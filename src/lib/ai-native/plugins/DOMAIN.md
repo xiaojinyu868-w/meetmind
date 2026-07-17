@@ -15,8 +15,8 @@
 | `studio-workshop.renderers.ts` | 渲染负载构建器（~180 行） |
 | `flashcards.plugin.ts` | 闪卡（模型题面 / 答案必须重新落回真实原文；无语义支持则用证据片段生成安全兜底卡） |
 | `flashcards.plugin.test.ts` | 闪卡证据回锚测试：语义匹配优先、秒/毫秒归一、禁止按卡片序号轮转原文 |
-| `mindmap.plugin.ts` | 思维导图（无原文支持的叶子节点会被剔除，保留节点回写证据时间） |
-| `cheatsheet.plugin.ts` | 速查表（无原文支持的条目直接丢弃；`strong` 只有证据明确强调时保留） |
+| `mindmap.plugin.ts` | 思维导图（节点 prompt 要求“地图标签”式短语而非解释句；无原文支持的叶子节点会被剔除，保留节点回写证据时间） |
+| `cheatsheet.plugin.ts` | 跨课 / 考试速查表：课堂、大纲、真题三类证据分别回锚；无支持条目直接丢弃，`strong` 只由明确强调或真题证据保留 |
 | `fallback.plugin.ts` | 兜底 |
 | `index.ts` | 插件注册（7 个插件） |
 
@@ -35,4 +35,4 @@
 
 - `studio-workshop.types.test.ts` — 44 tests，覆盖模式检测/时间戳/数组/对话解析
 - `flashcards.plugin.test.ts` — 覆盖模型时间戳不可信时，题面/答案仍能回到真正支持它的课堂片段
-- `quiz.plugin.test.ts` / `cheatsheet.plugin.test.ts` / `mindmap.plugin.test.ts` — 覆盖错误时间戳、幻觉条目、虚假重点与无证据节点的降级 / 剔除
+- `quiz.plugin.test.ts` / `cheatsheet.plugin.test.ts` / `mindmap.plugin.test.ts` — 覆盖错误时间戳、幻觉条目、虚假重点、跨课课内时间与大纲证据的降级 / 剔除

@@ -2,8 +2,8 @@
 
 import type { ReactNode } from 'react';
 import {
+  ArrowUpRight,
   BookMarked,
-  ExternalLink,
   Headphones,
   Image as ImageIcon,
   Layers,
@@ -32,6 +32,7 @@ interface WorkshopAppCardProps {
   onRetry: () => void;
   onRemake: () => void;
   onProgress: () => void;
+  compact?: boolean;
 }
 
 const APP_ICONS: Record<WorkshopAppKey, typeof Layers> = {
@@ -63,6 +64,7 @@ export function WorkshopAppCard({
   onRetry,
   onRemake,
   onProgress,
+  compact = false,
 }: WorkshopAppCardProps) {
   const Icon = APP_ICONS[app.key];
   const cardClassName = [
@@ -71,6 +73,7 @@ export function WorkshopAppCard({
     status === 'success' ? styles.cardGenerated : '',
     status === 'running' ? styles.cardRunning : '',
     status === 'error' ? styles.cardFailed : '',
+    compact ? styles.cardCompact : styles.cardFeatured,
   ].filter(Boolean).join(' ');
 
   return (
@@ -84,7 +87,6 @@ export function WorkshopAppCard({
           <div className={styles.titleGroup}>
             <div className={styles.cardLabelRow}>
               <span className={styles.learningAction}>{app.learningAction}</span>
-              {recommended ? <span className={styles.recommendedBadge}>{COPY.apps.matrix.recommended}</span> : null}
             </div>
             <h3 className={styles.appName}>{app.name}</h3>
           </div>
@@ -105,30 +107,66 @@ export function WorkshopAppCard({
 
       <div className={styles.actionRow}>
         {status === 'running' ? (
-          <button type="button" className={styles.primaryAction} onClick={onProgress} data-testid={`workshop-inline-progress-${app.key}`}>
+          <button
+            type="button"
+            className={styles.primaryAction}
+            onClick={onProgress}
+            aria-label={`${app.name}，${COPY.apps.matrix.progress}`}
+            title={COPY.apps.matrix.progress}
+            data-testid={`workshop-inline-progress-${app.key}`}
+          >
             <ListTodo size={13} strokeWidth={1.75} />
-            {COPY.apps.matrix.progress}
+            <span className={compact ? styles.compactActionText : undefined}>{COPY.apps.matrix.progress}</span>
           </button>
         ) : status === 'error' ? (
-          <button type="button" className={styles.primaryAction} onClick={onRetry} disabled={!available} data-testid={`workshop-inline-retry-${app.key}`}>
+          <button
+            type="button"
+            className={styles.primaryAction}
+            onClick={onRetry}
+            disabled={!available}
+            aria-label={`${app.name}，${COPY.apps.matrix.retry}`}
+            title={COPY.apps.matrix.retry}
+            data-testid={`workshop-inline-retry-${app.key}`}
+          >
             <RotateCcw size={13} strokeWidth={1.75} />
-            {COPY.apps.matrix.retry}
+            <span className={compact ? styles.compactActionText : undefined}>{COPY.apps.matrix.retry}</span>
           </button>
         ) : status === 'success' ? (
           <>
-            <button type="button" className={styles.primaryAction} onClick={onOpen} data-testid={`workshop-open-result-${app.key}`}>
-              <ExternalLink size={13} strokeWidth={1.75} />
-              {app.key === 'infographic' ? COPY.apps.matrix.openImage : COPY.apps.matrix.open}
+            <button
+              type="button"
+              className={styles.primaryAction}
+              onClick={onOpen}
+              aria-label={`${app.name}，${app.key === 'infographic' ? COPY.apps.matrix.openImage : COPY.apps.matrix.open}`}
+              title={app.key === 'infographic' ? COPY.apps.matrix.openImage : COPY.apps.matrix.open}
+              data-testid={`workshop-open-result-${app.key}`}
+            >
+              <ArrowUpRight size={13} strokeWidth={1.75} />
+              <span className={compact ? styles.compactActionText : undefined}>
+                {app.key === 'infographic' ? COPY.apps.matrix.openImage : COPY.apps.matrix.open}
+              </span>
             </button>
-            <button type="button" className={styles.secondaryAction} onClick={onRemake} disabled={!available} data-testid={`workshop-bg-generate-${app.key}`}>
-              <RotateCw size={13} strokeWidth={1.75} />
-              {COPY.apps.matrix.remake}
-            </button>
+            {!compact ? (
+              <button type="button" className={styles.secondaryAction} onClick={onRemake} disabled={!available} data-testid={`workshop-bg-generate-${app.key}`}>
+                <RotateCw size={13} strokeWidth={1.75} />
+                {COPY.apps.matrix.remake}
+              </button>
+            ) : null}
           </>
         ) : (
-          <button type="button" className={styles.primaryAction} onClick={onStart} disabled={!available} data-testid={`workshop-bg-generate-${app.key}`}>
+          <button
+            type="button"
+            className={styles.primaryAction}
+            onClick={onStart}
+            disabled={!available}
+            aria-label={`${app.name}，${available ? COPY.apps.matrix.start : COPY.apps.matrix.notAvailable}`}
+            title={available ? COPY.apps.matrix.start : COPY.apps.matrix.notAvailable}
+            data-testid={`workshop-bg-generate-${app.key}`}
+          >
             <Play size={13} strokeWidth={1.75} />
-            {available ? COPY.apps.matrix.start : COPY.apps.matrix.notAvailable}
+            <span className={compact ? styles.compactActionText : undefined}>
+              {available ? COPY.apps.matrix.start : COPY.apps.matrix.notAvailable}
+            </span>
           </button>
         )}
       </div>

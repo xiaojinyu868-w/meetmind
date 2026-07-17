@@ -8,6 +8,8 @@ import type { TranscriptSegment } from '@/types';
 import { EvidenceChip } from '@/components/apps/evidence/EvidenceChip';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
 import { RefreshCw, Loader2 } from 'lucide-react';
+import { COPY } from '@/lib/ui/copy';
+import { isInternalPodcastFailureSection } from './podcast-window-model';
 
 interface PodcastWindowProps {
   result: AppExecutionResult | null;
@@ -69,7 +71,9 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
   const [audioTime, setAudioTime] = useState(0);
   const payload = (result?.render?.payload || {}) as PodcastPayload;
   const isRegenerating = taskState?.status === 'running';
-  const sections = Array.isArray(payload.sections) ? payload.sections : [];
+  const sections = Array.isArray(payload.sections)
+    ? payload.sections.filter((section) => !isInternalPodcastFailureSection(section))
+    : [];
 
   const scriptLines = useMemo(() => {
     const lines = Array.isArray(payload.lines) ? payload.lines : [];
@@ -124,9 +128,9 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
     if (!scriptPlainText) return;
     try {
       await navigator.clipboard.writeText(scriptPlainText);
-      toast.success('播客脚本已复制');
+      toast.success(COPY.apps.podcast.scriptCopied);
     } catch {
-      toast.error('复制失败，请手动选择脚本内容');
+      toast.error(COPY.apps.podcast.copyFailed);
     }
   }, [scriptPlainText]);
 
@@ -135,7 +139,7 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
       return (
         <AppWindowPlaceholder
           status="error"
-          appName="课堂播客"
+          appName={COPY.apps.podcast.appName}
           errorMessage={taskState.error}
           onRetry={onRegenerate}
         />
@@ -145,13 +149,13 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
       return (
         <AppWindowPlaceholder
           status="empty"
-          appName="课堂播客"
-          description="点击生成后，会直接给你一版可播放的课堂播客。"
+          appName={COPY.apps.podcast.appName}
+          description={COPY.apps.podcast.emptyBody}
           onRetry={onRegenerate}
         />
       );
     }
-    return <AppWindowPlaceholder status="loading" appName="课堂播客" />;
+    return <AppWindowPlaceholder status="loading" appName={COPY.apps.podcast.appName} />;
   }
 
   const seekAudio = (startMs: number) => {
@@ -170,9 +174,92 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
     void audioRef.current.play().catch(() => undefined);
   };
 
+  const supportingMaterial = scriptLines.length > 0 || sections.length > 0 ? (
+    <details className="mt-3 border-t border-divider pt-3" open={!payload.audioUrl}>
+      <summary className="cursor-pointer select-none text-xs font-medium text-ink-secondary hover:text-ink">
+        {COPY.apps.podcast.details}
+      </summary>
+      <div className="mt-3 space-y-4">
+        {scriptLines.length > 0 ? (
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold tracking-[0.12em] text-ink-muted">{COPY.apps.podcast.script}</p>
+              <button
+                type="button"
+                onClick={copyScript}
+                className="rounded-full border border-divider bg-white px-2.5 py-1 text-[11px] font-medium text-ink-secondary transition hover:bg-paper-warm"
+              >
+                {COPY.apps.podcast.copyScript}
+              </button>
+            </div>
+            <div ref={scriptContainerRef} className="max-h-[480px] space-y-2 overflow-y-auto">
+              {scriptLines.map((line, index) => {
+                const isActive = index === activeLineIndex;
+                return (
+                  <button
+                    key={`line-${index}`}
+                    type="button"
+                    data-line-index={index}
+                    onClick={() => seekToLine(index)}
+                    className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${
+                      isActive
+                        ? 'border-vermilion/40 bg-vermilion-mist/50 ring-1 ring-vermilion/20'
+                        : 'border-divider bg-paper-warm hover:bg-white'
+                    }`}
+                  >
+                    <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${isActive ? 'text-vermilion' : 'text-ink-muted'}`}>
+                      {line.speaker}
+                    </p>
+                    <p className={`mt-2 text-sm leading-7 ${isActive ? 'text-ink' : 'text-ink-secondary'}`}>
+                      {line.line}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        {sections.length > 0 ? (
+          <div className="grid gap-3">
+            {sections.map((section, index) => {
+              const citation = chapterCitations[index];
+              return (
+                <article key={section.id || `section-${index}`} className="rounded-2xl border border-divider bg-paper-warm p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-ink">{section.title || COPY.apps.podcast.chapter(index + 1)}</p>
+                      <p className="mt-1 text-sm leading-6 text-ink-secondary">
+                        {sanitizeNarration(section.body || '') || COPY.apps.podcast.chapterEmpty}
+                      </p>
+                    </div>
+                    {citation ? (
+                      <button
+                        type="button"
+                        className="rounded-full border border-divider bg-white px-3 py-1.5 text-xs font-medium text-ink-secondary hover:bg-paper-warm"
+                        onClick={() => seekAudio(citation.startMs)}
+                      >
+                        {COPY.apps.podcast.seekChapter}
+                      </button>
+                    ) : null}
+                  </div>
+                  {citation ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <EvidenceChip citation={citation} transcript={transcript} onSeek={seekAudio} />
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    </details>
+  ) : null;
+
   return (
     <section className="space-y-4" data-testid="podcast-window">
-      <div className="rounded-2xl border border-divider bg-white p-4 shadow-sm sm:p-5">
+      <div className="rounded-2xl border border-divider bg-white p-4 sm:p-5">
         {payload.audioUrl ? (
           <>
             {/* 生成成功：首页就是一条播放条，其他都收起来 */}
@@ -183,114 +270,40 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
               </p>
             ) : null}
 
-            {scriptLines.length > 0 || sections.length > 0 ? (
-              <details className="mt-3 border-t border-divider pt-3">
-                <summary className="cursor-pointer select-none text-xs font-medium text-ink-secondary hover:text-ink">
-                  展开脚本与章节
-                </summary>
-                <div className="mt-3 space-y-4">
-                  {scriptLines.length > 0 ? (
-                    <div>
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">播客脚本</p>
-                        <button
-                          type="button"
-                          onClick={copyScript}
-                          className="rounded-full border border-divider bg-white px-2.5 py-1 text-[11px] font-medium text-ink-secondary transition hover:bg-paper-warm"
-                        >
-                          复制脚本
-                        </button>
-                      </div>
-                      <div ref={scriptContainerRef} className="max-h-[480px] space-y-2 overflow-y-auto">
-                        {scriptLines.map((line, index) => {
-                          const isActive = index === activeLineIndex;
-                          return (
-                            <button
-                              key={`line-${index}`}
-                              type="button"
-                              data-line-index={index}
-                              onClick={() => seekToLine(index)}
-                              className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${
-                                isActive
-                                  ? 'border-vermilion/40 bg-vermilion-mist/50 ring-1 ring-vermilion/20'
-                                  : 'border-divider bg-paper-warm hover:border-divider hover:bg-white'
-                              }`}
-                            >
-                              <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${isActive ? 'text-vermilion' : 'text-ink-muted'}`}>
-                                {line.speaker}
-                              </p>
-                              <p className={`mt-2 text-sm leading-7 ${isActive ? 'text-ink' : 'text-ink-secondary'}`}>{line.line}</p>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {sections.length > 0 ? (
-                    <div className="grid gap-3">
-                      {sections.map((section, index) => {
-                        const citation = chapterCitations[index];
-                        return (
-                          <article key={section.id || `section-${index}`} className="rounded-2xl border border-divider bg-paper-warm p-4">
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-semibold text-ink">{section.title || `章节 ${index + 1}`}</p>
-                                <p className="mt-1 text-sm leading-6 text-ink-secondary">{sanitizeNarration(section.body || '') || '暂无章节摘要。'}</p>
-                              </div>
-                              {citation ? (
-                                <button
-                                  type="button"
-                                  className="rounded-full border border-divider bg-white px-3 py-1.5 text-xs font-medium text-ink-secondary hover:bg-paper-warm"
-                                  onClick={() => seekAudio(citation.startMs)}
-                                >
-                                  跳到本章
-                                </button>
-                              ) : null}
-                            </div>
-                            {citation ? (
-                              <div className="mt-3 flex flex-wrap items-center gap-2">
-                                <EvidenceChip citation={citation} transcript={transcript} onSeek={seekAudio} />
-                              </div>
-                            ) : null}
-                          </article>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-              </details>
-            ) : null}
+            {supportingMaterial}
           </>
         ) : (
           /* 音频未就绪（如火山 403）：播放条形态的重试条，点整条重新生成；
              生成中显示 spinner，成功后同位置直接变成上方播放条 */
-          <button
-            type="button"
-            onClick={onRegenerate}
-            disabled={!onRegenerate || isRegenerating}
-            className="flex w-full items-center gap-4 rounded-xl bg-paper-warm px-4 py-3 text-left transition hover:bg-paper-deep disabled:cursor-default disabled:opacity-70"
-            aria-label={isRegenerating ? '正在生成播客音频' : '重新生成播客音频'}
-          >
-            <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-vermilion text-white shadow-[0_6px_16px_rgba(181,72,60,0.28)]">
-              {isRegenerating ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-ink">
-                {isRegenerating ? '正在生成播客音频…' : '音频未就绪 · 点这里重新生成'}
+          <>
+            <button
+              type="button"
+              onClick={onRegenerate}
+              disabled={!onRegenerate || isRegenerating}
+              className="flex w-full items-center gap-4 rounded-xl bg-paper-warm px-4 py-3 text-left transition hover:bg-paper-deep disabled:cursor-default disabled:opacity-70"
+              aria-label={isRegenerating ? COPY.apps.podcast.audioGenerating : COPY.apps.podcast.audioRetry}
+            >
+              <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-ink text-white">
+                {isRegenerating ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
               </span>
-              <span className="mt-0.5 block truncate text-xs text-ink-muted">
-                {isRegenerating
-                  ? '生成完这里会变成播放条，直接就能听'
-                  : payload.error
-                    ? `上次失败：${payload.error}`
-                    : '脚本已就绪，音频稍后就好'}
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-ink">
+                  {isRegenerating ? COPY.apps.podcast.audioGenerating : COPY.apps.podcast.audioRetry}
+                </span>
+                <span className="mt-0.5 block truncate text-xs text-ink-muted">
+                  {isRegenerating
+                    ? COPY.apps.podcast.audioGeneratingHint
+                    : supportingMaterial
+                      ? COPY.apps.podcast.audioRetryHint
+                      : COPY.apps.podcast.audioRetryNoScriptHint}
+                </span>
               </span>
-            </span>
-            <span className="flex-shrink-0 rounded-full bg-vermilion px-3 py-1.5 text-xs font-semibold text-white">
-              {isRegenerating ? '生成中' : '重新生成'}
-            </span>
-          </button>
+              <span className="flex-shrink-0 rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-white">
+                {isRegenerating ? COPY.apps.podcast.generating : COPY.apps.podcast.retry}
+              </span>
+            </button>
+            {supportingMaterial}
+          </>
         )}
       </div>
     </section>

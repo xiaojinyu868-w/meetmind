@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { ArrowLeft, RotateCw } from 'lucide-react';
 import { useMemo, type ReactNode } from 'react';
 import { getAppWindowShellTone } from './app-window-shell-tone';
 import type { WorkshopAppCatalogItem } from '@/lib/ai-native/app-catalog';
@@ -12,6 +13,9 @@ interface AppWindowShellProps {
   taskState: AppTaskState;
   onRegenerate: () => void;
   showPrimaryAction?: boolean;
+  backHref?: string;
+  onBack?: () => void;
+  backLabel?: string;
   children: ReactNode;
 }
 
@@ -48,7 +52,7 @@ function StatusIndicator({
   const textColor = immersive ? 'text-white/55' : 'text-ink-muted';
 
   return (
-    <span className={`inline-flex items-center gap-1.5 text-[11.5px] ${textColor}`}>
+    <span className={`inline-flex items-center gap-1.5 text-[11.5px] ${textColor}`} aria-label={label}>
       <span
         aria-hidden
         className="relative inline-flex h-1.5 w-1.5 flex-shrink-0"
@@ -64,7 +68,7 @@ function StatusIndicator({
           style={{ background: dot }}
         />
       </span>
-      <span className="tabular-nums">{label}</span>
+      <span className="hidden tabular-nums sm:inline">{label}</span>
     </span>
   );
 }
@@ -75,27 +79,18 @@ export function AppWindowShell(props: AppWindowShellProps) {
     taskState,
     onRegenerate,
     showPrimaryAction = true,
+    backHref = '/app?workspace=apps',
+    onBack,
+    backLabel = COPY.apps.matrix.backToMatrix,
     children,
   } = props;
   const tone = useMemo(() => getAppWindowShellTone(app.key), [app.key]);
+  const neutralTone = useMemo(() => getAppWindowShellTone('quiz'), []);
   const isRunning = taskState.status === 'running';
   // immersive 黑 hero（flashcards）只在产物真出来后启用——loading 态强制中性，
   // 否则会和白色 main 主体撞色，且 Octo Buddy 听课的温柔气质被切断
   const immersiveActive = app.key === 'flashcards' && taskState.status === 'success';
-  const effectiveTone = immersiveActive
-    ? tone
-    : {
-        ...tone,
-        root: 'min-h-screen bg-paper',
-        header:
-          'sticky top-0 z-20 border-b border-divider/70 bg-card/92 backdrop-blur-md shadow-soft',
-        backLink:
-          'inline-flex items-center gap-1.5 rounded-full border border-divider bg-card px-3 py-1.5 text-[13px] text-ink-secondary transition hover:border-pine hover:text-pine',
-        title: 'truncate text-[15.5px] font-semibold tracking-display text-ink',
-        subtitle: 'truncate text-[12px] text-ink-muted',
-        actionButton:
-          'rounded-lg bg-ink px-3.5 py-1.5 text-[13px] font-medium text-white shadow-soft transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.98]',
-      };
+  const effectiveTone = immersiveActive ? tone : neutralTone;
 
   return (
     <div
@@ -105,13 +100,20 @@ export function AppWindowShell(props: AppWindowShellProps) {
       {/* 打印态：header 整条隐藏（返回 / 标题 / 状态 / 重做都不上打印纸） */}
       <header className={`${effectiveTone.header} print:hidden`}>
         <div className={effectiveTone.headerInner}>
-          <Link href="/app?workspace=apps" className={effectiveTone.backLink}>
-            <span>←</span>
-            <span>{COPY.apps.matrix.backToMatrix}</span>
-          </Link>
+          {onBack ? (
+            <button type="button" onClick={onBack} className={effectiveTone.backLink} aria-label={backLabel}>
+              <ArrowLeft size={15} strokeWidth={1.8} aria-hidden />
+              <span className="hidden sm:inline">{backLabel}</span>
+            </button>
+          ) : (
+            <Link href={backHref} className={effectiveTone.backLink} aria-label={backLabel}>
+              <ArrowLeft size={15} strokeWidth={1.8} aria-hidden />
+              <span className="hidden sm:inline">{backLabel}</span>
+            </Link>
+          )}
           <div className="min-w-0 flex-1">
             <p className={effectiveTone.title}>{app.name}</p>
-            <p className={effectiveTone.subtitle}>{COPY.apps.matrix.workspaceSubtitle(app.learningAction, app.bestFor)}</p>
+            <p className={`${effectiveTone.subtitle} hidden sm:block`}>{COPY.apps.matrix.workspaceSubtitle(app.learningAction, app.bestFor)}</p>
           </div>
           <StatusIndicator status={taskState.status} immersive={immersiveActive} />
           {/* loading 时整条主操作按钮隐藏：避免视觉重量 + 用户也点不动；
@@ -122,8 +124,10 @@ export function AppWindowShell(props: AppWindowShellProps) {
               data-testid="app-window-rerun"
               className={effectiveTone.actionButton}
               onClick={onRegenerate}
+              aria-label={COPY.apps.matrix.remake}
             >
-              {COPY.apps.matrix.remake}
+              <RotateCw size={14} strokeWidth={1.8} aria-hidden />
+              <span className="hidden sm:inline">{COPY.apps.matrix.remake}</span>
             </button>
           ) : null}
         </div>

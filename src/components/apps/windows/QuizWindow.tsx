@@ -5,6 +5,17 @@ import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { TranscriptSegment } from '@/types';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
 import { formatQuizActivity, formatQuizCompleteActivity } from '@/components/review-learning-activity';
+import { COPY } from '@/lib/ui/copy';
+import {
+  formatQuizEvidenceTime,
+  isQuizAnswerCorrect,
+  isSubjectiveQuizQuestion,
+  normalizeQuizAnswer,
+  normalizeQuizQuestions,
+  QUIZ_SELF_CORRECT,
+  QUIZ_SELF_WRONG,
+  stripQuizOptionPrefix,
+} from './quiz-window-model';
 
 interface QuizWindowProps {
   result: AppExecutionResult | null;
@@ -13,132 +24,24 @@ interface QuizWindowProps {
   onLearningActivity?: (line: string) => void;
 }
 
-interface QuizQuestion {
-  id: string;
-  title?: string;
-  stem: string;
-  /** single | judge | fill | short。空选项即主观题（fill / short），走"看参考答案 + 自评" */
-  type: string;
-  options: string[];
-  answer: string;
-  explanation?: string;
-}
-
-/** 主观题自评标记：存进 selected[id]，用于和客观题统一计分 */
-const SELF_CORRECT = '__self_correct__';
-const SELF_WRONG = '__self_wrong__';
-
-/** 主观题 = 没有 ≥2 个选项的题（简答 / 填空） */
-function isSubjective(q: QuizQuestion): boolean {
-  return q.options.length < 2;
-}
-
-function normalizeQuestions(result: AppExecutionResult | null): QuizQuestion[] {
-  if (!result) return [];
-  // 客观题需 ≥2 选项；主观题（short/fill）选项为空但 stem 即可成题——不再被过滤掉
-  const isRenderable = (q: QuizQuestion) =>
-    Boolean(q.stem) && (q.options.length >= 2 || q.type === 'short' || q.type === 'fill');
-
-  const payload = result.render?.payload as { questions?: Array<Record<string, unknown>> } | undefined;
-  const payloadQuestions = Array.isArray(payload?.questions)
-    ? payload.questions
-        .map((item, index) => ({
-          id: typeof item.id === 'string' ? item.id : `quiz-${index + 1}`,
-          title: typeof item.title === 'string' ? item.title : `题目 ${index + 1}`,
-          stem: typeof item.stem === 'string' ? item.stem : '',
-          type: typeof item.type === 'string' ? item.type : 'single',
-          options: Array.isArray(item.options)
-            ? item.options.map((option) => (typeof option === 'string' ? option : '')).filter(Boolean)
-            : [],
-          answer: typeof item.answer === 'string' ? item.answer : '',
-          explanation: typeof item.explanation === 'string' ? item.explanation : '',
-        }))
-        .filter(isRenderable)
-    : [];
-  if (payloadQuestions.length > 0) return payloadQuestions;
-
-  return result.cards
-    .filter((card) => card.meta?.cardKind === 'quiz')
-    .map((card, index) => ({
-      id: card.id,
-      title: card.title || `题目 ${index + 1}`,
-      stem: typeof card.meta?.stem === 'string' ? card.meta.stem : card.body,
-      type: typeof card.meta?.type === 'string' ? card.meta.type : 'single',
-      options: Array.isArray(card.meta?.options)
-        ? card.meta.options.map((option) => (typeof option === 'string' ? option : '')).filter(Boolean)
-        : [],
-      answer: typeof card.meta?.answer === 'string' ? card.meta.answer : '',
-      explanation: typeof card.meta?.explanation === 'string' ? card.meta.explanation : '',
-    }))
-    .filter(isRenderable);
-}
-
-/** 客观题：比对选项；主观题：看自评标记 */
-function isAnswerCorrect(q: QuizQuestion, selectedValue: string | undefined): boolean {
-  if (!selectedValue) return false;
-  if (isSubjective(q)) return selectedValue === SELF_CORRECT;
-  return selectedValue === normalizeAnswer(q.answer, q.options);
-}
-
-function normalizeAnswer(answer: string, options: string[]): string {
-  const trimmed = answer.trim();
-  if (!trimmed) return '';
-
-  // 1. 纯字母匹配 — 仅当 answer 是 "A" / "B." / "C)" 等短模式时才走字母索引
-  const letterMatch = trimmed.match(/^([A-Za-z])[.、)\s]*$/);
-  if (letterMatch) {
-    const letterIndex = letterMatch[1].toUpperCase().charCodeAt(0) - 65;
-    if (letterIndex >= 0 && letterIndex < options.length) return options[letterIndex];
-  }
-
-  // 2. 精确匹配（忽略大小写）
-  const exact = options.find((o) => o.toLowerCase() === trimmed.toLowerCase());
-  if (exact) return exact;
-
-  // 3. "A. 选项内容" 格式 — answer 带字母前缀，去掉后匹配
-  const prefixedMatch = trimmed.match(/^[A-Za-z][.、)\s]+(.+)/);
-  if (prefixedMatch) {
-    const content = prefixedMatch[1].trim().toLowerCase();
-    const found = options.find((o) => {
-      const stripped = o.replace(/^[A-Za-z][.、)\s]+/, '').trim();
-      return stripped.toLowerCase() === content;
-    });
-    if (found) return found;
-  }
-
-  // 4. 模糊包含匹配 — 处理模型返回选项原文（不带字母前缀）的情况
-  //    例如 answer="栈只允许在栈顶插入和删除"，options=["A. 栈只允许在栈顶插入和删除", ...]
-  const fuzzy = options.find((o) => {
-    const stripped = o.replace(/^[A-Za-z][.、)\s]+/, '').trim();
-    return stripped.toLowerCase() === trimmed.toLowerCase()
-      || stripped.toLowerCase().includes(trimmed.toLowerCase())
-      || trimmed.toLowerCase().includes(stripped.toLowerCase());
-  });
-  if (fuzzy) return fuzzy;
-
-  return trimmed;
-}
-
-/** 去除选项文本的字母前缀（"A. 选项" → "选项"），避免和前端圆形字母标签重复 */
-function stripOptionPrefix(text: string): string {
-  return text.replace(/^[A-Za-z][.、)\s]+/, '').trim() || text;
-}
-
 /* 测验保持安静平涂：用排版和状态区分，不用题目环境光。 */
 const QUIZ_SUCCESS = '#2D6A4F';
-const QUIZ_WARNING = '#B8842B';
-const QUIZ_DANGER = '#B5483C';
 
-export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
-  const questions = useMemo(() => normalizeQuestions(result), [result]);
+export function QuizWindow({ result, onSeek, onLearningActivity }: QuizWindowProps) {
+  const questions = useMemo(() => normalizeQuizQuestions(result), [result]);
+  const [reviewQuestionIds, setReviewQuestionIds] = useState<string[] | null>(null);
+  const activeQuestions = useMemo(
+    () => reviewQuestionIds ? questions.filter((question) => reviewQuestionIds.includes(question.id)) : questions,
+    [questions, reviewQuestionIds],
+  );
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState<Record<string, boolean>>({});
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [showReport, setShowReport] = useState(false);
   const [startTime] = useState(() => Date.now());
   const [isAnimating, setIsAnimating] = useState(false);
   const [slideDir, setSlideDir] = useState<'none' | 'left' | 'right'>('none');
-  const [showExplanation, setShowExplanation] = useState(false);
 
   // Swipe gesture
   const touchStartX = useRef<number | null>(null);
@@ -148,7 +51,6 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
     if (isAnimating) return;
     setIsAnimating(true);
     setSlideDir(dir);
-    setShowExplanation(false);
     setTimeout(() => {
       setIndex(newIndex);
       setSlideDir('none');
@@ -162,9 +64,9 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
   }, [index, isAnimating, navigateTo]);
 
   const goToNext = useCallback(() => {
-    if (index >= questions.length - 1 || isAnimating) return;
+    if (index >= activeQuestions.length - 1 || isAnimating) return;
     navigateTo(index + 1, 'left');
-  }, [index, questions.length, isAnimating, navigateTo]);
+  }, [activeQuestions.length, index, isAnimating, navigateTo]);
 
   // Keyboard
   useEffect(() => {
@@ -198,25 +100,29 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
   }, [goToNext, goToPrev]);
 
   if (!result) {
-    return <AppWindowPlaceholder status="loading" appName="课堂测验" />;
+    return <AppWindowPlaceholder status="loading" appName={COPY.apps.quiz.appName} />;
   }
   if (questions.length === 0) {
-    return <AppWindowPlaceholder status="empty" appName="课堂测验" />;
+    return <AppWindowPlaceholder status="empty" appName={COPY.apps.quiz.appName} />;
   }
 
-  const current = questions[Math.min(index, questions.length - 1)];
+  const current = activeQuestions[Math.min(index, activeQuestions.length - 1)];
   const selectedOption = selected[current.id];
   const isSubmitted = Boolean(submitted[current.id]);
-  const subjective = isSubjective(current);
-  const normalizedAnswer = normalizeAnswer(current.answer, current.options);
-  const isCorrect = isAnswerCorrect(current, selectedOption);
+  const subjective = isSubjectiveQuizQuestion(current);
+  const normalizedAnswer = normalizeQuizAnswer(current.answer, current.options);
+  const isCorrect = isQuizAnswerCorrect(current, selectedOption);
 
-  const finishedCount = Object.values(submitted).filter(Boolean).length;
-  const correctCount = questions.filter((q) => submitted[q.id] && isAnswerCorrect(q, selected[q.id])).length;
-  const allDone = finishedCount === questions.length;
-  const wrongQuestions = questions.filter((q) => submitted[q.id] && !isAnswerCorrect(q, selected[q.id]));
+  const finishedCount = activeQuestions.filter((question) => submitted[question.id]).length;
+  const correctCount = activeQuestions.filter(
+    (question) => submitted[question.id] && isQuizAnswerCorrect(question, selected[question.id]),
+  ).length;
+  const allDone = finishedCount === activeQuestions.length;
+  const wrongQuestions = activeQuestions.filter(
+    (question) => submitted[question.id] && !isQuizAnswerCorrect(question, selected[question.id]),
+  );
   const accuracy = finishedCount > 0 ? Math.round((correctCount / finishedCount) * 100) : 0;
-  const progress = questions.length > 0 ? ((index + 1) / questions.length) * 100 : 0;
+  const progress = activeQuestions.length > 0 ? ((index + 1) / activeQuestions.length) * 100 : 0;
   const elapsedMinutes = Math.round((Date.now() - startTime) / 60000);
 
   const slideClass = slideDir === 'left'
@@ -225,35 +131,28 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
       ? 'translate-x-[8%] opacity-0 scale-95'
       : 'translate-x-0 opacity-100 scale-100';
 
-  // 成绩报告
+  // 本轮回顾：呈现学习信号，不给学生贴 A-F 等级标签。
   if (showReport && allDone) {
-    const grade = accuracy >= 90 ? 'A' : accuracy >= 80 ? 'B' : accuracy >= 70 ? 'C' : accuracy >= 60 ? 'D' : 'F';
-    const gradeColor = accuracy >= 80 ? QUIZ_SUCCESS : accuracy >= 60 ? QUIZ_WARNING : QUIZ_DANGER;
     return (
       <div className="flex h-full min-h-[420px] flex-col items-center justify-center bg-canvas p-6">
         <div className="w-full max-w-md text-center">
-          {/* Grade badge */}
-          <div className="mb-5 inline-flex h-20 w-20 items-center justify-center rounded-full border border-divider bg-white">
-            <span className="text-3xl font-semibold" style={{ color: gradeColor }}>{grade}</span>
-          </div>
-
-          <h2 className="mb-2 text-2xl font-semibold tracking-[-0.03em] text-ink">测验完成</h2>
+          <div className="mx-auto mb-5 h-1 w-12 rounded-full bg-pine" aria-hidden />
+          <h2 className="mb-2 text-2xl font-semibold tracking-[-0.03em] text-ink">{COPY.apps.quiz.completeTitle}</h2>
           <p className="mb-7 text-sm leading-relaxed text-ink-muted">
-            共 {questions.length} 题 · 用时 {elapsedMinutes < 1 ? '<1' : elapsedMinutes} 分钟
+            {COPY.apps.quiz.completeMeta(activeQuestions.length, elapsedMinutes < 1 ? '<1' : String(elapsedMinutes))}
           </p>
 
-          {/* Score ring */}
           <div className="relative inline-flex items-center justify-center w-32 h-32 mb-6">
             <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
               <circle cx="50" cy="50" r="42" fill="none" stroke="#E8E2D5" strokeWidth="6" />
-              <circle cx="50" cy="50" r="42" fill="none" stroke={gradeColor}
+              <circle cx="50" cy="50" r="42" fill="none" stroke={QUIZ_SUCCESS}
                 strokeWidth="6" strokeLinecap="round"
                 strokeDasharray={`${accuracy * 2.64} 264`}
                 style={{ transition: 'stroke-dasharray 1s ease-out' }} />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-3xl font-semibold text-ink">{accuracy}%</span>
-              <span className="text-xs text-ink-muted">正确率</span>
+              <span className="text-xs text-ink-muted">{COPY.apps.quiz.recallRate}</span>
             </div>
           </div>
 
@@ -261,36 +160,25 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
           <div className="mb-6 flex items-center justify-center gap-10">
             <div className="text-center">
               <div className="text-xl font-semibold text-ink">{correctCount}</div>
-              <div className="mt-1 text-xs text-ink-muted">正确</div>
+              <div className="mt-1 text-xs text-ink-muted">{COPY.apps.quiz.solidCount}</div>
             </div>
             <div className="h-8 w-px bg-divider" />
             <div className="text-center">
               <div className="text-xl font-semibold text-danger-500">{finishedCount - correctCount}</div>
-              <div className="mt-1 text-xs text-ink-muted">错误</div>
+              <div className="mt-1 text-xs text-ink-muted">{COPY.apps.quiz.revisitCount}</div>
             </div>
           </div>
 
           {/* Wrong questions preview */}
           {wrongQuestions.length > 0 && (
             <div className="mb-6 max-h-[160px] overflow-y-auto px-1">
-              <p className="mb-3 text-xs font-medium uppercase tracking-wider text-ink-muted">错题回顾</p>
+              <p className="mb-3 text-xs font-medium tracking-wider text-ink-muted">{COPY.apps.quiz.missedReview}</p>
               <div className="space-y-1.5">
-                {wrongQuestions.map((q) => {
-                  const qIndex = questions.indexOf(q);
-                  return (
-                    <button
-                      key={q.id}
-                      type="button"
-                      onClick={() => { setShowReport(false); setIndex(qIndex); setShowExplanation(true); }}
-                      className="w-full rounded-2xl border border-divider bg-white px-4 py-3 text-left transition-colors hover:border-danger-300"
-                    >
-                      <p className="truncate text-sm text-ink-secondary">
-                        <span className="mr-1.5 font-medium text-danger-500">#{qIndex + 1}</span>
-                        {q.stem.length > 40 ? q.stem.slice(0, 40) + '...' : q.stem}
-                      </p>
-                    </button>
-                  );
-                })}
+                {wrongQuestions.map((question) => (
+                  <p key={question.id} className="truncate rounded-2xl border border-divider bg-white px-4 py-3 text-left text-sm text-ink-secondary">
+                    {question.stem.length > 52 ? `${question.stem.slice(0, 52)}…` : question.stem}
+                  </p>
+                ))}
               </div>
             </div>
           )}
@@ -301,27 +189,32 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
               <button
                 type="button"
                 onClick={() => {
+                  const missedIds = wrongQuestions.map((question) => question.id);
+                  setReviewQuestionIds(missedIds);
                   setShowReport(false);
-                  const firstWrong = questions.findIndex((q) => submitted[q.id] && !isAnswerCorrect(q, selected[q.id]));
-                  if (firstWrong >= 0) { setIndex(firstWrong); setShowExplanation(true); }
+                  setIndex(0);
+                  setSelected({});
+                  setSubmitted({});
+                  setRevealed({});
                 }}
                 className="rounded-full bg-ink px-8 py-2.5 text-sm font-medium text-white transition hover:opacity-85"
               >
-                复习错题
+                {COPY.apps.quiz.reviewMissed(wrongQuestions.length)}
               </button>
             )}
             <button
               type="button"
               onClick={() => {
+                setReviewQuestionIds(null);
                 setIndex(0);
                 setSelected({});
                 setSubmitted({});
+                setRevealed({});
                 setShowReport(false);
-                setShowExplanation(false);
               }}
               className="rounded-full px-8 py-2.5 text-sm text-ink-muted transition-colors hover:text-ink"
             >
-              重新测验
+              {COPY.apps.quiz.restart}
             </button>
           </div>
         </div>
@@ -339,7 +232,7 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
       {/* Top: keyboard hint (desktop only) */}
       <div className="relative flex-shrink-0 pt-3 pb-1 text-center hidden md:block">
         <p className="text-[12px] tracking-wide text-ink-muted">
-          ← → 切换题目
+          {COPY.apps.quiz.keyboardHint}
         </p>
       </div>
 
@@ -350,8 +243,8 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
           type="button"
           onClick={goToPrev}
           disabled={index <= 0}
-          className="group absolute left-3 top-1/3 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-divider bg-white transition-colors duration-200 hover:border-ink-muted disabled:pointer-events-none disabled:opacity-0 md:left-6"
-          aria-label="上一题"
+          className="group absolute left-3 top-1/3 z-10 hidden h-11 w-11 items-center justify-center rounded-full border border-divider bg-white transition-colors duration-200 hover:border-ink-muted disabled:pointer-events-none disabled:opacity-0 md:left-6 md:flex"
+          aria-label={COPY.apps.quiz.previous}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-ink-muted transition-colors group-hover:text-ink" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
@@ -366,7 +259,7 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
             <div className="flex items-center gap-2 mb-5">
               <div className="inline-flex items-center gap-1.5 rounded-full border border-divider bg-canvas px-3 py-1.5">
                 <span className="text-[12px] font-semibold tracking-wide text-ink-secondary">
-                  {index + 1} / {questions.length}
+                  {index + 1} / {activeQuestions.length}
                 </span>
               </div>
               {isSubmitted && (
@@ -376,7 +269,7 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
                     : 'border-danger-200 bg-danger-50 text-danger-700'
                 }`}>
                   <div className={`h-1.5 w-1.5 rounded-full ${isCorrect ? 'bg-mint-500' : 'bg-danger-500'}`} />
-                  {isCorrect ? '正确' : '错误'}
+                  {isCorrect ? COPY.apps.quiz.correct : COPY.apps.quiz.wrong}
                 </div>
               )}
             </div>
@@ -389,29 +282,55 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
             {/* 简答 / 填空：无选项，先想后对照参考答案（不做花哨自评，仅一次轻量标记） */}
             {subjective ? (
               <div className="space-y-3">
-                {!isSubmitted ? (
+                {!revealed[current.id] ? (
                   <p className="rounded-2xl border border-dashed border-divider bg-canvas px-4 py-4 text-[14px] leading-[1.7] text-ink-muted">
-                    先在心里组织你的回答，再对照参考。
+                    {COPY.apps.quiz.subjectivePrompt}
                   </p>
                 ) : (
                   <div className="rounded-2xl border border-mint-200 bg-mint-50 p-4">
-                    <p className="mb-1.5 text-[12px] font-medium uppercase tracking-wider text-ink-muted">参考答案</p>
-                    <p className="text-[15px] leading-[1.75] text-ink">{current.answer || '回放原片段核对要点。'}</p>
+                    <p className="mb-1.5 text-[12px] font-medium tracking-wider text-ink-muted">{COPY.apps.quiz.referenceAnswer}</p>
+                    <p className="text-[15px] leading-[1.75] text-ink">{current.answer || COPY.apps.quiz.referenceFallback}</p>
                     <div className="mt-3 flex items-center gap-2 border-t border-mint-200 pt-3">
-                      <span className="text-[13px] text-ink-muted">我答得：</span>
+                      <span className="text-[13px] text-ink-muted">{COPY.apps.quiz.selfRate}</span>
                       <button
                         type="button"
-                        onClick={() => setSelected((prev) => ({ ...prev, [current.id]: SELF_CORRECT }))}
-                        className={`rounded-full border px-3 py-1 text-[13px] transition ${selectedOption === SELF_CORRECT ? 'border-mint-500 bg-mint-500 text-white' : 'border-divider text-ink-secondary hover:border-mint-300'}`}
+                        disabled={isSubmitted}
+                        onClick={() => {
+                          if (isSubmitted) return;
+                          setSelected((prev) => ({ ...prev, [current.id]: QUIZ_SELF_CORRECT }));
+                          setSubmitted((prev) => ({ ...prev, [current.id]: true }));
+                          onLearningActivity?.(formatQuizActivity({
+                            index: index + 1,
+                            total: activeQuestions.length,
+                            stem: current.stem,
+                            picked: COPY.apps.quiz.selfCorrect,
+                            answer: current.answer,
+                            correct: true,
+                          }));
+                        }}
+                        className={`rounded-full border px-3 py-1 text-[13px] transition disabled:cursor-default ${selectedOption === QUIZ_SELF_CORRECT ? 'border-mint-500 bg-mint-500 text-white' : 'border-divider text-ink-secondary hover:border-mint-300'}`}
                       >
-                        答对了
+                        {COPY.apps.quiz.selfCorrect}
                       </button>
                       <button
                         type="button"
-                        onClick={() => setSelected((prev) => ({ ...prev, [current.id]: SELF_WRONG }))}
-                        className={`rounded-full border px-3 py-1 text-[13px] transition ${selectedOption === SELF_WRONG ? 'border-danger-300 bg-danger-500 text-white' : 'border-divider text-ink-secondary hover:border-danger-300'}`}
+                        disabled={isSubmitted}
+                        onClick={() => {
+                          if (isSubmitted) return;
+                          setSelected((prev) => ({ ...prev, [current.id]: QUIZ_SELF_WRONG }));
+                          setSubmitted((prev) => ({ ...prev, [current.id]: true }));
+                          onLearningActivity?.(formatQuizActivity({
+                            index: index + 1,
+                            total: activeQuestions.length,
+                            stem: current.stem,
+                            picked: COPY.apps.quiz.selfWrong,
+                            answer: current.answer,
+                            correct: false,
+                          }));
+                        }}
+                        className={`rounded-full border px-3 py-1 text-[13px] transition disabled:cursor-default ${selectedOption === QUIZ_SELF_WRONG ? 'border-danger-300 bg-danger-500 text-white' : 'border-divider text-ink-secondary hover:border-danger-300'}`}
                       >
-                        没答上
+                        {COPY.apps.quiz.selfWrong}
                       </button>
                     </div>
                   </div>
@@ -461,7 +380,7 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
                     <span className={`text-[15px] leading-[1.7] ${
                       optionCorrect ? 'text-ink' : optionWrong ? 'text-danger-700' : 'text-ink-secondary'
                     }`}>
-                      {stripOptionPrefix(option)}
+                      {stripQuizOptionPrefix(option)}
                     </span>
                     {/* Correct/wrong indicator */}
                     {optionCorrect && (
@@ -481,51 +400,66 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
             )}
 
             {/* Explanation section (slide down after submit) */}
-            {isSubmitted && showExplanation && current.explanation && (
+            {isSubmitted && current.explanation && (
               <div className={`mt-6 rounded-2xl border p-4 transition-all duration-300 ${
                 isCorrect ? 'border-mint-200 bg-mint-50' : 'border-divider bg-canvas'
               }`}>
                 {!subjective && !isCorrect && (
                   <p className="mb-2 text-sm font-medium text-danger-700">
-                    正确答案：{stripOptionPrefix(normalizedAnswer)}
+                    {COPY.apps.quiz.correctAnswer(stripQuizOptionPrefix(normalizedAnswer))}
                   </p>
                 )}
                 <p className="text-[14px] leading-[1.75] text-ink-secondary">{current.explanation}</p>
               </div>
             )}
+            {isSubmitted && current.evidence && (
+              <button
+                type="button"
+                disabled={!onSeek}
+                onClick={() => onSeek?.(current.evidence!.startMs)}
+                className="mt-4 text-[12px] text-ink-muted transition hover:text-ink disabled:cursor-default"
+              >
+                {onSeek
+                  ? COPY.apps.quiz.returnToEvidenceAt(formatQuizEvidenceTime(current.evidence.startMs))
+                  : COPY.apps.quiz.evidenceAt(formatQuizEvidenceTime(current.evidence.startMs))}
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Right arrow */}
-        <button
-          type="button"
-          onClick={goToNext}
-          disabled={index >= questions.length - 1}
-          className="group absolute right-3 top-1/3 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-divider bg-white transition-colors duration-200 hover:border-ink-muted disabled:pointer-events-none disabled:opacity-0 md:right-6"
-          aria-label="下一题"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-ink-muted transition-colors group-hover:text-ink" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-        </button>
+        {/* 提交后只保留底部主动作，避免同屏出现两个“下一题”。 */}
+        {!isSubmitted && (
+          <button
+            type="button"
+            onClick={goToNext}
+            disabled={index >= activeQuestions.length - 1}
+            className="group absolute right-3 top-1/3 z-10 hidden h-11 w-11 items-center justify-center rounded-full border border-divider bg-white transition-colors duration-200 hover:border-ink-muted disabled:pointer-events-none disabled:opacity-0 md:right-6 md:flex"
+            aria-label={COPY.apps.quiz.next}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-ink-muted transition-colors group-hover:text-ink" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Bottom controls */}
       <div className="relative flex-shrink-0 px-4 pb-5 pt-2">
         {/* Action button */}
         <div className="flex items-center justify-center gap-3 mb-4">
-          {!isSubmitted ? (
+          {!isSubmitted && (!subjective || !revealed[current.id]) ? (
             <button
               type="button"
               className="rounded-full bg-ink px-8 py-2.5 text-sm font-medium text-white transition hover:opacity-85 active:scale-95 disabled:cursor-not-allowed disabled:bg-divider disabled:text-ink-muted"
               disabled={subjective ? false : !selectedOption}
               onClick={() => {
-                setSubmitted((prev) => ({ ...prev, [current.id]: true }));
-                setShowExplanation(true);
-                if (!subjective) {
+                if (subjective) {
+                  setRevealed((prev) => ({ ...prev, [current.id]: true }));
+                } else {
+                  setSubmitted((prev) => ({ ...prev, [current.id]: true }));
                   onLearningActivity?.(formatQuizActivity({
                     index: index + 1,
-                    total: questions.length,
+                    total: activeQuestions.length,
                     stem: current.stem,
                     picked: selectedOption || '',
                     answer: normalizedAnswer,
@@ -534,41 +468,41 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
                 }
               }}
             >
-              {subjective ? '查看参考答案' : '确认答案'}
+              {subjective ? COPY.apps.quiz.revealReference : COPY.apps.quiz.confirmAnswer}
             </button>
-          ) : (
+          ) : isSubmitted ? (
             <>
-              {index < questions.length - 1 ? (
+              {index < activeQuestions.length - 1 ? (
                 <button
                   type="button"
                   onClick={goToNext}
                   className="rounded-full bg-ink px-8 py-2.5 text-sm font-medium text-white transition hover:opacity-85 active:scale-95"
                 >
-                  下一题 →
+                  {COPY.apps.quiz.nextQuestion}
                 </button>
               ) : allDone ? (
                 <button
                   type="button"
                   onClick={() => {
                     setShowReport(true);
-                    onLearningActivity?.(formatQuizCompleteActivity({ correct: correctCount, total: questions.length }));
+                    onLearningActivity?.(formatQuizCompleteActivity({ correct: correctCount, total: activeQuestions.length }));
                   }}
                   className="rounded-full bg-ink px-8 py-2.5 text-sm font-medium text-white transition hover:opacity-85 active:scale-95"
                 >
-                  查看成绩
+                  {COPY.apps.quiz.viewResult}
                 </button>
               ) : null}
             </>
-          )}
+          ) : null}
         </div>
 
         {/* Progress dots + bar */}
         <div className="flex flex-col items-center gap-2 max-w-[420px] mx-auto">
           {/* Mini dots */}
           <div className="flex items-center justify-center gap-1.5 flex-wrap">
-            {questions.map((q, i) => {
+            {activeQuestions.map((q, i) => {
               const done = Boolean(submitted[q.id]);
-              const ok = done && isAnswerCorrect(q, selected[q.id]);
+              const ok = done && isQuizAnswerCorrect(q, selected[q.id]);
               const isCurrent = i === index;
               let dotColor = 'bg-divider';
               if (done) dotColor = ok ? 'bg-ink' : 'bg-danger-500';
@@ -579,7 +513,7 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
                   type="button"
                   onClick={() => { if (i !== index) navigateTo(i, i > index ? 'left' : 'right'); }}
                   className={`h-2 rounded-full transition-all duration-300 ${dotColor} ${isCurrent ? 'w-6' : 'w-2'}`}
-                  aria-label={`跳到第 ${i + 1} 题`}
+                  aria-label={COPY.apps.quiz.jumpTo(i + 1)}
                 />
               );
             })}
@@ -594,7 +528,7 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
               />
             </div>
             <span className="whitespace-nowrap text-[12px] tabular-nums tracking-wide text-ink-muted">
-              {finishedCount} / {questions.length} 已答
+              {COPY.apps.quiz.answered(finishedCount, activeQuestions.length)}
             </span>
           </div>
         </div>

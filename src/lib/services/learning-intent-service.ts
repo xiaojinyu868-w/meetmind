@@ -33,15 +33,15 @@ function fallbackPlan(query: string): LearningIntentPlan {
 function sanitizeQuestions(value: unknown): LearningIntentQuestion[] {
   if (!Array.isArray(value)) return [];
   const seenQuestionIds = new Set<string>();
-  return value.slice(0, 3).flatMap((item, questionIndex) => {
+  return value.slice(0, 2).flatMap((item, questionIndex) => {
     if (!item || typeof item !== 'object') return [];
     const question = item as Record<string, unknown>;
-    const prompt = compact(question.prompt, 100);
+    const prompt = compact(question.prompt, 64);
     const seenOptionIds = new Set<string>();
     const options = Array.isArray(question.options)
       ? question.options.slice(0, 4).flatMap((option, optionIndex) => {
         if (typeof option === 'string') {
-          const label = compact(option, 36);
+          const label = compact(option, 24);
           const id = `o${optionIndex + 1}`;
           if (!label || seenOptionIds.has(id)) return [];
           seenOptionIds.add(id);
@@ -49,7 +49,7 @@ function sanitizeQuestions(value: unknown): LearningIntentQuestion[] {
         }
         if (!option || typeof option !== 'object') return [];
         const optionValue = option as Record<string, unknown>;
-        const label = compact(optionValue.label, 36);
+        const label = compact(optionValue.label, 24);
         if (!label) return [];
         const id = compact(optionValue.id, 24) || `o${optionIndex + 1}`;
         if (seenOptionIds.has(id)) return [];
@@ -117,7 +117,7 @@ export function buildLearningIntentSystemPrompt(isFinalizing: boolean): string {
   "confidence": "high|medium|low",
   "questions": [{
     "id": "稳定的英文短 id",
-    "prompt": "一个真正影响学习路径的问题",
+    "prompt": "一个真正影响学习路径、像同学自然问出口的短问题",
     "kind": "single|multiple",
     "options": [{ "id": "稳定的英文短 id", "label": "自然、具体的选项" }]
   }]
@@ -126,9 +126,12 @@ export function buildLearningIntentSystemPrompt(isFinalizing: boolean): string {
 规则：
 - checkpoints 是模型接下来会做的事，不是给用户的任务清单。
 - 能从用户当前表达或其明确指向的上下文判断的内容直接判断，不要再问。
-- confidence=high 表示不需要用户再做选择，也能正确开始接下来的十分钟；“学好某个大领域”这类宽泛愿望通常还不满足这个条件。
-- 只有答案会明显改变讲解深度、练习方式或最终产物时，才生成 questions；优先只问信息量最高的一题。
-- questions 最多 3 个，每题 2-4 个选项；优先单选，确实可并存才用多选。
+- confidence 仅供内部判断，不会展示给用户；只要没有必须由用户决定的歧义，就直接开始，并让教学过程自适应校准。
+- 只有答案会明显改变讲解深度、练习方式或最终产物时，才生成 questions；默认只问信息量最高的一题。
+- questions 通常最多 1 个；只有两个问题彼此独立、无法合并且都足以改变路径时才允许 2 个。每题 2-4 个选项；优先单选，确实可并存才用多选。
+- 问题直接问本身，尽量不超过 22 个汉字；不要写“为了给你匹配 / 为了更好地帮助 / 请告诉我”之类的系统解释。
+- 选项是用户一眼能扫完的具体方向，中文通常 4-14 字；不要在选项里塞括号、举例和第二层说明。
+- 不要为了确认学习风格、年级、基础或目标是否“足够具体”而提问；能先用一个小解释或小练习动态判断，就直接开始。
 - 不询问年级、身份等已经存在于个人上下文的信息。
 ${isFinalizing ? '- 用户已经回答过问题：吸收答案并返回最终计划，questions 必须为空数组。' : '- 意图已足够清楚时，questions 返回空数组。'}
 仅输出 JSON。`;

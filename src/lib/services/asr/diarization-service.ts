@@ -7,7 +7,7 @@
  *
  * 设计决策：
  *   - 静默执行，失败不打断用户（说话人分离是增强，不是核心功能）
- *   - 合并策略：按 startMs 时间戳最近匹配（容忍 3 秒偏差）
+ *   - 合并策略：时间区间最大重叠优先；无重叠时仅允许 1.5 秒近邻兜底
  *   - UI 通知：通过 onSpeakerIdUpdated 回调让父组件刷新 transcript
  */
 
@@ -17,16 +17,90 @@ import type { TranscriptSegment } from '@/types';
 
 const log = createLogger('diarization-service');
 
+export interface DiarizationSentence {
+  text: string;
+  beginTime: number;
+  endTime: number;
+  speakerId: number;
+}
+
 interface DiarizationApiResponse {
   success: boolean;
-  sentences: Array<{
-    text: string;
-    beginTime: number;
-    endTime: number;
-    speakerId: number;
-  }>;
+  sentences: DiarizationSentence[];
   speakerCount: number;
   error?: string;
+}
+
+export interface DiarizationEvidence {
+  shouldApply: boolean;
+  stableSpeakerIds: number[];
+  stableSpeakerCount: number;
+  totalSpeechMs: number;
+}
+
+const MIN_STABLE_SPEAKER_MS = 1500;
+const MIN_STABLE_SPEAKER_CHARS = 6;
+const MIN_MULTI_SPEAKER_TOTAL_MS = 6000;
+
+/**
+ * 判断说话人结果是否真的值得展示。
+ *
+ * 说话人标签属于高信任信息：一个短噪声被聚成“第二个人”，比不显示更伤体验。
+ * 因此只有至少两位发言者都留下足够语音与文本证据时才应用；未确定的 -1 永远忽略。
+ */
+export function assessDiarizationEvidence(
+  sentences: DiarizationSentence[],
+): DiarizationEvidence {
+  const stats = new Map<number, { speechMs: number; chars: number }>();
+
+  for (const sentence of sentences) {
+    if (!Number.isInteger(sentence.speakerId) || sentence.speakerId < 0) continue;
+    const text = sentence.text.trim();
+    const durationMs = Math.max(0, sentence.endTime - sentence.beginTime);
+    if (!text || durationMs <= 0) continue;
+
+    const current = stats.get(sentence.speakerId) ?? { speechMs: 0, chars: 0 };
+    current.speechMs += durationMs;
+    current.chars += text.replace(/\s/g, '').length;
+    stats.set(sentence.speakerId, current);
+  }
+
+  const stableSpeakerIds = [...stats.entries()]
+    .filter(([, stat]) => (
+      stat.speechMs >= MIN_STABLE_SPEAKER_MS
+      && stat.chars >= MIN_STABLE_SPEAKER_CHARS
+    ))
+    // Map 保留首次出现顺序，用户看到的 A/B 与课堂时间线一致。
+    .map(([speakerId]) => speakerId);
+  const totalSpeechMs = [...stats.values()].reduce((sum, stat) => sum + stat.speechMs, 0);
+
+  return {
+    shouldApply: stableSpeakerIds.length >= 2 && totalSpeechMs >= MIN_MULTI_SPEAKER_TOTAL_MS,
+    stableSpeakerIds,
+    stableSpeakerCount: stableSpeakerIds.length,
+    totalSpeechMs,
+  };
+}
+
+/**
+ * Batch 定稿之后是否还需要补说话人标签。
+ *
+ * 续录片段的时间戳带有整节课 offset，而 diarization 返回的是当前音频 blob
+ * 内的相对时间；在没有完成 offset 映射前不能冒险错标上一段课堂。
+ */
+export function shouldRunPostBatchDiarization(
+  segments: TranscriptSegment[],
+  baseOffsetMs: number,
+): boolean {
+  const hasResolvedSpeaker = segments.some((segment) => (
+    typeof segment.speakerId === 'string'
+    && /^\d+$/.test(segment.speakerId)
+  ));
+  return (
+    segments.length > 0
+    && baseOffsetMs === 0
+    && !hasResolvedSpeaker
+  );
 }
 
 /**
@@ -42,7 +116,7 @@ export async function runDiarizationForSession(
   sessionId: string,
   existingSegments: TranscriptSegment[],
   onSpeakerIdUpdated?: (updatedSegments: TranscriptSegment[]) => void,
-): Promise<{ success: boolean; speakerCount: number; error?: string }> {
+): Promise<{ success: boolean; speakerCount: number; applied?: boolean; error?: string }> {
   log.info('Starting diarization', { sessionId, blobSize: audioBlob.size, segmentCount: existingSegments.length });
 
   try {
@@ -73,9 +147,36 @@ export async function runDiarizationForSession(
       speakerCount: result.speakerCount,
     });
 
+    const evidence = assessDiarizationEvidence(result.sentences);
+    if (!evidence.shouldApply) {
+      log.info('Diarization hidden: insufficient multi-speaker evidence', {
+        reportedSpeakerCount: result.speakerCount,
+        stableSpeakerCount: evidence.stableSpeakerCount,
+        totalSpeechMs: evidence.totalSpeechMs,
+      });
+      return {
+        success: true,
+        speakerCount: evidence.stableSpeakerCount,
+        applied: false,
+      };
+    }
+
+    const stableSpeakerIds = new Set(evidence.stableSpeakerIds);
+    const speakerOrdinal = new Map(
+      evidence.stableSpeakerIds.map((speakerId, index) => [speakerId, index]),
+    );
+    const stableSentences = result.sentences
+      .filter((sentence) => stableSpeakerIds.has(sentence.speakerId))
+      .map((sentence) => ({
+        ...sentence,
+        // 远端声纹编号可能不从 0 连续递增；落盘前收口为 A/B/C 顺序。
+        speakerId: speakerOrdinal.get(sentence.speakerId)!,
+      }));
+
     // 构建 startMs → speakerId 映射
-    const speakerMap = result.sentences.map((s) => ({
+    const speakerMap = stableSentences.map((s) => ({
       startMs: s.beginTime,
+      endMs: s.endTime,
       speakerId: String(s.speakerId),
     }));
 
@@ -84,12 +185,12 @@ export async function runDiarizationForSession(
     log.info('Updated speakerId in IndexedDB', { updatedCount, total: existingSegments.length });
 
     // 合并到内存中的 segments（用于回调）
-    const updatedSegments = mergeSpeakerIds(existingSegments, result.sentences);
+    const updatedSegments = mergeSpeakerIds(existingSegments, stableSentences);
 
     // 通知 UI 刷新
     onSpeakerIdUpdated?.(updatedSegments);
 
-    return { success: true, speakerCount: result.speakerCount };
+    return { success: true, speakerCount: evidence.stableSpeakerCount, applied: true };
   } catch (error) {
     log.error('Diarization failed', error);
     return {
@@ -103,26 +204,29 @@ export async function runDiarizationForSession(
 /**
  * 把 diarization 结果合并到内存中的 TranscriptSegment 数组
  *
- * 匹配策略：按 startMs 最接近原则，容忍 3 秒偏差
+ * 匹配策略：时间区间最大重叠优先；无重叠时只允许小范围时间轴偏差
  */
-function mergeSpeakerIds(
+export function mergeSpeakerIds(
   segments: TranscriptSegment[],
-  diarizationSentences: Array<{ text: string; beginTime: number; endTime: number; speakerId: number }>,
+  diarizationSentences: DiarizationSentence[],
 ): TranscriptSegment[] {
   return segments.map((seg) => {
     let bestMatch: { speakerId: number } | null = null;
+    let bestOverlap = 0;
     let bestDist = Infinity;
 
     for (const ds of diarizationSentences) {
+      const overlap = Math.max(0, Math.min(seg.endMs, ds.endTime) - Math.max(seg.startMs, ds.beginTime));
       const dist = Math.abs(seg.startMs - ds.beginTime);
-      if (dist < bestDist) {
+      if (overlap > bestOverlap || (overlap === bestOverlap && dist < bestDist)) {
+        bestOverlap = overlap;
         bestDist = dist;
         bestMatch = ds;
       }
     }
 
-    // 容忍 3 秒偏差
-    if (bestMatch && bestDist < 3000) {
+    // 优先采用时间重叠最大的发言；无重叠时只容忍 1.5 秒的小时间轴偏差。
+    if (bestMatch && (bestOverlap > 0 || bestDist < 1500)) {
       return { ...seg, speakerId: String(bestMatch.speakerId) };
     }
 
@@ -133,14 +237,15 @@ function mergeSpeakerIds(
 /**
  * 获取说话人显示标签
  *
- * 返回 "说话人N"（N = speakerId + 1），不假设谁是老师——
- * 声纹聚类的编号顺序不保证 0 是主讲人。
+ * 返回匿名“发言者 A / B”，不假设谁是老师，也不自动猜真实姓名——
+ * 声纹聚类编号的顺序不保证 0 是主讲人。
  */
 export function getSpeakerLabel(speakerId: string | undefined): string {
   if (!speakerId) return '';
-  const id = parseInt(speakerId, 10);
-  if (isNaN(id)) return '';
-  return `说话人${id + 1}`;
+  if (!/^\d+$/.test(speakerId)) return '';
+  const id = Number(speakerId);
+  if (!Number.isInteger(id) || id < 0 || id > 25) return '';
+  return `发言者 ${String.fromCharCode(65 + id)}`;
 }
 
 /**
@@ -152,8 +257,10 @@ export function getSpeakerLabel(speakerId: string | undefined): string {
  */
 export function getSpeakerColorClass(speakerId: string | undefined): string {
   if (!speakerId) return '';
-  const id = parseInt(speakerId, 10);
-  if (isNaN(id)) return '';
+  if (!/^\d+$/.test(speakerId)) return '';
+  const id = Number(speakerId);
+  if (!Number.isInteger(id) || id < 0) return '';
   if (id === 0) return 'text-pine';
-  return 'text-vermilion';
+  if (id === 1) return 'text-vermilion';
+  return 'text-ink-secondary';
 }

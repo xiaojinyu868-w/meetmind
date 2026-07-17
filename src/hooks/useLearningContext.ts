@@ -5,6 +5,7 @@ import { getPreference, setPreference } from '@/lib/db';
 import { useAuth } from '@/lib/hooks/useAuth';
 import type {
   LearnerProfile,
+  CourseContextPreference,
   LearningActivityEntry,
   LearningContextState,
   LearningMemoryEntry,
@@ -38,9 +39,13 @@ export interface UseLearningContextReturn extends LearningContextState {
   saving: boolean;
   error: string | null;
   addMemory: (draft: MemoryDraft) => Promise<void>;
-  updateMemory: (id: string, patch: Partial<Pick<LearningMemoryEntry, 'title' | 'detail' | 'status'>>) => Promise<void>;
+  updateMemory: (id: string, patch: Partial<Pick<LearningMemoryEntry, 'kind' | 'title' | 'detail' | 'status'>>) => Promise<void>;
   removeMemory: (id: string) => Promise<void>;
   recordActivity: (draft: ActivityDraft) => Promise<void>;
+  updateCoursePreference: (
+    courseKey: string,
+    patch: Partial<Pick<CourseContextPreference, 'displayName' | 'status' | 'confirmedByUser' | 'excludedSessionIds' | 'assessments'>>,
+  ) => Promise<void>;
   setActiveThread: (thread?: LearningThreadEntry) => Promise<void>;
 }
 
@@ -106,6 +111,7 @@ export function useLearningContext(): UseLearningContextReturn {
           ...base,
           memories: next.memories,
           recentLearningActivities: next.recentActivities,
+          courseContextPreferences: next.coursePreferences || [],
           activeLearningThread: next.activeThread,
         } as LearnerProfile;
         const ok = await saveLearnerProfile(profile);
@@ -138,7 +144,7 @@ export function useLearningContext(): UseLearningContextReturn {
 
   const updateMemory = useCallback(async (
     id: string,
-    patch: Partial<Pick<LearningMemoryEntry, 'title' | 'detail' | 'status'>>,
+    patch: Partial<Pick<LearningMemoryEntry, 'kind' | 'title' | 'detail' | 'status'>>,
   ) => {
     const next: LearningContextState = {
       ...stateRef.current,
@@ -171,6 +177,44 @@ export function useLearningContext(): UseLearningContextReturn {
     }));
   }, [persist]);
 
+  const updateCoursePreference = useCallback(async (
+    courseKey: string,
+    patch: Partial<Pick<CourseContextPreference, 'displayName' | 'status' | 'confirmedByUser' | 'excludedSessionIds' | 'assessments'>>,
+  ) => {
+    const existing = stateRef.current.coursePreferences || [];
+    const current = existing.find((item) => item.courseKey === courseKey);
+    const nextPreference: CourseContextPreference = {
+      courseKey,
+      displayName: current?.displayName,
+      status: current?.status ?? 'active',
+      confirmedByUser: current?.confirmedByUser,
+      excludedSessionIds: current?.excludedSessionIds,
+      assessments: current?.assessments,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    nextPreference.excludedSessionIds = Array.isArray(nextPreference.excludedSessionIds)
+      ? Array.from(new Set(nextPreference.excludedSessionIds.filter(Boolean))).slice(-64)
+      : undefined;
+    nextPreference.assessments = Array.isArray(nextPreference.assessments)
+      ? nextPreference.assessments
+        .filter((assessment) => assessment?.id && assessment?.name)
+        .map((assessment) => ({
+          ...assessment,
+          name: assessment.name.replace(/\s+/g, ' ').trim().slice(0, 60),
+          syllabus: assessment.syllabus?.trim().slice(0, 4_000) || undefined,
+        }))
+        .slice(-8)
+      : undefined;
+    await persist({
+      ...stateRef.current,
+      coursePreferences: [
+        ...existing.filter((item) => item.courseKey !== courseKey),
+        nextPreference,
+      ].slice(-32),
+    });
+  }, [persist]);
+
   const setActiveThread = useCallback(async (thread?: LearningThreadEntry) => {
     await persist(updateLearningThread(stateRef.current, thread));
   }, [persist]);
@@ -184,6 +228,7 @@ export function useLearningContext(): UseLearningContextReturn {
     updateMemory,
     removeMemory,
     recordActivity,
+    updateCoursePreference,
     setActiveThread,
   };
 }

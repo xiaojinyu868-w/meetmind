@@ -5,6 +5,7 @@ describe('isPublicRoute', () => {
   it('keeps /api/tutor/agent public for guest AI companion requests', () => {
     expect(isPublicRoute('/api/tutor/agent')).toBe(true);
     expect(isPublicRoute('/api/tutor/intent')).toBe(true);
+    expect(isPublicRoute('/api/tutor/memory')).toBe(true);
   });
 
   it('keeps /api/feed public so guest local captures can produce a rate-limited feed', () => {

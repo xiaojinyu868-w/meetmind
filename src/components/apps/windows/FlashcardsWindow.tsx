@@ -9,6 +9,11 @@ import { isGuestDemoFlashcardsResult } from '@/components/classroom/guest-demo-e
 import { buildFlashcardsTrialShareText } from './flashcards-share-actions';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
 import { formatFlashcardActivity, formatFlashcardCompleteActivity } from '@/components/review-learning-activity';
+import {
+  formatFlashcardEvidenceTime,
+  getFlashcardsFallbackMessage,
+  normalizeFlashcards,
+} from './flashcards-window-model';
 
 interface FlashcardsWindowProps {
   result: AppExecutionResult | null;
@@ -17,66 +22,19 @@ interface FlashcardsWindowProps {
   onLearningActivity?: (line: string) => void;
 }
 
-interface FlashcardItem {
-  id: string;
-  title?: string;
-  front: string;
-  back: string;
-  hint?: string;
-}
-
-function normalizeCards(result: AppExecutionResult | null): FlashcardItem[] {
-  if (!result) return [];
-  const payload = result.render?.payload as { cards?: Array<Record<string, unknown>> } | undefined;
-  const cardsFromPayload = Array.isArray(payload?.cards)
-    ? payload.cards
-        .map((item, index) => ({
-          id: typeof item.id === 'string' ? item.id : `payload-card-${index + 1}`,
-          title: typeof item.title === 'string' ? item.title : `闪卡 ${index + 1}`,
-          front: typeof item.front === 'string' ? item.front : '',
-          back: typeof item.back === 'string' ? item.back : '',
-          hint: typeof item.hint === 'string' ? item.hint : undefined,
-        }))
-        .filter((item) => item.front && item.back)
-    : [];
-
-  if (cardsFromPayload.length > 0) return cardsFromPayload;
-
-  return result.cards
-    .filter((card) => card.meta?.cardKind === 'flashcard')
-    .map((card, index) => ({
-      id: card.id,
-      title: card.title || `闪卡 ${index + 1}`,
-      front: typeof card.meta?.front === 'string' ? card.meta.front : card.body,
-      back: typeof card.meta?.back === 'string' ? card.meta.back : '',
-      hint: typeof card.meta?.hint === 'string' ? card.meta.hint : undefined,
-    }))
-    .filter((item) => item.front && item.back);
-}
-
-function getFallbackMessage(result: AppExecutionResult | null): string | null {
-  const payload = result?.render?.payload as { message?: unknown } | undefined;
-  return typeof payload?.message === 'string' && payload.message.trim()
-    ? payload.message.trim()
-    : null;
-}
-
 type MasteryScore = 'missed' | 'got';
 
-/* 卡片渐变色调 — 根据索引循环，营造视觉多样性 */
-const CARD_THEMES = [
-  { bg: 'from-[#1a1f35] to-[#14110D]', accent: '#6366f1', glow: 'rgba(99,102,241,0.15)' },
-  { bg: 'from-[#1a2332] to-[#14110D]', accent: '#3b82f6', glow: 'rgba(59,130,246,0.15)' },
-  { bg: 'from-[#1a2f2a] to-[#14110D]', accent: '#10b981', glow: 'rgba(16,185,129,0.15)' },
-  { bg: 'from-[#2a1f35] to-[#14110D]', accent: '#8b5cf6', glow: 'rgba(139,92,246,0.15)' },
-  { bg: 'from-[#2a2520] to-[#14110D]', accent: '#f59e0b', glow: 'rgba(245,158,11,0.15)' },
-];
-
-export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindowProps) {
-  const cards = useMemo(() => normalizeCards(result), [result]);
-  const fallbackMessage = useMemo(() => getFallbackMessage(result), [result]);
+export function FlashcardsWindow({ result, onSeek, onLearningActivity }: FlashcardsWindowProps) {
+  const cards = useMemo(() => normalizeFlashcards(result), [result]);
+  const fallbackMessage = useMemo(() => getFlashcardsFallbackMessage(result), [result]);
+  const [reviewCardIds, setReviewCardIds] = useState<string[] | null>(null);
+  const activeCards = useMemo(
+    () => reviewCardIds ? cards.filter((card) => reviewCardIds.includes(card.id)) : cards,
+    [cards, reviewCardIds],
+  );
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  const [showHint, setShowHint] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [slideDir, setSlideDir] = useState<'none' | 'left' | 'right'>('none');
   const [scores, setScores] = useState<Record<string, MasteryScore>>({});
@@ -123,6 +81,7 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
     setIsAnimating(true);
     setSlideDir(dir);
     setFlipped(false);
+    setShowHint(false);
     setTimeout(() => {
       setIndex(newIndex);
       setSlideDir('none');
@@ -136,9 +95,9 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
   }, [index, isAnimating, navigateTo]);
 
   const goToNext = useCallback(() => {
-    if (index >= cards.length - 1 || isAnimating) return;
+    if (index >= activeCards.length - 1 || isAnimating) return;
     navigateTo(index + 1, 'left');
-  }, [index, cards.length, isAnimating, navigateTo]);
+  }, [activeCards.length, index, isAnimating, navigateTo]);
 
   const handleFlip = useCallback(() => {
     if (isAnimating) return;
@@ -146,26 +105,26 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
   }, [isAnimating]);
 
   const handleScore = useCallback((value: MasteryScore) => {
-    const current = cards[Math.min(index, cards.length - 1)];
+    const current = activeCards[Math.min(index, activeCards.length - 1)];
     if (!current || isAnimating) return;
     const nextScores = { ...scores, [current.id]: value };
     setScores(nextScores);
     onLearningActivity?.(formatFlashcardActivity({
       index: index + 1,
-      total: cards.length,
+      total: activeCards.length,
       front: current.front,
       rating: value,
     }));
-    if (Object.keys(nextScores).length === cards.length) {
+    if (Object.keys(nextScores).length === activeCards.length) {
       const got = Object.values(nextScores).filter((score) => score === 'got').length;
-      onLearningActivity?.(formatFlashcardCompleteActivity({ got, total: cards.length }));
+      onLearningActivity?.(formatFlashcardCompleteActivity({ got, total: activeCards.length }));
     }
-    if (index < cards.length - 1) {
+    if (index < activeCards.length - 1) {
       navigateTo(index + 1, 'left');
     } else {
       setFlipped(false);
     }
-  }, [cards, index, isAnimating, navigateTo, onLearningActivity, scores]);
+  }, [activeCards, index, isAnimating, navigateTo, onLearningActivity, scores]);
 
   // Keyboard
   useEffect(() => {
@@ -200,25 +159,24 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
   }, [goToNext, goToPrev]);
 
   if (!result) {
-    return <AppWindowPlaceholder status="loading" appName="闪卡训练" />;
+    return <AppWindowPlaceholder status="loading" appName={COPY.apps.flashcards.appName} />;
   }
   if (fallbackMessage) {
     return (
-      <div className="flex h-full min-h-[420px] items-center justify-center bg-[#11110F] px-6">
-        <p className="max-w-[24rem] text-center text-[15px] leading-7 text-white/70">
+      <div className="flex h-full min-h-[420px] items-center justify-center bg-[#FAF7F2] px-6">
+        <p className="max-w-[24rem] text-center text-[15px] leading-7 text-ink-secondary">
           {fallbackMessage}
         </p>
       </div>
     );
   }
   if (cards.length === 0) {
-    return <AppWindowPlaceholder status="empty" appName="闪卡训练" />;
+    return <AppWindowPlaceholder status="empty" appName={COPY.apps.flashcards.appName} />;
   }
 
-  const current = cards[Math.min(index, cards.length - 1)];
-  const progress = cards.length > 0 ? ((index + 1) / cards.length) * 100 : 0;
-  const allDone = Object.keys(scores).length === cards.length;
-  const theme = CARD_THEMES[index % CARD_THEMES.length];
+  const current = activeCards[Math.min(index, activeCards.length - 1)];
+  const progress = activeCards.length > 0 ? ((index + 1) / activeCards.length) * 100 : 0;
+  const allDone = activeCards.length > 0 && Object.keys(scores).length === activeCards.length;
   const currentScore = scores[current.id];
 
   // Slide animation class
@@ -230,59 +188,50 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
 
   // Summary screen
   if (allDone) {
-    const accuracy = cards.length > 0 ? Math.round((gotCount / cards.length) * 100) : 0;
+    const recallRate = activeCards.length > 0 ? Math.round((gotCount / activeCards.length) * 100) : 0;
     return (
-      <div className="relative flex h-full min-h-[420px] flex-col items-center justify-center overflow-hidden bg-[#11110F] p-6">
-        {/* Ambient glow */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full opacity-20"
-            style={{ background: `radial-gradient(circle, ${accuracy >= 70 ? '#10b981' : '#f59e0b'} 0%, transparent 70%)` }} />
-        </div>
-
-        <div className="relative text-center z-10">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-6"
-            style={{ background: `linear-gradient(135deg, ${accuracy >= 70 ? '#10b98130' : '#f59e0b30'}, transparent)` }}>
-            <span className="text-4xl">{accuracy >= 80 ? '🎯' : accuracy >= 50 ? '💪' : '📚'}</span>
-          </div>
-          <h2 className="text-2xl font-bold text-white mb-1">训练完成</h2>
-          <p className="text-white/40 text-sm mb-8">共 {cards.length} 张闪卡</p>
+      <div className="flex h-full min-h-[420px] flex-col items-center justify-center overflow-hidden bg-[#FAF7F2] p-6">
+        <div className="text-center">
+          <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-pine" aria-hidden />
+          <h2 className="mb-1 text-2xl font-bold text-ink">{COPY.apps.flashcards.completeTitle}</h2>
+          <p className="mb-8 text-sm text-ink-muted">{COPY.apps.flashcards.roundSummary(activeCards.length)}</p>
 
           {/* Score ring */}
           <div className="relative inline-flex items-center justify-center w-32 h-32 mb-8">
             <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6" />
-              <circle cx="50" cy="50" r="42" fill="none" stroke={accuracy >= 70 ? '#10b981' : '#f59e0b'}
+              <circle cx="50" cy="50" r="42" fill="none" stroke="#E5E0D8" strokeWidth="6" />
+              <circle cx="50" cy="50" r="42" fill="none" stroke="#2F6B55"
                 strokeWidth="6" strokeLinecap="round"
-                strokeDasharray={`${accuracy * 2.64} 264`}
+                strokeDasharray={`${recallRate * 2.64} 264`}
                 style={{ transition: 'stroke-dasharray 1s ease-out' }} />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-3xl font-bold text-white">{accuracy}%</span>
-              <span className="text-xs text-white/40">正确率</span>
+              <span className="text-3xl font-bold text-ink">{recallRate}%</span>
+              <span className="text-xs text-ink-muted">{COPY.apps.flashcards.recallRate}</span>
             </div>
           </div>
 
           <div className="flex items-center justify-center gap-10 mb-8">
             <div className="text-center">
-              <div className="text-xl font-bold text-[#5C5A55]">{gotCount}</div>
-              <div className="text-xs text-white/40 mt-0.5">已掌握</div>
+              <div className="text-xl font-bold text-pine">{gotCount}</div>
+              <div className="mt-0.5 text-xs text-ink-muted">{COPY.apps.flashcards.gotCount}</div>
             </div>
-            <div className="w-px h-8 bg-white/10" />
+            <div className="h-8 w-px bg-divider" />
             <div className="text-center">
-              <div className="text-xl font-bold text-vermilion-light">{missedCount}</div>
-              <div className="text-xs text-white/40 mt-0.5">待加强</div>
+              <div className="text-xl font-bold text-vermilion">{missedCount}</div>
+              <div className="mt-0.5 text-xs text-ink-muted">{COPY.apps.flashcards.missedCount}</div>
             </div>
           </div>
 
-          {isGuestDemoResult && (
-            <div className="mb-5 w-full max-w-[320px] rounded-[20px] border border-white/10 bg-white/[0.04] p-4 text-left">
-              <p className="text-sm font-semibold text-white/90">{COPY.flashcardsShare.summaryTitle}</p>
-              <p className="mt-1 text-xs leading-5 text-white/45">{COPY.flashcardsShare.summaryBody(cards.length)}</p>
+          {isGuestDemoResult && reviewCardIds === null && (
+            <div className="mb-5 w-full max-w-[320px] rounded-[20px] border border-divider bg-white p-4 text-left shadow-soft">
+              <p className="text-sm font-semibold text-ink">{COPY.flashcardsShare.summaryTitle}</p>
+              <p className="mt-1 text-xs leading-5 text-ink-muted">{COPY.flashcardsShare.summaryBody(activeCards.length)}</p>
               <button
                 type="button"
                 onClick={handleShareTrialResult}
                 disabled={sharingTrial}
-                className="mt-3 w-full rounded-full bg-white px-4 py-2.5 text-[13px] font-medium text-[#1C1B19] transition hover:bg-white/90 active:scale-[0.99] disabled:opacity-60"
+                className="mt-3 w-full rounded-full bg-pine px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-pine/90 active:scale-[0.99] disabled:opacity-60"
               >
                 {sharingTrial ? COPY.flashcardsShare.sharing : COPY.flashcardsShare.open}
               </button>
@@ -294,20 +243,24 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
               <button
                 type="button"
                 onClick={() => {
-                  const firstMissed = cards.findIndex((c) => scores[c.id] === 'missed');
-                  if (firstMissed >= 0) { setIndex(firstMissed); setFlipped(false); setScores({}); }
+                  const missedIds = activeCards.filter((card) => scores[card.id] === 'missed').map((card) => card.id);
+                  setReviewCardIds(missedIds);
+                  setIndex(0);
+                  setFlipped(false);
+                  setShowHint(false);
+                  setScores({});
                 }}
-                className="rounded-full bg-white/10 border border-white/10 px-8 py-2.5 text-sm font-medium text-white hover:bg-white/15 transition-all"
+                className="rounded-full border border-pine/25 bg-pine-mist px-8 py-2.5 text-sm font-medium text-pine transition-all hover:bg-pine/15"
               >
-                复习薄弱项
+                {COPY.apps.flashcards.reviewMissed(missedCount)}
               </button>
             )}
             <button
               type="button"
-              onClick={() => { setIndex(0); setFlipped(false); setScores({}); }}
-              className="rounded-full px-8 py-2.5 text-sm text-white/50 hover:text-white/80 transition-colors"
+              onClick={() => { setReviewCardIds(null); setIndex(0); setFlipped(false); setShowHint(false); setScores({}); }}
+              className="rounded-full px-8 py-2.5 text-sm text-ink-muted transition-colors hover:text-ink"
             >
-              重新开始
+              {COPY.apps.flashcards.restart}
             </button>
           </div>
         </div>
@@ -317,23 +270,17 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
 
   return (
     <div
-      className="relative flex h-full min-h-[420px] flex-col select-none overflow-hidden bg-[#11110F]"
+      className="relative flex h-full min-h-[420px] flex-col select-none overflow-hidden bg-[#FAF7F2]"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       data-testid="flashcards-window"
     >
-      {/* Ambient background glow */}
-      <div className="absolute inset-0 pointer-events-none transition-all duration-700" style={{
-        background: `radial-gradient(ellipse 720px 460px at 50% 34%, ${theme.glow}, transparent 72%), linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0) 34%)`,
-      }} />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/30 to-transparent" />
-
-      {isGuestDemoResult && (
+      {isGuestDemoResult && reviewCardIds === null && (
         <button
           type="button"
           onClick={handleShareTrialResult}
           disabled={sharingTrial}
-          className="absolute right-4 top-3 z-20 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[12px] font-medium text-white/65 transition hover:bg-white/[0.1] hover:text-white active:scale-[0.99] disabled:opacity-60"
+          className="absolute right-4 top-3 z-20 rounded-full border border-pine/15 bg-white px-3 py-1.5 text-[12px] font-medium text-pine shadow-soft transition hover:bg-pine-mist active:scale-[0.99] disabled:opacity-60"
         >
           {sharingTrial ? COPY.flashcardsShare.sharing : COPY.flashcardsShare.open}
         </button>
@@ -341,8 +288,8 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
 
       {/* Top: keyboard hint (desktop only) */}
       <div className="relative flex-shrink-0 pt-3 pb-1 text-center hidden md:block">
-        <p className="text-[11px] text-white/25 tracking-wider">
-          SPACE 翻转 &nbsp;&middot;&nbsp; ← → 切换
+        <p className="text-[11px] tracking-wider text-ink-muted">
+          {COPY.apps.flashcards.keyboardHint}
         </p>
       </div>
 
@@ -353,11 +300,10 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
           type="button"
           onClick={goToPrev}
           disabled={index <= 0}
-          className="absolute left-3 md:left-6 z-10 group flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200 disabled:opacity-0 disabled:pointer-events-none"
-          style={{ background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(8px)' }}
-          aria-label="上一张"
+          className="group absolute left-3 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-divider bg-white/90 shadow-soft transition-all duration-200 disabled:pointer-events-none disabled:opacity-0 md:left-6"
+          aria-label={COPY.apps.flashcards.previous}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-white/50 group-hover:text-white transition-colors" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-ink-muted transition-colors group-hover:text-ink" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </button>
@@ -379,47 +325,88 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
             >
               {/* Front face */}
               <div
-                className={`rounded-[20px] bg-gradient-to-br ${theme.bg} p-7 md:p-8`}
+                className="rounded-[20px] border border-divider bg-white p-7 shadow-card md:p-8"
+                aria-hidden={flipped}
                 style={{
                   backfaceVisibility: 'hidden',
-                  boxShadow: `0 25px 50px -12px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06), inset 0 1px 0 rgba(255,255,255,0.05)`,
                 }}
               >
                 <div className="min-h-[220px] md:min-h-[240px] flex flex-col justify-center items-center text-center">
-                  <p className="text-[17px] md:text-xl font-semibold leading-[1.7] text-white/90 tracking-wide">
+                  <p className="text-[17px] font-semibold leading-[1.7] tracking-wide text-ink md:text-xl">
                     {current.front}
                   </p>
-                  {current.hint && (
-                    <p className="mt-5 text-[13px] text-white/30 leading-relaxed max-w-[90%]">
-                      💡 {current.hint}
-                    </p>
-                  )}
+                  {current.hint ? (
+                    showHint ? (
+                      <p className="mt-5 max-w-[90%] border-l border-vermilion/60 pl-3 text-left text-[13px] leading-relaxed text-ink-muted">
+                        {current.hint}
+                      </p>
+                    ) : (
+                      <button
+                        type="button"
+                        tabIndex={flipped ? -1 : 0}
+                        className="mt-5 rounded-full border border-divider bg-paper px-3 py-1.5 text-[12px] text-ink-muted transition hover:border-pine/25 hover:text-pine"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setShowHint(true);
+                        }}
+                      >
+                        {COPY.apps.flashcards.showHint}
+                      </button>
+                    )
+                  ) : null}
                 </div>
                 <div className="mt-3 text-center">
-                  <span className="text-[11px] text-white/20 tracking-wide uppercase">点击翻转</span>
+                  <button
+                    type="button"
+                    tabIndex={flipped ? -1 : 0}
+                    className="rounded-full px-3 py-1.5 text-[11px] tracking-wide text-ink-muted transition hover:bg-paper-warm hover:text-pine focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pine/30"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleFlip();
+                    }}
+                  >
+                    {COPY.apps.flashcards.reveal}
+                  </button>
                 </div>
               </div>
 
               {/* Back face */}
               <div
-                className="absolute inset-0 rounded-[20px] bg-gradient-to-br from-[#0a2520] to-[#14110D] p-7 md:p-8"
+                className="absolute inset-0 rounded-[20px] border border-pine/25 bg-[#F2F6F3] p-7 shadow-card md:p-8"
+                aria-hidden={!flipped}
                 style={{
                   backfaceVisibility: 'hidden',
                   transform: 'rotateY(180deg)',
-                  boxShadow: `0 25px 50px -12px rgba(0,0,0,0.5), 0 0 0 1px rgba(16,185,129,0.15), inset 0 1px 0 rgba(16,185,129,0.1)`,
                 }}
               >
                 <div className="min-h-[220px] md:min-h-[240px] flex flex-col justify-center items-center text-center">
-                  <div className="inline-flex items-center gap-1.5 rounded-full bg-[#1C1B19]/10 px-3 py-1 mb-4">
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#D1F4E0]" />
-                    <span className="text-[11px] font-medium text-[#5C5A55] tracking-wide uppercase">答案</span>
+                  <div className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-white/75 px-3 py-1 ring-1 ring-pine/10">
+                    <div className="h-1.5 w-1.5 rounded-full bg-pine" />
+                    <span className="text-[11px] font-medium tracking-wide text-pine">{COPY.apps.flashcards.answer}</span>
                   </div>
-                  <p className="text-[17px] md:text-xl font-semibold leading-[1.7] text-white/90 tracking-wide">
+                  <p className="text-[17px] font-semibold leading-[1.7] tracking-wide text-ink md:text-xl">
                     {current.back}
                   </p>
                 </div>
                 <div className="mt-3 text-center">
-                  <span className="text-[11px] text-white/20 tracking-wide uppercase">点击翻转</span>
+                  {current.evidence ? (
+                    <button
+                      type="button"
+                      tabIndex={flipped ? 0 : -1}
+                      className="text-[11px] tracking-wide text-pine/70 transition hover:text-pine"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSeek?.(current.evidence!.startMs);
+                      }}
+                      disabled={!onSeek}
+                    >
+                      {onSeek
+                        ? COPY.apps.flashcards.returnToEvidenceAt(formatFlashcardEvidenceTime(current.evidence.startMs))
+                        : COPY.apps.flashcards.evidenceAt(formatFlashcardEvidenceTime(current.evidence.startMs))}
+                    </button>
+                  ) : (
+                    <span className="text-[11px] tracking-wide text-ink-muted">{COPY.apps.flashcards.reveal}</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -430,12 +417,11 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
         <button
           type="button"
           onClick={goToNext}
-          disabled={index >= cards.length - 1}
-          className="absolute right-3 md:right-6 z-10 group flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200 disabled:opacity-0 disabled:pointer-events-none"
-          style={{ background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(8px)' }}
-          aria-label="下一张"
+          disabled={index >= activeCards.length - 1}
+          className="group absolute right-3 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-divider bg-white/90 shadow-soft transition-all duration-200 disabled:pointer-events-none disabled:opacity-0 md:right-6"
+          aria-label={COPY.apps.flashcards.next}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-white/50 group-hover:text-white transition-colors" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-ink-muted transition-colors group-hover:text-ink" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="9 18 15 12 9 6" />
           </svg>
         </button>
@@ -443,51 +429,48 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
 
       {/* Bottom controls */}
       <div className="relative flex-shrink-0 px-4 pb-5 pt-2">
-        {/* Score buttons */}
-        <div className="flex items-center justify-center gap-4 mb-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold tabular-nums" style={{ color: '#f87171', minWidth: '20px', textAlign: 'right' }}>{missedCount}</span>
+        {flipped ? (
+          <div className="mb-4 flex items-center justify-center gap-3">
             <button
               type="button"
               onClick={() => handleScore('missed')}
-              className={`group relative rounded-full px-6 py-2.5 text-sm font-medium transition-all duration-200 active:scale-95 ${
+              className={`min-h-11 rounded-full border px-6 text-sm font-medium transition active:scale-95 ${
                 currentScore === 'missed'
-                  ? 'bg-vermilion/22 text-vermilion-light ring-1 ring-vermilion/35'
-                  : 'bg-white/[0.04] text-white/60 hover:bg-white/[0.08] hover:text-vermilion-light'
+                  ? 'border-vermilion/45 bg-vermilion-mist text-vermilion'
+                  : 'border-divider bg-white text-ink-secondary hover:border-vermilion/35 hover:text-vermilion'
               }`}
             >
-              没掌握
+              {COPY.apps.flashcards.missed}
             </button>
-          </div>
-          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => handleScore('got')}
-              className={`group relative rounded-full px-6 py-2.5 text-sm font-medium transition-all duration-200 active:scale-95 ${
+              className={`min-h-11 rounded-full border px-6 text-sm font-medium transition active:scale-95 ${
                 currentScore === 'got'
-                  ? 'bg-[#1C1B19]/20 text-[#D1F4E0] ring-1 ring-[#D1F4E0]/30'
-                  : 'bg-white/[0.04] text-white/60 hover:bg-white/[0.08] hover:text-[#D1F4E0]'
+                  ? 'border-pine bg-pine text-white'
+                  : 'border-divider bg-white text-ink-secondary hover:border-pine/45 hover:text-pine'
               }`}
             >
-              掌握了
+              {COPY.apps.flashcards.got}
             </button>
-            <span className="text-sm font-semibold tabular-nums" style={{ color: '#34d399', minWidth: '20px' }}>{gotCount}</span>
           </div>
-        </div>
+        ) : (
+          <p className="mb-4 text-center text-[12px] text-ink-muted">{COPY.apps.flashcards.recallFirst}</p>
+        )}
 
         {/* Progress */}
         <div className="flex items-center gap-3 max-w-[400px] mx-auto">
-          <div className="flex-1 h-[3px] rounded-full bg-white/[0.06] overflow-hidden">
+          <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-divider/70">
             <div
               className="h-full rounded-full transition-all duration-500 ease-out"
               style={{
                 width: `${progress}%`,
-                background: `linear-gradient(90deg, ${theme.accent}, ${theme.accent}cc)`,
+                background: '#2F6B55',
               }}
             />
           </div>
-          <span className="text-[11px] text-white/30 tabular-nums whitespace-nowrap tracking-wider">
-            {index + 1} / {cards.length}
+          <span className="whitespace-nowrap text-[11px] tabular-nums tracking-wider text-ink-muted">
+              {index + 1} / {activeCards.length}
           </span>
         </div>
       </div>

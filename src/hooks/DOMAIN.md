@@ -44,7 +44,7 @@ hooks → stores + types + lib/db + lib/utils
 | `useCollectionPulse.ts` | ~250 | 收集发酵脉搏（collectionPulse 状态计算 + captureActivitySummary + 自动显隐 effect），从 page.tsx 提取（Phase 3） |
 | `useTutorLauncher.ts` | ~340 | AI 家教启动逻辑（blobToDataUrl + buildTutorLaunchImages + buildTutorPrompt* + openTutor* + applyBatchAction），从 page.tsx 提取（Phase 4） |
 | `useTranscriptIngest.ts` | ~400 | 转录摄入与持久化；尊重调用方的 persistSourceKey/sourceType/role，并将来源 provenance 写入 WorkspaceCapture |
-| `useRecordingLifecycle.ts` | 477 | 录音生命周期（persistCaptureToWorkspace + handleRecordingStart + handleRecordingStop）；写入 `transcriptionStatus` pending/completed/failed |
+| `useRecordingLifecycle.ts` | 477 | 录音生命周期（persistCaptureToWorkspace + handleRecordingStart + handleRecordingStop）；写入 `transcriptionStatus` pending/completed/failed；只有已有有效转录的课堂才在结束后进入课后应用矩阵，空课堂或仍等最终转写时留在课堂列表 |
 | `useTranscriptHandlers.ts` | 349 | 转录处理器（handleTranscriptUpdate + handleRecordingTranscriptionError + handleTranscriptEnhanced + handleVideoAssistantMessage + handleTranscriptTextUpdate）；失败时同步 audioSession 为 failed |
 | `useAudioMessagePlayback.ts` | ~130 | 收集流音频播放（stopAudioMessagePlayback + toggleAudioMessagePlayback + cleanup effect），从 page.tsx 提取（Phase 4） |
 | `useCollectionListActions.ts` | ~268 | 收集列表操作适配层（ensureWorkspaceCaptureSourceItem + resolveCollectionListSourceItem + quote/review/toggle/archive/restore/delete/edit/askTutor），从 page.tsx 提取（Phase 5） |
@@ -62,10 +62,12 @@ hooks → stores + types + lib/db + lib/utils
 | `useClassroomCompanion.ts` | ~260 | 课堂同桌对话（/api/tutor 流式 + 动态开场白 + 按 session 历史持久化 + 错误降级 + short-circuit），为 ClassroomView 专属 |
 | `useClassroomFlow.ts` | ~125 | 课中课堂脉络请求与稳定状态：按真实转录节奏调用 `/api/classroom/flow`，保留上一轮有用理解并标记新内容，不用关键词替模型切主题 |
 | `useLiveConcepts.ts` | ~100 | 录课中关键概念启发式抽取（订阅 captureEditorStore.segments，零 API），ClassroomRecordingView 消费 |
-| `useLearningContext.ts` | ~220 | 第二阶段统一学习上下文：登录态合并写入 `learnerProfile`，游客写 IndexedDB；管理用户确认的长期记忆、近期学习活动与可恢复学习线索，并通过页面事件同步多个消费组件 |
+| `useLearningContext.ts` | ~220 | 双层学习上下文状态：登录态合并写入 `learnerProfile`，游客写 IndexedDB；长期学习理解可由模型整理、用户纠正，客观最近学习现场独立保存，并通过页面事件同步多个消费组件 |
+| `useCourseContextPack.ts` | ~110 | 按学生选中的真实课堂懒加载转录、标记与摘要；至少两节有原文时构造 unit ContextPack，有学生确认的考试对象时升级为 exam tier 并注入考试名/日期/方式/大纲，不把空课堂或模型猜测伪装成考试材料 |
 | `useLessonDigest.ts` | ~190 | 课后课堂笔记：先用真实转录立即形成有时间锚点的可读预览，模型在后台静默整理并替换；失败时保留预览，不让用户停在空白等待 |
 | `useGlobalAskHistory.ts` | ~145 | 全局 Ask 的 IndexedDB 对话恢复/增量持久化 adapter；只恢复 `metadata.scope='global-ask'`，避免误接课堂复习对话 |
 | `useLearningIntentFlow.ts` | ~120 | 全局 Ask 的意图确认与线程转换：高置信且无关键分歧时直接开始，并把最终计划同步放进第一次 Tutor 请求；只有真实歧义或低置信计划才停下来确认 |
+| `useLearningMemoryDistillation.ts` | ~90 | 全局学习问答持久化后的静默学习理解管理：调用 `/api/tutor/memory` 获取少量候选，按 `replaceId` 更新或新增长期理解并同步活跃学习线索；是否值得保留由证据约束模型判断，网络或模型失败不影响客观学习现场与主回答 |
 | `useAppLearningActivity.ts` | ~80 | 桌面与移动应用共用的学习活动回写：记录应用生成结果及闪卡/测验交互到最近学习现场，使用稳定 sourceId 去重，不直接升级为长期记忆 |
 
 ### data/ — API 数据 hooks

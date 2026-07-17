@@ -26,13 +26,13 @@
 | **改 Workshop 应用窗口** | `src/components/apps/windows/DOMAIN.md` → 对应窗口组件 |
 | **改页面路由** | `src/app/DOMAIN.md` → 对应 page.tsx |
 | **改 API 接口** | `src/app/api/DOMAIN.md` → 对应子目录 DOMAIN.md → route.ts |
-| **改 Tutor 后端** | `src/app/api/tutor/DOMAIN.md`（`/api/tutor/agent` 按 `mode: 'in-class' \| 'review' \| 'shared' \| 'goal' \| 'word' \| 'global'` 6 分支；深度学习意图确认走 `/api/tutor/intent`） |
+| **改 Tutor 后端** | `src/app/api/tutor/DOMAIN.md`（`/api/tutor/agent` 按 `mode: 'in-class' \| 'review' \| 'shared' \| 'goal' \| 'word' \| 'global'` 6 分支；深度学习意图确认走 `/api/tutor/intent`，回答后的学习理解整理走 `/api/tutor/memory`） |
 | **改 prompt** | `src/lib/prompts/tutor-prompts.ts`（mode-driven `buildTutorSystemPrompt`） + `项目开发文档/提示词设计哲学.md` |
 | **改「聊聊你想要的」/ 目标共建 / 教练对话** | `src/components/intent/DOMAIN.md` → `IntentDialogContainer` 是入口包装，主对话在 `IntentDialog`，提炼卡片在 `IntentSummaryCard`（bio）/ `IntentBioCard`。入口仅在设置页（M14.6 移除首登强制拦截）。后端 `/api/tutor/agent` mode='goal'，prompt 在 `tutor-prompts.ts` 的 `buildGoalSegment`（GOAL_HEADER + GOAL_PATH_A 首次会面 / GOAL_PATH_B 回访 + GOAL_COMMON）。文件解析 helper `src/lib/services/file-parse-service.ts`。|
 | **改实时语音通话 UI / 抗噪抗打断** | `src/components/realtime/DOMAIN.md` → `RealtimeOrb`（v7 呼吸光晕，复用于复习态 + intent 通话）+ `IntentVoiceCallScreen` / `TutorRealtimeCallScreen`。后端 WebSocket 在 `server.js` 的 `/api/tutor-call`，VAD/降噪参数走环境变量（见 `.env.example` 实时语音同桌段）。|
 | **改业务逻辑（service）** | `src/lib/services/DOMAIN.md` → 找到对应 service 文件 |
 | **改 ASR 链路** | `src/lib/services/asr/`（text-utils / render-state-machine / post-edit / audio-constraints）+ `src/lib/services/dashscope-asr-service.ts`（DashScopeASRClient 实时 ASR 客户端）+ `server.js`（两个 WebSocket proxy：`/api/asr-stream` DashScope + `/api/asr-stream-speaker` 腾讯云说话人分离）+ `src/lib/services/asr/ws-url.ts`（URL 选择：speakerDiarization 切换路径）|
-| **改说话人分离** | `src/lib/services/asr/diarization-service.ts`（课后 diarization + getSpeakerLabel / getSpeakerColorClass）+ `server.js` speaker proxy（腾讯云 `16k_zh_en_speaker` HMAC 签名 + 协议翻译）+ `src/components/Recorder.tsx`（并行连接无感切换引擎）+ `src/lib/utils/transcript-format.ts`（formatTranscriptWithSpeakers：fullTranscript 带 `[说话人N]` 标记，用于 in-class + review 两种 mode）|
+| **改说话人分离** | `src/lib/services/asr/diarization-service.ts`（课后证据门槛 + 匿名标签）+ `tests/eval/asr/graders/diarization.ts`（DER）+ `server.js` speaker proxy（腾讯云 `16k_zh_en_speaker`，仅内部实验兼容）+ `src/lib/utils/transcript-format.ts`（有可靠 speakerId 时注入 fullTranscript）|
 | **改 AI-Native 插件** | `src/lib/ai-native/plugins/DOMAIN.md` → 对应 plugin |
 | **改 SharedAgent / 分享 Agent / 裂变** | `roadmap/v3.0-virality-agent.md`（北极星）→ `src/app/api/share/DOMAIN.md` → `src/app/share/DOMAIN.md` → `src/app/me/shares/`（A 管理面）→ `src/components/share/DOMAIN.md` → `src/lib/services/share-agent-service.ts`。**v3.0 闭环 5 个支点**：(1) 创建 `OctoCrystalDispatcher` (2) 落地页 `SharedAgentLanding` + `ArtifactRender` 真渲染产物 (3) 分享态对话 `mode='shared'` (4) 领取 `claimSharedAgent` → `WorkspaceCapture(sourceType='shared-agent')` 在 B 工作台点击跳回 `/share/[token]` (5) 管理 `MyShareList` + `DELETE /api/share/[token]`（撤销不影响已领取副本）|
 | **改文章 / 网页原文接入** | `src/app/api/article/`（无 DOMAIN.md）→ `src/lib/services/web-article-extract-service.ts` + `jina-reader-service.ts`；`.env.example` 配 `FIRECRAWL_API_KEY`（首选），`OPENCLAW_GATEWAY_URL` 已 **deprecated**（见 `openclaw/README.md`，与 MeetMind 解耦的 AI Agent Gateway，现仅 fallback） |
@@ -96,7 +96,7 @@ make stats        # 项目统计（超标文件、console.log 残留）
 make eval               # 完整套件（unit + ASR + Tutor）
 make eval-unit          # grader 自身单测
 make eval-asr           # ASR dry-run（基于 seed 数据集）
-make eval-asr-real      # ASR 真实调用（需 DASHSCOPE_API_KEY + 公网 audio URL）
+make eval-asr-real      # ASR 真实调用（本地短 fixture / 公网 URL；可用 ASR_EVAL_TRANSPORT=realtime 测产品 WS）
 make eval-tutor         # Tutor dry-run
 make eval-tutor-real    # Tutor 真实调用（优先 DEEPSEEK_API_KEY；也兼容 OPENAI_API_KEY / DASHSCOPE_API_KEY）
 make eval-guard         # CI gate：baseline 在 tests/eval/baselines/
@@ -294,7 +294,7 @@ M14.6 起，结构化产物**不再走** LLM 输出 `<open_app:KEY/>` marker 的
 | **分享态对话** (v3.0) | `SharedAgentChat` (落地页 `/share/[token]`) | `mode: 'shared'`, `shareToken`，服务端从 `SharedAgent.snapshotJson` 加载上下文；不读取访问者画像，禁用 native tools，禁用 inline app marker |
 | 目标共建 / onboarding | `IntentDialog` | `mode: 'goal'`, `learnerProfile`（bio 双 marker：headline + goals）；禁用 inline app marker；首次会面 vs 回访双路径 |
 | 选词解释浮窗 (M13) | `WordExplainer` | `mode: 'word'`, `selectionText` + `nearbyContext` + `fullTranscriptTail`；禁用 inline app marker；浮窗形态 |
-| 全局 Ask MeetMind | `GlobalAskPanel` | `mode: 'global'`；quick 直接回答，deep 先经 `/api/tutor/intent` 让用户确认计划，再注入长期记忆 / 最近活动 / 活跃学习线索 / 当前材料；学习进展必须再次由用户确认 |
+| 全局 Ask MeetMind | `GlobalAskPanel` | `mode: 'global'`；quick 直接回答，deep 先经 `/api/tutor/intent` 理解意图并仅在真实歧义时追问，再注入长期学习理解 / 客观最近学习现场 / 活跃学习线索 / 当前材料；任何全局学习问答持久化后都由 `/api/tutor/memory` 只根据用户真实表现静默判断是否新增或更新学习理解，不依赖模式开关，访客态同样可用且 route 内限流；用户可在「我的上下文」纠正、暂停或忘记，`recentLearningActivities` 始终是独立客观事件流 |
 
 ```
 POST /api/tutor/agent
@@ -330,14 +330,15 @@ POST /api/tutor/agent
 ASR 链路（`src/lib/services/asr/`）：
 
 - **三段式渲染**：`TranscriptRenderMachine` interim(灰斜体) / stable(黑) / final(commit)
+- **两段式交付**：课中默认 `qwen3-asr-flash-realtime-2026-02-10` 保低延迟；MediaRecorder 在 WebSocket ready 之前就保留原声，结束后始终用完整原声 batch 定稿并替换临时字幕
 - **长音频**：DashScope 异步 file-trans，分片 600s + 2s overlap + LCS 缝合（`stitchSegmentsWithOverlap` / `findOverlapLength`）
-- **稳定性**：`reconnecting-websocket` + `p-retry` Full Jitter 退避，audioQueue 跨重连保留
-- **Contextual biasing**：`buildASRContextHint` 注入 6 字段（courseTitle / courseSubject / participants / previousLessonTopics / lessonVocabulary / userHotwords）
+- **稳定性**：`reconnecting-websocket` + `p-retry` Full Jitter 退避，audioQueue 首连和重连都保留；44.1kHz 手机经 `StreamingPcmResampler` 连续相位重采样；新课只有在原声采集成功后才进入录课页并清屏；停止时先排空 proxy FIFO，再以 `session.finish → session.finished` 收尾 server_vad（严禁 manual-only commit）；Recorder 随后回到 idle，后台定稿冻结 recordingId/sessionId 且按 session 严格隔离，不串入下一节课
+- **Contextual biasing 官方契约**：`buildASRContextHint` 注入 6 字段（courseTitle / courseSubject / participants / previousLessonTopics / lessonVocabulary / userHotwords），Qwen Realtime 必须在首次 `session.update` 通过 `input_audio_transcription.corpus.text` 发送；不得使用未定义的 `prompt` 字段，也不得在 session ready 后伪装动态二次更新
 - **后校对**：`postEditSegments` 用 qwen3.7-plus 只打低置信片段（feature flag `ASR_POST_EDIT_ENABLED`，默认关）
 - **状态兜底**：`audioSessions.transcriptionStatus` 区分 pending/completed/failed；转写失败或超时后课堂卡片显示“原声已保留”，不能永久停在“整理中”
 - **静默校对 + 热词聚合**：`AsrCorrection` 表存用户编辑，`onRecordingStop` 触发 `/api/asr/corrections/aggregate` 生成下节课的 `userHotwords`
 - **AEC/NS/AGC**：`buildAudioConstraints` 是 getUserMedia 的唯一真相源，env 可覆盖
-- **说话人分离**（M14.6+）：双引擎可选——DashScope `qwen3-asr-flash-realtime`（高精度，无说话人分离）+ 腾讯云 `16k_zh_en_speaker`（实时声纹聚类，支持 10 人）。`server.js` 两个独立 WebSocket proxy（`/api/asr-stream` + `/api/asr-stream-speaker`），speaker proxy 做 HMAC-SHA1 签名 + 协议翻译（腾讯云格式→DashScope 兼容格式）。`DashScopeASRClient` 通过 `speakerDiarization` 选项切换 WS URL。`Recorder.tsx` 录音中无感切换（并行连接→ready 后交接 asrClientRef→异步关旧 client）。课后 diarization（`diarization-service.ts`）在已有 speakerId 时跳过（避免两套引擎编号混用）。`transcript-format.ts` 的 `formatTranscriptWithSpeakers` 把 speakerId 转成 `[说话人N]` 标记注入 fullTranscript，用于 in-class + review 两种 mode 的 AI 上下文。
+- **说话人分离**（M14.6+）：产品主链路坚持“听准优先”。课堂首页与录课中不暴露实时供应商 / 单多人开关，固定使用 DashScope `qwen3-asr-flash-realtime-2026-02-10`；腾讯 `16k_zh_en_speaker` proxy 仅为内部实验兼容。完整原声 batch 定稿后再静默 diarization，`assessDiarizationEvidence` 过滤 `-1`、短噪声伪聚类与单人课堂，只有至少两位稳定发言者时显示匿名“发言者 A / B”。说话人质量必须跑 `tests/eval/asr/graders/diarization.ts` 的 DER，不得用正文 CER 代替。
 
 ### 3.9 跨设备课堂证据（v2.1 主链路已闭合）
 

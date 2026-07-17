@@ -106,12 +106,12 @@ async function submitAsyncTask(
   fileUrl: string,
   apiKey: string,
   language: string,
-  contextHint: string
+  _contextHint: string
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
   // Qwen 官方：混合语种或不确定时省略 language 参数（M7.6 修复中英夹杂）
   const langParam = language === 'auto' ? {} : { language };
   const requestBody = {
-    model: 'qwen3-asr-flash-filetrans',
+    model: process.env.DASHSCOPE_ASR_FILE_MODEL || 'qwen3-asr-flash-filetrans-2025-11-17',
     input: {
       file_url: fileUrl,
     },
@@ -119,7 +119,6 @@ async function submitAsyncTask(
       channel_id: [0],
       ...langParam,
       enable_itn: true,
-      ...(contextHint ? { corpus: { text: contextHint } } : {}),
     },
   };
 
@@ -438,7 +437,8 @@ export async function POST(request: NextRequest) {
       totalDuration,
       segments,
       language,
-      contextHintUsed: Boolean(contextHint),
+      // Qwen filetrans 不支持上下文精度增强；保留字段兼容旧客户端，但明确没有下发。
+      contextHintUsed: false,
     });
   } catch (error) {
     if (

@@ -1,47 +1,44 @@
 'use client';
 
 /**
- * CheatsheetWindow — 考试速查表渲染器（M7-fix12）
+ * CheatsheetWindow — 跨课考试速查表的编辑与打印界面。
  *
- * 主用户场景：开卷考 / 允许带一张 A4 / quiz 时的"那一张纸"。
- *
- * 设计哲学校准：
- *   cheatsheet 不是展示工具，是【编辑工具 + 打印工具】。
- *   老师只给一张纸 → 用户必须做取舍 → 我们必须帮他做取舍。
- *
- * 这一轮（fix12）的核心改动：
- *   1. 横向 A4 默认（landscape 比 portrait 多 41% 横向，3 列布局密度更高）
- *   2. 单条删除（×）：屏幕 hover 显出，打印不渲染
- *   3. 区块折叠：整块"我熟"直接收起来
- *   4. 密度估算：顶部"约占一页 N%"，超过 100% 提醒怎么收
- *   5. 字号三档（紧凑 / 标准 / 舒适）：通过 CSS 变量统一驱动
- *
- * 保留来自上一轮的：
- *   - 6 区语义色编码（实色 border-left，打印 100% 保留）
- *   - emphasis = 'strong' 的 ★ 标记 + 极淡区块色（考场扫读救命）
- *   - 公式块强化（等宽 14px + 双侧实色边）
- *   - 打印 -webkit-print-color-adjust: exact
- *   - 复制为 Markdown（次要场景，给"分享给同学"用）
+ * 屏幕预览与打印共用同一套分页模型；学生可以按考试规则切换纸张、
+ * 横纵向、单双面与页数，并在打印前删减、折叠或修正具体条目。
  */
 
 import { useCallback, useMemo, useState } from 'react';
-import { Printer, Copy, Check, ChevronDown, ChevronRight, X, RotateCcw } from 'lucide-react';
+import { Printer, Copy, Check, ChevronDown, ChevronRight, X, RotateCcw, Settings2, PencilLine } from 'lucide-react';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import { CompanionMarkdown } from '@/components/classroom/CompanionMarkdown';
+import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
+import { COPY } from '@/lib/ui/copy';
 import type {
   CheatsheetItem,
   CheatsheetPayload,
   CheatsheetSection,
   CheatsheetSectionKey,
 } from '@/lib/ai-native/plugins/cheatsheet.plugin';
+import {
+  REVIEW_PRINT_SETTINGS,
+  citationLabel,
+  paginateCheatsheetSections,
+  payloadToMarkdown,
+  settingsForPurpose,
+  targetPageCount,
+  type CheatsheetColorMode,
+  type CheatsheetFontScale,
+  type CheatsheetOrientation,
+  type CheatsheetPaperSize,
+  type CheatsheetPrintSides,
+  type CheatsheetPrintSettings,
+  type CheatsheetPurpose,
+} from './cheatsheet-window-model';
 
 interface CheatsheetWindowProps {
   result: AppExecutionResult | null;
   onSeek?: (ms: number) => void;
 }
-
-type PageOrientation = 'landscape' | 'portrait';
-type FontScale = 'compact' | 'standard' | 'comfortable';
 
 const SECTION_ACCENTS: Record<
   CheatsheetSectionKey,
@@ -62,7 +59,7 @@ const SECTION_ACCENTS: Record<
  * 可读极限；舒适模式给"屏幕预览 / 内容少"，term 15 / body 13.5 看着舒服。
  */
 const FONT_SCALES: Record<
-  FontScale,
+  CheatsheetFontScale,
   { term: string; body: string; latex: string; ts: string; rowGap: string; itemPadY: string }
 > = {
   compact:     { term: '11.5px', body: '10.5px', latex: '12px', ts: '9.5px',  rowGap: '0.125rem', itemPadY: '0.25rem' },
@@ -70,18 +67,11 @@ const FONT_SCALES: Record<
   comfortable: { term: '15px',   body: '13.5px',  latex: '16px', ts: '11.5px', rowGap: '0.375rem', itemPadY: '0.5rem' },
 };
 
-const FONT_SCALE_LABELS: Record<FontScale, string> = {
-  compact: '紧凑',
-  standard: '标准',
-  comfortable: '舒适',
+const FONT_SCALE_LABELS: Record<CheatsheetFontScale, string> = {
+  compact: COPY.apps.cheatsheet.compact,
+  standard: COPY.apps.cheatsheet.standard,
+  comfortable: COPY.apps.cheatsheet.comfortable,
 };
-
-function formatMs(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
 
 function extractPayload(result: AppExecutionResult | null): CheatsheetPayload | null {
   const payload = result?.render?.payload as Partial<CheatsheetPayload> | undefined;
@@ -91,71 +81,33 @@ function extractPayload(result: AppExecutionResult | null): CheatsheetPayload | 
   return payload as CheatsheetPayload;
 }
 
-/**
- * 估算"这张速查表占一页 A4 多少比例"。
- *
- * 这是诚实的近似而非精确计算——精确版需要测量实际渲染高度，
- * 在不同字体/系统/打印机下还会漂移。我们给一个"用户能据此决策"
- * 的粗估（误差 ±10% 左右），UI 显示时永远加 "约" 字提醒是估算。
- *
- * 算法：把"一页可装多少条标准字号 item"作为基准容量，
- * 然后按字号档位 / 布局列数 / 是否含 latex 修正。
- */
-function estimateDensity(args: {
-  visibleItems: number;
-  latexCount: number;
-  orientation: PageOrientation;
-  fontScale: FontScale;
-}): number {
-  const { visibleItems, latexCount, orientation, fontScale } = args;
-  // 基准容量（标准字号 + 2 列 portrait）：~28 条 item
-  const baseCapacity = 28;
-  // 横向 + 3 列 大约 ×1.65 容量
-  const layoutMul = orientation === 'landscape' ? 1.65 : 1;
-  // 字号倍率：紧凑可装更多，舒适装更少
-  const fontMul = fontScale === 'compact' ? 1.35 : fontScale === 'comfortable' ? 0.74 : 1;
-  const capacity = baseCapacity * layoutMul * fontMul;
-  // 含 latex 的 item 算 1.6 条（多一个公式块）
-  const cost = visibleItems + latexCount * 0.6;
-  return Math.round((cost / capacity) * 100);
-}
-
-function payloadToMarkdown(
-  payload: CheatsheetPayload,
-  filter?: { hiddenItemIds: ReadonlySet<string>; collapsedSections: ReadonlySet<string> },
-): string {
-  const lines: string[] = [];
-  lines.push(`# ${payload.title}`, '', `> ${payload.overview}`, '');
-  for (const section of payload.sections) {
-    if (filter?.collapsedSections.has(section.key)) continue;
-    const visibleItems = filter
-      ? section.items.filter((it) => !filter.hiddenItemIds.has(it.id))
-      : section.items;
-    if (visibleItems.length === 0) continue;
-    lines.push(`## ${section.label}`, '');
-    for (const item of visibleItems) {
-      const star = item.emphasis === 'strong' ? ' ★' : '';
-      const ts = item.citation ? ` _(${formatMs(item.citation.startMs)})_` : '';
-      lines.push(`- **${item.term}${star}** — ${item.body}${ts}`);
-      if (item.latex) lines.push(`  $$${item.latex}$$`);
-    }
-    lines.push('');
-  }
-  return lines.join('\n').trim();
-}
-
 function ItemRow({
   item,
   accent,
   onSeek,
   onHide,
+  onEdit,
 }: {
   item: CheatsheetItem;
   accent: (typeof SECTION_ACCENTS)[CheatsheetSectionKey];
   onSeek?: (ms: number) => void;
   onHide: () => void;
+  onEdit: (next: Pick<CheatsheetItem, 'term' | 'body' | 'latex'>) => void;
 }) {
   const isStrong = item.emphasis === 'strong';
+  const citation = citationLabel(item);
+  const [editing, setEditing] = useState(false);
+  const [draftTerm, setDraftTerm] = useState(item.term);
+  const [draftBody, setDraftBody] = useState(item.body);
+  const [draftLatex, setDraftLatex] = useState(item.latex || '');
+
+  const beginEdit = () => {
+    setDraftTerm(item.term);
+    setDraftBody(item.body);
+    setDraftLatex(item.latex || '');
+    setEditing(true);
+  };
+
   return (
     <li
       className="group relative flex flex-col gap-1 rounded-md print:px-1 print:py-0.5"
@@ -165,7 +117,50 @@ function ItemRow({
         paddingBlock: 'var(--cs-item-pad-y, 0.375rem)',
       }}
     >
-      <div className="flex items-start gap-1.5">
+      {editing ? (
+        <div className="print:hidden space-y-2">
+          <input
+            value={draftTerm}
+            onChange={(event) => setDraftTerm(event.target.value)}
+            aria-label={COPY.apps.cheatsheet.editTerm}
+            className="w-full rounded-lg border border-divider bg-canvas px-2.5 py-2 text-[12px] font-semibold text-ink outline-none focus:border-pine/40"
+          />
+          <textarea
+            value={draftBody}
+            onChange={(event) => setDraftBody(event.target.value)}
+            aria-label={COPY.apps.cheatsheet.editBody}
+            rows={3}
+            className="w-full resize-none rounded-lg border border-divider bg-canvas px-2.5 py-2 text-[11.5px] leading-5 text-ink outline-none focus:border-pine/40"
+          />
+          <input
+            value={draftLatex}
+            onChange={(event) => setDraftLatex(event.target.value)}
+            aria-label={COPY.apps.cheatsheet.editFormula}
+            className="w-full rounded-lg border border-divider bg-canvas px-2.5 py-2 font-mono text-[11px] text-ink outline-none focus:border-pine/40"
+          />
+          <div className="flex justify-end gap-1.5">
+            <button type="button" onClick={() => setEditing(false)} className="rounded-full px-3 py-1.5 text-[10.5px] text-ink-muted hover:bg-paper-warm">
+              {COPY.apps.cheatsheet.cancelEdit}
+            </button>
+            <button
+              type="button"
+              disabled={!draftTerm.trim() || !draftBody.trim()}
+              onClick={() => {
+                onEdit({
+                  term: draftTerm.trim(),
+                  body: draftBody.trim(),
+                  latex: draftLatex.trim() || undefined,
+                });
+                setEditing(false);
+              }}
+              className="rounded-full bg-pine px-3 py-1.5 text-[10.5px] font-medium text-white disabled:opacity-40"
+            >
+              {COPY.apps.cheatsheet.saveEdit}
+            </button>
+          </div>
+        </div>
+      ) : null}
+      <div className={`items-start gap-1.5 ${editing ? 'hidden print:flex' : 'flex'}`}>
         <span
           className="mt-[5px] inline-block h-[4px] w-[4px] flex-shrink-0 rounded-full"
           style={{ backgroundColor: isStrong ? accent.dot : 'rgba(0,0,0,0.45)' }}
@@ -180,40 +175,47 @@ function ItemRow({
             </strong>
             {isStrong ? (
               <span
-                aria-label="老师反复强调 / 必考"
-                title="老师反复强调 / 必考"
-                className="leading-none"
-                style={{ color: accent.dot, fontSize: 'var(--cs-term, 13.5px)' }}
-              >
-                ★
-              </span>
+                aria-label={COPY.apps.cheatsheet.focusTitle}
+                title={COPY.apps.cheatsheet.focusTitle}
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: accent.dot }}
+              />
             ) : null}
-            {item.citation && onSeek ? (
+            {item.citation && citation && onSeek ? (
               <button
                 type="button"
                 onClick={() => onSeek(item.citation!.startMs)}
                 className="print:hidden ml-auto inline-flex h-[22px] items-center rounded-full px-2 font-mono tabular-nums text-ink-secondary ring-[0.5px] ring-ink/[0.10] transition-all duration-150 hover:bg-pine/[0.10] hover:text-pine hover:ring-pine/30 active:scale-95"
                 style={{ fontSize: 'var(--cs-ts, 10.5px)' }}
-                title={`跳到课堂 ${formatMs(item.citation.startMs)} 处`}
-                aria-label={`跳回课堂 ${formatMs(item.citation.startMs)}`}
+                title={COPY.apps.cheatsheet.seekTitle(citation)}
+                aria-label={COPY.apps.cheatsheet.seekTitle(citation)}
               >
-                {formatMs(item.citation.startMs)}
+                {citation}
               </button>
-            ) : item.citation ? (
+            ) : item.citation && citation ? (
               <span
                 className="ml-auto font-mono tabular-nums text-ink-muted/70"
                 style={{ fontSize: 'var(--cs-ts, 10.5px)' }}
               >
-                {formatMs(item.citation.startMs)}
+                {citation}
               </span>
             ) : null}
             {/* 删除按钮：hover 才显，避免视觉污染；打印时不渲染 */}
             <button
               type="button"
+              onClick={beginEdit}
+              className="print:hidden absolute right-7 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/80 text-ink-muted opacity-0 ring-[0.5px] ring-[#1C1B19]/[0.18] transition group-hover:opacity-100 hover:bg-white hover:text-pine hover:ring-pine/35 active:scale-90"
+              title={COPY.apps.cheatsheet.editItem}
+              aria-label={COPY.apps.cheatsheet.editItem}
+            >
+              <PencilLine size={9.5} strokeWidth={2.1} />
+            </button>
+            <button
+              type="button"
               onClick={onHide}
               className="print:hidden absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/80 text-ink-muted opacity-0 ring-[0.5px] ring-[#1C1B19]/[0.18] transition group-hover:opacity-100 hover:bg-white hover:text-[#B5483C] hover:ring-[#B5483C]/40 active:scale-90"
-              title="不带这条进考场（屏幕态隐藏 / 打印不出）"
-              aria-label="删除此条"
+              title={COPY.apps.cheatsheet.hideItem}
+              aria-label={COPY.apps.cheatsheet.hideItem}
             >
               <X size={10} strokeWidth={2.4} />
             </button>
@@ -253,6 +255,7 @@ function SectionCard({
   collapsed,
   onToggleCollapse,
   onSeek,
+  onEditItem,
 }: {
   section: CheatsheetSection;
   hiddenItemIds: ReadonlySet<string>;
@@ -260,6 +263,7 @@ function SectionCard({
   collapsed: boolean;
   onToggleCollapse: () => void;
   onSeek?: (ms: number) => void;
+  onEditItem: (itemId: string, next: Pick<CheatsheetItem, 'term' | 'body' | 'latex'>) => void;
 }) {
   const accent = SECTION_ACCENTS[section.key] ?? SECTION_ACCENTS.definition;
   const visibleItems = section.items.filter((it) => !hiddenItemIds.has(it.id));
@@ -279,7 +283,7 @@ function SectionCard({
             {section.label}
           </h3>
           <span className="ml-auto text-[10.5px] tabular-nums">
-            {hiddenCount} 条已删
+            {COPY.apps.cheatsheet.removedCount(hiddenCount)}
           </span>
         </header>
       </section>
@@ -301,8 +305,8 @@ function SectionCard({
           type="button"
           onClick={onToggleCollapse}
           className="print:hidden inline-flex h-5 w-5 items-center justify-center rounded text-ink-muted transition hover:bg-[#1C1B19]/[0.06] hover:text-ink"
-          title={collapsed ? '展开' : '折叠（不带进考场）'}
-          aria-label={collapsed ? '展开' : '折叠'}
+          title={collapsed ? COPY.apps.cheatsheet.expand : COPY.apps.cheatsheet.collapse}
+          aria-label={collapsed ? COPY.apps.cheatsheet.expand : COPY.apps.cheatsheet.collapse}
           aria-expanded={!collapsed}
         >
           {collapsed ? <ChevronRight size={12} strokeWidth={2} /> : <ChevronDown size={12} strokeWidth={2} />}
@@ -316,14 +320,14 @@ function SectionCard({
             <span
               className="inline-flex items-center gap-0.5"
               style={{ color: accent.dot }}
-              title={`${strongCount} 条必考 / 重点`}
+              title={COPY.apps.cheatsheet.focusCount(strongCount)}
             >
-              ★{strongCount}
+              {COPY.apps.cheatsheet.focusCount(strongCount)}
             </span>
           ) : null}
           <span>{visibleItems.length}</span>
           {hiddenCount > 0 ? (
-            <span className="text-ink-muted/50" title={`${hiddenCount} 条已删除`}>
+            <span className="text-ink-muted/50" title={COPY.apps.cheatsheet.removedTitle(hiddenCount)}>
               /-{hiddenCount}
             </span>
           ) : null}
@@ -331,7 +335,7 @@ function SectionCard({
       </header>
       {collapsed ? (
         <p className="text-[10.5px] text-ink-muted/70 print:hidden">
-          已折叠（不带进考场） · {visibleItems.length} 条
+          {COPY.apps.cheatsheet.collapsedCount(visibleItems.length)}
         </p>
       ) : (
         <ul className="flex flex-col" style={{ rowGap: 'var(--cs-row-gap, 0.25rem)' }}>
@@ -342,6 +346,7 @@ function SectionCard({
               accent={accent}
               onSeek={onSeek}
               onHide={() => onHideItem(item.id)}
+              onEdit={(next) => onEditItem(item.id, next)}
             />
           ))}
         </ul>
@@ -350,17 +355,59 @@ function SectionCard({
   );
 }
 
+function SettingChoice<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="mb-1.5 text-[10.5px] text-ink-muted">{label}</p>
+      <div className="inline-flex max-w-full rounded-full bg-paper-warm p-[2px]">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium transition ${
+              value === option.value ? 'bg-white text-ink ring-[0.5px] ring-divider' : 'text-ink-muted hover:text-ink'
+            }`}
+            aria-pressed={value === option.value}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
   const payload = extractPayload(result);
 
-  // 编辑态本地状态：删除集合 / 折叠集合 / 排版参数 / 字号档位
-  // 全部本地，刷新即重置——这是有意的：避免引入持久化层增加复杂度，
-  // 一节课的 cheatsheet 调一次基本就打印了，不需要跨会话保留。
+  // 轻编辑与打印约束只属于当前产物，不写回长期学习上下文。
   const [hiddenItemIds, setHiddenItemIds] = useState<Set<string>>(new Set());
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
-  const [orientation, setOrientation] = useState<PageOrientation>('landscape'); // 默认横向：考场带纸主流
-  const [fontScale, setFontScale] = useState<FontScale>('standard');
+  const [itemEdits, setItemEdits] = useState<Record<string, Pick<CheatsheetItem, 'term' | 'body' | 'latex'>>>({});
+  const [settings, setSettings] = useState<CheatsheetPrintSettings>({ ...REVIEW_PRINT_SETTINGS });
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'done'>('idle');
+  const editedPayload = useMemo<CheatsheetPayload | null>(() => {
+    if (!payload) return null;
+    return {
+      ...payload,
+      sections: payload.sections.map((section) => ({
+        ...section,
+        items: section.items.map((item) => ({ ...item, ...itemEdits[item.id] })),
+      })),
+    };
+  }, [itemEdits, payload]);
 
   const handleHideItem = useCallback((itemId: string) => {
     setHiddenItemIds((prev) => {
@@ -373,6 +420,14 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
   const handleResetEdits = useCallback(() => {
     setHiddenItemIds(new Set());
     setCollapsedSections(new Set());
+    setItemEdits({});
+  }, []);
+
+  const handleEditItem = useCallback((
+    itemId: string,
+    next: Pick<CheatsheetItem, 'term' | 'body' | 'latex'>,
+  ) => {
+    setItemEdits((current) => ({ ...current, [itemId]: next }));
   }, []);
 
   const handleToggleCollapse = useCallback((sectionKey: string) => {
@@ -390,8 +445,12 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
   }, []);
 
   const handleCopyMarkdown = useCallback(async () => {
-    if (!payload) return;
-    const md = payloadToMarkdown(payload, { hiddenItemIds, collapsedSections });
+    if (!editedPayload) return;
+    const md = payloadToMarkdown(editedPayload, {
+      hiddenItemIds,
+      collapsedSections,
+      focusLabel: COPY.apps.cheatsheet.focus,
+    });
     try {
       await navigator.clipboard.writeText(md);
       setCopyState('done');
@@ -410,40 +469,40 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
       } catch { /* swallow */ }
       document.body.removeChild(ta);
     }
-  }, [payload, hiddenItemIds, collapsedSections]);
+  }, [editedPayload, hiddenItemIds, collapsedSections]);
 
-  // 密度估算 / 总览统计
+  const visibleSections = useMemo(() => (editedPayload?.sections || [])
+    .filter((section) => !collapsedSections.has(section.key))
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => !hiddenItemIds.has(item.id)),
+    }))
+    .filter((section) => section.items.length > 0), [collapsedSections, editedPayload, hiddenItemIds]);
+  const pages = useMemo(
+    () => paginateCheatsheetSections(visibleSections, settings),
+    [settings, visibleSections],
+  );
   const stats = useMemo(() => {
-    if (!payload) return null;
-    let visibleItems = 0;
-    let latexCount = 0;
-    let strongCount = 0;
-    let hiddenCount = 0;
-    let visibleSections = 0;
-    for (const section of payload.sections) {
-      if (collapsedSections.has(section.key)) {
-        // 折叠 = 不带 = 不算入密度，但单独统计
-        hiddenCount += section.items.filter((it) => !hiddenItemIds.has(it.id)).length;
-        continue;
-      }
-      let sectionVisible = 0;
-      for (const item of section.items) {
-        if (hiddenItemIds.has(item.id)) {
-          hiddenCount += 1;
-          continue;
-        }
-        visibleItems += 1;
-        sectionVisible += 1;
-        if (item.latex) latexCount += 1;
-        if (item.emphasis === 'strong') strongCount += 1;
-      }
-      if (sectionVisible > 0) visibleSections += 1;
-    }
-    const density = estimateDensity({ visibleItems, latexCount, orientation, fontScale });
-    return { visibleSections, visibleItems, strongCount, hiddenCount, density };
-  }, [payload, hiddenItemIds, collapsedSections, orientation, fontScale]);
+    if (!editedPayload) return null;
+    const visibleItems = visibleSections.reduce((sum, section) => sum + section.items.length, 0);
+    const strongCount = visibleSections.reduce(
+      (sum, section) => sum + section.items.filter((item) => item.emphasis === 'strong').length,
+      0,
+    );
+    const hiddenCount = editedPayload.sections.reduce((sum, section) => (
+      sum + section.items.filter((item) => hiddenItemIds.has(item.id) || collapsedSections.has(section.key)).length
+    ), 0);
+    return {
+      visibleSections: visibleSections.length,
+      visibleItems,
+      strongCount,
+      hiddenCount,
+      pageCount: pages.length,
+      targetPages: targetPageCount(settings),
+    };
+  }, [collapsedSections, editedPayload, hiddenItemIds, pages.length, settings, visibleSections]);
 
-  const fontVars = FONT_SCALES[fontScale];
+  const fontVars = FONT_SCALES[settings.fontScale];
   const cssVars = {
     ['--cs-term' as string]: fontVars.term,
     ['--cs-body' as string]: fontVars.body,
@@ -454,31 +513,17 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
   };
 
   if (!payload) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-        <div className="max-w-sm">
-          <p className="text-[14px] font-medium text-ink">速查表还在等课堂内容</p>
-          <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-muted">
-            一张能带进考场的速查表至少需要 5 分钟以上的课堂转录。
-          </p>
-          <ul className="mt-3 space-y-1.5 text-left text-[12px] leading-relaxed text-ink-muted">
-            <li>{'· 继续录课，5 分钟后再点一次"考试速查表"'}</li>
-            <li>· 或在已有课堂里试试，体验完整效果</li>
-            <li>· 想先预览：试听一节 demo 课，看真实产出</li>
-          </ul>
-        </div>
-      </div>
-    );
+    return <AppWindowPlaceholder status="empty" appName={COPY.apps.cheatsheet.appName} description={COPY.apps.cheatsheet.emptyBody} />;
   }
 
-  const isOverflow = stats && stats.density > 100;
-  const hasEdits = hiddenItemIds.size > 0 || collapsedSections.size > 0;
+  const isOverflow = Boolean(stats && stats.pageCount > stats.targetPages);
+  const hasEdits = hiddenItemIds.size > 0 || collapsedSections.size > 0 || Object.keys(itemEdits).length > 0;
 
   return (
     <div className="flex h-full flex-col bg-[#FAF7F2]" style={cssVars as React.CSSProperties}>
       {/* 顶部信息条：标题 + 密度估算 + 编辑工具 + 主操作 */}
-      <div className="flex-shrink-0 flex flex-col gap-2.5 border-b border-[#E8E2D5] bg-canvas px-8 py-3.5 print:hidden">
-        <div className="flex items-start gap-4">
+      <div className="flex-shrink-0 flex flex-col gap-2.5 border-b border-[#E8E2D5] bg-canvas px-4 py-3.5 print:hidden sm:px-8">
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:gap-4">
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-[17px] font-semibold tracking-[-0.015em] text-ink">
               {payload.title}
@@ -487,172 +532,216 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
             {stats ? (
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] tabular-nums text-ink-muted/85">
                 <span>
-                  {stats.visibleSections} 区 · {stats.visibleItems} 条
+                  {COPY.apps.cheatsheet.sectionCount(stats.visibleSections, stats.visibleItems)}
                 </span>
                 {stats.strongCount > 0 ? (
                   <>
                     <span aria-hidden className="text-ink-muted/40">·</span>
-                    <span className="inline-flex items-center text-[#B8842B]">★ {stats.strongCount}</span>
+                    <span className="inline-flex items-center text-[#B8842B]">{COPY.apps.cheatsheet.focusCount(stats.strongCount)}</span>
                   </>
                 ) : null}
                 <span aria-hidden className="text-ink-muted/40">·</span>
                 <span
                   className={isOverflow ? 'font-medium text-vermilion' : 'text-ink-muted'}
-                  title="按字号 / 布局粗略估算，实际打印 ±10% 误差"
                 >
-                  约占一页 {stats.density}%
-                  {isOverflow ? `（超出 ${stats.density - 100}%）` : ''}
+                  {COPY.apps.cheatsheet.pageUsage(stats.pageCount, stats.targetPages)}
                 </span>
                 {stats.hiddenCount > 0 ? (
                   <>
                     <span aria-hidden className="text-ink-muted/40">·</span>
-                    <span className="text-ink-muted/70">已删 {stats.hiddenCount}</span>
+                    <span className="text-ink-muted/70">{COPY.apps.cheatsheet.removedCount(stats.hiddenCount)}</span>
                   </>
                 ) : null}
               </div>
             ) : null}
-            {isOverflow ? (
+            {isOverflow && stats ? (
               <p className="mt-1 text-[11px] leading-relaxed text-vermilion/85">
-                超出一页：考虑调字号到「紧凑」、删几条、或者保持横向 A4。
+                {COPY.apps.cheatsheet.pageOverflow(stats.pageCount - stats.targetPages)}
               </p>
             ) : null}
           </div>
-          <div className="flex flex-shrink-0 items-center gap-2">
+          <div className="flex w-full flex-shrink-0 items-center gap-2 sm:w-auto">
+            <button
+              type="button"
+              onClick={() => setSettingsOpen((open) => !open)}
+              className="inline-flex h-[28px] items-center gap-1.5 rounded-full bg-white px-3 text-[12px] font-medium text-ink ring-[0.5px] ring-divider transition hover:ring-pine/35 active:scale-95"
+              aria-expanded={settingsOpen}
+              title={COPY.apps.cheatsheet.printLayout}
+            >
+              <Settings2 size={12} strokeWidth={1.8} />
+              {COPY.apps.cheatsheet.settingSummary(settings)}
+            </button>
             <button
               type="button"
               onClick={handleCopyMarkdown}
               className="inline-flex h-[28px] items-center gap-1.5 rounded-full bg-white px-3 text-[12px] font-medium text-ink ring-[0.5px] ring-[#1C1B19]/[0.18] transition hover:ring-[#1C1B19]/[0.4] active:scale-95"
-              title="复制为 Markdown，便于粘贴到笔记或发给同学"
+              title={COPY.apps.cheatsheet.copyTitle}
             >
               {copyState === 'done' ? <Check size={12} strokeWidth={2} /> : <Copy size={12} strokeWidth={1.8} />}
-              {copyState === 'done' ? '已复制' : 'Markdown'}
+              {copyState === 'done' ? COPY.apps.cheatsheet.copied : COPY.apps.cheatsheet.copyMarkdown}
             </button>
             <button
               type="button"
               onClick={handlePrint}
               className="inline-flex h-[28px] items-center gap-1.5 rounded-full bg-ink px-3.5 text-[12px] font-medium text-white transition hover:opacity-85 active:scale-95"
-              title="打印 / 导出 PDF（按当前布局与字号）"
+              title={COPY.apps.cheatsheet.printTitle}
             >
               <Printer size={12} strokeWidth={1.8} />
-              打印 / 导出 PDF
+              {COPY.apps.cheatsheet.print}
             </button>
           </div>
         </div>
 
-        {/* 编辑工具条：横向/纵向 + 字号档位 + 恢复全部 */}
-        <div className="flex items-center gap-3 text-[11px] text-ink-muted">
-          {/* 布局切换 */}
-          <div className="inline-flex items-center gap-1">
-            <span className="text-ink-muted/70">页面</span>
-            <div className="inline-flex rounded-full bg-paper-warm p-[2px]">
-              {(['landscape', 'portrait'] as const).map((opt) => (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => setOrientation(opt)}
-                  className={`rounded-full px-2.5 py-[2px] text-[11px] font-medium transition ${
-                    orientation === opt ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
-                  }`}
-                  title={opt === 'landscape' ? '横向 A4（3 列，密度更高）' : '纵向 A4（2 列）'}
-                  aria-pressed={orientation === opt}
-                >
-                  {opt === 'landscape' ? '横向 A4' : '纵向 A4'}
-                </button>
-              ))}
-            </div>
+        {settingsOpen ? (
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-[18px] border border-divider bg-white p-3.5 sm:grid-cols-3 lg:grid-cols-6">
+            <SettingChoice<CheatsheetPurpose>
+              label={COPY.apps.cheatsheet.purpose}
+              value={settings.purpose}
+              options={[
+                { value: 'review', label: COPY.apps.cheatsheet.reviewPurpose },
+                { value: 'open-book', label: COPY.apps.cheatsheet.openBookPurpose },
+              ]}
+              onChange={(purpose) => setSettings(settingsForPurpose(purpose))}
+            />
+            <SettingChoice<CheatsheetPaperSize>
+              label={COPY.apps.cheatsheet.paper}
+              value={settings.paperSize}
+              options={[
+                { value: 'a4', label: COPY.apps.cheatsheet.paperA4 },
+                { value: 'letter', label: COPY.apps.cheatsheet.paperLetter },
+              ]}
+              onChange={(paperSize) => setSettings((current) => ({ ...current, paperSize }))}
+            />
+            <SettingChoice<CheatsheetOrientation>
+              label={COPY.apps.cheatsheet.orientation}
+              value={settings.orientation}
+              options={[
+                { value: 'portrait', label: COPY.apps.cheatsheet.portrait },
+                { value: 'landscape', label: COPY.apps.cheatsheet.landscape },
+              ]}
+              onChange={(orientation) => setSettings((current) => ({ ...current, orientation }))}
+            />
+            <SettingChoice<'1' | '2' | '3'>
+              label={COPY.apps.cheatsheet.sheets}
+              value={String(settings.sheetCount) as '1' | '2' | '3'}
+              options={(['1', '2', '3'] as const).map((value) => ({ value, label: COPY.apps.cheatsheet.sheetCount(Number(value)) }))}
+              onChange={(value) => setSettings((current) => ({ ...current, sheetCount: Number(value) as 1 | 2 | 3 }))}
+            />
+            <SettingChoice<CheatsheetPrintSides>
+              label={COPY.apps.cheatsheet.sides}
+              value={settings.sides}
+              options={[
+                { value: 'single', label: COPY.apps.cheatsheet.singleSided },
+                { value: 'duplex', label: COPY.apps.cheatsheet.duplex },
+              ]}
+              onChange={(sides) => setSettings((current) => ({ ...current, sides }))}
+            />
+            <SettingChoice<CheatsheetFontScale>
+              label={COPY.apps.cheatsheet.fontSize}
+              value={settings.fontScale}
+              options={(Object.keys(FONT_SCALE_LABELS) as CheatsheetFontScale[]).map((value) => ({ value, label: FONT_SCALE_LABELS[value] }))}
+              onChange={(fontScale) => setSettings((current) => ({ ...current, fontScale }))}
+            />
+            <SettingChoice<CheatsheetColorMode>
+              label={COPY.apps.cheatsheet.colorMode}
+              value={settings.colorMode}
+              options={[
+                { value: 'color', label: COPY.apps.cheatsheet.color },
+                { value: 'mono', label: COPY.apps.cheatsheet.mono },
+              ]}
+              onChange={(colorMode) => setSettings((current) => ({ ...current, colorMode }))}
+            />
+            {settings.sides === 'duplex' ? (
+              <p className="col-span-2 self-end text-[10.5px] leading-5 text-ink-muted sm:col-span-2">
+                {COPY.apps.cheatsheet.duplexHint}
+              </p>
+            ) : null}
+            {hasEdits ? (
+              <button
+                type="button"
+                onClick={handleResetEdits}
+                className="col-span-2 inline-flex items-center justify-center gap-1 rounded-full border border-divider px-3 py-2 text-[11px] text-ink-muted hover:text-ink sm:col-span-1"
+              >
+                <RotateCcw size={11} strokeWidth={1.8} />{COPY.apps.cheatsheet.restore}
+              </button>
+            ) : null}
           </div>
+        ) : null}
+      </div>
 
-          {/* 字号档位 */}
-          <div className="inline-flex items-center gap-1">
-            <span className="text-ink-muted/70">字号</span>
-            <div className="inline-flex rounded-full bg-paper-warm p-[2px]">
-              {(['compact', 'standard', 'comfortable'] as const).map((opt) => (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => setFontScale(opt)}
-                  className={`rounded-full px-2.5 py-[2px] text-[11px] font-medium transition ${
-                    fontScale === opt ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
-                  }`}
-                  aria-pressed={fontScale === opt}
-                  title={
-                    opt === 'compact'
-                      ? '紧凑：能塞最多内容（中文打印可读极限）'
-                      : opt === 'comfortable'
-                        ? '舒适：屏幕预览友好'
-                        : '标准：均衡'
-                  }
-                >
-                  {FONT_SCALE_LABELS[opt]}
-                </button>
-              ))}
+      {/* 真实分页预览：屏幕页界与打印页界共用同一份分配结果。 */}
+      <div className="flex-1 overflow-y-auto px-3 py-4 print:overflow-visible print:p-0 sm:px-6 sm:py-5">
+        <div
+          className="mx-auto flex w-full flex-col gap-5 print:block"
+          style={{ maxWidth: settings.orientation === 'landscape' ? '1120px' : '820px' }}
+        >
+          {pages.length === 0 ? (
+            <div className="rounded-[20px] border border-dashed border-divider bg-white px-6 py-16 text-center text-[12.5px] text-ink-muted print:hidden">
+              {COPY.apps.cheatsheet.allRemoved}
             </div>
-          </div>
-
-          {/* 恢复全部：仅在有编辑时出现，避免视觉污染 */}
-          {hasEdits ? (
-            <button
-              type="button"
-              onClick={handleResetEdits}
-              className="ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-[3px] text-[11px] text-ink-muted ring-[0.5px] ring-[#1C1B19]/[0.14] transition hover:bg-white hover:text-ink hover:ring-[#1C1B19]/[0.3] active:scale-95"
-              title="恢复全部（撤销所有删除和折叠）"
+          ) : pages.map((page, pageIndex) => (
+            <article
+              key={page.id}
+              className={`cheatsheet-print-page flex flex-col bg-white p-4 sm:p-6 ${settings.colorMode === 'mono' ? 'cheatsheet-monochrome' : ''}`}
+              style={{
+                aspectRatio: settings.paperSize === 'a4'
+                  ? (settings.orientation === 'portrait' ? '210 / 297' : '297 / 210')
+                  : (settings.orientation === 'portrait' ? '8.5 / 11' : '11 / 8.5'),
+              }}
             >
-              <RotateCcw size={11} strokeWidth={1.8} />
-              恢复全部
-            </button>
-          ) : null}
+              <header className="print-keep mb-3 border-b border-divider/70 pb-2">
+                <h1 className="text-[15px] font-semibold text-ink">{payload.title}</h1>
+                <p className="mt-0.5 text-[9.5px] leading-4 text-ink-muted">{payload.overview}</p>
+              </header>
+              <div className="cheatsheet-content-grid grid flex-1 content-start gap-3 print:gap-2">
+                {page.sections.map((section, sectionIndex) => (
+                  <SectionCard
+                    key={`${page.id}:${section.key}:${sectionIndex}`}
+                    section={section}
+                    hiddenItemIds={hiddenItemIds}
+                    onHideItem={handleHideItem}
+                    collapsed={false}
+                    onToggleCollapse={() => handleToggleCollapse(section.key)}
+                    onSeek={onSeek}
+                    onEditItem={handleEditItem}
+                  />
+                ))}
+              </div>
+              <footer className="mt-3 flex items-center justify-between border-t border-divider/60 pt-2 text-[8.5px] text-ink-muted">
+                <span className="truncate">{payload.title}</span>
+                <span className="tabular-nums">{COPY.apps.cheatsheet.pageNumber(pageIndex + 1, pages.length)}</span>
+              </footer>
+            </article>
+          ))}
         </div>
       </div>
 
-      {/* 速查卡主体 */}
-      <div className="flex-1 overflow-y-auto px-6 py-5 print:overflow-visible print:p-[10mm]">
-        <div className="mx-auto w-full" style={{ maxWidth: orientation === 'landscape' ? '1100px' : '880px' }}>
-          {/* 打印态专属 header */}
-          <header className="mb-3 hidden print:block">
-            <h1 className="text-[16px] font-semibold text-ink">{payload.title}</h1>
-            <p className="mt-0.5 text-[10px] text-ink-muted">{payload.overview}</p>
-          </header>
-          <div
-            className={`grid gap-3 print:gap-2 ${
-              orientation === 'landscape'
-                ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3 print:grid-cols-3'
-                : 'grid-cols-1 md:grid-cols-2 print:grid-cols-2'
-            }`}
-          >
-            {payload.sections.map((section) => (
-              <SectionCard
-                key={section.key}
-                section={section}
-                hiddenItemIds={hiddenItemIds}
-                onHideItem={handleHideItem}
-                collapsed={collapsedSections.has(section.key)}
-                onToggleCollapse={() => handleToggleCollapse(section.key)}
-                onSeek={onSeek}
-              />
-            ))}
-          </div>
-
-          <footer className="mt-6 hidden print:flex print:items-center print:justify-between print:text-[8.5px] print:text-ink-muted">
-            <span className="truncate">{payload.title}</span>
-            <span className="tabular-nums">
-              {new Date().toLocaleString('zh-CN', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </span>
-          </footer>
-        </div>
-      </div>
-
-      {/* 打印样式：按 orientation 动态切换 + 颜色保真 */}
+      {/* 打印样式：纸张、方向与分页和屏幕预览保持同源。 */}
       <style jsx global>{`
+        .cheatsheet-content-grid {
+          grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+        }
+        .cheatsheet-monochrome {
+          filter: grayscale(1);
+        }
         @media print {
+          .cheatsheet-print-page {
+            break-after: page;
+            box-sizing: border-box;
+            min-height: ${settings.paperSize === 'a4'
+              ? (settings.orientation === 'portrait' ? '281mm' : '194mm')
+              : (settings.orientation === 'portrait' ? '10.37in' : '7.87in')};
+            padding: 0 !important;
+          }
+          .cheatsheet-print-page:last-child {
+            break-after: auto;
+          }
+          .cheatsheet-content-grid {
+            grid-template-columns: repeat(${settings.orientation === 'landscape' ? 3 : 2}, minmax(0, 1fr));
+          }
           @page {
-            size: A4 ${orientation};
-            margin: 0;
+            size: ${settings.paperSize === 'a4' ? 'A4' : 'Letter'} ${settings.orientation};
+            margin: 8mm;
           }
           html,
           body {

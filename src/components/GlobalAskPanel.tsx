@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { COPY } from '@/lib/ui/copy';
 import { useLearningContext } from '@/hooks/useLearningContext';
 import { useGlobalAskHistory } from '@/hooks/useGlobalAskHistory';
+import { useLearningMemoryDistillation } from '@/hooks/useLearningMemoryDistillation';
 import {
   createLearningThread,
   learningThreadToIntent,
@@ -17,14 +18,17 @@ import {
   useLearningIntentFlow,
   withConfirmedLearningIntent,
 } from '@/hooks/useLearningIntentFlow';
-import { formatLearningContextForTutor, summarizeLearningContext } from '@/lib/utils/learning-context';
+import {
+  formatLearningContextForTutor,
+  summarizeLearningContext,
+  toLearningActivityPreview,
+} from '@/lib/utils/learning-context';
 import { useSessionStore } from '@/stores/session-store';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import type { LearningIntentAnswer, LearningIntentPlan } from '@/types/learning-intent';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { LearningIntentConfirmationCard } from '@/components/LearningIntentConfirmationCard';
-import { LearningProgressMemoryCard } from '@/components/LearningProgressMemoryCard';
 import { LearningMemoryPanel } from '@/components/LearningMemoryPanel';
 import { LearningContextStatus } from '@/components/LearningContextStatus';
 import {
@@ -36,7 +40,6 @@ import {
   collectMessageText,
   useChatComposer,
   useChatFileUpload,
-  type ChatMarkerHit,
 } from '@/components/chat';
 
 interface GlobalAskPanelProps {
@@ -47,8 +50,6 @@ interface GlobalAskPanelProps {
 }
 
 type AskDepth = 'quick' | 'deep';
-type ProgressState = { points: string[]; status: 'pending' | 'saved' | 'dismissed' };
-
 export function GlobalAskPanel({
   open,
   onClose,
@@ -67,7 +68,6 @@ export function GlobalAskPanel({
   const [intentPlan, setIntentPlan] = React.useState<LearningIntentPlan | null>(null);
   const [activeIntent, setActiveIntent] = React.useState<LearningIntentPlan | null>(null);
   const [pendingQuery, setPendingQuery] = React.useState('');
-  const [progressByMessage, setProgressByMessage] = React.useState<Record<string, ProgressState>>({});
   const activeThreadRef = React.useRef(learning.activeThread);
   const composerRef = React.useRef<HTMLFormElement>(null);
 
@@ -75,6 +75,15 @@ export function GlobalAskPanel({
 
   const fileUpload = useChatFileUpload({ authToken: accessToken ?? undefined, targetRef: composerRef });
   const { busy: intentBusy, requestIntent } = useLearningIntentFlow();
+  const distillAndApplyLearningMemory = useLearningMemoryDistillation({
+    accessToken: accessToken ?? undefined,
+    memories: learning.memories,
+    activeThread: learning.activeThread,
+    activeIntent,
+    addMemory: learning.addMemory,
+    updateMemory: learning.updateMemory,
+    setActiveThread: learning.setActiveThread,
+  });
 
   const currentTranscript = React.useMemo(
     () => segments.map((segment) => segment.text.trim()).filter(Boolean).join('\n').slice(-10_000),
@@ -104,6 +113,7 @@ export function GlobalAskPanel({
   const contextFocus = activeIntent?.contextFocus ?? 'mixed';
   const usePersonalContext = contextFocus !== 'current';
   const useCurrentContext = contextFocus !== 'personal';
+  const effectiveDepth: AskDepth = activeIntent ? 'deep' : depth;
 
   const agentContext = React.useMemo(() => {
     const attached = fileUpload.attachedFiles.map((file) => ({ title: file.title, content: file.text }));
@@ -111,7 +121,7 @@ export function GlobalAskPanel({
     return {
       ...(supportMaterials.length > 0 ? { supportMaterials } : {}),
       global: {
-        depth,
+        depth: effectiveDepth,
         ...(activeIntent ? {
           intent: {
             title: activeIntent.title,
@@ -123,7 +133,9 @@ export function GlobalAskPanel({
         ...(usePersonalContext ? formattedLearningContext : {}),
       },
     };
-  }, [activeIntent, currentMaterials, depth, fileUpload.attachedFiles, formattedLearningContext, useCurrentContext, usePersonalContext]);
+  }, [activeIntent, currentMaterials, effectiveDepth, fileUpload.attachedFiles, formattedLearningContext, useCurrentContext, usePersonalContext]);
+  const agentContextRef = React.useRef(agentContext);
+  React.useEffect(() => { agentContextRef.current = agentContext; }, [agentContext]);
 
   const transport = React.useMemo(() => new DefaultChatTransport({
     api: '/api/tutor/agent',
@@ -131,12 +143,14 @@ export function GlobalAskPanel({
     body: () => ({
       mode: 'global',
       sessionId: sessionId || 'global-ask',
-      context: agentContext,
+      context: agentContextRef.current,
       options: {},
     }),
-  }), [accessToken, agentContext, sessionId]);
+  }), [accessToken, sessionId]);
 
-  const { messages, setMessages, sendMessage, status, stop, error } = useChat({ transport });
+  const { messages, setMessages, sendMessage, status, stop, error } = useChat({
+    transport,
+  });
   const busy = status === 'submitted' || status === 'streaming';
   const latestMessage = messages[messages.length - 1];
   const latestText = latestMessage ? collectMessageText(latestMessage) : '';
@@ -150,30 +164,41 @@ export function GlobalAskPanel({
   }, [open]);
 
   const handleDepthRestored = React.useCallback((restoredDepth: AskDepth) => {
-    setDepth(restoredDepth);
     const restoredThread = activeThreadRef.current;
-    if (restoredDepth === 'deep' && restoredThread?.status === 'active') {
+    if (restoredThread?.status === 'active') {
+      setDepth('deep');
       setActiveIntent(learningThreadToIntent(restoredThread));
+      return;
     }
+    setDepth(restoredDepth);
   }, []);
 
   const handleAssistantPersisted = React.useCallback(async ({
     text,
+    userText,
     sourceId,
     depth: persistedDepth,
-  }: { text: string; sourceId: string; depth: AskDepth }) => {
+  }: { text: string; userText: string; sourceId: string; depth: AskDepth }) => {
+    const learningMemoryUpdate = userText.trim()
+      ? distillAndApplyLearningMemory({
+          userText,
+          assistantText: text,
+          sourceId,
+        })
+      : Promise.resolve();
     await recordLearningActivity({
       kind: 'conversation',
       title: persistedDepth === 'deep' ? COPY.globalAsk.recentDeepSession : COPY.globalAsk.recentConversation,
-      detail: text.slice(0, 220),
+      detail: toLearningActivityPreview(text),
       sourceId,
     });
-  }, [recordLearningActivity]);
+    await learningMemoryUpdate;
+  }, [distillAndApplyLearningMemory, recordLearningActivity]);
 
   const history = useGlobalAskHistory({
     open,
     userId,
-    depth,
+    depth: effectiveDepth,
     busy,
     messages,
     setMessages,
@@ -185,10 +210,10 @@ export function GlobalAskPanel({
 
   const startNewConversation = React.useCallback(() => {
     stop();
+    setDepth('quick');
     setIntentPlan(null);
     setActiveIntent(null);
     setPendingQuery('');
-    setProgressByMessage({});
     history.reset();
     fileUpload.clear();
   }, [fileUpload, history, stop]);
@@ -227,7 +252,7 @@ export function GlobalAskPanel({
         activeContext: currentMaterials.map((item) => `${item.title}\n${item.content.slice(0, 500)}`).join('\n\n').slice(0, 4_000),
         ...(answers?.length ? { answers } : {}),
       });
-      if (shouldAutoStartLearningIntent(plan, Boolean(answers?.length))) {
+      if (shouldAutoStartLearningIntent(plan)) {
         await beginDeepSession(plan, query);
       } else {
         setIntentPlan(plan);
@@ -247,13 +272,13 @@ export function GlobalAskPanel({
 
   const submitText = React.useCallback((text: string) => {
     if (busy || intentBusy) return;
-    if (depth === 'deep' && !activeIntent) {
+    if (effectiveDepth === 'deep' && !activeIntent) {
       void prepareDeepIntent(text);
       return;
     }
     sendMessage({ text });
     fileUpload.clear();
-  }, [activeIntent, busy, depth, fileUpload, intentBusy, prepareDeepIntent, sendMessage]);
+  }, [activeIntent, busy, effectiveDepth, fileUpload, intentBusy, prepareDeepIntent, sendMessage]);
 
   const composer = useChatComposer({
     draftKey: 'global-ask',
@@ -276,38 +301,6 @@ export function GlobalAskPanel({
     if (query) sendQuick(query);
   }, [pendingQuery, sendQuick]);
 
-  const handleMarkerHit = React.useCallback((hit: ChatMarkerHit) => {
-    if (hit.kind !== 'learning-progress' || !hit.learningProgress?.points.length || !hit.messageId) return;
-    setProgressByMessage((current) => current[hit.messageId] ? current : {
-      ...current,
-      [hit.messageId]: { points: hit.learningProgress!.points, status: 'pending' },
-    });
-  }, []);
-
-  const saveProgress = React.useCallback(async (messageId: string, points: string[]) => {
-    for (let index = 0; index < points.length; index += 1) {
-      await learning.addMemory({
-        kind: 'progress',
-        title: points[index],
-        source: 'confirmed-ai',
-        sourceId: `global-progress:${messageId}:${index}`,
-      });
-    }
-    if (learning.activeThread) {
-      await learning.setActiveThread({
-        ...learning.activeThread,
-        lastSummary: points.join('；'),
-        nextStep: activeIntent?.checkpoints[1] || activeIntent?.checkpoints[0],
-        conversationId: history.conversationId || undefined,
-        updatedAt: new Date().toISOString(),
-      });
-    }
-    setProgressByMessage((current) => ({
-      ...current,
-      [messageId]: { ...current[messageId], status: 'saved' },
-    }));
-  }, [activeIntent, history.conversationId, learning]);
-
   const visibleSources = sourceItems.filter((item) => item.status !== 'failed').slice(-3).reverse();
 
   if (!open) return null;
@@ -316,6 +309,11 @@ export function GlobalAskPanel({
       <div className={cn('fixed inset-0 z-[80]', !isMobile && 'left-[var(--sidebar-width,0px)]')}>
         <LearningMemoryPanel
           onBack={() => setView('ask')}
+          onTalkToMeetMind={() => {
+            setView('ask');
+            composer.setValue(COPY.globalAsk.memoryTalkPrompt);
+            window.setTimeout(() => composer.textareaRef.current?.focus(), 0);
+          }}
           onResumeThread={() => {
             setView('ask');
             setDepth('deep');
@@ -337,7 +335,7 @@ export function GlobalAskPanel({
             <span className="flex h-9 w-9 items-center justify-center rounded-2xl border border-pine/15 bg-pine-fog text-pine"><Sparkles size={16} /></span>
             <div className="min-w-0">
               <h1 className="truncate text-[15px] font-semibold text-ink">{COPY.globalAsk.title}</h1>
-              <p className="truncate text-[11.5px] text-ink-muted">{history.hydrated ? (history.restoredTitle ? `${COPY.globalAsk.historyRestored} · ${history.restoredTitle}` : COPY.globalAsk.subtitle) : COPY.globalAsk.historyLoading}</p>
+              <p className="hidden truncate text-[11.5px] text-ink-muted sm:block">{history.hydrated ? (history.restoredTitle ? `${COPY.globalAsk.historyRestored} · ${history.restoredTitle}` : COPY.globalAsk.subtitle) : COPY.globalAsk.historyLoading}</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
@@ -349,20 +347,29 @@ export function GlobalAskPanel({
           </div>
         </header>
 
-        <div className="flex items-center gap-3 overflow-x-auto border-b border-divider bg-white px-4 py-2 sm:justify-between sm:px-6">
-          <div className="flex shrink-0 items-center gap-1">
-            {(['quick', 'deep'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => { setDepth(mode); if (mode === 'quick') { setIntentPlan(null); setActiveIntent(null); } }}
-                className={cn('inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[11.5px] transition', depth === mode ? 'bg-ink text-white' : 'text-ink-muted hover:bg-paper-warm hover:text-ink')}
-              >
-                {mode === 'deep' ? <BrainCircuit size={13} /> : <Sparkles size={12} />}
-                {mode === 'deep' ? COPY.globalAsk.deepMode : COPY.globalAsk.quickMode}
-              </button>
-            ))}
-          </div>
+        <div className="flex items-center justify-between gap-3 border-b border-divider bg-white px-4 py-2 sm:px-6">
+          <button
+            type="button"
+            aria-pressed={effectiveDepth === 'deep'}
+            onClick={() => {
+              if (effectiveDepth === 'deep') {
+                setDepth('quick');
+                setIntentPlan(null);
+                setActiveIntent(null);
+                return;
+              }
+              setDepth('deep');
+            }}
+            className={cn(
+              'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[11.5px] transition',
+              effectiveDepth === 'deep'
+                ? 'bg-pine text-white'
+                : 'border border-divider bg-paper text-ink-secondary hover:border-pine/25 hover:text-pine',
+            )}
+          >
+            <BrainCircuit size={13} />
+            {COPY.globalAsk.deepMode}
+          </button>
           <LearningContextStatus
             currentCount={currentMaterials.length + fileUpload.attachedFiles.length}
             recentCount={learning.recentActivities.length}
@@ -380,7 +387,7 @@ export function GlobalAskPanel({
             <div className="mx-auto flex max-w-xl flex-col items-center pt-8 text-center sm:pt-14">
               <OctoAvatar mood="listening" size="lg" aura className="mb-5" />
               <h2 className="font-serif text-[25px] italic tracking-[-0.025em] text-ink">{COPY.globalAsk.emptyTitle}</h2>
-              <p className="mt-3 max-w-lg text-[13px] leading-6 text-ink-secondary">{COPY.globalAsk.emptyBody}</p>
+              <p className="mt-2 max-w-lg text-[13px] leading-6 text-ink-secondary">{COPY.globalAsk.emptyBody}</p>
               {learning.activeThread?.status === 'active' ? (
                 <button
                   type="button"
@@ -418,24 +425,15 @@ export function GlobalAskPanel({
           {messages.map((message, index) => {
             const text = collectMessageText(message);
             const isStreaming = busy && index === messages.length - 1 && message.role === 'assistant';
-            const progress = progressByMessage[message.id];
             return (
               <ChatBubble
                 key={message.id}
                 role={message.role === 'user' ? 'user' : 'assistant'}
                 avatar={message.role === 'assistant' ? <OctoAvatar mood={isStreaming ? 'thinking' : 'happy'} size="sm" /> : undefined}
                 messageId={message.id}
-                footer={progress && progress.status !== 'dismissed' ? (
-                  <LearningProgressMemoryCard
-                    points={progress.points}
-                    saved={progress.status === 'saved'}
-                    onSave={(points) => saveProgress(message.id, points)}
-                    onDismiss={() => setProgressByMessage((current) => ({ ...current, [message.id]: { ...progress, status: 'dismissed' } }))}
-                  />
-                ) : undefined}
               >
                 {message.role === 'assistant' ? (
-                  <ChatRenderer content={text} isStreaming={isStreaming} markers={depth === 'deep' ? ['learning-progress'] : undefined} onMarkerHit={handleMarkerHit} messageId={message.id} />
+                  <ChatRenderer content={text} isStreaming={isStreaming} messageId={message.id} />
                 ) : <span className="whitespace-pre-wrap">{text}</span>}
               </ChatBubble>
             );
@@ -470,7 +468,7 @@ export function GlobalAskPanel({
           isDragging={fileUpload.isDragging}
           capabilities={{ file: true, mic: true }}
           onVoiceTranscript={(text) => composer.setValue([composer.value, text].filter(Boolean).join(' '))}
-          placeholder={depth === 'deep' ? COPY.globalAsk.composerDeep : COPY.globalAsk.composerQuick}
+          placeholder={effectiveDepth === 'deep' ? COPY.globalAsk.composerDeep : COPY.globalAsk.composerQuick}
           statusLabel={intentBusy ? COPY.globalAsk.preparingIntent : undefined}
         />
       </div>

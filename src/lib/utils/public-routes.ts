@@ -21,6 +21,7 @@ const PUBLIC_ROUTES = [
   '/api/tutor',
   '/api/tutor/agent',
   '/api/tutor/intent',
+  '/api/tutor/memory',
   '/api/chat',
   '/api/llm/models',
   '/api/asr-config',

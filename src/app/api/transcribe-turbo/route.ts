@@ -332,7 +332,7 @@ async function syncTranscribeSegment(
   const asrOptions: Record<string, unknown> = { enable_itn: true };
   if (language !== 'auto') asrOptions.language = language;
   const requestBody = {
-    model: 'qwen3-asr-flash',
+    model: process.env.DASHSCOPE_ASR_BATCH_MODEL || 'qwen3-asr-flash-2026-02-10',
     input: {
       messages,
     },

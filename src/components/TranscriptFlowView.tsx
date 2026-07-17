@@ -46,6 +46,7 @@ import { useTextSelection } from '@/hooks/useTextSelection';
 import { WordExplainer } from './WordExplainer';
 import { useEnToZhTranslation, useTranslationMode, type TranslationMode } from '@/hooks/useEnToZhTranslation';
 import { extractChineseRuns, extractEnglishRuns } from '@/lib/services/translation/extract-english';
+import { getSpeakerColorClass, getSpeakerLabel } from '@/lib/services/asr/diarization-service';
 
 // ─── 类型定义 ───
 
@@ -460,8 +461,9 @@ function ParagraphBlock({
       {(() => {
         const firstSpeakerId = paragraph.segments.find((s) => s.speakerId)?.speakerId;
         if (!firstSpeakerId) return null;
-        const label = `说话人${parseInt(firstSpeakerId, 10) + 1}`;
-        const colorClass = firstSpeakerId === '0' ? 'text-pine' : 'text-vermilion';
+        const label = getSpeakerLabel(firstSpeakerId);
+        if (!label) return null;
+        const colorClass = getSpeakerColorClass(firstSpeakerId);
         return (
           <span className={`ml-1.5 mb-1.5 inline-flex items-center text-[10.5px] font-medium ${colorClass}`}>
             {label}

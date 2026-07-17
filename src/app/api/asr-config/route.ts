@@ -10,12 +10,12 @@ export async function GET() {
     );
   }
 
-  const wsModel = process.env.DASHSCOPE_ASR_WS_MODEL || 'qwen3-asr-flash-realtime';
+  const wsModel = process.env.DASHSCOPE_ASR_WS_MODEL || 'qwen3-asr-flash-realtime-2026-02-10';
   const sampleRate = Number(process.env.DASHSCOPE_ASR_WS_SR || '16000');
 
   return NextResponse.json({
     wsUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
-    apiKey,
+    available: true,
     model: wsModel,
     sampleRate,
   });

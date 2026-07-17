@@ -108,10 +108,6 @@ export interface ClassroomLeftPanelProps {
   audioSource?: RecorderAudioSource;
   /** 切换录音来源 */
   onChangeAudioSource?: (source: RecorderAudioSource) => void;
-  /** 是否启用说话人分离（多人会议模式） */
-  speakerDiarization?: boolean;
-  /** 切换说话人分离 */
-  onChangeSpeakerDiarization?: (enabled: boolean) => void;
   /**
    * 打开一个 App 应用。hero 的能力预览卡被点击时，会先 loadDemoLesson 再
    * 延迟 320ms 调这个，让用户看到 demo 转录闪进来、再看到窗口冒出来。
@@ -270,8 +266,6 @@ function EmptyState({
   onCapabilityClick,
   audioSource,
   onChangeAudioSource,
-  speakerDiarization,
-  onChangeSpeakerDiarization,
   onAddMaterial,
   onSearch,
   recoverySlot,
@@ -281,8 +275,6 @@ function EmptyState({
   onCapabilityClick?: (appKey: string) => void;
   audioSource?: RecorderAudioSource;
   onChangeAudioSource?: (source: RecorderAudioSource) => void;
-  speakerDiarization?: boolean;
-  onChangeSpeakerDiarization?: (enabled: boolean) => void;
   onAddMaterial?: () => void;
   onSearch?: () => void;
   recoverySlot?: React.ReactNode;
@@ -294,8 +286,6 @@ function EmptyState({
       onCapabilityClick={onCapabilityClick}
       audioSource={audioSource}
       onChangeAudioSource={onChangeAudioSource}
-      speakerDiarization={speakerDiarization}
-      onChangeSpeakerDiarization={onChangeSpeakerDiarization}
       onAddMaterial={onAddMaterial}
       onSearch={onSearch}
       recoverySlot={recoverySlot}
@@ -315,8 +305,6 @@ function ListView({
   onStop,
   audioSource,
   onChangeAudioSource,
-  speakerDiarization,
-  onChangeSpeakerDiarization,
   onRenameLesson,
   onAddMaterial,
   onSearch,
@@ -332,8 +320,6 @@ function ListView({
   onStop: (lessonId?: string) => void;
   audioSource?: RecorderAudioSource;
   onChangeAudioSource?: (source: RecorderAudioSource) => void;
-  speakerDiarization?: boolean;
-  onChangeSpeakerDiarization?: (enabled: boolean) => void;
   onRenameLesson?: (id: string, title: string) => void;
   onAddMaterial?: () => void;
   onSearch?: () => void;
@@ -355,8 +341,6 @@ function ListView({
         onCapabilityClick={onCapabilityClick}
         audioSource={audioSource}
         onChangeAudioSource={onChangeAudioSource}
-        speakerDiarization={speakerDiarization}
-        onChangeSpeakerDiarization={onChangeSpeakerDiarization}
         onAddMaterial={onAddMaterial}
         onSearch={onSearch}
         recoverySlot={recovery}
@@ -621,8 +605,6 @@ export function ClassroomLeftPanel({
   onFinishDemo,
   audioSource,
   onChangeAudioSource,
-  speakerDiarization,
-  onChangeSpeakerDiarization,
   onOpenApp,
   onRenameLesson,
   onQuickPhoto,
@@ -688,8 +670,6 @@ export function ClassroomLeftPanel({
             onStop={onStopRecording}
             audioSource={audioSource}
             onChangeAudioSource={onChangeAudioSource}
-            speakerDiarization={speakerDiarization}
-            onChangeSpeakerDiarization={onChangeSpeakerDiarization}
             onAddMaterial={onAddMaterial}
             onSearch={onSearch}
             onRenameLesson={onRenameLesson}
@@ -715,8 +695,6 @@ export function ClassroomLeftPanel({
             onReplayDemo={onReplayDemo}
             onFinishDemo={onFinishDemo}
             onQuickPhoto={onQuickPhoto}
-            speakerDiarization={speakerDiarization}
-            onToggleSpeakerDiarization={onChangeSpeakerDiarization ? () => onChangeSpeakerDiarization(!speakerDiarization) : undefined}
           />
         )}
       </div>

@@ -70,10 +70,8 @@ export function withConfirmedLearningIntent<T extends { global: Record<string, u
 
 export function shouldAutoStartLearningIntent(
   plan: LearningIntentPlan,
-  hasAnswers = false,
 ): boolean {
-  if (hasAnswers) return true;
-  return plan.confidence === 'high' && !plan.questions?.length;
+  return !plan.questions?.length;
 }
 
 export function useLearningIntentFlow() {

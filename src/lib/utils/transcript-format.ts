@@ -26,8 +26,9 @@ export function formatTranscriptWithSpeakers(segments: TranscriptLikeSegment[]):
       if (!s.speakerId) return text;
       const prevSpeaker = i > 0 ? segments[i - 1].speakerId : undefined;
       if (prevSpeaker === s.speakerId) return text;
-      const speakerNum = parseInt(s.speakerId, 10) + 1;
-      if (isNaN(speakerNum)) return text;
+      if (!/^\d+$/.test(s.speakerId)) return text;
+      const speakerNum = Number(s.speakerId) + 1;
+      if (!Number.isInteger(speakerNum) || speakerNum < 1) return text;
       return `[说话人${speakerNum}] ${text}`;
     })
     .join(' ')

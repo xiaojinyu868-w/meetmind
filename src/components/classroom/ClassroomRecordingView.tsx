@@ -22,7 +22,6 @@ import { extractChineseRuns, extractEnglishRuns } from '@/lib/services/translati
 import { useEnToZhTranslation, useTranslationMode, type TranslationMode } from '@/hooks/useEnToZhTranslation';
 import { buildLiveTranslationRows } from '@/lib/utils/live-translation-rows';
 import { stitchLiveSentences } from '@/lib/utils/stitch-live-sentences';
-import { getSpeakerLabel, getSpeakerColorClass } from '@/lib/services/asr/diarization-service';
 import { cycleTranslationMode, resolveSessionTranslationMode } from './ClassroomRecordingView.model';
 import { COPY } from '@/lib/ui/copy';
 
@@ -66,10 +65,6 @@ export interface ClassroomRecordingViewProps {
   onFinishDemo?: () => void;
   /** 课中拍照：传入当前录音秒数，由父组件透传到 handleImportFiles */
   onQuickPhoto?: (capturedAtMs: number) => void;
-  /** 是否启用说话人分离（多人会议模式） */
-  speakerDiarization?: boolean;
-  /** 切换说话人分离 */
-  onToggleSpeakerDiarization?: () => void;
 }
 
 // ── 时间工具 ──────────────────────────────────────────────────────────
@@ -92,8 +87,6 @@ function LiveTranscriptPanel({
   demoAudioPlaying,
   demoAudioNeedsGesture,
   onToggleDemoAudio,
-  speakerDiarization,
-  onToggleSpeakerDiarization,
 }: {
   segments?: TranscriptSegment[];
   recentLines: Array<{ id: string; text: string; startMs: number }>;
@@ -106,8 +99,6 @@ function LiveTranscriptPanel({
   demoAudioPlaying?: boolean;
   demoAudioNeedsGesture?: boolean;
   onToggleDemoAudio?: () => void;
-  speakerDiarization?: boolean;
-  onToggleSpeakerDiarization?: () => void;
 }) {
   const rows = useMemo(
     () => buildLiveTranslationRows({ segments, recentLines, interimText, maxFinalRows: 9999 }),
@@ -279,19 +270,6 @@ function LiveTranscriptPanel({
         <div className="mt-2 flex items-center justify-between gap-2 rounded-full border border-divider bg-card px-2 py-1.5">
           <span className="px-3 py-1 text-[12px] font-medium text-ink">实时文字</span>
           <div className="flex items-center gap-1.5">
-            {onToggleSpeakerDiarization ? (
-              <button
-                type="button"
-                onClick={onToggleSpeakerDiarization}
-                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium transition ${
-                  speakerDiarization ? 'bg-pine text-white shadow-soft' : 'text-ink-muted hover:bg-paper-warm'
-                }`}
-                title={speakerDiarization ? '说话人分离已开启，点击切回单人模式' : '开启多人说话人分离（实时切换）'}
-              >
-                <span className={`h-1.5 w-1.5 rounded-full ${speakerDiarization ? 'bg-white' : 'bg-ink-muted'}`} />
-                <span>{speakerDiarization ? '多人' : '单人'}</span>
-              </button>
-            ) : null}
             <button
               type="button"
               onClick={onCycleTranslationMode}
@@ -359,14 +337,6 @@ function LiveTranscriptPanel({
                   >
                     {formatTime(Math.floor(sentence.startMs / 1000))}
                   </span>
-                  {sentence.speakerId && speakerDiarization ? (
-                    <span
-                      className={`mr-1.5 inline-block align-baseline text-[11.5px] font-medium ${getSpeakerColorClass(sentence.speakerId)}`}
-                      style={{ verticalAlign: '0.05em' }}
-                    >
-                      {getSpeakerLabel(sentence.speakerId)}
-                    </span>
-                  ) : null}
                   <span>{sentence.text}</span>
                   {translateEnabled && sentence.translation && !isInterim ? (
                     <span className="ml-1.5 inline italic text-ink-muted/80">
@@ -516,8 +486,6 @@ export function ClassroomRecordingView({
   onReplayDemo,
   onFinishDemo,
   onQuickPhoto,
-  speakerDiarization,
-  onToggleSpeakerDiarization,
 }: ClassroomRecordingViewProps) {
   const [mobilePane, setMobilePane] = useState<'flow' | 'transcript'>('flow');
 
@@ -564,8 +532,6 @@ export function ClassroomRecordingView({
               demoAudioPlaying={demoAudioPlaying}
               demoAudioNeedsGesture={demoAudioNeedsGesture}
               onToggleDemoAudio={onToggleDemoAudio}
-              speakerDiarization={speakerDiarization}
-              onToggleSpeakerDiarization={onToggleSpeakerDiarization}
             />
           </div>
           <div className={`${mobilePane === 'flow' ? 'block' : 'hidden'} min-w-0 overflow-hidden rounded-[24px] border border-divider bg-white xl:block`}>

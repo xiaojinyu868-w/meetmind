@@ -57,8 +57,9 @@ export function buildPackFromExecutionContext(
 /**
  * 把 ContextPack（新契约）转回 AppExecutionContext（旧契约），用于喂给现有 plugin。
  *
- * 取 pack.lessons[0] 作为单 lesson 上下文。多 lesson 场景（unit/exam）暂未实现，
- * 直接抛错——本期 tier 始终为 'class'，不会触发。
+ * 单 lesson 保持原引用；多 lesson 按发生时间排序并展平成一条只供插件消费的时间轴，
+ * 同时为每段写入 sourceItemId/sourceTitle，并在 metadata.lessonSources 保存 offset。
+ * 下游引用必须用这份映射还原到“哪节课 + 课内时间”，不得把聚合时间冒充单课时间。
  */
 export function buildExecutionContextFromPack(
   pack: ContextPack,
@@ -68,29 +69,73 @@ export function buildExecutionContextFromPack(
   if (pack.lessons.length === 0) {
     throw new Error('[context-pack] cannot build execution context from empty pack');
   }
-  if (pack.lessons.length > 1) {
-    throw new Error(
-      `[context-pack] multi-lesson pack (tier=${pack.tier}, lessons=${pack.lessons.length}) ` +
-        'is not yet supported by AppExecutionContext. Only single-lesson (class tier) is implemented.'
-    );
+  const orderedLessons = [...pack.lessons].sort((a, b) => (
+    (a.occurredAt ?? 0) - (b.occurredAt ?? 0)
+  ));
+  const lessonSources: Array<{
+    sessionId: string;
+    title: string;
+    offsetMs: number;
+    durationMs: number;
+  }> = [];
+  const transcript: LessonContext['transcript'] = [];
+  const anchors: LessonContext['anchors'] = [];
+  let offsetMs = 0;
+
+  for (const [lessonIndex, lesson] of orderedLessons.entries()) {
+    const durationMs = lesson.transcript.reduce((max, segment) => Math.max(max, segment.endMs), 0);
+    const title = lesson.title?.trim() || `第 ${lessonIndex + 1} 节课`;
+    lessonSources.push({ sessionId: lesson.sessionId, title, offsetMs, durationMs });
+    lesson.transcript.forEach((segment) => {
+      transcript.push({
+        ...segment,
+        id: `${lesson.sessionId}:${segment.id}`,
+        startMs: segment.startMs + offsetMs,
+        endMs: segment.endMs + offsetMs,
+        sourceItemId: lesson.sessionId,
+        sourceTitle: title,
+      });
+    });
+    lesson.anchors.forEach((anchor) => {
+      anchors.push({
+        ...anchor,
+        id: `${lesson.sessionId}:${anchor.id}`,
+        timestamp: anchor.timestamp + offsetMs,
+      });
+    });
+    // 每节课之间留 1 秒空隙，防止边界时间恰好重合；真实课内时间由 lessonSources 还原。
+    offsetMs += Math.max(1, durationMs) + 1_000;
   }
 
-  const lesson = pack.lessons[0];
+  const lesson = orderedLessons[0];
+  const summaries = orderedLessons.map((item) => item.summary?.trim()).filter(Boolean);
+  const difficulties = orderedLessons.flatMap((item) => item.keyDifficulties || []);
+  const terminology = orderedLessons.map((item) => item.terminologyHint?.trim()).filter(Boolean);
   return {
     input: {
-      sessionId: lesson.sessionId,
+      sessionId: pack.tier === 'class' ? lesson.sessionId : `${pack.tier}:${orderedLessons.map((item) => item.sessionId).join(',')}`,
       dataSource: 'live',
-      transcript: lesson.transcript,
-      anchors: lesson.anchors,
-      metadata: lesson.metadata,
+      transcript: pack.lessons.length === 1 ? lesson.transcript : transcript,
+      anchors: pack.lessons.length === 1 ? lesson.anchors : anchors,
+      metadata: {
+        ...lesson.metadata,
+        contextTier: pack.tier,
+        lessonSources,
+        exam: pack.exam,
+      },
     },
     memory: {
-      summary: lesson.summary,
-      keyDifficulties: lesson.keyDifficulties,
-      terminologyHint: lesson.terminologyHint,
+      summary: summaries.join('\n') || lesson.summary,
+      keyDifficulties: difficulties.length > 0 ? Array.from(new Set(difficulties)) : lesson.keyDifficulties,
+      terminologyHint: terminology.join('\n') || lesson.terminologyHint,
+      custom: {
+        lessonSources,
+        exam: pack.exam,
+      },
     },
     goal,
     model,
+    contextTier: pack.tier,
   };
 }
 
@@ -240,7 +285,7 @@ export function findOwningSegmentIndex(
  *   // pack.personalAnnotations 传入 → 内联标记
  *   // 为 undefined / 空数组 → 退化为纯转录（分发自动剥离）
  *
- * 多 lesson 场景（unit / exam，本期未落地）：每节课渲染为一个段落块，
+ * 多 lesson 场景（unit / exam）：每节课渲染为一个段落块，
  * 段落间用 `---` 分隔，块头标注 lesson title / occurredAt。
  */
 export function renderTranscriptWithAnnotations(pack: ContextPack): string {
@@ -322,6 +367,9 @@ function formatMs(ms: number): string {
 
 /** 检查 ContextPack 在某个 tier 下是否合法（lessons 数量 / exam 字段）。 */
 export function validatePack(pack: ContextPack): { ok: boolean; reason?: string } {
+  if (!pack || !Array.isArray(pack.lessons)) {
+    return { ok: false, reason: 'pack.lessons must be an array' };
+  }
   if (pack.lessons.length === 0) {
     return { ok: false, reason: 'pack.lessons cannot be empty' };
   }
@@ -331,8 +379,31 @@ export function validatePack(pack: ContextPack): { ok: boolean; reason?: string 
       reason: `class tier requires exactly 1 lesson, got ${pack.lessons.length}`,
     };
   }
+  if (pack.tier === 'unit' && pack.lessons.length < 2) {
+    return { ok: false, reason: 'unit tier requires at least 2 lessons' };
+  }
   if (pack.tier === 'exam' && !pack.exam) {
     return { ok: false, reason: 'exam tier requires pack.exam' };
+  }
+  for (const [lessonIndex, lesson] of pack.lessons.entries()) {
+    if (!lesson || typeof lesson.sessionId !== 'string' || !lesson.sessionId.trim()) {
+      return { ok: false, reason: `lesson ${lessonIndex + 1} requires sessionId` };
+    }
+    if (!Array.isArray(lesson.transcript) || !Array.isArray(lesson.anchors)) {
+      return { ok: false, reason: `lesson ${lesson.sessionId} requires transcript and anchors arrays` };
+    }
+    const invalidSegment = lesson.transcript.find((segment) => (
+      !segment
+      || typeof segment.id !== 'string'
+      || typeof segment.text !== 'string'
+      || !Number.isFinite(segment.startMs)
+      || !Number.isFinite(segment.endMs)
+      || segment.startMs < 0
+      || segment.endMs < segment.startMs
+    ));
+    if (invalidSegment) {
+      return { ok: false, reason: `lesson ${lesson.sessionId} contains an invalid transcript segment` };
+    }
   }
   return { ok: true };
 }

@@ -5,6 +5,7 @@ import {
   mergeLearningActivity,
   mergeLearningMemory,
   summarizeLearningContext,
+  toLearningActivityPreview,
   updateLearningThread,
 } from './learning-context';
 
@@ -40,6 +41,11 @@ describe('learning context', () => {
     });
     expect(state.memories).toEqual([]);
     expect(state.recentActivities).toHaveLength(1);
+  });
+
+  it('stores assistant activity previews without markdown artifacts', () => {
+    expect(toLearningActivityPreview('## 结论\n你还要检查 **反向因果**，再看 `样本量`。'))
+      .toBe('结论 你还要检查 反向因果，再看 样本量。');
   });
 
   it('only injects active memories and goals', () => {

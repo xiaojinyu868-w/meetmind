@@ -1,119 +1,97 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Check, Copy, Download, ImageIcon, Loader2, RefreshCw, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  Check,
-  ChevronDown,
-  Download,
-  ImageIcon,
-  Loader2,
-  RefreshCw,
-  Sparkles,
-  Wand2,
-} from 'lucide-react';
 
 import type { AppExecutionResult } from '@/lib/ai-native/types';
+import { COPY } from '@/lib/ui/copy';
 import {
-  type InfographicWindowProps,
   type DraftPayload,
-  type RenderPayload,
   type ImageConfigResponse,
+  type InfographicWindowProps,
+  type RenderPayload,
   ICON_SM,
-  ICON_MD,
   ICON_STROKE,
-  SCENE_ITEMS,
-  STYLE_PRESETS,
-  LANGUAGES,
   ORIENTATIONS,
-  DETAIL_LEVELS,
-  normalizeContextText,
-  truncateText,
-  resolveStylePresetKey,
+  STYLE_PRESETS,
   buildFallbackDraft,
   buildSyntheticResult,
+  resolveInfographicGenerationBase,
+  resolveStylePresetKey,
 } from './infographic-window-data';
 
-/* ------------------------------------------------------------------ */
-/*  Sub-components                                                     */
-/* ------------------------------------------------------------------ */
-
-function DraftPreparingState() {
+function PreparingState() {
   return (
-    <section className="flex h-full items-center justify-center" data-testid="infographic-window">
-      <div className="flex min-h-80 w-full max-w-md flex-col items-center justify-center gap-5 rounded-3xl border border-slate-200 bg-white px-8 py-10 shadow-sm">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+    <section
+      className="flex h-full items-center justify-center bg-canvas px-6"
+      data-testid="infographic-window"
+    >
+      <div className="flex max-w-sm flex-col items-center text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-pine-mist text-pine">
           <Loader2 size={26} strokeWidth={2} className="animate-spin" />
         </div>
-        <div className="space-y-2 text-center">
-          <p className="text-base font-semibold text-slate-900">AI 正在理解课堂内容</p>
-          <p className="text-sm leading-6 text-slate-500">先帮你提炼标题、关键信息和推荐布局，完成后会回到可编辑页面。</p>
-        </div>
-        <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
-          <div className="flex items-center gap-2 text-slate-700">
-            <Sparkles size={14} strokeWidth={ICON_STROKE} className="text-blue-500" />
-            <span className="font-medium">正在准备 AI 推荐草案</span>
-          </div>
-          <p className="mt-2 leading-6">这一步只做内容理解，不会直接强制开始生图。</p>
-        </div>
+        <p className="mt-4 text-[15px] font-semibold text-ink">{COPY.apps.infographic.preparing}</p>
+        <p className="mt-1.5 text-[12px] leading-6 text-ink-muted">{COPY.apps.infographic.preparingHint}</p>
       </div>
     </section>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  Main Component                                                     */
-/* ------------------------------------------------------------------ */
 
 export function InfographicWindow({
   sessionId,
   result,
   taskState,
   contentContext,
-  onResultUpdate,
   onGenerateDraft,
-  standalone = false,
+  onResultUpdate,
 }: InfographicWindowProps) {
-  const payload = useMemo(() => (result?.render?.payload || {}) as RenderPayload, [result?.render?.payload]);
+  const payload = useMemo(
+    () => (result?.render?.payload || {}) as RenderPayload,
+    [result?.render?.payload],
+  );
   const draftFromRaw = (result?.raw?.infographicDraft || null) as DraftPayload | null;
-  const aiDraft = useMemo(() => payload.draft || draftFromRaw || null, [payload.draft, draftFromRaw]);
-  const imageUrl =
-    payload.image?.imageUrl ||
-    (result?.raw?.infographicImageUrl as string | undefined) ||
-    (typeof window !== 'undefined' ? sessionStorage.getItem(`mm_infographic_img:${sessionId}`) || '' : '');
+  const aiDraft = useMemo(
+    () => payload.draft || draftFromRaw || null,
+    [payload.draft, draftFromRaw],
+  );
+  const imageUrl = payload.image?.imageUrl
+    || (result?.raw?.infographicImageUrl as string | undefined)
+    || (typeof window !== 'undefined'
+      ? sessionStorage.getItem(`mm_infographic_img:${sessionId}`) || ''
+      : '');
 
-  const [language, setLanguage] = useState('中文（简体）');
   const [orientation, setOrientation] = useState<'landscape' | 'portrait' | 'square'>(
-    aiDraft?.suggestedOrientation || 'landscape'
+    aiDraft?.suggestedOrientation || 'portrait',
   );
   const [detailLevel, setDetailLevel] = useState<'concise' | 'standard' | 'detailed'>(
-    aiDraft?.suggestedDetailLevel || 'standard'
+    aiDraft?.suggestedDetailLevel || 'standard',
   );
   const [scenePreset, setScenePreset] = useState(aiDraft?.suggestedScene || 'class-take-away');
   const [stylePreset, setStylePreset] = useState(resolveStylePresetKey(aiDraft?.stylePreset));
   const [customDesc, setCustomDesc] = useState('');
-  const [showReferenceInfo, setShowReferenceInfo] = useState(false);
-
+  const [customizeMode, setCustomizeMode] = useState(false);
   const [imageEnabled, setImageEnabled] = useState(false);
   const [checking, setChecking] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
   const [previewMode, setPreviewMode] = useState<'fit' | 'full'>('fit');
 
   useEffect(() => {
     let cancelled = false;
-    const run = async () => {
+    const checkImageService = async () => {
       setChecking(true);
       try {
         const response = await fetch('/api/apps/infographic/generate-image', { method: 'GET' });
         const data = (await response.json().catch(() => ({}))) as ImageConfigResponse;
-        if (cancelled) return;
-        setImageEnabled(Boolean(data.enabled));
+        if (!cancelled) setImageEnabled(Boolean(data.enabled));
       } catch {
         if (!cancelled) setImageEnabled(false);
+      } finally {
+        if (!cancelled) setChecking(false);
       }
-      if (!cancelled) setChecking(false);
     };
-    void run();
+    void checkImageService();
     return () => {
       cancelled = true;
     };
@@ -124,40 +102,36 @@ export function InfographicWindow({
     if (aiDraft?.suggestedOrientation) setOrientation(aiDraft.suggestedOrientation);
     if (aiDraft?.suggestedDetailLevel) setDetailLevel(aiDraft.suggestedDetailLevel);
     if (aiDraft?.stylePreset) setStylePreset(resolveStylePresetKey(aiDraft.stylePreset));
-  }, [aiDraft?.stylePreset, aiDraft?.suggestedDetailLevel, aiDraft?.suggestedOrientation, aiDraft?.suggestedScene]);
+  }, [
+    aiDraft?.stylePreset,
+    aiDraft?.suggestedDetailLevel,
+    aiDraft?.suggestedOrientation,
+    aiDraft?.suggestedScene,
+  ]);
 
   useEffect(() => {
-    if (imageUrl) {
-      setPreviewMode('fit');
-    }
+    if (imageUrl) setPreviewMode('fit');
   }, [imageUrl]);
 
   const previewDraft = useMemo(
-    () =>
-      aiDraft ||
-      buildFallbackDraft({
-        contentContext,
-        scenePreset,
-        orientation,
-        detailLevel,
-      }),
-    [aiDraft, contentContext, detailLevel, orientation, scenePreset]
+    () => aiDraft || buildFallbackDraft({ contentContext, scenePreset, orientation, detailLevel }),
+    [aiDraft, contentContext, detailLevel, orientation, scenePreset],
   );
-
-  const currentScene = SCENE_ITEMS.find((item) => item.key === scenePreset) || SCENE_ITEMS[0];
-  const currentOrientation = ORIENTATIONS.find((item) => item.value === orientation) || ORIENTATIONS[0];
-  const currentDetail = DETAIL_LEVELS.find((item) => item.value === detailLevel) || DETAIL_LEVELS[1];
   const currentStyle = STYLE_PRESETS.find((item) => item.key === stylePreset) || STYLE_PRESETS[0];
-  const summaryPreview = truncateText(normalizeContextText(contentContext), 120);
-  const draftError = useMemo(() => {
-    const raw = taskState?.status === 'error' ? taskState.error : '';
-    if (!raw) return '';
-    if (/failed to fetch|load failed|networkerror/i.test(raw)) {
-      return '网络请求失败。通常是开发服务正在重启、接口暂时不可用，或浏览器请求被中断；刷新后重试即可。';
+
+  const copyReadableDraft = useCallback(async () => {
+    const lines = [
+      previewDraft.title,
+      previewDraft.subtitle,
+      ...(previewDraft.keyPoints || []).map((point, index) => `${index + 1}. ${point}`),
+    ].filter(Boolean);
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      toast.success(COPY.apps.infographic.readableCopied);
+    } catch {
+      toast.error(COPY.apps.infographic.readableCopyFailed);
     }
-    return raw;
-  }, [taskState?.error, taskState?.status]);
-  const hasAiDraft = Boolean(aiDraft?.imagePrompt || aiDraft?.keyPoints?.length || aiDraft?.visualPlan?.length);
+  }, [previewDraft]);
 
   const downloadImage = useCallback(async () => {
     if (!imageUrl) return;
@@ -167,490 +141,379 @@ export function InfographicWindow({
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `${previewDraft.title || '课堂信息图'}.png`;
+      anchor.download = `${previewDraft.title || COPY.apps.infographic.appName}.png`;
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
-      toast.success('图片已下载');
+      toast.success(COPY.apps.infographic.downloaded);
     } catch {
-      toast.error('下载失败，请右键图片另存为');
+      toast.error(COPY.apps.infographic.downloadFailed);
     }
   }, [imageUrl, previewDraft.title]);
 
-  const requestImage = useCallback(
-    async (baseResult: AppExecutionResult | null = result) => {
-      const basePayload = ((baseResult?.render?.payload || {}) as RenderPayload) || {};
-      const baseDraftFromRaw = (baseResult?.raw?.infographicDraft || null) as DraftPayload | null;
-      const fallbackDraft = buildFallbackDraft({
-        contentContext,
-        scenePreset,
-        orientation,
-        detailLevel,
-      });
-      const sourceDraft = basePayload.draft || baseDraftFromRaw || fallbackDraft;
-      const mergedDraft: DraftPayload = {
-        ...fallbackDraft,
-        ...sourceDraft,
-        stylePreset: currentStyle.prompt || sourceDraft.stylePreset || fallbackDraft.stylePreset,
-        suggestedScene: scenePreset,
-        suggestedOrientation: orientation,
-        suggestedDetailLevel: detailLevel,
-      };
-      const basePrompt = mergedDraft.imagePrompt?.trim() || fallbackDraft.imagePrompt?.trim() || mergedDraft.title?.trim() || '';
-      const finalPrompt = customDesc.trim() ? `${basePrompt}\n\n用户补充要求：${customDesc.trim()}` : basePrompt;
+  const requestImage = useCallback(async (baseResult: AppExecutionResult | null = result) => {
+    const basePayload = ((baseResult?.render?.payload || {}) as RenderPayload) || {};
+    const baseDraftFromRaw = (baseResult?.raw?.infographicDraft || null) as DraftPayload | null;
+    const fallbackDraft = buildFallbackDraft({ contentContext, scenePreset, orientation, detailLevel });
+    const sourceDraft = basePayload.draft || baseDraftFromRaw || fallbackDraft;
+    const mergedDraft: DraftPayload = {
+      ...fallbackDraft,
+      ...sourceDraft,
+      stylePreset: currentStyle.prompt || sourceDraft.stylePreset || fallbackDraft.stylePreset,
+      suggestedScene: scenePreset,
+      suggestedOrientation: orientation,
+      suggestedDetailLevel: detailLevel,
+    };
+    const basePrompt = mergedDraft.imagePrompt?.trim()
+      || fallbackDraft.imagePrompt?.trim()
+      || mergedDraft.title?.trim()
+      || '';
+    const finalPrompt = customDesc.trim()
+      ? `${basePrompt}\n\n用户补充要求：${customDesc.trim()}`
+      : basePrompt;
 
-      if (!finalPrompt.trim()) {
-        toast.error('缺少课堂内容摘要，暂时无法生成信息图');
+    if (!finalPrompt.trim()) {
+      toast.error(COPY.apps.infographic.missingContext);
+      return;
+    }
+
+    setGenerating(true);
+    setImageFailed(false);
+    try {
+      const response = await fetch('/api/apps/infographic/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          appKey: 'infographic',
+          draftPrompt: finalPrompt,
+          stylePreset: mergedDraft.stylePreset || currentStyle.prompt || '',
+          orientation,
+          detailLevel,
+          language: '中文（简体）',
+          scenePreset,
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+        imageUrl?: string;
+        requestId?: string;
+        model?: string;
+      } | null;
+      if (!response.ok || !data?.ok || !data.imageUrl) {
+        throw new Error(data?.error || COPY.apps.infographic.generateFailed);
+      }
+
+      try {
+        sessionStorage.setItem(`mm_infographic_img:${sessionId}`, data.imageUrl);
+      } catch {
+        // The in-memory result remains available even when browser storage is full.
+      }
+      onResultUpdate(buildSyntheticResult({
+        baseResult,
+        draft: mergedDraft,
+        image: { imageUrl: data.imageUrl, requestId: data.requestId, model: data.model },
+      }));
+      setCustomizeMode(false);
+      setImageFailed(false);
+      toast.success(COPY.apps.infographic.finished);
+    } catch {
+      toast.error(COPY.apps.infographic.generateFailed);
+      setImageFailed(true);
+      setCustomizeMode(false);
+    } finally {
+      setGenerating(false);
+    }
+  }, [
+    contentContext,
+    currentStyle.prompt,
+    customDesc,
+    detailLevel,
+    onResultUpdate,
+    orientation,
+    result,
+    scenePreset,
+    sessionId,
+  ]);
+
+  const hasAutoStartedRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoStartedRef.current || customizeMode || !result || !imageEnabled || imageUrl) return;
+    if (generating || checking || taskState?.status === 'running') return;
+    hasAutoStartedRef.current = true;
+    void requestImage(result);
+  }, [
+    checking,
+    customizeMode,
+    generating,
+    imageEnabled,
+    imageUrl,
+    requestImage,
+    result,
+    taskState?.status,
+  ]);
+
+  const generateFromCurrentContext = useCallback(async () => {
+    setGenerating(true);
+    try {
+      const baseResult = await resolveInfographicGenerationBase(result, onGenerateDraft);
+      if (!baseResult && onGenerateDraft) {
+        setImageFailed(true);
+        toast.error(COPY.apps.infographic.generateFailed);
         return;
       }
+      await requestImage(baseResult);
+    } catch {
+      setImageFailed(true);
+      toast.error(COPY.apps.infographic.generateFailed);
+    } finally {
+      setGenerating(false);
+    }
+  }, [onGenerateDraft, requestImage, result]);
 
-      setGenerating(true);
-      try {
-        const response = await fetch('/api/apps/infographic/generate-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId,
-            appKey: 'infographic',
-            draftPrompt: finalPrompt,
-            stylePreset: mergedDraft.stylePreset || currentStyle.prompt || '',
-            orientation,
-            detailLevel,
-            language,
-            scenePreset,
-          }),
-        });
-        const data = (await response.json().catch(() => null)) as {
-          ok?: boolean;
-          error?: string;
-          imageUrl?: string;
-          requestId?: string;
-          model?: string;
-        } | null;
-
-        if (!response.ok || !data?.ok || !data.imageUrl) {
-          throw new Error(data?.error || '生图失败');
-        }
-
-        // imageUrl 是 base64 data URL，会被 localStorage 缓存的 stripLargeInlineData 剥空，
-        // 单独存 sessionStorage，让"查看图片"弹窗和独立页恢复都能读回完整图片（同 tab 有效）。
-        try {
-          sessionStorage.setItem(`mm_infographic_img:${sessionId}`, data.imageUrl);
-        } catch { /* quota exceeded — 查看时回退到独立页重新生成 */ }
-
-        const next = buildSyntheticResult({
-          baseResult,
-          draft: mergedDraft,
-          image: {
-            imageUrl: data.imageUrl,
-            requestId: data.requestId,
-            model: data.model,
-          },
-        });
-
-        onResultUpdate(next);
-        toast.success('图片生成完成');
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : '生图失败');
-      } finally {
-        setGenerating(false);
-      }
-    },
-    [contentContext, currentStyle.prompt, customDesc, detailLevel, language, onResultUpdate, orientation, result, scenePreset, sessionId]
-  );
-
-  const handleDirectGenerate = useCallback(() => {
-    void requestImage(result);
-  }, [requestImage, result]);
-
-  // M14.5.5: 用户反馈"图片生成不要复杂编辑面板，应该是点击-等待-查看"。
-  // 实现方式：AI draft 准备好后立刻自动 generate，跳过编辑面板。
-  // 用户只在"等待"和"查看"之间体验。如果对结果不满意，"重新生成"按钮仍在。
-  // 用 ref 标记已 auto-started，避免依赖变化时重复触发。
-  const hasAutoStartedGenRef = useRef(false);
-  useEffect(() => {
-    if (hasAutoStartedGenRef.current) return;
-    if (!result) return;
-    if (!imageEnabled) return;
-    if (imageUrl) return;
-    if (generating || checking) return;
-    if (taskState?.status === 'running') return;
-    hasAutoStartedGenRef.current = true;
-    void requestImage(result);
-  }, [result, imageEnabled, imageUrl, generating, checking, taskState?.status, requestImage]);
-
-  const handleAiRecommend = useCallback(() => {
-    void onGenerateDraft?.();
-  }, [onGenerateDraft]);
-
-  const resetToCustomize = useCallback(() => {
-    if (!result) return;
-    const next = buildSyntheticResult({
-      baseResult: result,
-      draft: previewDraft,
-      image: null,
-    });
-    onResultUpdate(next);
-  }, [onResultUpdate, previewDraft, result]);
-
-  if (taskState?.status === 'running' && !result && !generating) {
-    return <DraftPreparingState />;
+  if ((taskState?.status === 'running' && !result) || generating || checking) {
+    return <PreparingState />;
   }
 
-  if (imageUrl && !generating) {
+  if (imageUrl && !customizeMode) {
     return (
-      <section className="flex h-full min-h-0 flex-col" data-testid="infographic-window">
-        <div className="flex flex-col gap-3 px-1 pb-3 lg:flex-row lg:items-center lg:justify-between">
+      <section
+        className="flex h-full min-h-0 flex-col bg-canvas px-3 pb-4 sm:px-5"
+        data-testid="infographic-window"
+      >
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-divider py-3">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="truncate text-sm font-semibold text-slate-900">{previewDraft.title || '信息图'}</p>
-              <span className="inline-flex items-center gap-1 rounded-full bg-[#D1F4E0]/30 px-2 py-0.5 text-[10px] font-medium text-[#1C1B19]">
-                <Check size={10} strokeWidth={3} />
-                已完成
-              </span>
-              <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                {previewMode === 'fit' ? '适应页面' : '放大查看'}
+            <div className="flex items-center gap-2">
+              <p className="truncate text-[14px] font-semibold text-ink">
+                {previewDraft.title || COPY.apps.infographic.appName}
+              </p>
+              <span className="inline-flex items-center gap-1 rounded-full bg-pine-mist px-2 py-0.5 text-[10px] font-medium text-pine">
+                <Check size={11} strokeWidth={2.5} />
+                {COPY.apps.infographic.finished}
               </span>
             </div>
-            <p className="mt-1 text-xs text-slate-500">
-              {standalone ? '这是结果页，不再复用应用窗口外壳；默认先看完整成品。' : '默认先展示完整成品，再把下载和继续修改收在同一条操作线上。'}
-            </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-full border border-slate-200 bg-white p-1 shadow-sm">
-              <button
-                type="button"
-                onClick={() => setPreviewMode('fit')}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                  previewMode === 'fit' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                适应页面
-              </button>
-              <button
-                type="button"
-                onClick={() => setPreviewMode('full')}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                  previewMode === 'full' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                放大查看
-              </button>
+          <div className="flex items-center gap-1.5">
+            <div className="inline-flex rounded-full border border-divider bg-card p-0.5">
+              {(['fit', 'full'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setPreviewMode(mode)}
+                  className={`rounded-full px-2.5 py-1.5 text-[11px] font-medium transition ${
+                    previewMode === mode ? 'bg-ink text-canvas' : 'text-ink-muted'
+                  }`}
+                >
+                  {mode === 'fit' ? COPY.apps.infographic.fit : COPY.apps.infographic.full}
+                </button>
+              ))}
             </div>
             <button
               type="button"
               onClick={downloadImage}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 active:bg-slate-100"
+              aria-label={COPY.apps.infographic.save}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-divider bg-card px-3 text-[11px] font-medium text-ink"
             >
-              <Download size={ICON_SM} strokeWidth={ICON_STROKE} />
-              下载
+              <Download size={14} strokeWidth={ICON_STROKE} />
+              <span className="hidden sm:inline">{COPY.apps.infographic.save}</span>
             </button>
             <button
               type="button"
-              onClick={resetToCustomize}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-blue-700 active:bg-blue-800"
+              onClick={() => setCustomizeMode(true)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full bg-pine px-3 text-[11px] font-medium text-white"
             >
-              <RefreshCw size={ICON_SM} strokeWidth={ICON_STROKE} />
-              继续修改
+              <RefreshCw size={13} strokeWidth={ICON_STROKE} />
+              {COPY.apps.infographic.adjust}
             </button>
           </div>
-        </div>
+        </header>
 
-        <div
-          className={`min-h-0 flex flex-1 flex-col overflow-hidden rounded-[28px] ${
-            standalone
-              ? 'border border-slate-200 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.10)]'
-              : 'border border-slate-800 bg-[#11141b] shadow-[0_18px_60px_rgba(15,23,42,0.22)]'
-          }`}
-        >
-          <div
-            className={`flex items-center justify-between px-4 py-3 text-xs ${
-              standalone ? 'border-b border-slate-200 text-slate-500' : 'border-b border-white/10 text-slate-400'
-            }`}
-          >
-            <span>{standalone ? '结果页会优先展示完整成品，避免首屏只看到局部。' : '完整成品会优先适配到当前窗口内，避免一打开就只能看到局部。'}</span>
-            <span>{previewMode === 'fit' ? '优先看全貌' : '优先看细节'}</span>
-          </div>
-          <div className={`min-h-0 flex-1 ${previewMode === 'fit' ? 'overflow-hidden' : 'overflow-auto'} px-4 py-4 sm:px-6 sm:py-6`}>
-            <div className="flex min-h-full items-center justify-center">
-              <img
-                src={imageUrl}
-                alt={previewDraft.title || '课堂信息图'}
-                className={
-                  previewMode === 'fit'
-                    ? standalone
-                      ? 'h-auto max-h-[72vh] w-auto max-w-full rounded-2xl object-contain shadow-[0_18px_48px_rgba(15,23,42,0.18)]'
-                      : 'max-h-full w-auto max-w-full rounded-2xl object-contain shadow-[0_24px_70px_rgba(2,6,23,0.42)]'
-                    : standalone
-                      ? 'h-auto max-w-[1100px] rounded-2xl object-contain shadow-[0_18px_48px_rgba(15,23,42,0.18)]'
-                      : 'h-auto max-w-none rounded-2xl object-contain shadow-[0_24px_70px_rgba(2,6,23,0.42)]'
-                }
-              />
-            </div>
+        <div className={`min-h-0 flex-1 ${previewMode === 'fit' ? 'overflow-hidden' : 'overflow-auto'}`}>
+          <div className="flex min-h-full items-center justify-center py-4">
+            <img
+              src={imageUrl}
+              alt={previewDraft.title || COPY.apps.infographic.appName}
+              className={previewMode === 'fit'
+                ? 'h-auto max-h-full w-auto max-w-full rounded-2xl border border-divider object-contain'
+                : 'h-auto max-w-none rounded-2xl border border-divider object-contain'}
+            />
           </div>
         </div>
-        <p className="mt-2 text-center text-[10px] text-slate-400">AI 智能生图 · 默认优先保证完整可见</p>
       </section>
     );
   }
 
-  if (generating) {
+  if (!customizeMode && (imageFailed || !imageEnabled)) {
+    const keyPoints = (previewDraft.keyPoints || []).slice(0, 5);
     return (
-      <section className="flex h-full items-center justify-center px-4" data-testid="infographic-window">
-        <p className="text-sm text-ink-muted">正在生成信息图，完成后自动显示</p>
+      <section
+        className="h-full overflow-auto bg-canvas px-4 py-5 sm:px-6"
+        data-testid="infographic-window"
+      >
+        <div className="mx-auto max-w-xl">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[13px] font-semibold text-ink">{COPY.apps.infographic.readableReady}</p>
+              <p className="mt-0.5 text-[11px] leading-5 text-ink-muted">{COPY.apps.infographic.readableHint}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCustomizeMode(true)}
+              className="shrink-0 rounded-full border border-divider bg-card px-3 py-1.5 text-[11px] font-medium text-ink-secondary"
+            >
+              {COPY.apps.infographic.adjust}
+            </button>
+          </div>
+
+          <article className="overflow-hidden rounded-[28px] border border-pine/20 bg-[#F8F5ED] shadow-soft">
+            <div className="border-b border-pine/15 bg-pine px-5 py-5 text-white">
+              <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-white/65">MeetMind · {COPY.apps.infographic.appName}</p>
+              <h2 className="mt-3 font-serif text-[26px] leading-[1.16] tracking-[-0.02em]">
+                {previewDraft.title || COPY.apps.infographic.appName}
+              </h2>
+              {previewDraft.subtitle ? (
+                <p className="mt-2 text-[12px] leading-6 text-white/75">{previewDraft.subtitle}</p>
+              ) : null}
+            </div>
+            <div className="space-y-3 p-4">
+              {keyPoints.map((point, index) => (
+                <div key={`${point}-${index}`} className="flex gap-3 rounded-2xl border border-divider/80 bg-white px-4 py-3.5">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-vermilion-mist font-mono text-[11px] font-semibold text-vermilion">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <p className="pt-0.5 text-[13px] leading-6 text-ink-secondary">{point}</p>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => void copyReadableDraft()}
+              className="inline-flex items-center gap-1.5 rounded-full border border-divider bg-card px-3.5 py-2 text-[11px] font-medium text-ink-secondary"
+            >
+              <Copy size={13} strokeWidth={ICON_STROKE} />
+              {COPY.apps.infographic.copyReadable}
+            </button>
+            {imageEnabled ? (
+              <button
+                type="button"
+                onClick={() => void requestImage(result)}
+                className="inline-flex items-center gap-1.5 rounded-full bg-pine px-3.5 py-2 text-[11px] font-medium text-white"
+              >
+                <RefreshCw size={13} strokeWidth={ICON_STROKE} />
+                {COPY.apps.infographic.retryImage}
+              </button>
+            ) : null}
+          </div>
+        </div>
       </section>
     );
   }
 
   return (
-    <section className="flex h-full items-start justify-center overflow-auto py-6" data-testid="infographic-window">
-      <div className="w-full max-w-5xl rounded-[28px] border border-slate-800 bg-[#0b0d12] text-slate-100 shadow-[0_24px_80px_rgba(2,6,23,0.45)]">
-        <div className="border-b border-slate-800 px-6 py-5">
-          <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-indigo-300">
-              <currentScene.Icon size={ICON_MD} strokeWidth={ICON_STROKE} />
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Customize Infographic</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">自定义信息图</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-400">把关键配置直接放到一屏里，减少来回展开和扫视成本。</p>
-            </div>
+    <section
+      className="h-full overflow-auto bg-canvas px-4 py-6 sm:px-6"
+      data-testid="infographic-window"
+    >
+      <div className="mx-auto max-w-2xl rounded-[24px] border border-divider bg-card p-5 sm:p-7">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-pine-mist text-pine">
+            <Sparkles size={20} strokeWidth={1.8} />
+          </div>
+          <div>
+            <h2 className="text-[17px] font-semibold text-ink">
+              {result ? COPY.apps.infographic.adjustTitle : COPY.apps.infographic.createTitle}
+            </h2>
+            <p className="mt-1 text-[12px] leading-6 text-ink-muted">
+              {result ? COPY.apps.infographic.adjustHint : COPY.apps.infographic.createHint}
+            </p>
           </div>
         </div>
 
-        <div className="space-y-6 px-6 py-6">
-          {draftError ? (
-            <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-              {draftError}
-            </div>
-          ) : null}
+        {taskState?.status === 'error' ? (
+          <div className="mt-5 rounded-2xl bg-vermilion-mist px-4 py-3 text-[12px] leading-6 text-vermilion">
+            {COPY.apps.infographic.generateFailed}
+          </div>
+        ) : null}
 
-          {!imageEnabled && !checking ? (
-            <div className="rounded-2xl border border-[#E8E2D5]/30 bg-[#FADEC9]/10 px-4 py-3 text-sm leading-6 text-[#FDF3C0]">
-              当前环境还没配置图片生成服务，所以可以先调界面，但暂时无法真正生图。
-            </div>
-          ) : null}
+        {!imageEnabled ? (
+          <div className="mt-5 rounded-2xl border border-divider bg-canvas px-4 py-3">
+            <p className="text-[13px] font-medium text-ink">{COPY.apps.infographic.serviceUnavailable}</p>
+            <p className="mt-1 text-[12px] leading-6 text-ink-muted">{COPY.apps.infographic.serviceUnavailableBody}</p>
+          </div>
+        ) : null}
 
-          <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-            <div>
-              <p className="text-sm font-semibold text-white">选择语言</p>
-              <div className="relative mt-3">
-                <select
-                  value={language}
-                  onChange={(event) => setLanguage(event.target.value)}
-                  className="w-full appearance-none rounded-2xl border border-slate-700 bg-[#10131a] py-3 pl-4 pr-10 text-sm text-slate-100 shadow-sm transition focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+        <div className="mt-6 space-y-6">
+          <div>
+            <p className="text-[12px] font-medium text-ink">{COPY.apps.infographic.orientation}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {ORIENTATIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setOrientation(option.value)}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-[12px] font-medium transition ${
+                    orientation === option.value
+                      ? 'border-pine bg-pine-mist text-pine'
+                      : 'border-divider bg-canvas text-ink-muted'
+                  }`}
                 >
-                  {LANGUAGES.map((languageOption) => (
-                    <option key={languageOption.value} value={languageOption.value}>
-                      {languageOption.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  size={ICON_SM}
-                  strokeWidth={ICON_STROKE}
-                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-white">选择方向</p>
-                <span className="text-xs text-slate-500">当前：{currentOrientation.label}</span>
-              </div>
-              <div className="mt-3 inline-flex w-full rounded-full border border-slate-700 bg-[#10131a] p-1">
-                {ORIENTATIONS.map((option) => {
-                  const selected = orientation === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setOrientation(option.value)}
-                      className={`inline-flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium transition ${
-                        selected ? 'bg-slate-700 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]' : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      {selected ? <Check size={14} strokeWidth={2.5} /> : <option.Icon size={14} strokeWidth={ICON_STROKE} />}
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
+                  {orientation === option.value ? <Check size={12} strokeWidth={2.5} /> : null}
+                  {option.label}
+                </button>
+              ))}
             </div>
           </div>
 
           <div>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-white">选择视觉风格</p>
-                <p className="mt-1 text-xs text-slate-500">参考图的优点是选项直接可见，你不用先读文案再猜结果。</p>
-              </div>
-              <span className="rounded-full border border-slate-700 bg-white/[0.03] px-3 py-1 text-xs text-slate-300">{currentStyle.label}</span>
-            </div>
-            <div className="mt-3 flex gap-3 overflow-x-auto pb-2">
-              {STYLE_PRESETS.map((item) => {
-                const selected = stylePreset === item.key;
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => setStylePreset(item.key)}
-                    className={`group w-[176px] shrink-0 text-left transition-transform hover:-translate-y-0.5 ${selected ? 'scale-[1.01]' : ''}`}
-                  >
-                    <div
-                      className={`relative overflow-hidden rounded-[22px] border p-3 ${
-                        selected ? 'border-indigo-400 bg-white/[0.07] shadow-[0_0_0_1px_rgba(129,140,248,0.28)]' : 'border-slate-700 bg-white/[0.03]'
-                      }`}
-                    >
-                      <div className={`relative flex h-28 items-center justify-center rounded-2xl bg-gradient-to-br ${item.previewClassName}`}>
-                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.7),transparent_45%)]" />
-                        <item.Icon size={32} strokeWidth={1.8} className="relative text-slate-700" />
-                        {selected ? (
-                          <div className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-slate-900/80 text-white shadow-sm">
-                            <Check size={14} strokeWidth={2.6} />
-                          </div>
-                        ) : null}
-                      </div>
-                      <div className="mt-3">
-                        <p className="text-sm font-semibold text-white">{item.label}</p>
-                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">{item.description}</p>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
+            <p className="text-[12px] font-medium text-ink">{COPY.apps.infographic.style}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {STYLE_PRESETS.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setStylePreset(item.key)}
+                  className={`rounded-full border px-3 py-2 text-[12px] font-medium transition ${
+                    stylePreset === item.key
+                      ? 'border-pine bg-pine-mist text-pine'
+                      : 'border-divider bg-canvas text-ink-muted'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div>
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-white">详细程度</p>
-              <span className="text-xs text-slate-500">当前：{currentDetail.label}</span>
-            </div>
-            <div className="mt-3 inline-flex w-full rounded-full border border-slate-700 bg-[#10131a] p-1">
-              {DETAIL_LEVELS.map((option) => {
-                const selected = detailLevel === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setDetailLevel(option.value)}
-                    className={`inline-flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium transition ${
-                      selected ? 'bg-slate-700 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]' : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {selected ? <Check size={14} strokeWidth={2.5} /> : null}
-                    {option.label}
-                    {option.badge ? (
-                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${selected ? 'bg-white/10 text-slate-200' : 'bg-slate-800 text-slate-500'}`}>
-                        {option.badge}
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-white">内容版式</p>
-                <p className="mt-1 text-xs text-slate-500">保留能力，但收成轻量标签，不再堆成大面积表单卡片。</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowReferenceInfo((value) => !value)}
-                className="text-xs font-medium text-slate-400 transition hover:text-slate-200"
-              >
-                {showReferenceInfo ? '收起课堂摘要' : '查看课堂摘要'}
-              </button>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {SCENE_ITEMS.map((item) => {
-                const selected = scenePreset === item.key;
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => setScenePreset(item.key)}
-                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium transition ${
-                      selected
-                        ? 'border-indigo-400 bg-indigo-500/15 text-indigo-200'
-                        : 'border-slate-700 bg-white/[0.03] text-slate-400 hover:border-slate-600 hover:text-slate-200'
-                    }`}
-                  >
-                    <item.Icon size={13} strokeWidth={ICON_STROKE} />
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {showReferenceInfo ? (
-            <div className="rounded-2xl border border-slate-800 bg-white/[0.03] px-4 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">课堂摘要</p>
-              <p className="mt-2 text-sm leading-6 text-slate-300">{summaryPreview || '暂无摘要，将使用课堂原始内容提炼生成。'}</p>
-              {hasAiDraft && previewDraft.keyPoints?.length ? (
-                <div className="mt-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">AI 推荐要点</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {previewDraft.keyPoints.slice(0, 5).map((point) => (
-                      <span key={point} className="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-xs text-slate-300">
-                        {point}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          <div>
-            <p className="text-sm font-semibold text-white">
-              补充你的要求 <span className="font-normal text-slate-500">（可选）</span>
-            </p>
-            <p className="mt-1 text-xs text-slate-500">例如强调蓝色主题、突出 3 个结论，或者更像复习海报。</p>
+          <label className="block">
+            <span className="text-[12px] font-medium text-ink">{COPY.apps.infographic.custom}</span>
             <textarea
               value={customDesc}
               onChange={(event) => setCustomDesc(event.target.value)}
-              placeholder='例如：“蓝色主题，突出 3 个核心结论；尽量像复习海报，适合手机查看。”'
-              rows={5}
-              className="mt-3 w-full resize-none rounded-[24px] border border-slate-700 bg-[#10131a] px-4 py-3 text-sm leading-6 text-slate-100 placeholder:text-slate-500 shadow-sm transition focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/25"
+              placeholder={COPY.apps.infographic.customPlaceholder}
+              rows={3}
+              className="mt-2 w-full resize-none rounded-2xl border border-divider bg-canvas px-4 py-3 text-[13px] leading-6 text-ink outline-none placeholder:text-ink-faint focus:border-pine"
             />
-          </div>
+          </label>
         </div>
 
-        <div className="flex flex-col gap-4 border-t border-slate-800 bg-white/[0.02] px-6 py-5 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-xs font-medium text-slate-300">
-              已选择 {currentStyle.label} · {currentScene.label} · {currentOrientation.label} · {currentDetail.label}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">主按钮固定在底部右侧，减少来回找操作的负担。</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handleAiRecommend}
-              disabled={taskState?.status === 'running'}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:border-slate-600 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Wand2 size={14} strokeWidth={ICON_STROKE} />
-              AI 推荐草案
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-full bg-indigo-500 px-7 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(99,102,241,0.35)] transition-all hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.97]"
-              onClick={handleDirectGenerate}
-              disabled={!imageEnabled || generating || checking}
-            >
-              <ImageIcon size={ICON_SM} strokeWidth={ICON_STROKE} />
-              生成信息图
-            </button>
-          </div>
+        <div className="mt-7 flex justify-end">
+          <button
+            type="button"
+            onClick={() => {
+              setCustomizeMode(false);
+              void generateFromCurrentContext();
+            }}
+            disabled={!imageEnabled || generating}
+            className="inline-flex items-center gap-2 rounded-full bg-pine px-5 py-2.5 text-[13px] font-semibold text-white transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ImageIcon size={ICON_SM} strokeWidth={ICON_STROKE} />
+            {result ? COPY.apps.infographic.regenerate : COPY.apps.infographic.generate}
+          </button>
         </div>
       </div>
     </section>

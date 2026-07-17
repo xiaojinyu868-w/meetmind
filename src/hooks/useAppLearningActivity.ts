@@ -26,7 +26,7 @@ export function useAppLearningActivity({
   const recordedResultRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!resultReady) return;
+    if (!resultReady || !resultDetail.trim()) return;
     const sourceId = `app-result:${sessionId}:${appKey}:${resultUpdatedAt}`;
     if (recordedResultRef.current === sourceId) return;
     recordedResultRef.current = sourceId;

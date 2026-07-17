@@ -273,7 +273,7 @@ export const AuthConfig = {
 export const ASRConfig = {
   // 通义千问 ASR
   qwen: {
-    model: process.env.DASHSCOPE_ASR_WS_MODEL || 'qwen3-asr-flash-realtime',
+    model: process.env.DASHSCOPE_ASR_WS_MODEL || 'qwen3-asr-flash-realtime-2026-02-10',
     sampleRate: parseInt(process.env.DASHSCOPE_ASR_WS_SR || '16000', 10),
     chunkDurationSec: 180, // 3分钟分块
   },

@@ -86,6 +86,7 @@ export class DashScopeASRClient {
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+  private stopFinishedResolver: (() => void) | null = null;
   private readonly sessionId = `asr-realtime-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   constructor(
@@ -95,7 +96,7 @@ export class DashScopeASRClient {
   ) {
     this.callbacks = callbacks;
     this.options = {
-      model: 'qwen3-asr-flash-realtime',
+      model: 'qwen3-asr-flash-realtime-2026-02-10',
       sampleRate: 16000,
       format: 'pcm',
       language: ['zh'],
@@ -229,6 +230,7 @@ export class DashScopeASRClient {
             clearTimeout(connectionTimeout);
             this.stopKeepAlive();
             this.ws = null;
+            this.resolveStopFinished();
 
             // M13-fix: 4401 = 服务端标记的鉴权失败，重连无意义，立刻给用户清晰提示
             if (event.code === 4401) {
@@ -353,6 +355,7 @@ export class DashScopeASRClient {
         case 'finished':
           this.updateStatus('stopped');
           this.callbacks.onTaskFinished?.();
+          this.resolveStopFinished();
           break;
 
         case 'error': {
@@ -371,6 +374,7 @@ export class DashScopeASRClient {
 
         case 'closed':
           this.updateStatus('stopped');
+          this.resolveStopFinished();
           break;
       }
     } catch (error) {
@@ -513,23 +517,6 @@ export class DashScopeASRClient {
     );
   }
 
-  /**
-   * Dynamically update context with recently confirmed transcript text.
-   * Called periodically after N final segments to help ASR maintain
-   * consistency for names and terms.
-   */
-  sendContextUpdate(recentText: string): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    if (!recentText.trim()) return;
-
-    this.ws.send(
-      JSON.stringify({
-        type: 'context-update',
-        recentText: recentText.trim(),
-      })
-    );
-  }
-
   sendVADTimestamp(startMs: number, endMs: number): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return;
@@ -606,16 +593,33 @@ export class DashScopeASRClient {
     }
 
     try {
+      const finished = new Promise<void>((resolve) => {
+        this.stopFinishedResolver = resolve;
+      });
       this.ws.send(JSON.stringify({ action: 'stop' }));
+
+      // 正常情况下 Qwen 在数百毫秒内回 session.finished；最多等 5 秒，
+      // 既给尾句充分定稿时间，也不让“结束这节课”被异常网络永久卡住。
+      await Promise.race([
+        finished,
+        new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+      ]);
     } catch {
       this.closeConnection();
       return;
+    } finally {
+      this.stopFinishedResolver = null;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 1500));
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.closeConnection();
     }
+  }
+
+  private resolveStopFinished(): void {
+    const resolve = this.stopFinishedResolver;
+    this.stopFinishedResolver = null;
+    resolve?.();
   }
 
   // M2 T2.2: 重连机制
@@ -693,6 +697,7 @@ export class DashScopeASRClient {
 
   private closeConnection(): void {
     this.stopKeepAlive();
+    this.resolveStopFinished();
     if (this.ws) {
       this.ws.close();
       this.ws = null;

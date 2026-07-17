@@ -26,10 +26,12 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { OctoCrystalDispatcher } from '@/components/share/OctoCrystalDispatcher';
 import { WorkshopAppCard, type WorkshopCardStatus } from './WorkshopAppCard';
 import { COPY } from '@/lib/ui/copy';
+import { createLogger } from '@/lib/logger';
 import { recommendWorkshopApp } from './workshop-recommendation';
 import { useWorkshopReadiness } from './hooks/useWorkshopReadiness';
 
 const DOCK_STORAGE_PREFIX = 'app_workspace_dock:';
+const log = createLogger('workshop-matrix');
 
 interface CatalogResponse {
   apps?: Array<WorkshopAppCatalogItem & { enabled?: boolean }>;
@@ -120,6 +122,30 @@ function readDockTasks(sessionId: string): Record<string, DockTask> {
 function writeDockTasks(sessionId: string, tasks: Record<string, DockTask>): void {
   if (typeof window === 'undefined' || !sessionId) return;
   window.localStorage.setItem(dockStorageKey(sessionId), JSON.stringify(tasks));
+}
+
+function sameBooleanRecord(
+  current: Record<string, boolean>,
+  next: Record<string, boolean>,
+): boolean {
+  const keys = Object.keys(next);
+  if (Object.keys(current).length !== keys.length) return false;
+  return keys.every((key) => current[key] === next[key]);
+}
+
+function sameTaskRecord(
+  current: Record<string, AppTaskState>,
+  next: Record<string, AppTaskState>,
+): boolean {
+  const keys = Object.keys(next);
+  if (Object.keys(current).length !== keys.length) return false;
+  return keys.every((key) => {
+    const left = current[key];
+    const right = next[key];
+    return left?.status === right?.status
+      && left?.updatedAt === right?.updatedAt
+      && left?.error === right?.error;
+  });
 }
 
 function statusText(status: DockTaskStatus): string {
@@ -256,6 +282,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     activeAnchorCount,
     keyDifficulties,
     summary: summaryOverview,
+    contextTier: tier,
   });
 
   const availableAppKeys = useMemo(() => new Set(
@@ -268,12 +295,14 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     segmentCount: transcript.length,
   }), [activeAnchorCount, keyDifficulties?.length, transcript.length]);
 
+  // 模型明确返回 null 也是判断结果：说明当前没有一项值得被强推。
+  // 旧逻辑会在 ready 时用前端规则补一个“现在最适合”，把模型的克制覆盖掉。
   const recommendationKey = assessment
-    ? assessment.recommendedAppKey ?? (assessment.status === 'ready' ? fallbackRecommendation.key : null)
+    ? assessment.recommendedAppKey
     : fallbackRecommendation.key;
-  const recommendationReason = assessment
-    ? COPY.apps.matrix.recommendedByContent
-    : fallbackRecommendation.reason;
+  const recommendationReason = fallbackRecommendation.key === recommendationKey
+    ? fallbackRecommendation.reason
+    : '';
   const recommendedApp = recommendationKey
     ? visibleApps.find((app) => app.key === recommendationKey && availableAppKeys.has(app.key))
     : undefined;
@@ -333,9 +362,9 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       anchor.click();
       document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
-      toast.success('图片已下载');
+      toast.success(COPY.apps.matrix.imageDownloaded);
     } catch {
-      toast.error('下载失败，请右键图片另存为');
+      toast.error(COPY.apps.matrix.imageDownloadFailed);
     }
   }, [infographicPreview?.title, infographicPreview?.url]);
 
@@ -351,8 +380,10 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       if (cachedTask) nextTasks[app.key] = cachedTask;
     }
 
-    setGeneratedMap(nextGenerated);
-    setTaskMap(nextTasks);
+    // 定时同步只在缓存真的变化时更新 React state。此前每 1.5 秒无条件塞入
+    // 新对象，会让整个三栏学习区持续重渲染，按钮点击和大画布交互都会发黏。
+    setGeneratedMap((prev) => sameBooleanRecord(prev, nextGenerated) ? prev : nextGenerated);
+    setTaskMap((prev) => sameTaskRecord(prev, nextTasks) ? prev : nextTasks);
     setDockTasks((prev) => {
       const next = { ...prev };
       let changed = false;
@@ -461,7 +492,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       if (runningMap[app.key]) return;
 
       if (transcript.length === 0) {
-        const errorMessage = '当前会话暂无可用课堂内容，请先录音或导入。';
+        const errorMessage = COPY.apps.matrix.noContent;
         const failedState: AppTaskState = {
           status: 'error',
           updatedAt: Date.now(),
@@ -501,6 +532,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         const preferredModel = await resolveWorkshopModelId();
         const requestBody = JSON.stringify({
           appKey: app.key,
+          contextTier: tier,
           model: preferredModel,
           goal: {
             intent: app.intent,
@@ -544,11 +576,8 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           window.clearTimeout(timeoutId);
         }
 
-        // 如实暴露失败原因，不掩盖：
-        // - route 正常报错时返回 { ok:false, error }，直接用后端给的 error；
-        // - 后端没正常响应（502/504/进程重启返回 HTML）时 response.json() 会失败，
-        //   此时把真实 HTTP 状态 + 响应片段带出来，便于定位是网关还是上游挂了，
-        //   而不是退回无信息量的字面量 "生成失败"。
+        // 诊断信息进日志，用户只看到稳定、可行动的产品文案。
+        // HTTP 状态、网关 HTML、模型名都不是用户该承担的认知负担。
         const rawBody = await response.text();
         let data: ExecuteApiResponse = {};
         try {
@@ -559,13 +588,18 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
 
         if (!response.ok || !data.ok || !data.result) {
           const backendError = data.error?.trim();
-          const snippet = !backendError && rawBody ? `：${rawBody.slice(0, 120).replace(/\s+/g, ' ').trim()}` : '';
           const safeError = backendError === 'CONTENT_NOT_READY'
             ? COPY.apps.matrix.executeNotReady
             : backendError === 'APP_NOT_SUITABLE'
               ? COPY.apps.matrix.executeNotSuitable
-              : backendError;
-          throw new Error(safeError || `服务端返回 HTTP ${response.status}${snippet}`);
+              : COPY.apps.matrix.generateFailed;
+          log.error('app.execute.failed', {
+            appKey: app.key,
+            status: response.status,
+            backendError,
+            responsePreview: rawBody.slice(0, 240).replace(/\s+/g, ' ').trim(),
+          });
+          throw new Error(safeError);
         }
 
         writeCachedAppResult(sessionId, app.key, data.result);
@@ -579,11 +613,11 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           hasResult: true,
           message: undefined,
         });
-        toast.success(`${app.name} 已生成完成`, {
+        toast.success(COPY.apps.matrix.generated(app.name), {
           action:
             onOpenAppWindow || app.key === 'infographic'
               ? {
-                  label: '打开结果',
+                  label: COPY.apps.matrix.openResult,
                   onClick: () => {
                     if (app.key === 'infographic') {
                       const cached = readCachedInfographicImageUrl(sessionId);
@@ -605,26 +639,30 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           (error instanceof Error && error.name === 'AbortError');
 
         if (isAborted) {
-          const timeoutMessage = `生成超时（${Math.round(resolveWorkshopTimeoutMs(app.key) / 1000)}s），请重试或切换模型。`;
+          const timeoutMessage = COPY.apps.matrix.timeout;
           const cancelled = {
             status: 'error' as const,
             updatedAt: Date.now(),
-            error: timeoutTriggered ? timeoutMessage : '任务已取消',
+            error: timeoutTriggered ? timeoutMessage : COPY.apps.matrix.cancelled,
           };
           writeCachedTaskState(sessionId, app.key, cancelled);
           setTaskMap((prev) => ({ ...prev, [app.key]: cancelled }));
           upsertDockTask(app, {
             status: timeoutTriggered ? 'error' : 'cancelled',
             updatedAt: Date.now(),
-            message: timeoutTriggered ? timeoutMessage : '任务已取消',
+            message: timeoutTriggered ? timeoutMessage : COPY.apps.matrix.cancelled,
           });
           if (timeoutTriggered) {
-            toast.error(`${app.name} ${timeoutMessage}`);
+            toast.error(COPY.apps.matrix.timeoutFor(app.name));
           } else {
-            toast.message(`${app.name} 任务已取消`);
+            toast.message(COPY.apps.matrix.cancelledFor(app.name));
           }
         } else {
-          const message = error instanceof Error ? error.message : '生成失败';
+          const message = error instanceof Error ? error.message : COPY.apps.matrix.generateFailed;
+          log.error('app.execute.client-failed', {
+            appKey: app.key,
+            message,
+          });
           const failedState: AppTaskState = { status: 'error', updatedAt: Date.now(), error: message };
           writeCachedTaskState(sessionId, app.key, failedState);
           setTaskMap((prev) => ({ ...prev, [app.key]: failedState }));
@@ -633,7 +671,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
             updatedAt: Date.now(),
             message,
           });
-          toast.error(`${app.name} 生成失败：${message}`);
+          toast.error(COPY.apps.matrix.failedFor(app.name));
         }
       } finally {
         delete abortControllersRef.current[app.key];
@@ -642,15 +680,20 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     },
     [
       anchors,
+      accessToken,
+      buildAppHref,
       dataSource,
       dockTasks,
       generatedMap,
       keyDifficulties,
       onOpenAppWindow,
+      props.contextTitle,
       runningMap,
+      router,
       sessionId,
       summaryOverview,
       transcript,
+      tier,
       upsertDockTask,
     ]
   );
@@ -763,6 +806,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         onRetry={() => retryTask(app.key)}
         onRemake={() => void runInBackground(app)}
         onProgress={() => setDockOpen(true)}
+        compact={!isRecommended}
       />
     );
   };
@@ -773,11 +817,15 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       data-readiness-state={readinessFailed ? 'fallback' : isAssessing ? 'assessing' : assessment ? 'remote' : 'none'}
     >
       <header className={styles.header}>
-        <p className={styles.eyebrow}>{COPY.apps.matrix.eyebrow}</p>
-        <h2 className={styles.title}>{blockedCopy?.title ?? COPY.apps.matrix.title}</h2>
-        <p className={styles.subTitle}>{blockedCopy?.body ?? COPY.apps.matrix.subtitle}</p>
-        <p className={styles.contextBasis}>{COPY.apps.matrix.contextBasis(transcript.length, activeAnchorCount, keyDifficulties?.length ?? 0)}</p>
-        {assessment?.status !== 'not_ready' && (generatedCount > 0 || runningCount > 0 || failedCount > 0) ? (
+        <div className={styles.headerTop}>
+          <div>
+            <p className={styles.eyebrow}>{COPY.apps.matrix.eyebrow}</p>
+            <h2 className={styles.title}>{blockedCopy?.title ?? COPY.apps.matrix.title}</h2>
+          </div>
+          <p className={styles.contextBasis}>{COPY.apps.matrix.contextBasis(transcript.length, activeAnchorCount, keyDifficulties?.length ?? 0)}</p>
+        </div>
+        {blockedCopy?.body ? <p className={styles.subTitle}>{blockedCopy.body}</p> : null}
+        {assessment?.status !== 'not_ready' && (runningCount > 0 || failedCount > 0) ? (
           <p className={styles.subStatus} data-testid="workshop-task-summary">
             {COPY.apps.matrix.summary(visibleApps.length, generatedCount, runningCount, failedCount)}
           </p>
@@ -795,7 +843,6 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         <section className={styles.matrixSection} aria-labelledby="workshop-recommended-title">
           <div className={styles.sectionHeading}>
             <h3 id="workshop-recommended-title" className={styles.sectionTitle}>{COPY.apps.matrix.recommendedTitle}</h3>
-            <p className={styles.sectionHint}>{COPY.apps.matrix.recommendedHint}</p>
           </div>
           <div className={`${styles.grid} ${styles.recommendedGrid}`}>{renderAppCard(recommendedApp, true)}</div>
         </section>
@@ -826,7 +873,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         />
       ) : null}
 
-      {assessment?.status !== 'not_ready' && (runningCount > 0 || failedCount > 0 || completedCount > 0) ? (
+      {assessment?.status !== 'not_ready' && (runningCount > 0 || failedCount > 0) ? (
         <div className={styles.dock}>
           <button
             type="button"
@@ -860,7 +907,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
               </div>
 
               {dockList.length === 0 ? (
-                <p className={styles.dockEmpty}>暂无进度记录，点任意应用的“先做一版”即可开始。</p>
+                <p className={styles.dockEmpty}>{COPY.apps.matrix.noTasks}</p>
               ) : (
                 <div className={styles.dockTaskList}>
                   {dockList.map((task) => {
@@ -924,36 +971,36 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       ) : null}
       {infographicPreview ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+          className={styles.previewOverlay}
           onClick={() => setInfographicPreview(null)}
           role="dialog"
           aria-modal="true"
-          aria-label="信息图预览"
+          aria-label={COPY.apps.matrix.infographicPreview}
         >
           <div
-            className="relative flex max-h-[92vh] max-w-[94vw] flex-col items-center gap-3"
+            className={styles.previewStage}
             onClick={(e) => e.stopPropagation()}
           >
             <img
               src={infographicPreview.url}
               alt={infographicPreview.title}
-              className="max-h-[80vh] max-w-[92vw] rounded-2xl object-contain shadow-[0_24px_70px_rgba(0,0,0,0.5)]"
+              className={styles.previewImage}
             />
-            <div className="flex items-center gap-2">
+            <div className={styles.previewActions}>
               <button
                 type="button"
                 onClick={downloadInfographicImage}
-                className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-sm font-medium text-[#1C1B19] shadow-sm transition hover:bg-paper-warm"
+                className={styles.previewPrimaryAction}
               >
                 <Download size={14} strokeWidth={2} />
-                下载
+                {COPY.apps.matrix.downloadImage}
               </button>
               <button
                 type="button"
                 onClick={() => setInfographicPreview(null)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/40 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
+                className={styles.previewSecondaryAction}
               >
-                关闭
+                {COPY.apps.matrix.closePreview}
               </button>
             </div>
           </div>

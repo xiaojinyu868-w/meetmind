@@ -160,13 +160,19 @@ interface LearnerProfileBase {
    */
   bio?: BioEntry;
   /**
-   * 用户明确确认过、允许 MeetMind 在后续会话里继续使用的长期记忆。
-   * 应用行为和模型推断不能直接写入这里；它们先进入 recentLearningActivities，
-   * 只有用户确认后才提升为 memory。
+   * MeetMind 对学习者的长期学习理解：既包含用户主动说明，也包含模型从真实学习互动中的
+   * 真实表现里提炼出的进展、困难与方式。用户始终可以纠正、暂停或忘记。
+   * 这与 recentLearningActivities 的客观事件流严格分离，模型不能改写学习现场。
    */
   memories?: LearningMemoryEntry[];
   /** 最近学习现场，负责跨页面恢复；只保留轻量摘要，不复制原始课堂内容。 */
   recentLearningActivities?: LearningActivityEntry[];
+  /**
+   * 用户对“课堂上下文”自动归组结果的少量纠正。
+   * 真实课堂仍以 IndexedDB / 服务端 session 为准；这里只保存课程改名、确认和暂停状态，
+   * 避免把客观课堂复制进个人画像。
+   */
+  courseContextPreferences?: CourseContextPreference[];
   /** 当前仍可继续的深度学习线索。 */
   activeLearningThread?: LearningThreadEntry;
 }
@@ -184,7 +190,7 @@ export interface LearningMemoryEntry {
   title: string;
   detail?: string;
   status: 'active' | 'paused';
-  source: 'user' | 'confirmed-ai';
+  source: 'user' | 'ai' | 'confirmed-ai';
   sourceId?: string;
   createdAt: string;
   updatedAt: string;
@@ -199,6 +205,37 @@ export interface LearningActivityEntry {
   appKey?: string;
   sourceId?: string;
   occurredAt: string;
+}
+
+export interface CourseContextPreference {
+  /** 由显式学科、重复课表时段或单节 session 形成的稳定分组键。 */
+  courseKey: string;
+  /** 用户改过的课程名；空值时继续使用客观数据推导的名称。 */
+  displayName?: string;
+  /** paused 只表示不再把这组课堂作为 AI 的跨课背景，不删除任何课堂。 */
+  status: 'active' | 'paused';
+  /** 用户改名或确认过后为 true；模型推测的课表归组不冒充用户确认。 */
+  confirmedByUser?: boolean;
+  /** 用户明确从该自动分组中移出的课堂；只改变课程边界，不删除客观课堂。 */
+  excludedSessionIds?: string[];
+  /**
+   * 这门课程中由学生确认的考试对象。课堂仍是客观原件；这里只保留轻量考试边界，
+   * 让多节课堂、大纲和打印产物拥有同一个稳定归属。
+   */
+  assessments?: CourseAssessmentEntry[];
+  updatedAt: string;
+}
+
+export interface CourseAssessmentEntry {
+  id: string;
+  name: string;
+  targetDate?: string;
+  mode: 'unknown' | 'closed-book' | 'open-book';
+  /** 老师公布的范围或学生粘贴的大纲；不把模型推断伪装成考试要求。 */
+  syllabus?: string;
+  status: 'active' | 'completed';
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface LearningThreadEntry {
@@ -219,6 +256,7 @@ export interface LearningThreadEntry {
 export interface LearningContextState {
   memories: LearningMemoryEntry[];
   recentActivities: LearningActivityEntry[];
+  coursePreferences?: CourseContextPreference[];
   activeThread?: LearningThreadEntry;
 }
 

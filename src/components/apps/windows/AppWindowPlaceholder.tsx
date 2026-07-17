@@ -34,6 +34,10 @@ interface AppWindowPlaceholderProps {
   onBack?: () => void;
   /** 自定义描述文案 */
   description?: string;
+  /** 场景化 loading 主文案；缺省沿用单课应用文案。 */
+  loadingLabel?: string;
+  /** 返回动作的场景化名称。 */
+  backLabel?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -52,13 +56,13 @@ function useElapsedSec(): number {
   return seconds;
 }
 
-function ListeningLoading({ appName }: { appName: string }) {
+function ListeningLoading({ appName, loadingLabel }: { appName: string; loadingLabel?: string }) {
   const seconds = useElapsedSec();
 
   // 文案分级：30s 内一句温柔陪伴；30-60s 承认内容多；>60s 表达耐心
   const message =
     seconds <= 30
-      ? COPY.stages.listenStart(appName)
+      ? loadingLabel || COPY.stages.listenStart(appName)
       : seconds <= 60
         ? COPY.stages.listenSlow
         : COPY.stages.listenVerySlow;
@@ -87,10 +91,7 @@ function ListeningLoading({ appName }: { appName: string }) {
           {message}
         </p>
         <BrewingStrip>
-          <span className="font-mono tabular-nums text-pine">
-            {seconds.toString().padStart(2, '0')}s
-          </span>
-          <span className="font-serif italic text-pine/85">· Octo 在酿这节课</span>
+          <span className="font-mono tabular-nums text-pine">{COPY.apps.placeholder.workingElapsed(seconds)}</span>
         </BrewingStrip>
       </div>
     </div>
@@ -101,11 +102,12 @@ function ListeningLoading({ appName }: { appName: string }) {
 /*  空态引导                                                            */
 /* ------------------------------------------------------------------ */
 
-function EmptyGuide({ appName, description, onRetry, onBack }: {
+function EmptyGuide({ appName, description, onRetry, onBack, backLabel }: {
   appName: string;
   description?: string;
   onRetry?: () => void;
   onBack?: () => void;
+  backLabel?: string;
 }) {
   return (
     <div className="flex h-full min-h-[360px] flex-col items-center justify-center gap-6 rounded-2xl border border-dashed border-divider bg-paper p-10">
@@ -115,10 +117,10 @@ function EmptyGuide({ appName, description, onRetry, onBack }: {
       {/* 文案 */}
       <div className="text-center">
         <p className="text-[15px] font-medium text-ink">
-          还没整理过<span className="font-serif italic text-pine"> {appName}</span>
+          {COPY.apps.placeholder.emptyTitle(appName)}
         </p>
         <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-ink-muted">
-          {description || `点击"再做一版"或返回应用目录，让 Octo 为当前课堂整理${appName}。`}
+          {description || COPY.apps.placeholder.emptyBody(appName)}
         </p>
       </div>
 
@@ -130,7 +132,7 @@ function EmptyGuide({ appName, description, onRetry, onBack }: {
             onClick={onRetry}
             className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white shadow-soft transition hover:opacity-85 active:scale-[0.97]"
           >
-            再做一版
+            {COPY.apps.placeholder.remake}
           </button>
         ) : null}
         {onBack ? (
@@ -139,7 +141,7 @@ function EmptyGuide({ appName, description, onRetry, onBack }: {
             onClick={onBack}
             className="rounded-lg border border-divider bg-card px-4 py-2 text-sm font-medium text-ink-secondary transition hover:border-pine hover:text-pine"
           >
-            返回应用
+            {backLabel || COPY.apps.placeholder.back}
           </button>
         ) : null}
       </div>
@@ -151,11 +153,12 @@ function EmptyGuide({ appName, description, onRetry, onBack }: {
 /*  错误态                                                              */
 /* ------------------------------------------------------------------ */
 
-function ErrorState({ appName, errorMessage, onRetry, onBack }: {
+function ErrorState({ appName, errorMessage, onRetry, onBack, backLabel }: {
   appName: string;
   errorMessage?: string;
   onRetry?: () => void;
   onBack?: () => void;
+  backLabel?: string;
 }) {
   return (
     <div className="relative flex h-full min-h-[360px] flex-col items-center justify-center gap-6 px-8 py-12">
@@ -173,14 +176,14 @@ function ErrorState({ appName, errorMessage, onRetry, onBack }: {
       </div>
       <div className="relative text-center">
         <p className="text-[15px] font-medium text-ink">
-          <span className="font-serif italic text-vermilion">{appName}</span> 刚才没做好
+          {COPY.apps.placeholder.failedTitle(appName)}
         </p>
         {errorMessage ? (
           <p className="mt-2 max-w-sm text-[12.5px] leading-relaxed text-ink-muted" title={errorMessage}>
             {errorMessage.length > 120 ? `${errorMessage.slice(0, 120)}…` : errorMessage}
           </p>
         ) : (
-          <p className="mt-2 text-[12.5px] text-ink-muted">网络可能有点慢，再试一次看看</p>
+          <p className="mt-2 text-[12.5px] text-ink-muted">{COPY.apps.placeholder.failedBody}</p>
         )}
       </div>
       <div className="relative flex items-center gap-3">
@@ -190,7 +193,7 @@ function ErrorState({ appName, errorMessage, onRetry, onBack }: {
             onClick={onRetry}
             className="rounded-full bg-ink px-5 py-2 text-[13px] font-medium text-white shadow-soft transition hover:opacity-85 active:scale-[0.97]"
           >
-            再试一次
+            {COPY.apps.placeholder.retry}
           </button>
         ) : null}
         {onBack ? (
@@ -199,7 +202,7 @@ function ErrorState({ appName, errorMessage, onRetry, onBack }: {
             onClick={onBack}
             className="rounded-full border border-divider bg-card px-5 py-2 text-[13px] font-medium text-ink-secondary transition hover:border-pine hover:text-pine"
           >
-            返回应用
+            {backLabel || COPY.apps.placeholder.back}
           </button>
         ) : null}
       </div>
@@ -212,15 +215,24 @@ function ErrorState({ appName, errorMessage, onRetry, onBack }: {
 /* ------------------------------------------------------------------ */
 
 export function AppWindowPlaceholder(props: AppWindowPlaceholderProps) {
-  const { status, appName = '应用内容', errorMessage, onRetry, onBack, description } = props;
+  const {
+    status,
+    appName = COPY.apps.placeholder.defaultAppName,
+    errorMessage,
+    onRetry,
+    onBack,
+    description,
+    loadingLabel,
+    backLabel,
+  } = props;
 
   if (status === 'loading') {
-    return <ListeningLoading appName={appName} />;
+    return <ListeningLoading appName={appName} loadingLabel={loadingLabel} />;
   }
 
   if (status === 'error') {
-    return <ErrorState appName={appName} errorMessage={errorMessage} onRetry={onRetry} onBack={onBack} />;
+    return <ErrorState appName={appName} errorMessage={errorMessage} onRetry={onRetry} onBack={onBack} backLabel={backLabel} />;
   }
 
-  return <EmptyGuide appName={appName} description={description} onRetry={onRetry} onBack={onBack} />;
+  return <EmptyGuide appName={appName} description={description} onRetry={onRetry} onBack={onBack} backLabel={backLabel} />;
 }

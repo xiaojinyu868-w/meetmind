@@ -64,6 +64,8 @@ export interface TranscriptSegment {
   rawText?: string;
   originalText?: string;
   sourceItemId?: string;
+  /** 多课堂 ContextPack 展平后保留的可读来源名；不写回原始转录表。 */
+  sourceTitle?: string;
 }
 
 export type VideoSourceMode = 'bili-native' | 'bili-subtitle' | 'yt-dlp' | 'direct';

@@ -5,7 +5,7 @@ import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools
 import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
 import { resolveGroundedEvidence } from '../evidence-grounding';
 
-const TARGET_QUESTION_COUNT = 8;
+const TARGET_QUESTION_COUNT = 6;
 
 interface QuizDraft {
   stem?: string;
@@ -138,7 +138,8 @@ async function generateQuizWithLLM(
         role: 'system',
         content:
           '你是一位经验丰富的命题研究员，擅长设计能区分"真懂"和"以为自己懂"的测试题。学生刚上完一节课，想检验自己对课堂内容的理解程度。题目类型可以是单选、判断、填空、简答任意组合，由你按内容性质决定哪种最合适。' +
-          '单选题的每个干扰项都必须来自课堂内容里真实存在的、似是而非的理解偏差或易混淆概念，写成具体、自洽、有信息量的陈述；严禁出现"该片段主要讨论了X""跳过了这个话题""仅做了简单引用，未做实质分析"这类与具体知识无关、一眼就是模板的空话选项。如果一道题凑不出 3 个有内容的干扰项，就把它出成简答题而不是硬凑选择题。',
+          '单选题的每个干扰项都必须来自课堂内容里真实存在的、似是而非的理解偏差或易混淆概念，写成具体、自洽、有信息量的陈述；严禁出现"该片段主要讨论了X""跳过了这个话题""仅做了简单引用，未做实质分析"这类与具体知识无关、一眼就是模板的空话选项。如果一道题凑不出 3 个有内容的干扰项，就把它出成简答题而不是硬凑选择题。' +
+          '题目会显示在三栏学习界面的中间窄区，阅读成本必须低：每题只检验一个判断；中文题干尽量不超过 32 字，英文题干尽量不超过 24 个词；中文选项尽量不超过 24 字，英文选项尽量不超过 16 个词。不要反复写“根据上下文”“Based on the context”等无信息铺垫，直接提问。通常生成 4-6 道互不重复的题，内容不足时宁可少出。题面与选项优先沿用课堂原文的主要语言，explanation 使用简体中文帮助复盘。',
       },
       {
         role: 'user',

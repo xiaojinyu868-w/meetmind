@@ -55,14 +55,15 @@ describe('buildTutorSystemPrompt — mode 决定基础骨架', () => {
 });
 
 describe('buildTutorSystemPrompt — global Ask 与深度学习', () => {
-  it('普通全局提问直接回答，不自动沉淀记忆', () => {
+  it('普通全局提问直接回答，并把学习理解判断留给后台流程', () => {
     const prompt = buildTutorSystemPrompt('global', { global: { depth: 'quick' } });
     expect(prompt).toMatch(/全局 Ask MeetMind/);
     expect(prompt).toMatch(/先直接回答/);
-    expect(prompt).toMatch(/不要输出“学习进展” marker/);
+    expect(prompt).toMatch(/是否形成新的学习理解由回答完成后的独立流程判断/);
+    expect(prompt).not.toMatch(/---学习进展---/);
   });
 
-  it('深度学习使用已确认意图，并输出待用户确认的进展块', () => {
+  it('深度学习使用已确认意图，并把回答与后台学习理解整理解耦', () => {
     const prompt = buildTutorSystemPrompt('global', {
       global: {
         depth: 'deep',
@@ -79,8 +80,9 @@ describe('buildTutorSystemPrompt — global Ask 与深度学习', () => {
     expect(prompt).toMatch(/真正理解反向传播/);
     expect(prompt).toMatch(/更喜欢用图理解/);
     expect(prompt).toMatch(/刚完成神经网络闪卡/);
-    expect(prompt).toMatch(/---学习进展---/);
-    expect(prompt).toMatch(/没有被确认的内容不能当成长久记忆/);
+    expect(prompt).toMatch(/不要在正文里输出任何学习记忆标记/);
+    expect(prompt).toMatch(/独立流程依据真实互动静默整理/);
+    expect(prompt).not.toMatch(/---学习进展---/);
   });
 });
 
@@ -229,13 +231,21 @@ describe('buildTutorSystemPrompt — learnerProfile 注入', () => {
 });
 
 describe('buildTutorSystemPrompt — goal 模式沉淀边界', () => {
-  it('首次会面在身份已知后转向最近状态，而不是继续盘问资料字段', () => {
+  it('首次会面先接住当下需要，不把用户带进画像访谈', () => {
     const prompt = buildTutorSystemPrompt('goal');
-    expect(prompt).toMatch(/身份或阶段一旦已经清楚/);
-    expect(prompt).toMatch(/不要继续盘问专业、学校、年级/);
-    expect(prompt).toMatch(/我是大三学生/);
-    expect(prompt).toMatch(/而不是追问“什么专业”/);
-    expect(prompt).toMatch(/最近的状态/);
+    expect(prompt).toMatch(/用户不是来建立档案的/);
+    expect(prompt).toMatch(/第一轮就得到一点有用的理解/);
+    expect(prompt).toMatch(/不要从身份、年级、专业、学校开始/);
+    expect(prompt).toMatch(/先行动，再在过程里校准/);
+    expect(prompt).not.toMatch(/把这个人聊完整/);
+    expect(prompt).not.toMatch(/身份和阶段是最容易开口的/);
+  });
+
+  it('让模型静默维护上下文，但不把短期状态和猜测写成长期事实', () => {
+    const prompt = buildTutorSystemPrompt('goal');
+    expect(prompt).toMatch(/上下文由你在后台主动管理/);
+    expect(prompt).toMatch(/不要让用户承担“维护画像”的工作/);
+    expect(prompt).toMatch(/不把一时情绪、模型建议或猜测包装成长期事实/);
   });
 
   it('回访确认具体愿望时优先输出我想要的 marker', () => {

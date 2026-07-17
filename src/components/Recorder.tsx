@@ -23,7 +23,7 @@ import {
   normalizeRecorderErrorMessage,
   normalizeRecorderErrorDetail,
   formatRecorderTime,
-  resamplePcm,
+  StreamingPcmResampler,
   float32ToInt16,
 } from './recorder/recorder-utils';
 import { acquireAudioStream } from './recorder/recorder-audio-source';
@@ -97,8 +97,9 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   }, []);
   const [transcribeMode, setTranscribeMode] = useState<TranscribeMode>('streaming');
   const [streamingAvailable, setStreamingAvailable] = useState(true);
+  // 浏览器只连自有 WebSocket proxy，不接触 DashScope 密钥。
   const [apiKey, setApiKey] = useState<string>('');
-  const [wsModel, setWsModel] = useState<string>('qwen3-asr-flash-realtime');
+  const [wsModel, setWsModel] = useState<string>('qwen3-asr-flash-realtime-2026-02-10');
   const [wsSampleRate, setWsSampleRate] = useState<number>(16000);
   const [anchorCount, setAnchorCount] = useState(0);
 
@@ -124,6 +125,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   const asrSwitchGenerationRef = useRef(0);
   const transcriptRef = useRef<TranscriptSegment[]>([]);
   const pcmProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const pcmResamplerRef = useRef<StreamingPcmResampler | null>(null);
   const isStartingRecordingRef = useRef(false);
   const lastAutoStartSignalRef = useRef(0);
   const [isStartingRecording, setIsStartingRecording] = useState(false);
@@ -131,8 +133,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   const interimItemIdRef = useRef<string | null>(null);
   const processedSentenceIdsRef = useRef<Set<string>>(new Set());
   const noiseFloorRef = useRef(0.02);
-  const contextUpdateCountRef = useRef(0);
-  const CONTEXT_UPDATE_EVERY_N_SEGMENTS = 8;
   const [asrReconnecting, setAsrReconnecting] = useState(false);
   const pauseTimestampRef = useRef<number>(0);
   
@@ -225,19 +225,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         setEnhanceStats((prev) => ({ ...prev, total: prev.total + 1 }));
       }
 
-      // Periodically send context update with recent transcript for better ASR consistency
-      contextUpdateCountRef.current++;
-      if (
-        contextUpdateCountRef.current >= CONTEXT_UPDATE_EVERY_N_SEGMENTS &&
-        asrClientRef.current?.isConnected()
-      ) {
-        contextUpdateCountRef.current = 0;
-        const recentText = nextTranscript
-          .slice(-15)
-          .map((s) => s.text)
-          .join('');
-        asrClientRef.current.sendContextUpdate(recentText);
-      }
     },
     onInterim: (interim) => {
       if (interim.itemId) {
@@ -274,7 +261,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     format: 'pcm',
     initialContextHint: contextHint.trim(),
     initialLanguageMode: languageMode,
-    maxReconnectAttempts: 30,
+    maxReconnectAttempts: 8,
     reconnectBaseMs: 800,
     reconnectCapMs: 15_000,
     speakerDiarization: speakerDiarizationEnabled,
@@ -286,7 +273,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         const response = await fetch('/api/asr-config');
         if (response.ok) {
           const config = await response.json();
-          setApiKey(config.apiKey);
+          setApiKey(config.available ? 'server-proxy' : '');
           if (config.model) setWsModel(config.model);
           if (config.sampleRate) setWsSampleRate(config.sampleRate);
           setStreamingAvailable(true);
@@ -336,8 +323,8 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     }
   }, []);
 
-  const startRecording = useCallback(async () => {
-    if (isStartingRecordingRef.current || status !== 'idle') return;
+  const startRecording = useCallback(async (): Promise<boolean> => {
+    if (isStartingRecordingRef.current || status !== 'idle') return false;
 
     isStartingRecordingRef.current = true;
     setIsStartingRecording(true);
@@ -359,6 +346,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         pcmProcessorRef.current.onaudioprocess = null;
         pcmProcessorRef.current = null;
       }
+      pcmResamplerRef.current = null;
       if (mediaRecorderRef.current) {
         await stopMediaRecorderSafely();
       }
@@ -368,12 +356,15 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       }
 
       audioChunksRef.current = [];
+      setElapsedMs(0);
       setTranscript([]);
       transcriptRef.current = [];
       manuallyEditedSegmentIdsRef.current.clear();
       setInterimText('');
       interimItemIdRef.current = null;
       setAnchorCount(0);
+      setTranscribeProgress('');
+      setTranscribeStartedAt(null);
 
       setEnhancedSegments(new Map());
       setEnhanceStats({ enhanced: 0, total: 0, isEnhancing: false });
@@ -421,7 +412,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
             onTranscriptEnhanced?.(enhancedTranscript);
 
-            // Update transcriptRef so that sendContextUpdate sends corrected text to ASR
+            // Keep the recorder's active transcript aligned with the silently corrected result.
             transcriptRef.current = enhancedTranscript;
 
             return newMap;
@@ -561,31 +552,10 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       recordingIdRef.current = `recording-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       processedSentenceIdsRef.current = new Set(); // 新录音清空去重集合
 
-      if (effectiveTranscribeMode === 'streaming' && streamingAvailable && apiKey && audioContext && source) {
-        asrClientRef.current = new DashScopeASRClient(apiKey, createAsrCallbacks(), buildAsrOptions(speakerDiarization));
-
-        const started = await asrClientRef.current.start();
-        if (!started) {
-          asrClientRef.current = null;
-        } else {
-          contextUpdateCountRef.current = 0;
-
-          pcmProcessorRef.current = audioContext.createScriptProcessor(PCM_PROCESSOR_BUFFER_SIZE, 1, 1);
-          
-          pcmProcessorRef.current.onaudioprocess = (e) => {
-            if (asrClientRef.current || pendingAsrClientRef.current) {
-              const inputData = e.inputBuffer.getChannelData(0);
-              const resampledData = resamplePcm(inputData, actualSampleRate, wsSampleRate);
-              const pcmData = float32ToInt16(resampledData);
-              sendPcmToAsrClients(pcmData.buffer as ArrayBuffer);
-            }
-          };
-          
-          source.connect(pcmProcessorRef.current);
-          pcmProcessorRef.current.connect(audioContext.destination);
-        }
-      }
-
+      // 原声是最终真相：拿到 stream 后立即开始录，不等 ASR WebSocket ready。
+      // 旧顺序会在弱网 / 冷启动时丢掉开头数秒，而且这些话连课后 batch
+      // 都无法找回。新顺序是：MediaRecorder 立即收原声，PCM 在 ASR 连接前
+      // 进 DashScopeASRClient 队列，ready 后按原顺序补送。
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
         : 'audio/webm';
@@ -603,15 +573,52 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
       mediaRecorder.start(1000);
       mediaRecorderRef.current = mediaRecorder;
-
       timerRef.current = setInterval(() => {
         setElapsedMs(Date.now() - startTimeRef.current);
       }, 100);
 
+      if (effectiveTranscribeMode === 'streaming' && streamingAvailable && apiKey && audioContext && source) {
+        const asrClient = new DashScopeASRClient(apiKey, createAsrCallbacks(), buildAsrOptions(speakerDiarization));
+        asrClientRef.current = asrClient;
+
+        // 先挂 PCM pipeline：DashScopeASRClient 在 !ready 时会将 chunk 有界排队，
+        // 因此首字之前的语音也不会丢。
+        pcmResamplerRef.current = new StreamingPcmResampler(actualSampleRate, wsSampleRate);
+        pcmProcessorRef.current = audioContext.createScriptProcessor(PCM_PROCESSOR_BUFFER_SIZE, 1, 1);
+        pcmProcessorRef.current.onaudioprocess = (e) => {
+          if (asrClientRef.current || pendingAsrClientRef.current) {
+            const inputData = e.inputBuffer.getChannelData(0);
+            const resampledData = pcmResamplerRef.current?.process(inputData) ?? new Float32Array();
+            if (resampledData.length === 0) return;
+            const pcmData = float32ToInt16(resampledData);
+            sendPcmToAsrClients(pcmData.buffer as ArrayBuffer);
+          }
+        };
+        source.connect(pcmProcessorRef.current);
+        pcmProcessorRef.current.connect(audioContext.destination);
+
+        // 不让 WebSocket 握手阻塞「已开始录音」。连接失败时原声仍继续，
+        // 结束后会自动走完整原声转写。
+        void asrClient.start().then((started) => {
+          if (!started && asrClientRef.current === asrClient) {
+            asrClientRef.current = null;
+          }
+        }).catch((startError) => {
+          console.error('[Recorder] ASR start failed; raw audio recording continues:', startError);
+          if (asrClientRef.current === asrClient) {
+            asrClientRef.current = null;
+          }
+        });
+      }
+
       setStatus('recording');
       onRecordingStart?.(sessionIdRef.current, { isContinuation: shouldContinueIntoCurrentSession });
+      return true;
 
     } catch (err) {
+      if (mediaRecorderRef.current) {
+        try { await stopMediaRecorderSafely(); } catch { /* preserve original startup error */ }
+      }
       // 有可能 stream 已经通过 acquireAudioStream 拿到并注册了 cleanup；
       // 也有可能还没走到那一步（比如 enhanceManager 初始化失败）。两边都兜住。
       if (audioCleanupRef.current) {
@@ -640,7 +647,11 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
-      setError(err instanceof Error ? err.message : '\u5f55\u97f3\u542f\u52a8\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002');
+      const rawMessage = err instanceof Error ? err.message : '';
+      const message = normalizeRecorderErrorMessage(rawMessage || COPY.recording.startFailedFallback);
+      setError(message);
+      toast.error(COPY.recording.startFailed(message));
+      return false;
     } finally {
       isStartingRecordingRef.current = false;
       setIsStartingRecording(false);
@@ -711,12 +722,14 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     }
 
     const actualSampleRate = audioContext.sampleRate;
+    pcmResamplerRef.current ??= new StreamingPcmResampler(actualSampleRate, wsSampleRate);
     pcmProcessorRef.current = audioContext.createScriptProcessor(PCM_PROCESSOR_BUFFER_SIZE, 1, 1);
 
     pcmProcessorRef.current.onaudioprocess = (e) => {
       if (asrClientRef.current || pendingAsrClientRef.current) {
         const inputData = e.inputBuffer.getChannelData(0);
-        const resampledData = resamplePcm(inputData, actualSampleRate, wsSampleRate);
+        const resampledData = pcmResamplerRef.current?.process(inputData) ?? new Float32Array();
+        if (resampledData.length === 0) return;
         const pcmData = float32ToInt16(resampledData);
         sendPcmToAsrClients(pcmData.buffer as ArrayBuffer);
       }
@@ -767,12 +780,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
         asrClientRef.current = newClient;
         pendingAsrClientRef.current = null;
-        const recentText = transcriptRef.current
-          .slice(-15)
-          .map((s) => s.text)
-          .join('');
-        if (recentText) newClient.sendContextUpdate(recentText);
-        contextUpdateCountRef.current = 0;
 
         void oldClient.stop().catch(() => { /* ignore */ });
 
@@ -816,15 +823,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
       const started = await asrClientRef.current.start();
       if (started) {
-        const recentText = transcriptRef.current
-          .slice(-15)
-          .map((s) => s.text)
-          .join('');
-        if (recentText) {
-          asrClientRef.current.sendContextUpdate(recentText);
-        }
-        contextUpdateCountRef.current = 0;
-
         // Rebuild PCM pipeline
         rebuildPcmPipeline();
       } else {
@@ -871,13 +869,30 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     wsSampleRate,
   ]);
 
-  const transcribeWithQwenASR = useCallback(async (audioBlob: Blob, options?: { skipEnhancement?: boolean; emitStopCallback?: boolean }) => {
-    const skipEnhancement = options?.skipEnhancement ?? false;
+  const transcribeWithQwenASR = useCallback(async (audioBlob: Blob, options?: {
+    skipEnhancement?: boolean;
+    emitStopCallback?: boolean;
+    finalPassOnly?: boolean;
+    /** Detached jobs may finish after another lesson has started and must not mutate Recorder refs/UI. */
+    detached?: boolean;
+    callbackMeta?: RecorderCallbackMeta;
+  }) => {
+    const detached = options?.detached ?? false;
+    const skipEnhancement = detached ? true : (options?.skipEnhancement ?? false);
     const emitStopCallback = options?.emitStopCallback ?? true;
-    setStatus('transcribing');
-    setTranscribeStartedAt(Date.now());
-    setTranscribeProgress(skipEnhancement ? '正在转录这段原声...' : '正在转录音频...');
-    onTranscribing?.(true);
+    const finalPassOnly = options?.finalPassOnly ?? false;
+    // Capture before the first await. Reading getCallbackMeta() after fetch returns
+    // can pick up the next lesson's refs and is the exact shape of a cross-session leak.
+    const callbackMeta = options?.callbackMeta ?? getCallbackMeta();
+    if (!detached) {
+      setStatus('transcribing');
+      setTranscribeStartedAt(Date.now());
+      setTranscribeProgress(skipEnhancement ? '正在转录这段原声...' : '正在转录音频...');
+      onTranscribing?.(true);
+    }
+    const updateProgress = (message: string) => {
+      if (!detached) setTranscribeProgress(message);
+    };
     let deferredTranscriptionError: string | null = null;
 
     try {
@@ -918,7 +933,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       });
       for (let index = 0; index < endpoints.length; index += 1) {
         const endpoint = endpoints[index];
-        setTranscribeProgress(
+        updateProgress(
           endpoint === '/api/transcribe-turbo'
             ? '本地先用极速转写接住这段原声...'
             : endpoint === '/api/transcribe-fast'
@@ -969,12 +984,14 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
           isFinal: true,
         }));
 
-        setTranscript(segments);
-        transcriptRef.current = segments;
-        onTranscriptUpdate?.(segments, getCallbackMeta());
+        if (!detached) {
+          setTranscript(segments);
+          transcriptRef.current = segments;
+        }
+        onTranscriptUpdate?.(segments, callbackMeta);
         
         if (segments.length > 0 && !skipEnhancement) {
-          setTranscribeProgress('转录完成，正在优化文本...');
+          updateProgress('转录完成，正在优化文本...');
           setEnhanceStats(prev => ({ ...prev, total: segments.length, isEnhancing: true }));
           
           enhanceManagerRef.current = new TranscriptEnhanceManager({
@@ -1027,35 +1044,40 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
           
           enhanceManagerRef.current.finalize().then(() => {
             const enhancedCount = enhanceManagerRef.current?.getAllEnhanced().filter(s => s.enhanceStatus === 'enhanced').length || 0;
-            setTranscribeProgress(`转录完成，共 ${segments.length} 段，已优化 ${enhancedCount} 段`);
+            updateProgress(`转录完成，共 ${segments.length} 段，已优化 ${enhancedCount} 段`);
             enhanceManagerRef.current?.dispose();
             enhanceManagerRef.current = null;
           });
         } else if (segments.length > 0) {
-          setTranscribeProgress(`转录完成，共 ${segments.length} 段`);
+          updateProgress(`转录完成，共 ${segments.length} 段`);
         } else {
-          setTranscribeProgress(`转录完成，共 ${segments.length} 段`);
+          updateProgress(`转录完成，共 ${segments.length} 段`);
           deferredTranscriptionError = '这段原声没有转出可用文字。';
         }
       } else {
-        setTranscribeProgress('转录完成，但没有获取到文本。');
+        updateProgress('转录完成，但没有获取到文本。');
         deferredTranscriptionError = '这段原声没有转出可用文字。';
       }
     } catch (err) {
       const rawMessage = err instanceof Error ? err.message : '转录失败';
-      setError(rawMessage);
+      if (!detached) setError(rawMessage);
       // 延后到 onRecordingStop 之后派发：外层需要先创建 pending audio，才能把失败态写回卡片和 session。
       deferredTranscriptionError = normalizeRecorderErrorMessage(rawMessage);
-      setTranscribeProgress('');
+      if (!detached) setTranscribeProgress('');
     } finally {
-      onTranscribing?.(false);
-      setStatus('stopped');
-      setTranscribeStartedAt(null);
+      if (!detached) {
+        onTranscribing?.(false);
+        setStatus('stopped');
+        setTranscribeStartedAt(null);
+      }
       if (emitStopCallback) {
-        onRecordingStop?.(audioBlob ?? undefined, getCallbackMeta());
+        onRecordingStop?.(audioBlob ?? undefined, callbackMeta);
       }
       if (deferredTranscriptionError) {
-        onTranscriptionError?.(deferredTranscriptionError, getCallbackMeta());
+        onTranscriptionError?.(deferredTranscriptionError, {
+          ...callbackMeta,
+          finalPassOnly,
+        });
       }
     }
   }, [contextHint, elapsedMs, getCallbackMeta, languageMode, onRecordingStop, onTranscriptEnhanced, onTranscriptUpdate, onTranscribing, onTranscriptionError]);
@@ -1063,6 +1085,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   const stopRecording = useCallback(async () => {
     // 把每一步清理都 try/catch 包起来：任何一步出错都不能阻止 audioBlob 走到 onRecordingStop，
     // 否则用户停录后什么都看不到（体感就是"录完没记录也存不下来"）。
+    const recordingMeta = getCallbackMeta();
 
     try {
       asrSwitchGenerationRef.current += 1;
@@ -1089,6 +1112,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       console.error('[Recorder] pcmProcessor disconnect error:', err);
       pcmProcessorRef.current = null;
     }
+    pcmResamplerRef.current = null;
 
     if (animationIdRef.current) {
       cancelAnimationFrame(animationIdRef.current);
@@ -1162,15 +1186,14 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     const blobIsUsable = Boolean(audioBlob && audioBlob.size > MIN_FALLBACK_BLOB_BYTES);
 
     if (effectiveTranscribeMode === 'batch' && audioBlob && audioBlob.size > 0) {
-      onRecordingStop?.(audioBlob ?? undefined, getCallbackMeta());
-      try {
-        await transcribeWithQwenASR(audioBlob, {
-          skipEnhancement: compactMode,
-          emitStopCallback: false,
-        });
-      } catch (err) {
-        console.error('[Recorder] transcribeWithQwenASR error:', err);
-      }
+      onRecordingStop?.(audioBlob, recordingMeta);
+      setStatus('idle');
+      void transcribeWithQwenASR(audioBlob, {
+        skipEnhancement: true,
+        emitStopCallback: false,
+        detached: true,
+        callbackMeta: recordingMeta,
+      }).catch((err) => console.error('[Recorder] detached batch transcription error:', err));
     } else if (streamingProducedNothing && blobIsUsable && audioBlob) {
       // 实时没接住，但音频在 → 兜底批量转写，绝不让录音白录
       // eslint-disable-next-line no-console
@@ -1179,25 +1202,55 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       });
       // 先派发 onRecordingStop（外层据此创建 pending audio + 落盘 blob），
       // 再跑批量转写，转好的段会通过 onTranscriptUpdate 回填那条 pending session。
-      onRecordingStop?.(audioBlob, getCallbackMeta());
-      try {
-        await transcribeWithQwenASR(audioBlob, {
-          skipEnhancement: compactMode,
-          emitStopCallback: false,
-        });
-      } catch (err) {
-        console.error('[Recorder] streaming→batch fallback transcription error:', err);
-      }
+      onRecordingStop?.(audioBlob, recordingMeta);
+      setStatus('idle');
+      void transcribeWithQwenASR(audioBlob, {
+        skipEnhancement: true,
+        emitStopCallback: false,
+        detached: true,
+        callbackMeta: recordingMeta,
+      }).catch((err) => console.error('[Recorder] detached streaming fallback error:', err));
+    } else if (
+      effectiveTranscribeMode === 'streaming'
+      && transcriptRef.current.length > 0
+      && blobIsUsable
+      && audioBlob
+    ) {
+      // 两段式 ASR：课中用 realtime 换低延迟，课后始终用完整原声定稿。
+      // 旧逻辑只在 realtime 一句都没有时才跑 batch，少量噪声幻觉反而
+      // 会阻止整段校准。先交付 realtime 结果和原声，随后用同一
+      // recordingId 回填完整原声的高精度结果。
+      const enhancedCount = enhanceStats.enhanced;
+      const totalCount = transcriptRef.current.length;
+      setTranscribeProgress(COPY.recording.finalizingTranscript(totalCount, enhancedCount));
+      onTranscriptUpdate?.(transcriptRef.current, recordingMeta);
+      onRecordingStop?.(audioBlob, {
+        ...recordingMeta,
+        finalPassPending: true,
+      });
+      setStatus('idle');
+      void transcribeWithQwenASR(audioBlob, {
+        // batch ASR 自己重听声学证据；不再叠加逐段 LLM 改写，
+        // 避免在没有原声依据时把专有名词「修顺」。
+        skipEnhancement: true,
+        emitStopCallback: false,
+        finalPassOnly: true,
+        detached: true,
+        callbackMeta: recordingMeta,
+      }).catch((err) => {
+        // realtime 结果和原声已保存，定稿失败不能破坏已交付的课堂。
+        console.error('[Recorder] detached streaming final-pass error:', err);
+      });
     } else {
       if (effectiveTranscribeMode === 'streaming' && transcriptRef.current.length > 0) {
         const enhancedCount = enhanceStats.enhanced;
         const totalCount = transcriptRef.current.length;
         const enhanceInfo = enhancedCount > 0 ? `，已优化 ${enhancedCount} 段` : '';
         setTranscribeProgress(`文字已整理，共 ${totalCount} 段${enhanceInfo}`);
-        onTranscriptUpdate?.(transcriptRef.current, getCallbackMeta());
+        onTranscriptUpdate?.(transcriptRef.current, recordingMeta);
       }
-      setStatus('stopped');
-      onRecordingStop?.(audioBlob ?? undefined, getCallbackMeta());
+      setStatus('idle');
+      onRecordingStop?.(audioBlob ?? undefined, recordingMeta);
     }
   }, [
     enhanceStats.enhanced,
@@ -1205,7 +1258,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     onRecordingStop,
     onTranscriptUpdate,
     stopMediaRecorderSafely,
-    compactMode,
     effectiveTranscribeMode,
     transcribeWithQwenASR,
   ]);
@@ -1230,6 +1282,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       pcmProcessorRef.current.onaudioprocess = null;
       pcmProcessorRef.current = null;
     }
+    pcmResamplerRef.current = null;
     if (animationIdRef.current) {
       cancelAnimationFrame(animationIdRef.current);
       animationIdRef.current = null;
@@ -1304,6 +1357,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         pcmProcessorRef.current.disconnect();
         pcmProcessorRef.current.onaudioprocess = null;
       }
+      pcmResamplerRef.current = null;
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop();
         mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());

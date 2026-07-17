@@ -26,7 +26,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/transcribe/status` | GET | 异步转录任务状态查询 |
 | `/api/transcript-enhance` | POST | LLM 转录文本纠错增强 |
 | `/api/upload-audio` | POST | 音频文件上传到临时目录 |
-| `/api/asr-config` | GET | ASR 配置（API Key/模型/采样率） |
+| `/api/asr-config` | GET | ASR proxy 可用性、模型与采样率；禁止向浏览器返回 DashScope API Key |
 | `/api/asr/oneshot` | POST | 非实时短音频 ASR（语音输入对话框） |
 | `/api/asr/diarize` | POST | 说话人分离（Fun-ASR 非实时 + diarization_enabled） |
 | `/api/asr/corrections` | GET/POST | ASR 纠错事件记录 / 热词列表 |
@@ -52,6 +52,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/tutor` | POST | AI 家教（解释/追问/引导/联网检索） |
 | `/api/tutor/agent` | POST | AI 同桌 agent-native 工具调用流 |
 | `/api/tutor/intent` | POST | 深度学习开始前生成可编辑意图计划；游客也可按 Tutor 限流调用；只提出计划，不写长期记忆 |
+| `/api/tutor/memory` | POST | 全局学习问答持久化后静默整理最多 2 条学习理解；访客与登录用户都可使用，route 内限流；支持替换近义旧理解，失败返回空结果且不影响最近学习现场 |
 | `/api/classroom/foresight` | POST | 课堂预知气泡生成（qwen3.7-plus） |
 | `/api/classroom/flow` | POST | 课中课堂脉络：模型根据带时间位置的实时转录，自主判断当前讲解、近期推进与值得课后回看的内容；前端只消费稳定 JSON 契约 |
 | `/api/classroom/lesson-digest` | POST | 课堂结构化分段总结生成（飞书妙记形态，segments + 图片锚点 → 分段 digest） |
@@ -66,10 +67,10 @@ route.ts → lib/services/ + lib/utils/rate-limit
 
 | 路由 | 方法 | 职责 |
 |------|------|------|
-| `/api/apps/execute` | POST | 执行 AI-Native 应用插件 |
+| `/api/apps/execute` | POST | 执行 AI-Native 应用插件；单课可传 legacy `input`，unit/exam 传 `contextPack`。服务端校验 tier、课数与 catalog 白名单；考试速查表必须有至少两节课，或 exam tier 的大纲/真题范围 |
 | `/api/apps/plugins` | GET | 获取已注册插件列表 |
 | `/api/apps/catalog` | GET | 获取应用目录 |
-| `/api/apps/readiness` | POST | 结合真实原文、场景标题/来源与学习信号判断当前材料是否足以生成应用，并返回模型认可的应用范围；允许明确返回“不生成”，也不得把听力练习等对话型学习材料误判为闲聊。游客复习也会调用，已在 `public-routes.ts` 放行并由 route 自身限流 |
+| `/api/apps/readiness` | POST | 结合真实原文、场景标题/来源、学习信号与 `contextTier` 判断当前层材料是否足以生成应用；ready 只返回该层 catalog 白名单，单课不含考试速查表。游客复习也会调用，已在 `public-routes.ts` 放行并由 route 自身限流 |
 | `/api/apps/infographic/generate-image` | POST | Gemini 信息图生成 |
 
 ### 👤 认证
@@ -88,7 +89,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/auth/send-code` | POST | 发送验证码 |
 | `/api/auth/wechat` | GET | 微信 OAuth URL |
 | `/api/auth/wechat/callback` | GET | 微信 OAuth 回调 |
-| `/api/auth/learner-profile` | GET/PATCH | 读取或保存学习者画像；`stage='unknown'` 是对话确认画像后的合法状态，画像同时承载经用户确认的长期记忆与轻量学习连续性 |
+| `/api/auth/learner-profile` | GET/PATCH | 读取或保存学习者画像；除可纠正的学习理解与轻量学习连续性外，只保存用户对课堂自动归组的改名/确认/暂停偏好，真实课堂 session 不复制进画像 |
 
 ### 📦 Workspace
 

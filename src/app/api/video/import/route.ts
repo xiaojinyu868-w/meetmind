@@ -210,7 +210,7 @@ async function transcribeLongAudioDirect(
 
   // 1. 提交异步任务
   const submitBody = {
-    model: 'qwen3-asr-flash-filetrans',
+    model: process.env.DASHSCOPE_ASR_FILE_MODEL || 'qwen3-asr-flash-filetrans-2025-11-17',
     input: { file_url: fileUrl },
     parameters: {
       channel_id: [0],

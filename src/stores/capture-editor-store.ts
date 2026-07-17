@@ -62,11 +62,6 @@ interface CaptureEditorState {
    */
   recorderAudioSource: RecorderAudioSource;
   /**
-   * 课堂页是否启用说话人分离（多人会议模式）。
-   * 启用后 Recorder 切换到腾讯云 16k_zh_en_speaker 引擎，实时返回 speaker_id。
-   */
-  recorderSpeakerDiarization: boolean;
-  /**
    * 流式 ASR 中，当前还未落定为 final segment 的「跟读」文本。
    * 由 Recorder 的 onInterim 写入，课堂录课视图订阅后显示在顶部，
    * 让用户感知到"AI 真的在听"，体验上抹平批量转写的割裂感。
@@ -96,7 +91,6 @@ interface CaptureEditorActions {
   setExtractedTermsHint: (hint: string) => void;
   setRecorderAutoStartSignal: (signal: number) => void;
   setRecorderAudioSource: (source: RecorderAudioSource) => void;
-  setRecorderSpeakerDiarization: (enabled: boolean) => void;
   setLiveInterimText: (text: string) => void;
   setClassroomASRContextHint: (hint: string) => void;
 
@@ -123,7 +117,6 @@ const initialState: CaptureEditorState = {
   extractedTermsHint: '',
   recorderAutoStartSignal: 0,
   recorderAudioSource: 'mic',
-  recorderSpeakerDiarization: false,
   liveInterimText: '',
   classroomASRContextHint: '',
 };
@@ -156,7 +149,6 @@ export const useCaptureEditorStore = create<CaptureEditorStore>()(
         setExtractedTermsHint: (hint) => set({ extractedTermsHint: hint }, false, 'setExtractedTermsHint'),
         setRecorderAutoStartSignal: (signal) => set({ recorderAutoStartSignal: signal }, false, 'setRecorderAutoStartSignal'),
         setRecorderAudioSource: (source) => set({ recorderAudioSource: source }, false, 'setRecorderAudioSource'),
-        setRecorderSpeakerDiarization: (enabled) => set({ recorderSpeakerDiarization: enabled }, false, 'setRecorderSpeakerDiarization'),
         setLiveInterimText: (text) => set({ liveInterimText: text }, false, 'setLiveInterimText'),
         setClassroomASRContextHint: (hint) => set({ classroomASRContextHint: hint }, false, 'setClassroomASRContextHint'),
 
@@ -183,7 +175,6 @@ export const useActiveVideoInsightId = () => useCaptureEditorStore((s) => s.acti
 export const useExtractedTermsHint = () => useCaptureEditorStore((s) => s.extractedTermsHint);
 export const useRecorderAutoStartSignal = () => useCaptureEditorStore((s) => s.recorderAutoStartSignal);
 export const useRecorderAudioSource = () => useCaptureEditorStore((s) => s.recorderAudioSource);
-export const useRecorderSpeakerDiarization = () => useCaptureEditorStore((s) => s.recorderSpeakerDiarization);
 export const useLiveInterimText = () => useCaptureEditorStore((s) => s.liveInterimText);
 export const useClassroomASRContextHint = () => useCaptureEditorStore((s) => s.classroomASRContextHint);
 export const useCaptureEditorActions = () => useCaptureEditorStore((s) => s.actions);

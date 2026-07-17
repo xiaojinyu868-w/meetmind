@@ -24,6 +24,7 @@ describe('normalizeLessonDigestOutput', () => {
 
   it('模型返回空分段时保留有根的转录降级笔记', () => {
     const digest = normalizeLessonDigestOutput({ sections: [] }, segments, [], '课程名');
+    expect(digest.overview).toBe('');
     expect(digest.sections[0]?.text).toContain('先讲概念');
   });
 });

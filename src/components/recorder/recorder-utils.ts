@@ -248,6 +248,82 @@ export function resamplePcm(inputData: Float32Array, fromRate: number, toRate: n
   return result;
 }
 
+/**
+ * Stateful streaming resampler for microphone PCM.
+ *
+ * `resamplePcm` is correct for a complete buffer, but applying it independently
+ * to every ScriptProcessor callback rounds every chunk and loses the fractional
+ * source position. 48kHz happens to divide cleanly into 16kHz; 44.1kHz phones do
+ * not, so the old path duplicated/dropped samples at every callback boundary.
+ */
+export class StreamingPcmResampler {
+  private processedSourceSamples = 0;
+  private nextOutputSourcePosition = 0;
+  private previousSample = 0;
+  private hasPreviousSample = false;
+
+  constructor(
+    private readonly fromRate: number,
+    private readonly toRate: number,
+  ) {
+    if (!(fromRate > 0) || !(toRate > 0)) {
+      throw new Error('Audio sample rates must be positive');
+    }
+  }
+
+  process(inputData: Float32Array): Float32Array {
+    if (inputData.length === 0) return new Float32Array();
+    if (this.fromRate === this.toRate) {
+      this.processedSourceSamples += inputData.length;
+      this.previousSample = inputData[inputData.length - 1];
+      this.hasPreviousSample = true;
+      return inputData.slice();
+    }
+
+    const chunkStart = this.processedSourceSamples;
+    const chunkEnd = chunkStart + inputData.length;
+    const sourceStep = this.fromRate / this.toRate;
+    const output: number[] = [];
+
+    while (this.nextOutputSourcePosition < chunkEnd) {
+      const leftIndex = Math.floor(this.nextOutputSourcePosition);
+      const fraction = this.nextOutputSourcePosition - leftIndex;
+      const rightIndex = leftIndex + 1;
+      const readSample = (globalIndex: number): number | undefined => {
+        if (globalIndex === chunkStart - 1 && this.hasPreviousSample) return this.previousSample;
+        const localIndex = globalIndex - chunkStart;
+        if (localIndex < 0 || localIndex >= inputData.length) return undefined;
+        return inputData[localIndex];
+      };
+
+      const left = readSample(leftIndex);
+      if (left === undefined) break;
+      if (fraction === 0) {
+        output.push(left);
+      } else {
+        const right = readSample(rightIndex);
+        // Preserve the fractional position for the next callback instead of
+        // extrapolating at this chunk boundary.
+        if (right === undefined) break;
+        output.push(left * (1 - fraction) + right * fraction);
+      }
+      this.nextOutputSourcePosition += sourceStep;
+    }
+
+    this.processedSourceSamples = chunkEnd;
+    this.previousSample = inputData[inputData.length - 1];
+    this.hasPreviousSample = true;
+    return Float32Array.from(output);
+  }
+
+  reset(): void {
+    this.processedSourceSamples = 0;
+    this.nextOutputSourcePosition = 0;
+    this.previousSample = 0;
+    this.hasPreviousSample = false;
+  }
+}
+
 /** 将 Float32Array PCM 数据转换为 Int16Array（供 ASR WebSocket 发送） */
 export function float32ToInt16(input: Float32Array): Int16Array {
   const pcmData = new Int16Array(input.length);

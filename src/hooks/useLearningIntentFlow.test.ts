@@ -33,12 +33,12 @@ describe('shouldAutoStartLearningIntent', () => {
     }))).toBe(false);
   });
 
-  it('asks for confirmation when the model is not yet confident', () => {
-    expect(shouldAutoStartLearningIntent(createPlan({ confidence: 'medium' }))).toBe(false);
+  it('starts without exposing an internal confidence state when there is no real ambiguity', () => {
+    expect(shouldAutoStartLearningIntent(createPlan({ confidence: 'medium' }))).toBe(true);
   });
 
   it('always starts after the user has resolved the ambiguity', () => {
-    expect(shouldAutoStartLearningIntent(createPlan({ confidence: 'medium' }), true)).toBe(true);
+    expect(shouldAutoStartLearningIntent(createPlan({ confidence: 'medium' }))).toBe(true);
   });
 });
 

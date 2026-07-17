@@ -27,7 +27,6 @@ import { TutorAgentPanel } from './tutor/TutorAgentPanel';
 import { buildTutorAgentReviewContext, formatLearnerProfileForTutorAgent } from './tutor/tutor-agent-adapter';
 import { getPreference } from '@/lib/db';
 import type { AITutorProps } from './tutor/tutor-types';
-import { useWorkshopReadiness } from '@/components/apps/hooks/useWorkshopReadiness';
 import {
   TUTOR_PREFERENCES_DEFAULT,
   TUTOR_SHOW_TIMESTAMPS_KEY,
@@ -98,23 +97,6 @@ export function SafeAITutor(props: AITutorProps) {
     ],
   );
 
-  // 这层与应用矩阵共用同一个纯证据门。即使远端内容判断暂时不可用，
-  // 短录音 / 零散闲聊也不会在右栏出现“考试速查表”等误导入口。
-  const readinessTranscript = React.useMemo(() => props.segments.map((segment) => ({
-      id: segment.id,
-      text: segment.text,
-      startMs: segment.startMs,
-      endMs: segment.endMs,
-      confidence: 1,
-      isFinal: true,
-    })), [props.segments]);
-  const { assessment: workshopReadiness } = useWorkshopReadiness({
-    transcript: readinessTranscript,
-    contextTitle: props.lessonTitle,
-    contextType: 'review',
-    activeAnchorCount: 0,
-  });
-
   return (
     <TutorErrorBoundary panelName="AI 同桌" resetKeys={resetKeys}>
       <div className="flex h-full flex-col">
@@ -146,9 +128,6 @@ export function SafeAITutor(props: AITutorProps) {
               returnTimestamps: tutorPrefs.showTimestamps,
               thinkingGuide: tutorPrefs.thinkingGuide,
             }}
-            onOpenApp={props.onOpenAppInWorkspace}
-            availableAppKeys={workshopReadiness?.allowedAppKeys}
-            workshopReadinessStatus={workshopReadiness?.status}
           />
         </div>
       </div>

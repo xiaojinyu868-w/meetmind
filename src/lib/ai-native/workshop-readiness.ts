@@ -1,5 +1,6 @@
-import { isWorkshopAppKey } from '@/lib/ai-native/app-catalog';
+import { getWorkshopAppKeysForTier, isWorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import type {
+  ContextTier,
   WorkshopAppKey,
   WorkshopContentKind,
   WorkshopReadinessAssessment,
@@ -34,6 +35,8 @@ export interface AssessWorkshopReadinessInput {
   keyDifficulties?: string[];
   summary?: string;
   goalIntent?: string;
+  /** 当前学习对象。默认单课；unit / exam 才允许跨课压缩型应用。 */
+  contextTier?: ContextTier;
 }
 
 function compact(value: unknown, max: number): string {
@@ -56,6 +59,23 @@ export function fallbackWorkshopReadiness(
   input: AssessWorkshopReadinessInput,
 ): WorkshopReadinessAssessment {
   const evidence = getWorkshopEvidence(input.transcript);
+  const tierAppKeys = getWorkshopAppKeysForTier(input.contextTier ?? 'class');
+  const isCuratedDemo = input.contextType?.trim().toLowerCase() === 'demo';
+
+  // 官方试听课不是用户上传的未知短片段，而是经过策划、证据完整的能力样本。
+  // 它必须让用户看见完整应用矩阵；真实短碎片仍继续走下方严格门禁。
+  if (isCuratedDemo && evidence.segmentCount >= 2 && evidence.characterCount >= 80) {
+    return {
+      status: 'ready',
+      contentKind: 'lecture',
+      recommendedAppKey: 'flashcards',
+      allowedAppKeys: tierAppKeys,
+      reason: 'ready',
+      confidence: 'high',
+      evidence,
+    };
+  }
+
   if (evidence.segmentCount < 2 || evidence.characterCount < 80 || evidence.durationMs < 20_000) {
     return {
       status: 'not_ready',
@@ -69,30 +89,51 @@ export function fallbackWorkshopReadiness(
   }
 
   if (evidence.characterCount < 220 || evidence.durationMs < 60_000) {
+    const limitedKeys: WorkshopAppKey[] = [];
+    if ((input.activeAnchorCount ?? 0) > 0 && tierAppKeys.includes('quiz')) limitedKeys.push('quiz');
+    if ((input.keyDifficulties?.length ?? 0) > 0 && tierAppKeys.includes('flashcards')) limitedKeys.push('flashcards');
+
+    // “limited” 必须真的有一项可靠动作可做。旧逻辑会返回 limited + 空列表，
+    // 前端看起来像有能力，执行层却全部拒绝，用户只会得到一次无意义失败。
+    if (limitedKeys.length === 0) {
+      return {
+        status: 'not_ready',
+        contentKind: 'fragment',
+        recommendedAppKey: null,
+        allowedAppKeys: [],
+        reason: 'insufficient_content',
+        confidence: 'high',
+        evidence,
+      };
+    }
+
     return {
       status: 'limited',
       contentKind: 'fragment',
-      recommendedAppKey: null,
-      allowedAppKeys: [],
+      recommendedAppKey: limitedKeys[0],
+      allowedAppKeys: limitedKeys.slice(0, 2),
       reason: 'partial_learning',
-      confidence: 'low',
+      confidence: 'medium',
       evidence,
     };
   }
 
-  const recommendedAppKey = (input.activeAnchorCount ?? 0) > 0
+  const candidateRecommendation = (input.activeAnchorCount ?? 0) > 0
     ? 'quiz'
     : (input.keyDifficulties?.length ?? 0) > 0
       ? 'flashcards'
       : evidence.segmentCount >= 24
         ? 'mindmap'
         : null;
+  const recommendedAppKey = candidateRecommendation && tierAppKeys.includes(candidateRecommendation)
+    ? candidateRecommendation
+    : null;
 
   return {
     status: 'ready',
     contentKind: 'unknown',
     recommendedAppKey,
-    allowedAppKeys: ALL_WORKSHOP_APP_KEYS,
+    allowedAppKeys: tierAppKeys,
     reason: 'ready',
     confidence: 'low',
     evidence,
@@ -111,6 +152,7 @@ export function sanitizeWorkshopReadinessAssessment(
   input: AssessWorkshopReadinessInput,
 ): WorkshopReadinessAssessment {
   const fallback = fallbackWorkshopReadiness(input);
+  const tierAppKeys = getWorkshopAppKeysForTier(input.contextTier ?? 'class');
   if (!raw || typeof raw !== 'object') return fallback;
 
   const value = raw as Record<string, unknown>;
@@ -141,11 +183,11 @@ export function sanitizeWorkshopReadinessAssessment(
     };
   }
 
-  const allowedAppKeys = sanitizeAppKeys(value.allowedAppKeys);
+  const allowedAppKeys = sanitizeAppKeys(value.allowedAppKeys).filter((key) => tierAppKeys.includes(key));
   // “推荐什么”与“产品能做什么”是两件事。材料已经完整时，模型只负责挑出
   // 此刻最合适的一项，不再通过 allowedAppKeys 裁掉其余稳定能力。
   const resolvedAllowed = status === 'ready'
-    ? ALL_WORKSHOP_APP_KEYS
+    ? tierAppKeys
     : allowedAppKeys.slice(0, 2);
   const rawRecommendation = typeof value.recommendedAppKey === 'string' && isWorkshopAppKey(value.recommendedAppKey)
     ? value.recommendedAppKey

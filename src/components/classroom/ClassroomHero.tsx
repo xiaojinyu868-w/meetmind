@@ -28,10 +28,6 @@ export interface ClassroomHeroProps {
   audioSource?: RecorderAudioSource;
   /** 切换录音来源 */
   onChangeAudioSource?: (source: RecorderAudioSource) => void;
-  /** 是否启用说话人分离（多人会议模式） */
-  speakerDiarization?: boolean;
-  /** 切换说话人分离 */
-  onChangeSpeakerDiarization?: (enabled: boolean) => void;
   /** 把文件/网页/音视频放入学习上下文 */
   onAddMaterial?: () => void;
   /** 搜索已有课堂和资料 */
@@ -128,8 +124,6 @@ export function ClassroomHero({
   onStartRecording,
   audioSource = 'mic',
   onChangeAudioSource,
-  speakerDiarization = false,
-  onChangeSpeakerDiarization,
   onAddMaterial,
   onSearch,
   recoverySlot,
@@ -163,28 +157,6 @@ export function ClassroomHero({
               <AudioSourceRail value={audioSource} onChange={onChangeAudioSource} />
             ) : null}
           </div>
-
-          {onChangeSpeakerDiarization ? (
-            <button
-              type="button"
-              onClick={() => onChangeSpeakerDiarization(!speakerDiarization)}
-              className={cn(
-                'mt-3 inline-flex items-center gap-2 rounded-lg px-1 py-2 text-[12px] transition-colors',
-                speakerDiarization ? 'text-pine' : 'text-ink-muted hover:text-ink-secondary',
-              )}
-              aria-pressed={speakerDiarization}
-            >
-              <span
-                className={cn(
-                  'h-1.5 w-1.5 rounded-full',
-                  speakerDiarization ? 'bg-pine' : 'bg-ink-muted/60',
-                )}
-              />
-              {speakerDiarization
-                ? COPY.recording.multiSpeakerEnabled
-                : COPY.recording.multiSpeaker}
-            </button>
-          ) : null}
 
           <div className="mt-7 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
             <button

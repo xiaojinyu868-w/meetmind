@@ -37,14 +37,6 @@ import type { InlineAppInteraction } from '@/components/classroom/InlineAppCard'
 /** 最多保留多少条历史（防止无限膨胀） */
 const MAX_PERSISTED_MESSAGES = 50;
 
-/** 切到录课态时同桌自动说一句。 */
-const AUTO_LISTENING_MSG: CompanionMessage = {
-  id: 'auto-listening',
-  role: 'companion',
-  content: '我在听这节课。听不懂的地方你直接问我。',
-  createdAt: Date.now(),
-};
-
 export interface UseClassroomCompanionReturn {
   messages: CompanionMessage[];
   /** 流式追加中的 AI 消息（还未 commit 进 messages）。null 表示没在流。 */
@@ -55,7 +47,7 @@ export interface UseClassroomCompanionReturn {
   send: (text: string) => Promise<void>;
   /** 停止当前流式请求 */
   stop: () => void;
-  /** 同桌切到 listening 态时调用一次，追加一句开场白 */
+  /** 同桌切到 listening 态时调用；存在感由面板状态和可点问题表达，不再追加寒暄消息。 */
   markListening: () => void;
   /** inline 模式：用户在错误态的内联卡片里点"再试一次" */
   retryInlineApp: (messageId: string) => void;
@@ -193,8 +185,6 @@ export function useClassroomCompanion(
     return () => { alive = false; };
   }, []);
 
-  // 防抖：避免在同一次 listening 切换中重复追加 AUTO_LISTENING_MSG
-  const hasListeningGreetedRef = useRef(false);
   // 防抖：开场白只注入一次（lessons 后续变化不再改开场白）
   const hasHelloInjectedRef = useRef(false);
   // 是否已从 preferences 水合——未水合前不写回，避免用空数组覆盖持久化的历史
@@ -210,7 +200,6 @@ export function useClassroomCompanion(
     setIsHydrated(false);
     setStreamingMessage(null);
     quizAttemptsRef.current = [];
-    hasListeningGreetedRef.current = false;
     hasHelloInjectedRef.current = false;
 
     if (isRecording) {
@@ -285,12 +274,8 @@ export function useClassroomCompanion(
   }, [lessons, isRecording, isHydrated]);
 
   const markListening = useCallback(() => {
-    if (hasListeningGreetedRef.current) return;
-    hasListeningGreetedRef.current = true;
-    setMessages((prev) => {
-      if (prev.some((m) => m.id === 'auto-listening')) return prev;
-      return [...prev, { ...AUTO_LISTENING_MSG, createdAt: Date.now() }];
-    });
+    // 录课态的 header、章鱼和轻问题已经足够表达“同学在听”。
+    // 不再向对话历史写入一条没有学习价值的自动寒暄。
   }, []);
 
   // ── 新课清爽：isRecording 从 false → true 时清空可见对话 ──
@@ -306,7 +291,6 @@ export function useClassroomCompanion(
       setMessages([]);
       setStreamingMessage(null);
       quizAttemptsRef.current = [];
-      hasListeningGreetedRef.current = false;
       // 新课不再走首次 hello 注入
       hasHelloInjectedRef.current = true;
     }

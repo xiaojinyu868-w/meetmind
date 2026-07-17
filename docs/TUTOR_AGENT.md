@@ -6,12 +6,13 @@ Tutor 的唯一新主链路是 `POST /api/tutor/agent`，由 `buildTutorSystemPr
 
 全局 Ask MeetMind 使用 `mode='global'`：
 
-- quick：直接回答，不生成长期记忆。
-- deep：先调用 `/api/tutor/intent` 得到 `LearningIntentPlan`。模型应先利用已有课堂和个人上下文；只有答案会明显改变路径时才返回 1-3 个动态单选/多选问题。前端回传包含问题与选项语义的 `answers[{questionId, question, optionIds, optionLabels}]` 后取得最终计划并开始，避免让用户编辑一份 AI 表单。模型可在回答末尾输出 `---学习进展---` 候选，前端仍须逐条让用户确认。
-- `LearnerProfile.memories` 只存用户确认过的内容；应用结果、对话摘要与模型推断只能先进入 `recentLearningActivities`。
+- quick：直接回答，不做意图确认，也不在正文里生成记忆标记；回答持久化后仍由独立流程判断用户是否真实表现出值得长期保留的学习理解。
+- deep：先调用 `/api/tutor/intent` 得到 `LearningIntentPlan`。模型应先利用已有课堂和个人上下文；没有真实歧义时前端立即开始，不展示内部置信度或额外确认卡。只有答案会明显改变路径时才暂停，并通常只返回 1 个动态选择问题（两个问题彼此独立且都足以改变路径时最多 2 个）。前端回传包含问题与选项语义的 `answers[{questionId, question, optionIds, optionLabels}]` 后取得最终计划并自动开始。主回答保持自然纯文本。
+- 上下文整理不依赖 quick / deep 开关：任一全局学习问答持久化后，`/api/tutor/memory` 都依据本轮用户真实表达/作答静默判断是否形成最多 2 条新增或更新的学习理解。证据不足返回空数组，愿望、建议、人格与敏感推断不能进入长期理解；访客态与 Tutor 主链路一致可用，route 内限流。
+- `LearnerProfile.memories` 是模型整理、用户可纠正/暂停/忘记的学习理解；`recentLearningActivities` 是课堂、提问、材料和应用等客观学习现场，始终保持独立，不被自动升级或改写成对用户的判断。
 - `GlobalAskPanel` 基于 ChatBase，`useGlobalAskHistory` 只恢复 `metadata.scope='global-ask'` 的 IndexedDB 对话，避免误接某节课的复习聊天。
 
-当前 prompt telemetry 版本：`2026-07-tutor-v6-global-context`。
+当前 prompt telemetry 版本：`2026-07-tutor-v9-consumer-context`。goal 首次会面改为“先帮助、后理解”：不做画像访谈，模型静默维护稳定上下文，仅在真实需要用户决定时追问。
 
 ---
 

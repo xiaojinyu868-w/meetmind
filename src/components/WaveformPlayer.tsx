@@ -306,7 +306,13 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
       audioUrlRef.current = null;
     }
 
-    wavesurferRef.current.load(url);
+    let cancelled = false;
+    void wavesurferRef.current.load(url).catch((error: unknown) => {
+      if (cancelled || (error instanceof DOMException && error.name === 'AbortError')) return;
+      setIsReady(false);
+      setLoadProgress(0);
+      setLoadError(true);
+    });
 
     // 超时兜底：wavesurfer 的 MediaElement backend 加载失败不一定触发 'error' 事件
     // （audio onerror 可能不冒泡），导致 isReady 永远 false 卡在"加载音频..."大片灰。
@@ -319,6 +325,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
     }, 15000);
 
     return () => {
+      cancelled = true;
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
         loadingTimeoutRef.current = null;

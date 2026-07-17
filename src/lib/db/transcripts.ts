@@ -77,11 +77,11 @@ export async function getSessionTranscripts(sessionId: string): Promise<Transcri
  * 按 startMs 时间戳匹配：取时间区间重叠最大的 diarization 句子的 speakerId。
  *
  * @param sessionId 会话 ID
- * @param updates { startMs → speakerId } 映射（startMs 匹配已有 segment 的 startMs）
+ * @param speakerMap diarization 句子的时间区间与 speakerId
  */
 export async function updateTranscriptSpeakerIds(
   sessionId: string,
-  speakerMap: Array<{ startMs: number; speakerId: string }>,
+  speakerMap: Array<{ startMs: number; endMs?: number; speakerId: string }>,
 ): Promise<number> {
   const segments = await db.transcripts
     .where('sessionId')
@@ -90,18 +90,23 @@ export async function updateTranscriptSpeakerIds(
 
   let updated = 0;
   for (const seg of segments) {
-    // 按 startMs 最接近原则匹配
-    let bestMatch: { startMs: number; speakerId: string } | null = null;
+    // 时间区间重叠优先；老数据没有 endMs 时退化为近邻匹配。
+    let bestMatch: { startMs: number; endMs?: number; speakerId: string } | null = null;
+    let bestOverlap = 0;
     let bestDist = Infinity;
     for (const m of speakerMap) {
+      const overlap = typeof m.endMs === 'number'
+        ? Math.max(0, Math.min(seg.endMs, m.endMs) - Math.max(seg.startMs, m.startMs))
+        : 0;
       const dist = Math.abs(seg.startMs - m.startMs);
-      if (dist < bestDist) {
+      if (overlap > bestOverlap || (overlap === bestOverlap && dist < bestDist)) {
+        bestOverlap = overlap;
         bestDist = dist;
         bestMatch = m;
       }
     }
-    // 容忍 3 秒以内的偏差（实时 ASR 和非实时 ASR 的时间戳可能有差异）
-    if (bestMatch && bestDist < 3000) {
+    // 无重叠时只容忍 1.5 秒偏差，错误身份比缺少标签更伤信任。
+    if (bestMatch && (bestOverlap > 0 || bestDist < 1500)) {
       await db.transcripts.update(seg.id!, { speakerId: bestMatch.speakerId });
       updated++;
     }

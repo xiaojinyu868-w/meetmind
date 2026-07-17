@@ -27,7 +27,7 @@ export async function submitAsyncTask(
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
 
   const requestBody = {
-    model: 'qwen3-asr-flash-filetrans',
+    model: process.env.DASHSCOPE_ASR_FILE_MODEL || 'qwen3-asr-flash-filetrans-2025-11-17',
     input: {
       file_url: fileUrl,
     },
@@ -265,7 +265,7 @@ export async function transcribeWavChunk(
   const audioBase64 = wavBuffer.toString('base64');
 
   const requestBody = {
-    model: 'qwen3-asr-flash',
+    model: process.env.DASHSCOPE_ASR_BATCH_MODEL || 'qwen3-asr-flash-2026-02-10',
     input: {
       audio: [
         {

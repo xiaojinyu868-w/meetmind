@@ -64,6 +64,19 @@ export interface ImageConfigResponse {
   model?: string;
 }
 
+/**
+ * 首次进入信息图时先生成有课堂依据的结构化草案；已经有结果时直接沿用，
+ * 没有 draft 生成器的旧调用方才允许落到本地可读版。
+ */
+export async function resolveInfographicGenerationBase(
+  result: AppExecutionResult | null,
+  onGenerateDraft?: () => Promise<AppExecutionResult | null>,
+): Promise<AppExecutionResult | null> {
+  if (result) return result;
+  if (!onGenerateDraft) return null;
+  return onGenerateDraft();
+}
+
 export interface SceneItem {
   key: string;
   label: string;

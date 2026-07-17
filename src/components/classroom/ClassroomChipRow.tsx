@@ -9,8 +9,8 @@
  *   ←———— 稳定区 3 个，永远在 ————→     ←—— AI 写的最多 2 个 ——→
  *
  * 稳定区：肌肉记忆，按钮文案不变；点了发出固定 utterance（除"记一下"是客户端动作）。
- *   - 「刚才那段」 → 发送 "请回放刚才那段，把核心讲一句"
- *   - 「我没跟上」 → 发送 "我刚没跟上，从断点把主线接给我"
+ *   - 「刚才那段」 → 发送用户自然会说的“刚才那段讲了什么？”
+ *   - 「我没跟上」 → 发送用户自然会说的“我没跟上，帮我接一下主线。”
  *   - 「记一下」 → onMarkMoment 客户端给当前转录段打标，不发对话
  *
  * 动态区：useClassroomChipPulse 后台 30s 一次写候选 chip 缓存到 IndexedDB。
@@ -25,6 +25,7 @@
 
 import * as React from 'react';
 import { cn } from '@/lib/utils';
+import { COPY } from '@/lib/ui/copy';
 
 export type ClassroomStableChipKind = 'recap' | 'catch-up' | 'mark-moment';
 
@@ -55,17 +56,17 @@ const STABLE_CHIPS: Array<{
 }> = [
   {
     kind: 'recap',
-    label: '刚才那段',
-    utterance: '请回放刚才那段，把核心用一句话讲清楚。',
+    label: COPY.companion.quickRecap,
+    utterance: COPY.companion.quickRecapQuestion,
   },
   {
     kind: 'catch-up',
-    label: '我没跟上',
-    utterance: '我刚没跟上，从断点把主线最少必要的信息接给我，让我能继续在场。',
+    label: COPY.companion.quickCatchUp,
+    utterance: COPY.companion.quickCatchUpQuestion,
   },
   {
     kind: 'mark-moment',
-    label: '记一下',
+    label: COPY.companion.quickMark,
     // 客户端动作，不发 utterance
   },
 ];

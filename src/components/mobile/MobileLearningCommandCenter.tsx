@@ -29,9 +29,6 @@ export function MobileLearningCommandCenter({
           <h1 className="mt-5 max-w-[19rem] font-serif text-[32px] font-medium leading-[1.08] tracking-[-0.035em] text-ink">
             {COPY.mobileHome.title}
           </h1>
-          <p className="mt-3 text-[14px] leading-6 text-ink-secondary">
-            {COPY.mobileHome.body}
-          </p>
 
           <button
             type="button"
@@ -72,10 +69,10 @@ function CommandAction({
     <button
       type="button"
       onClick={onClick}
-      className={`flex min-h-[58px] min-w-0 items-center justify-center gap-2 rounded-[14px] border px-2 text-center text-[13px] font-medium transition active:scale-[0.98] ${featured ? 'border-vermilion/22 bg-vermilion-fog text-vermilion' : 'border-divider bg-white text-ink-secondary hover:border-pine/25 hover:text-pine'}`}
+      className={`flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[14px] border px-1.5 text-center text-[12.5px] font-medium transition active:scale-[0.98] ${featured ? 'border-vermilion/22 bg-vermilion-fog text-vermilion' : 'border-divider bg-white text-ink-secondary hover:border-pine/25 hover:text-pine'}`}
     >
       <Icon size={16} strokeWidth={1.9} />
-      <span className="truncate">{label}</span>
+      <span className="w-full whitespace-nowrap leading-4">{label}</span>
     </button>
   );
 }

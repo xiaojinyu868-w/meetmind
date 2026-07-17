@@ -344,15 +344,48 @@ describe('adapters round-trip', () => {
     expect(restored.model).toBe('mymodel');
   });
 
-  it('buildExecutionContextFromPack throws on multi-lesson pack', () => {
+  it('buildExecutionContextFromPack flattens multi-lesson pack while preserving source identity', () => {
     const pack: ContextPack = {
       tier: 'unit',
       lessons: [
-        { sessionId: 'a', transcript: [], anchors: [] },
-        { sessionId: 'b', transcript: [], anchors: [] },
+        {
+          sessionId: 'b',
+          title: '第二讲',
+          occurredAt: 2,
+          transcript: [seg('b1', 0, 4_000, '第二讲讨论价格弹性。')],
+          anchors: [],
+          summary: '价格弹性',
+        },
+        {
+          sessionId: 'a',
+          title: '第一讲',
+          occurredAt: 1,
+          transcript: [seg('a1', 0, 5_000, '第一讲讨论边际成本。')],
+          anchors: [],
+          summary: '边际成本',
+        },
       ],
     };
-    expect(() => buildExecutionContextFromPack(pack, { intent: 't' })).toThrow(/multi-lesson/);
+    const restored = buildExecutionContextFromPack(pack, { intent: 't' });
+    expect(restored.contextTier).toBe('unit');
+    expect(restored.input.transcript).toHaveLength(2);
+    expect(restored.input.transcript[0]).toMatchObject({
+      sourceItemId: 'a',
+      sourceTitle: '第一讲',
+      startMs: 0,
+      endMs: 5_000,
+    });
+    expect(restored.input.transcript[1]).toMatchObject({
+      sourceItemId: 'b',
+      sourceTitle: '第二讲',
+      startMs: 6_000,
+      endMs: 10_000,
+    });
+    expect(restored.memory.summary).toBe('边际成本\n价格弹性');
+    expect(restored.input.metadata?.lessonSources).toEqual([
+      { sessionId: 'a', title: '第一讲', offsetMs: 0, durationMs: 5_000 },
+      { sessionId: 'b', title: '第二讲', offsetMs: 6_000, durationMs: 4_000 },
+    ]);
   });
 
   it('buildExecutionContextFromPack throws on empty pack', () => {
@@ -427,6 +460,28 @@ describe('validatePack', () => {
       ],
     });
     expect(ok.ok).toBe(true);
+  });
+
+  it('unit tier rejects a single lesson masquerading as cross-lesson context', () => {
+    const result = validatePack({
+      tier: 'unit',
+      lessons: [{ sessionId: 'a', transcript: [], anchors: [] }],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/at least 2 lessons/);
+  });
+
+  it('rejects malformed transcript segments before adapting a runtime payload', () => {
+    const result = validatePack({
+      tier: 'class',
+      lessons: [{
+        sessionId: 'a',
+        transcript: [{ id: 'bad', text: 'bad', startMs: 10, endMs: 1, isFinal: true }],
+        anchors: [],
+      }],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/invalid transcript segment/);
   });
 });
 

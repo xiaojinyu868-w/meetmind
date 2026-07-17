@@ -9,7 +9,9 @@ import type { MindmapNode } from '@/lib/ai-native/plugins/mindmap.plugin';
 
 export interface LayoutNode {
   id: string;
+  /** 画布上显示的短标签。完整内容保留在 fullTitle，并可在大纲中阅读。 */
   title: string;
+  fullTitle: string;
   depth: number;
   x: number;
   y: number;
@@ -146,6 +148,24 @@ export function measureText(text: string, fontSize: number): number {
   return Math.ceil(w);
 }
 
+/**
+ * 思维导图是“定位地图”，不是把整段笔记横着铺进 SVG。
+ * 这里只裁剪画布标签，数据与大纲仍保留完整标题；按估算像素而不是中英文字符数裁剪，
+ * 避免英文节点特别宽、中文节点又被裁得过短。
+ */
+export function compactVisualLabel(text: string, fontSize: number, maxWidth = 260): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized || measureText(normalized, fontSize) <= maxWidth) return normalized;
+
+  const suffix = '…';
+  let result = '';
+  for (const char of normalized) {
+    if (measureText(`${result}${char}${suffix}`, fontSize) > maxWidth) break;
+    result += char;
+  }
+  return `${result.trimEnd()}${suffix}`;
+}
+
 export function getFontSize(depth: number): number {
   if (depth === 0) return FONT_SIZE_ROOT;
   if (depth === 1) return FONT_SIZE_L1;
@@ -162,7 +182,9 @@ export function buildLayoutTree(
   return nodes.map((node, idx) => {
     const id = `${parentId}-${idx}`;
     const fontSize = getFontSize(depth);
-    const textW = measureText(node.title, fontSize);
+    const fullTitle = node.title.replace(/\s+/g, ' ').trim();
+    const title = compactVisualLabel(fullTitle, fontSize, depth <= 1 ? 230 : 270);
+    const textW = measureText(title, fontSize);
     const hasChildren = Array.isArray(node.children) && node.children.length > 0;
     // 文字坐在墨线上：宽度 = 文字宽 + 少量右侧留白（有子节点时给折叠点位让位）
     const width = textW + 6 + (hasChildren ? MARKER_RESERVE : 0);
@@ -174,7 +196,7 @@ export function buildLayoutTree(
         ? buildLayoutTree(node.children!, depth + 1, expandedSet, id)
         : [];
 
-    return { id, title: node.title, depth, x: 0, y: 0, width, height, children: childLayouts, expanded, hasChildren };
+    return { id, title, fullTitle, depth, x: 0, y: 0, width, height, children: childLayouts, expanded, hasChildren };
   });
 }
 

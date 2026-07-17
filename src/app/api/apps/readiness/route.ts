@@ -20,6 +20,7 @@ const BodySchema = z.object({
   keyDifficulties: z.array(z.string().max(240)).max(24).optional(),
   summary: z.string().max(4_000).optional(),
   goalIntent: z.string().max(1_000).optional(),
+  contextTier: z.enum(['class', 'unit', 'exam']).optional(),
 });
 
 export async function POST(request: NextRequest) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WORKSHOP_APP_CATALOG } from './app-catalog';
+import { getWorkshopAppKeysForTier, WORKSHOP_APP_CATALOG } from './app-catalog';
 import { COPY } from '@/lib/ui/copy';
 
 describe('WORKSHOP_APP_CATALOG copy', () => {
@@ -31,5 +31,11 @@ describe('WORKSHOP_APP_CATALOG copy', () => {
       expect(app.bestFor.length).toBeGreaterThan(8);
       expect(app.timeLabel).toContain('约');
     }
+  });
+
+  it('keeps exam cheatsheets out of a single lesson', () => {
+    expect(getWorkshopAppKeysForTier('class')).not.toContain('cheatsheet');
+    expect(getWorkshopAppKeysForTier('unit')).toContain('cheatsheet');
+    expect(getWorkshopAppKeysForTier('exam')).toContain('cheatsheet');
   });
 });

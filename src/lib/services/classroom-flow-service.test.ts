@@ -56,4 +56,24 @@ describe('classroom-flow-service', () => {
     expect(flow.recent.map((item) => item.id)).toEqual(['r4', 'r5', 'r6', 'r7']);
     expect(flow.keep).toHaveLength(4);
   });
+
+  it('drops internal teaching-move enum names instead of leaking them into the classroom UI', () => {
+    const flow = sanitizeClassroomFlow({
+      now: {
+        id: 'detail',
+        title: '确认客户姓名 Jane Bond',
+        teachingMove: 'listening_detail',
+        anchorMs: 12_000,
+      },
+      recent: [{
+        id: 'context',
+        title: '交代搬家背景',
+        teachingMove: '结合语境解释表达',
+        anchorMs: 6_000,
+      }],
+    }, 20_000);
+
+    expect(flow.now?.teachingMove).toBeUndefined();
+    expect(flow.recent[0]?.teachingMove).toBe('结合语境解释表达');
+  });
 });

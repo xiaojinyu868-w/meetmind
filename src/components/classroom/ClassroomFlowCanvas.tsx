@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { BookOpen, CircleDot, Sparkles } from 'lucide-react';
+import { BookOpen, CircleDot } from 'lucide-react';
 import { COPY } from '@/lib/ui/copy';
 import type { ClassroomFlowState, ClassroomSignalKind } from '@/types/classroom-flow';
 
@@ -31,33 +31,25 @@ function formatTime(ms: number): string {
 
 function EmptyFlow({ elapsedMs, isUnderstanding }: { elapsedMs: number; isUnderstanding: boolean }) {
   return (
-    <div className="flex h-full flex-col justify-between px-6 py-7 lg:px-8 lg:py-8">
-      <div>
-        <div className="flex items-center justify-between gap-4">
+    <div className="flex h-full flex-col px-6 py-7 lg:px-8 lg:py-8">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <CircleDot size={14} className="text-pine" aria-hidden />
           <p className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-pine">
             {COPY.classroomFlow.eyebrow}
           </p>
-          <span className="font-mono text-[11px] tabular-nums text-ink-muted">{formatTime(elapsedMs)}</span>
         </div>
-        <h2 className="mt-5 max-w-[28rem] text-[28px] font-semibold tracking-[-0.045em] text-ink lg:text-[34px]">
-          {COPY.classroomFlow.listeningTitle}
-        </h2>
-        <p className="mt-3 max-w-[34rem] text-[14px] leading-[1.8] text-ink-secondary">
-          {isUnderstanding ? COPY.classroomFlow.understanding : COPY.classroomFlow.listeningBody}
-        </p>
+        <span className="font-mono text-[11px] tabular-nums text-ink-muted">{formatTime(elapsedMs)}</span>
       </div>
 
-      <div className="mt-8 border-t border-divider pt-5">
-        <div className="flex items-start gap-3">
-          <span className="mt-1 flex h-7 w-7 items-center justify-center rounded-full bg-pine-mist text-pine">
-            <Sparkles size={14} strokeWidth={1.8} />
-          </span>
-          <div>
-            <p className="text-[13px] font-medium text-ink">{COPY.classroomFlow.emptyPromiseTitle}</p>
-            <p className="mt-1 max-w-[30rem] text-[12.5px] leading-[1.7] text-ink-muted">
-              {COPY.classroomFlow.emptyPromiseBody}
-            </p>
-          </div>
+      <div className="flex flex-1 items-center pb-14">
+        <div>
+          <h2 className="max-w-[28rem] text-[28px] font-semibold tracking-[-0.045em] text-ink lg:text-[34px]">
+          {COPY.classroomFlow.listeningTitle}
+          </h2>
+          {isUnderstanding ? (
+            <p className="mt-3 text-[13px] text-ink-muted">{COPY.classroomFlow.understanding}</p>
+          ) : null}
         </div>
       </div>
     </div>

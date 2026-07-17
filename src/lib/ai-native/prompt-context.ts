@@ -55,6 +55,9 @@ export function buildPromptTranscriptContext(
       if (includeTimestamp) {
         prefixParts.push(`[${formatTimestamp(segment.startMs)}-${formatTimestamp(segment.endMs)}]`);
       }
+      if (segment.sourceItemId && (index === 0 || transcript[index - 1]?.sourceItemId !== segment.sourceItemId)) {
+        prefixParts.push(`【来源：${normalizeText(segment.sourceTitle || segment.sourceItemId)}】`);
+      }
       const prefix = prefixParts.length > 0 ? `${prefixParts.join(' ')} ` : '';
       return { prefix, text };
     })
@@ -115,4 +118,3 @@ export function buildTerminologyHintBlock(terminologyHint: string | undefined): 
   if (!terminologyHint?.trim()) return '';
   return `\n关键术语表（请在输出中使用正规写法，避免 ASR 误识别变体）：\n${terminologyHint.trim()}`;
 }
-

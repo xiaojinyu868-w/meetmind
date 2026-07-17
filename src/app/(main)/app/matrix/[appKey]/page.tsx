@@ -13,6 +13,7 @@ import { getWorkshopAppByKey, isWorkshopAppKey, type WorkshopAppKey } from '@/li
 import { useAppExecution } from '@/components/apps/hooks/useAppExecution';
 import { AppWindowShell } from '@/components/apps/windows/AppWindowShell';
 import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
+import { COPY } from '@/lib/ui/copy';
 
 const WORKSHOP_MODEL_PREFERENCE = 'ai_workshop_model';
 
@@ -91,6 +92,41 @@ function mapDemoAnchors(sessionId: string): Anchor[] {
 type LoadState = 'loading' | 'ready' | 'empty' | 'error';
 const LOAD_TIMEOUT_MS = 12000;
 
+function MatrixRouteState({
+  title,
+  body,
+  primaryHref,
+  primaryLabel,
+  secondaryHref,
+}: {
+  title: string;
+  body?: string;
+  primaryHref?: string;
+  primaryLabel?: string;
+  secondaryHref?: string;
+}) {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-canvas p-6">
+      <section className="w-full max-w-md rounded-2xl border border-divider bg-white p-6 text-center">
+        <p className="text-lg font-semibold text-ink">{title}</p>
+        {body ? <p className="mt-2 text-sm leading-6 text-ink-secondary">{body}</p> : null}
+        {primaryHref && primaryLabel ? (
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            <Link href={primaryHref} className="inline-flex min-h-10 items-center rounded-full bg-pine px-4 text-sm font-medium text-white">
+              {primaryLabel}
+            </Link>
+            {secondaryHref ? (
+              <Link href={secondaryHref} className="inline-flex min-h-10 items-center rounded-full border border-divider px-4 text-sm font-medium text-ink-secondary">
+                {COPY.apps.matrix.backToMatrix}
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+    </main>
+  );
+}
+
 function buildInfographicContentContext(summaryOverview: string, transcript: TranscriptSegment[]): string {
   const normalizedSummary = summaryOverview.trim();
   if (normalizedSummary) return normalizedSummary;
@@ -116,6 +152,14 @@ export default function AppMatrixWindowPage() {
   const rawAppKey = params?.appKey;
   const appKey = Array.isArray(rawAppKey) ? rawAppKey[0] : rawAppKey || '';
   const app = useMemo(() => (isWorkshopAppKey(appKey) ? getWorkshopAppByKey(appKey) : undefined), [appKey]);
+  const backHref = useMemo(
+    () => `/app?workspace=apps${searchParams.get('guest') === '1' ? '&guest=1' : ''}`,
+    [searchParams],
+  );
+  const classroomHref = useMemo(
+    () => `/app${searchParams.get('guest') === '1' ? '?guest=1' : ''}`,
+    [searchParams],
+  );
 
   useEffect(() => {
     void runMemoryMigration().catch(() => undefined);
@@ -157,7 +201,7 @@ export default function AppMatrixWindowPage() {
     const timeout = window.setTimeout(() => {
       if (cancelled) return;
       setLoadState('error');
-      toast.error('应用窗口加载超时，请返回应用页重试。');
+      toast.error(COPY.apps.matrix.windowLoadTimeout);
     }, LOAD_TIMEOUT_MS);
     const run = async () => {
       setLoadState('loading');
@@ -246,7 +290,7 @@ export default function AppMatrixWindowPage() {
       if (!cancelled) {
         window.clearTimeout(timeout);
         setLoadState('error');
-        toast.error(error instanceof Error ? error.message : '这节课内容加载失败');
+        toast.error(error instanceof Error ? error.message : COPY.apps.matrix.windowLoadFailed);
       }
     });
 
@@ -275,75 +319,61 @@ export default function AppMatrixWindowPage() {
 
   if (!app) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-canvas p-6">
-        <div className="max-w-md rounded-2xl border border-divider bg-white p-6">
-          <p className="text-lg font-semibold text-ink">应用不存在</p>
-          <p className="mt-2 text-sm text-ink-secondary">该应用暂未启用。</p>
-          <Link href="/app?workspace=apps" className="mt-4 inline-flex rounded-lg bg-ink px-3 py-2 text-sm font-medium text-white">
-            返回应用
-          </Link>
-        </div>
-      </div>
+      <MatrixRouteState
+        title={COPY.apps.matrix.windowUnavailableTitle}
+        body={COPY.apps.matrix.windowUnavailableBody}
+        primaryHref={backHref}
+        primaryLabel={COPY.apps.matrix.backToMatrix}
+      />
     );
   }
 
   if (loadState === 'loading') {
-    return <div className="flex min-h-screen items-center justify-center bg-canvas text-sm text-ink-muted">正在整理这节课...</div>;
+    return <MatrixRouteState title={COPY.apps.matrix.windowLoading} />;
   }
 
   if (loadState === 'empty') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-canvas p-6">
-        <div className="max-w-lg rounded-2xl border border-divider bg-white p-6">
-          <p className="text-lg font-semibold text-ink">暂无可用课堂数据</p>
-          <p className="mt-2 text-sm leading-6 text-ink-secondary">还没找到能使用的课堂内容。请先录一节课或导入视频后再进入应用。</p>
-          <div className="mt-4 flex gap-2">
-            <Link href="/app" className="rounded-lg bg-ink px-3 py-2 text-sm font-medium text-white">
-              去导入数据
-            </Link>
-            <Link href="/app?workspace=apps" className="rounded-lg border border-divider px-3 py-2 text-sm font-medium text-ink-secondary">
-              返回应用
-            </Link>
-          </div>
-        </div>
-      </div>
+      <MatrixRouteState
+        title={COPY.apps.matrix.windowEmptyTitle}
+        body={COPY.apps.matrix.windowEmptyBody}
+        primaryHref={classroomHref}
+        primaryLabel={COPY.apps.matrix.windowBackToClassroom}
+        secondaryHref={backHref}
+      />
     );
   }
 
   if (loadState === 'error') {
-    return <div className="flex min-h-screen items-center justify-center bg-canvas text-sm text-danger-600">加载失败，请返回应用页重试。</div>;
+    return (
+      <MatrixRouteState
+        title={COPY.apps.matrix.windowErrorTitle}
+        body={COPY.apps.matrix.windowErrorBody}
+        primaryHref={backHref}
+        primaryLabel={COPY.apps.matrix.backToMatrix}
+      />
+    );
   }
 
   if (app.key === 'infographic') {
     return (
-      <div className="min-h-screen bg-canvas">
-        <header className="sticky top-0 z-20 border-b border-divider bg-white">
-          <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
-            <Link
-              href="/app?workspace=apps"
-              className="inline-flex items-center gap-1 rounded-full border border-divider bg-white px-3 py-1.5 text-sm text-ink-secondary hover:text-ink"
-            >
-              <span>←</span>
-              <span>返回应用</span>
-            </Link>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-lg font-semibold text-ink">信息图结果</p>
-              <p className="truncate text-xs text-ink-muted">独立结果页：优先看成品，可直接下载或继续修改。</p>
-            </div>
-          </div>
-        </header>
-        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-          <AppRenderSurface
-            appKey="infographic"
-            sessionId={sessionId}
-            result={execution.result}
-            taskState={execution.taskState}
-            contentContext={infographicContentContext}
-            onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
-            onResultUpdate={execution.updateResult}
-          />
-        </main>
-      </div>
+      <AppWindowShell
+        app={app}
+        taskState={execution.taskState}
+        onRegenerate={() => void execution.rerun()}
+        showPrimaryAction={false}
+        backHref={backHref}
+      >
+        <AppRenderSurface
+          appKey="infographic"
+          sessionId={sessionId}
+          result={execution.result}
+          taskState={execution.taskState}
+          contentContext={infographicContentContext}
+          onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
+          onResultUpdate={execution.updateResult}
+        />
+      </AppWindowShell>
     );
   }
 
@@ -354,6 +384,7 @@ export default function AppMatrixWindowPage() {
       onRegenerate={() => {
         void execution.rerun();
       }}
+      backHref={backHref}
     >
       <AppRenderSurface
         appKey={app.key}
@@ -365,7 +396,6 @@ export default function AppMatrixWindowPage() {
         onRegenerate={() => void execution.rerun()}
         onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
         onResultUpdate={execution.updateResult}
-        mindmapDefaultFullscreen
       />
     </AppWindowShell>
   );

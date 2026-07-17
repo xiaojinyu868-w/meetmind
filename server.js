@@ -52,6 +52,7 @@ const {
   isIgnorableSessionUpdateError,
   isLikelyHallucination,
 } = require('./server/asr/text-utils');
+const { buildQwenAsrFinishEvent, buildQwenAsrSessionConfig } = require('./server/asr/qwen-session');
 void _unusedNormalize;
 void longestCommonSubstringRatio;
 
@@ -653,13 +654,19 @@ app.prepare().then(() => {
     console.log('[ASR-Proxy] Client connected');
 
     const apiKey = process.env.DASHSCOPE_API_KEY;
-    const model = process.env.DASHSCOPE_ASR_WS_MODEL || 'qwen3-asr-flash-realtime';
+    const model = process.env.DASHSCOPE_ASR_WS_MODEL || 'qwen3-asr-flash-realtime-2026-02-10';
     const sampleRate = parseInt(process.env.DASHSCOPE_ASR_WS_SR || '16000', 10);
     const turnSilenceMs = clampNumber(
-      parseInt(process.env.DASHSCOPE_ASR_WS_VAD_SILENCE_MS || '800', 10),
+      parseInt(process.env.DASHSCOPE_ASR_WS_VAD_SILENCE_MS || '1000', 10),
       200,
       3000,
-      800
+      1000
+    );
+    const turnVadThreshold = clampNumber(
+      parseFloat(process.env.DASHSCOPE_ASR_WS_VAD_THRESHOLD || '0.30'),
+      0.05,
+      0.95,
+      0.30
     );
     const draftFlushMs = clampNumber(
       parseInt(process.env.ASR_DRAFT_FLUSH_MS || '800', 10),
@@ -708,7 +715,8 @@ app.prepare().then(() => {
     let lastSpeechEndMs = 0;
 
     let hasAudioAppended = false;
-    let hasCommittedAudioBuffer = false;
+    let hasFinishedSession = false;
+    let clientFinishedSent = false;
     let stopRequestedByClient = false;
     let closeTimer = null;
 
@@ -717,7 +725,6 @@ app.prepare().then(() => {
     let appendedChunks = 0;
 
     let contextHint = '';
-    let recentFinalTexts = [];
     let initialSessionUpdateTimer = null;
     let initialSessionUpdateSent = false;
     // 语种模式：
@@ -726,8 +733,6 @@ app.prepare().then(() => {
     //   'en'   = 明确英文
     // 默认 'auto'，让模型自动识别中英混合。客户端可通过 'context-hint' 消息携带 languageMode 覆盖。
     let languageMode = 'auto';
-    const CONTEXT_UPDATE_INTERVAL = 5; // update DashScope context every N final segments
-    let finalSegmentCountSinceUpdate = 0;
 
     const vadTimestampQueue = [];
     const interimByItemId = new Map();
@@ -739,33 +744,16 @@ app.prepare().then(() => {
       clientWs.send(JSON.stringify(payload));
     }
 
-    function buildASRPrompt() {
-      // 分节组织：热词区（固定，靠前）+ 最近识别区（滚动）
-      // 目的：避免 30 分钟后 recentContext 把 3000 字配额挤满、热词被截断
-      // 优先级：热词 > 最近识别，各自独立截断
-      const sections = [];
-      const HINT_MAX = 2000;  // 热词最多占 2000 字
-      const RECENT_MAX = 800; // 最近识别最多占 800 字
+    function sendClientFinished(code) {
+      if (clientFinishedSent) return;
+      clientFinishedSent = true;
+      sendClientEvent({ event: 'finished', code });
+      sendClientEvent({ event: 'closed', code });
+    }
 
-      if (contextHint) {
-        const hint = contextHint.slice(0, HINT_MAX);
-        sections.push(`[课程术语与专有名词]\n${hint}`);
-      }
-      if (recentFinalTexts.length > 0) {
-        // 从尾部倒序取，直到累计长度超过 RECENT_MAX
-        const reversed = [...recentFinalTexts].reverse();
-        const picked = [];
-        let total = 0;
-        for (const text of reversed) {
-          if (total + text.length > RECENT_MAX) break;
-          picked.unshift(text);
-          total += text.length;
-        }
-        if (picked.length > 0) {
-          sections.push(`[最近已识别内容]\n${picked.join('')}`);
-        }
-      }
-      return sections.join('\n\n') || '';
+    function buildASRCorpusText() {
+      if (!contextHint) return '';
+      return `[课程术语与专有名词]\n${contextHint.slice(0, 3000)}`;
     }
 
     function sendSessionUpdate(extraLog) {
@@ -790,27 +778,18 @@ app.prepare().then(() => {
         return;
       }
 
-      const prompt = buildASRPrompt();
+      const corpusText = buildASRCorpusText();
       // Qwen 官方最佳实践：混合语种或不确定时，不传 language 参数，让模型自动识别。
       // 只有客户端明确指定 'zh' 或 'en' 时才下发 language。
-      const transcriptionConfig = {
-        semantic_punctuation_enabled: true,
-        ...(prompt ? { prompt } : {}),
-      };
-      if (languageMode === 'zh' || languageMode === 'en') {
-        transcriptionConfig.language = languageMode;
-      }
-
-      const sessionConfig = {
-        input_audio_format: 'pcm',
-        sample_rate: sampleRate,
-        input_audio_transcription: transcriptionConfig,
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.2,
-          silence_duration_ms: turnSilenceMs,
-        },
-      };
+      const sessionConfig = buildQwenAsrSessionConfig({
+        sampleRate,
+        languageMode,
+        // Qwen Realtime 官方字段是 input_audio_transcription.corpus.text。
+        // 旧代码误发 prompt，课程术语上下文并未按协议生效。
+        contextHint: corpusText,
+        vadThreshold: turnVadThreshold,
+        vadSilenceMs: turnSilenceMs,
+      });
 
       dashscopeWs.send(JSON.stringify({
         event_id: generateEventId(),
@@ -820,7 +799,7 @@ app.prepare().then(() => {
       initialSessionUpdateSent = true;
 
       if (extraLog) {
-        console.log(`[ASR-Proxy] Session updated (${extraLog}), lang=${languageMode}, prompt length: ${prompt.length}`);
+        console.log(`[ASR-Proxy] Session updated (${extraLog}), lang=${languageMode}, corpus length: ${corpusText.length}`);
       }
     }
 
@@ -834,22 +813,34 @@ app.prepare().then(() => {
       }, delayMs);
     }
 
-    function commitAudioBuffer(commitReason) {
+    function finishDashscopeSession(finishReason) {
       if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) return false;
-      if (hasCommittedAudioBuffer) return false;
+      if (hasFinishedSession) return false;
       if (!hasAudioAppended && audioQueue.length === 0) return false;
 
+      // Qwen ASR 当前使用 server_vad。官方协议明确规定：VAD 模式下
+      // input_audio_buffer.commit 被禁用；录音结束必须发送 session.finish，
+      // 服务端才会把最后一段尚未遇到足够静音的语音完整定稿。
+      // 旧实现发送 commit，错误又被静默吞掉，正是“只识别第一句话/结尾吞字”的根因。
+      if (isFlushingAudioQueue || audioQueue.length > 0) return false;
+
       try {
-        dashscopeWs.send(JSON.stringify({
-          event_id: generateEventId(),
-          type: 'input_audio_buffer.commit',
-        }));
-        hasCommittedAudioBuffer = true;
-        console.log(`[ASR-Proxy] Audio buffer committed (${commitReason})`);
+        dashscopeWs.send(JSON.stringify(buildQwenAsrFinishEvent(generateEventId())));
+        hasFinishedSession = true;
+        console.log(`[ASR-Proxy] Session finish sent (${finishReason})`);
         return true;
       } catch (error) {
-        console.error('[ASR-Proxy] Commit failed:', error);
+        console.error('[ASR-Proxy] Session finish failed:', error);
         return false;
+      }
+    }
+
+    function maybeFinishAfterFlush(reason) {
+      if (!stopRequestedByClient || hasFinishedSession) return;
+      if (finishDashscopeSession(reason)) {
+        // 官方建议最多等待 20 秒拿 session.finished；这里保留 20 秒异常兜底，
+        // 正常路径由 session.finished 立即关闭，不平白增加用户等待。
+        scheduleDashscopeClose('session.finish timeout', 20000);
       }
     }
 
@@ -893,6 +884,7 @@ app.prepare().then(() => {
 
       if (audioQueue.length === 0) {
         isFlushingAudioQueue = false;
+        maybeFinishAfterFlush('audio queue drained');
         return;
       }
 
@@ -1023,19 +1015,6 @@ app.prepare().then(() => {
       });
 
       lastFinalSegment = nextFinal;
-
-      // Track recent final texts for dynamic context updates
-      recentFinalTexts.push(segment.text);
-      if (recentFinalTexts.length > 30) {
-        recentFinalTexts = recentFinalTexts.slice(-20);
-      }
-
-      // Periodically re-inject context into DashScope session
-      finalSegmentCountSinceUpdate++;
-      if (finalSegmentCountSinceUpdate >= CONTEXT_UPDATE_INTERVAL) {
-        finalSegmentCountSinceUpdate = 0;
-        sendSessionUpdate('dynamic context refresh');
-      }
     }
 
     try {
@@ -1145,17 +1124,21 @@ app.prepare().then(() => {
             case 'input_audio_buffer.committed':
               break;
 
-            case 'response.done':
-              // DashScope 完成了一轮处理；如果客户端已请求停止，可以安全关闭
-              if (stopRequestedByClient && hasCommittedAudioBuffer) {
-                scheduleDashscopeClose('response.done after client stop', 300);
+            case 'session.finished':
+              // Qwen ASR VAD 模式的正式收尾事件。只有收到它，最后一段语音
+              // 才能视为已经完整定稿；不能用 response.done 或固定 sleep 猜测。
+              sendClientFinished(1000);
+              if (closeTimer) {
+                clearTimeout(closeTimer);
+                closeTimer = null;
               }
+              scheduleDashscopeClose('session.finished', 100);
               break;
 
             case 'error': {
               const error = msg.error?.message || msg.message || '识别错误';
               if (isIgnorableCommitError(error)) {
-                if (stopRequestedByClient || hasCommittedAudioBuffer) {
+                if (stopRequestedByClient || hasFinishedSession) {
                   scheduleDashscopeClose('Client disconnected', 100);
                 }
                 break;
@@ -1200,8 +1183,7 @@ app.prepare().then(() => {
         isSessionReady = false;
 
         if (clientWs.readyState === WebSocket.OPEN) {
-          sendClientEvent({ event: 'finished', code });
-          sendClientEvent({ event: 'closed', code });
+          sendClientFinished(code);
           // 仅异常断开时主动关闭客户端（code 1000 = 正常关闭，由客户端 stop 触发）
           if (code !== 1000 && !stopRequestedByClient) {
             clientWs.close(1000, 'DashScope disconnected unexpectedly');
@@ -1294,24 +1276,17 @@ app.prepare().then(() => {
           return;
         }
 
-        if (msg.type === 'context-update') {
-          const text = typeof msg.recentText === 'string' ? msg.recentText.trim() : '';
-          if (text) {
-            // Merge client-provided recent text with our tracked texts
-            recentFinalTexts.push(text);
-            if (recentFinalTexts.length > 30) {
-              recentFinalTexts = recentFinalTexts.slice(-20);
-            }
-          }
-          return;
-        }
-
         if (msg.action === 'stop') {
           stopRequestedByClient = true;
-          const committed = commitAudioBuffer('client stop');
-          // 给 DashScope 足够时间处理缓冲区中的音频（文件转写场景音频一次性发完）
-          // 主关闭由 response.done 触发，这里是保底超时
-          scheduleDashscopeClose('Client stop', committed ? 15000 : 100);
+          if (!finishDashscopeSession('client stop')) {
+            // 首次连接/重连的有界队列尚未排空时，flush 完成后再 finish；
+            // 没有音频则无需等待模型。
+            if (!hasAudioAppended && audioQueue.length === 0) {
+              scheduleDashscopeClose('Client stop without audio', 100);
+            }
+          } else {
+            scheduleDashscopeClose('session.finish timeout', 20000);
+          }
         }
       } catch {
         // 文本消息 JSON 解析失败，记录警告并忽略（不当作音频处理）
@@ -1325,8 +1300,13 @@ app.prepare().then(() => {
       );
 
       stopRequestedByClient = true;
-      const committed = commitAudioBuffer('client disconnected');
-      scheduleDashscopeClose('Client disconnected', committed ? 10000 : 100);
+      if (!finishDashscopeSession('client disconnected')) {
+        if (!hasAudioAppended && audioQueue.length === 0) {
+          scheduleDashscopeClose('Client disconnected without audio', 100);
+        }
+      } else {
+        scheduleDashscopeClose('session.finish timeout after client disconnect', 20000);
+      }
     });
 
     clientWs.on('error', (error) => {

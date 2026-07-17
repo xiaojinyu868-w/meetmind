@@ -31,7 +31,7 @@ chat/
     ├── copyMessageSmart.ts         # 智能复制（markdown / 纯文本双格式）
     ├── extractIntentSummary.ts     # ---我想要的---...---结束--- 解析
     ├── extractIntentBio.ts         # M11.4 bio（headline + detail）解析
-    └── extractLearningProgress.ts  # ---学习进展---...---结束---；只生成候选，adapter 必须再次让用户确认
+    └── extractLearningProgress.ts  # 旧 ---学习进展--- marker 解析；GlobalAsk 已改用后台 distillation，新 adapter 勿依赖
 ```
 
 ## 标准 adapter 形态
@@ -112,7 +112,7 @@ export function MyChatAdapter({ sessionId, authToken, ... }) {
 | `IntentDialog` | `components/intent/IntentDialog.tsx` | `goal` | `glass` | 沉浸式 octo blur 背景；marker=`intent-summary`；M11.4 bio 双 marker |
 | `TutorAgentPanel` | `components/tutor/TutorAgentPanel.tsx` | `review` / `in-class`（预留） | `paper` | 持久化到 `conversationService`；仅 `review` 提供时间戳跳转；M11 迁 |
 | `ClassroomCompanionPanel` | `components/classroom/ClassroomCompanionPanel.tsx` | `in-class` | `paper` | M14/M14.5 迁；Octo Buddy chip + inline app；不渲染时间戳回跳 |
-| `GlobalAskPanel` | `components/GlobalAskPanel.tsx` | `global` | `paper` | quick 直接回答；deep 在路径确有歧义时渲染模型动态选择题，用户作答后自动细化并开始 |
+| `GlobalAskPanel` | `components/GlobalAskPanel.tsx` | `global` | `paper` | 统一以“问同学”承接问题，默认直接回答；“一起学”是可选动作而非要求用户理解的系统模式。没有真实歧义就自动开始，只有答案会改变学习路径时才渲染一个动态选择题 |
 | `SharedAgentChat` | `app/share/[token]/SharedAgentChat.tsx` | `shared` | `paper` | M11.5 迁；shareToken 认证 + 隐私铁律 |
 | `WordExplainer` | `components/WordExplainer.tsx` | `word` | `minimal` | M13 迁；选词解释浮窗 |
 

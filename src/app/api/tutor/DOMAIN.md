@@ -7,7 +7,8 @@
 | 文件 | 职责 |
 |------|------|
 | `agent/route.ts` | **M10 主入口** `POST /api/tutor/agent`：mode-driven 单一 endpoint，AI SDK v6 `streamText` + `createUIMessageStreamResponse`。详见下方 mode 矩阵与 provider 说明 |
-| `intent/route.ts` | `POST /api/tutor/intent`：将原始问题与学习上下文整理为 `LearningIntentPlan`；当前表达优先，历史上下文不能静默收窄宽泛愿望；可返回 1-3 个动态选择题，前端回传 `answers[{questionId, question, optionIds, optionLabels}]` 后得到最终计划；高置信且无问题的计划由前端直接执行，只有真实歧义或较低置信度才停下来确认；不持久化、不替用户确认 |
+| `intent/route.ts` | `POST /api/tutor/intent`：将原始问题与学习上下文整理为 `LearningIntentPlan`；当前表达优先，历史上下文不能静默收窄宽泛愿望；没有真实歧义就直接开始，不展示内部置信度或额外确认卡。只有答案会改变学习路径时才返回动态选择题（通常 1 个，最多 2 个），前端回传 `answers[{questionId, question, optionIds, optionLabels}]` 后得到最终计划；不持久化、不替用户确认 |
+| `memory/route.ts` | `POST /api/tutor/memory`：全局学习问答持久化后的静默学习理解整理；输入本轮用户表达、助手回答和最多 12 条既有理解，返回最多 2 条新增或带 `replaceId` 的更新；不接收、不改写 `recentLearningActivities`，与 Tutor 主链路一致允许访客请求并在 route 内限流 |
 | `route.ts` | Legacy SSE 路径（M10 前的主路由）。flag off 时仍可用，但**不在上面加新功能**；非语音对话应迁移到 `agent/route.ts` |
 | `tutor-prompts.ts` | **Legacy** System Prompt 模板（M10 前的旧实现）。当前 5 mode 唯一 prompt 源在 `@/lib/prompts/tutor-prompts.ts` 的 `buildTutorSystemPrompt`，本文件勿再扩展 |
 | `tutor-types.ts` | 共享类型定义 |
@@ -18,7 +19,7 @@
 
 ## `/api/tutor/agent` 的 mode 矩阵
 
-六种 mode 共用场景中立的“同桌”身份基底；课堂是否正在进行、是否已经结束、是否来自分享，只能由各 mode segment 描述。当前 prompt telemetry 版本为 `2026-07-tutor-v6-global-context`。
+六种 mode 共用场景中立的“同桌”身份基底；课堂是否正在进行、是否已经结束、是否来自分享，只能由各 mode segment 描述。当前 prompt telemetry 版本为 `2026-07-tutor-v9-consumer-context`。
 
 `TutorMode = 'in-class' | 'review' | 'shared' | 'goal' | 'word' | 'global'`（定义在 `@/lib/prompts/tutor-prompts.ts`）。
 
@@ -27,9 +28,9 @@
 | `in-class` | `useClassroomCompanion`（课堂同桌） | `recentFocus` | 短回答；禁时间戳回跳，避免打断正在进行的课堂；M14.6 起纯对话，不挂 native tools；结构化产物由前端 SkillChip 直接打开 |
 | `review` | `TutorAgentPanel` / `SafeAITutor`（录音/视频复习） | `fullTranscript` + `currentTimestampSec`（秒，非毫秒）+ `learnerProfile` | 可长答；强制时间戳 `[MM:SS]`；可选 `thinkingGuide`；M14.6 起纯对话，不挂 native tools |
 | `shared` | `SharedAgentChat` 落地页 `/share/[token]` | `shared` snapshot + `shareToken` | 禁 native tools；禁时间戳；不注入 `learnerProfile`（**隐私铁律**） |
-| `goal` | 「聊聊你想要的」`IntentDialog`（M11） | `goal.existingGoals` + `goal.sessionHint` + `supportMaterials` | 无 transcript；禁 native tools；禁时间戳；AI 用 `---我想要的---...---结束---` 块提炼可保存的 `GoalEntry`；首次会面 vs 回访双路径 |
+| `goal` | 「聊聊你想要的」`IntentDialog`（M11） | `goal.existingGoals` + `goal.sessionHint` + `supportMaterials` | 无 transcript；禁 native tools；禁时间戳；AI 用 `---我想要的---...---结束---` 块提炼可保存的 `GoalEntry`；首次会面先帮助再理解，不做画像访谈，稳定上下文由模型静默管理 |
 | `word` | 选词解释浮窗 `WordExplainer`（M13） | `word.selectionText` + `word.nearbyContext` + `word.fullTranscriptTail` | 浮窗形态；禁 native tools；禁时间戳 |
-| `global` | `GlobalAskPanel` | `global.depth` + 已确认 `intent` + `memories/recentActivities/activeThread/goals/bio` + 可选 `supportMaterials` | 普通问答直接回答；深度会话输出 `---学习进展---` 候选，前端逐条确认后才可写长期记忆 |
+| `global` | `GlobalAskPanel` | `global.depth` + 已确认 `intent` + `memories/recentActivities/activeThread/goals/bio` + 可选 `supportMaterials` | 普通问答直接回答，深度学习仅在真实歧义时确认路径；任何全局学习问答持久化后都由 `/api/tutor/memory` 独立判断是否形成真实学习理解，证据不足返回空；用户可纠正/暂停/忘记，客观最近学习现场保持独立 |
 
 ### M14.6 重要变更：native tools 与 inline app marker 已移除
 
@@ -56,6 +57,7 @@
 
 - `@/lib/prompts/tutor-prompts` — `buildTutorSystemPrompt(mode, context, options)`，6 mode 唯一 prompt 源
 - `@/lib/services/learning-intent-service` — `/api/tutor/intent` 的模型计划生成与确定性兜底
+- `@/lib/services/learning-memory-distillation-service` — `/api/tutor/memory` 的证据约束、去重更新与模型失败空结果
 - `@/lib/utils/tutor-agent-provider` — provider 解析 + fallback
 - `@/lib/services/share-agent-service` — `shared` mode 加载 `SharedAgent.snapshotJson`
 - `@/lib/services/llm-service` — 通用 LLM 调用层（legacy 路径用）

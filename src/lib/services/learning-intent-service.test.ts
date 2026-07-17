@@ -8,7 +8,10 @@ describe('buildLearningIntentSystemPrompt', () => {
     expect(prompt).toContain('用户当前这句话定义目标边界');
     expect(prompt).toContain('不能替用户把宽泛愿望静默收窄成历史里的具体目标');
     expect(prompt).toContain('把这些方向变成一个真正影响学习路径的选择题');
-    expect(prompt).toContain('“学好某个大领域”这类宽泛愿望通常还不满足这个条件');
+    expect(prompt).toContain('没有必须由用户决定的歧义，就直接开始');
+    expect(prompt).toContain('能先用一个小解释或小练习动态判断，就直接开始');
+    expect(prompt).toContain('不要写“为了给你匹配 / 为了更好地帮助 / 请告诉我”');
+    expect(prompt).toContain('中文通常 4-14 字');
   });
 
   it('forbids another question after ambiguity has been resolved', () => {
@@ -52,7 +55,7 @@ describe('sanitizeLearningIntentPlan', () => {
     expect(plan.questions).toBeUndefined();
   });
 
-  it('keeps at most three actionable choice questions', () => {
+  it('keeps at most two actionable choice questions', () => {
     const plan = sanitizeLearningIntentPlan({
       title: '选对统计检验',
       outcome: '看到题目能判断该用哪种检验',

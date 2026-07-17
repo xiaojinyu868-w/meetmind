@@ -100,7 +100,7 @@ eval-asr: ## ASR 评测（dry-run，基于 seed 数据集 + 未来真实 Qwen3-A
 	npx tsx tests/eval/asr/runner.ts --dry-run
 
 .PHONY: eval-asr-real
-eval-asr-real: ## ASR 评测（真实调用 Qwen3-ASR-Flash，需 DASHSCOPE_API_KEY + 公网 audio URL）
+eval-asr-real: ## ASR 真实评测（本地短 fixture / 公网 URL；ASR_EVAL_TRANSPORT=realtime 可测产品 WS）
 	npx tsx tests/eval/asr/runner.ts --real
 
 .PHONY: eval-tutor

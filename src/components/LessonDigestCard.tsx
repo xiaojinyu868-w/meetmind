@@ -176,15 +176,14 @@ export function LessonDigestCard({
   return (
     <div className="space-y-4">
       <div>
-        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-pine">
-          课堂总结
-        </p>
-        <h1 className="mt-1.5 font-serif text-[26px] leading-[1.15] tracking-[-0.02em] text-ink">
+        <h1 className="font-serif text-[26px] leading-[1.15] tracking-[-0.02em] text-ink">
           {digest.title}
         </h1>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
-          {digest.overview}
-        </p>
+        {digest.overview.trim() ? (
+          <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
+            {digest.overview}
+          </p>
+        ) : null}
       </div>
 
       {digest.sections.map((section, i) => (

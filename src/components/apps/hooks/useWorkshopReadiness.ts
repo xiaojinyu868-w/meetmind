@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { WorkshopReadinessAssessment } from '@/lib/ai-native/types';
+import type { ContextTier, WorkshopReadinessAssessment } from '@/lib/ai-native/types';
 import { fallbackWorkshopReadiness } from '@/lib/ai-native/workshop-readiness';
 import type { TranscriptSegment } from '@/types';
 
@@ -12,6 +12,7 @@ interface UseWorkshopReadinessInput {
   activeAnchorCount: number;
   keyDifficulties?: string[];
   summary?: string;
+  contextTier?: ContextTier;
 }
 
 interface ReadinessApiResponse {
@@ -45,6 +46,7 @@ function requestWorkshopReadiness(
         activeAnchorCount: input.activeAnchorCount,
         keyDifficulties: input.keyDifficulties,
         summary: input.summary,
+        contextTier: input.contextTier,
       }),
     });
     const data = await response.json().catch(() => null) as (ReadinessApiResponse & { error?: unknown }) | null;
@@ -82,6 +84,7 @@ export function buildWorkshopReadinessSignature(input: UseWorkshopReadinessInput
   mix(input.summary?.trim() ?? '');
   mix(input.contextTitle?.trim() ?? '');
   mix(input.contextType?.trim() ?? '');
+  mix(input.contextTier ?? 'class');
 
   const last = input.transcript[input.transcript.length - 1];
   return `${input.transcript.length}:${last?.endMs ?? 0}:${characterCount}:${input.activeAnchorCount}:${rollingHash >>> 0}`;
@@ -103,6 +106,7 @@ export function useWorkshopReadiness(input: UseWorkshopReadinessInput) {
     activeAnchorCount: 0,
     contextTitle: input.contextTitle,
     contextType: input.contextType,
+    contextTier: input.contextTier,
   });
 
   useEffect(() => {

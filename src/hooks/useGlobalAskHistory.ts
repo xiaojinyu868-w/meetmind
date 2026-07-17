@@ -16,7 +16,12 @@ interface UseGlobalAskHistoryOptions {
   getMessageText: (message: UIMessage) => string;
   fallbackTitle: string;
   onDepthRestored: (depth: AskDepth) => void;
-  onAssistantPersisted: (input: { text: string; sourceId: string; depth: AskDepth }) => Promise<void> | void;
+  onAssistantPersisted: (input: {
+    text: string;
+    userText: string;
+    sourceId: string;
+    depth: AskDepth;
+  }) => Promise<void> | void;
 }
 
 function toUIMessage(message: { messageId: string; role: string; content: string }): UIMessage {
@@ -44,6 +49,7 @@ export function useGlobalAskHistory({
   const [conversationId, setConversationId] = useState<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
   const persistedIdsRef = useRef<Set<string>>(new Set());
+  const persistingIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!open) return;
@@ -53,6 +59,7 @@ export function useGlobalAskHistory({
     setConversationId(null);
     conversationIdRef.current = null;
     persistedIdsRef.current = new Set();
+    persistingIdsRef.current = new Set();
     setMessages([]);
 
     const hydrate = async () => {
@@ -88,9 +95,11 @@ export function useGlobalAskHistory({
       const unsaved = messages.filter((message) => (
         (message.role === 'user' || message.role === 'assistant')
         && !persistedIdsRef.current.has(message.id)
+        && !persistingIdsRef.current.has(message.id)
         && getMessageText(message).trim()
       ));
       if (unsaved.length === 0) return;
+      unsaved.forEach((message) => persistingIdsRef.current.add(message.id));
       try {
         if (!conversationIdRef.current) {
           const firstUser = unsaved.find((message) => message.role === 'user');
@@ -117,14 +126,21 @@ export function useGlobalAskHistory({
         unsaved.forEach((message) => persistedIdsRef.current.add(message.id));
         const latestAssistant = [...unsaved].reverse().find((message) => message.role === 'assistant');
         if (latestAssistant) {
+          const latestUser = [...messages].reverse().find((message) => (
+            message.role === 'user' && getMessageText(message).trim()
+          ));
           await onAssistantPersisted({
             text: getMessageText(latestAssistant),
+            userText: latestUser ? getMessageText(latestUser) : '',
             sourceId: `global-ask:${currentConversationId}:${latestAssistant.id}`,
             depth,
           });
         }
       } catch (error) {
+        unsaved.forEach((message) => persistingIdsRef.current.delete(message.id));
         console.error('[useGlobalAskHistory] failed to persist history', error);
+      } finally {
+        unsaved.forEach((message) => persistingIdsRef.current.delete(message.id));
       }
     };
     void persist();
@@ -133,6 +149,7 @@ export function useGlobalAskHistory({
   const reset = useCallback(() => {
     conversationIdRef.current = null;
     persistedIdsRef.current = new Set();
+    persistingIdsRef.current = new Set();
     setConversationId(null);
     setRestoredTitle(null);
     setMessages([]);

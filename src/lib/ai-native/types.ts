@@ -84,6 +84,8 @@ export interface AppExecutionContext {
   memory: MemoryLayerSnapshot;
   goal: ApplicationGoal;
   model?: string;
+  /** 当前学习对象层级；旧调用缺省为 class。 */
+  contextTier?: ContextTier;
 }
 
 export type CardPriority = 'high' | 'medium' | 'low';
@@ -184,8 +186,12 @@ export interface AppExecuteRequest {
   appKey?: string;
   pluginId?: string;
   model?: string;
+  /** 当前学习对象层级；缺省按单节课处理。 */
+  contextTier?: ContextTier;
+  /** unit / exam 的多课堂统一上下文；提供后优先于 legacy input。 */
+  contextPack?: ContextPack;
   goal: ApplicationGoal | string;
-  input: {
+  input?: {
     sessionId?: string;
     dataSource?: DataSourceType;
     transcript: TranscriptSegment[];
@@ -199,19 +205,19 @@ export interface AppExecuteRequest {
 // Context Pack (PRD v1.1 §2)
 //
 // 应用矩阵的统一上下文契约。三层心智（class / unit / exam）共用一套结构，
-// 本期始终为 'class'。是给主分支裂变能力（v3.0 SharedAgent）的合并接口：
+// 当前 class 已有完整入口，unit / exam 用同一契约继续接入。也是给主分支裂变能力的合并接口：
 // 主分支只需要构造 ContextPack 就能复用应用矩阵，不直接调 plugin 或拼 prompt。
 //
 // 关键约束：
 //   1. lessons[] = 场景上下文（会被分发）
 //   2. personalAnnotations[] = 个人上下文-局部型（不分发）
 //      用户自用渲染时注入；分发渲染时为 undefined（自动剥离）
-//   3. exam = 考试层独有字段，本期 undefined
+//   3. exam = 考试层独有字段；只有 exam tier 才应传入
 //
 // 注入逻辑见 src/lib/ai-native/context-pack.ts 的 renderTranscriptWithAnnotations()
 // ─────────────────────────────────────────────────────────────────────────
 
-/** 三层心智：课堂 / 单元 / 考试。本期所有应用 tier='class'。 */
+/** 三层学习对象：课堂 / 单元 / 考试。catalog 按层声明真实支持范围。 */
 export type ContextTier = 'class' | 'unit' | 'exam';
 
 /** 单节课的场景上下文。N 个 lesson 组成 unit/exam 的上下文集合。 */
@@ -253,16 +259,17 @@ export interface PersonalAnnotation {
 
 /** 应用矩阵的统一上下文契约。 */
 export interface ContextPack {
-  /** 三层心智。本期始终为 'class'。 */
+  /** 当前学习对象层级。 */
   tier: ContextTier;
   /** 场景上下文：会被分发的内容（转录 + anchors + 摘要等）。 */
   lessons: LessonContext[];
   /** 个人上下文-局部型：用户标记/困惑。**不会被分发**——分发渲染时此字段不传。 */
   personalAnnotations?: PersonalAnnotation[];
-  /** 考试层独有字段（真题 + 大纲），本期始终 undefined。 */
+  /** 考试层独有字段（真题 + 大纲）；class / unit 不传。 */
   exam?: {
     name?: string;
     targetDate?: number;
+    mode?: 'unknown' | 'closed-book' | 'open-book';
     pastPapers?: Array<{ title: string; content: string }>;
     syllabus?: string;
   };

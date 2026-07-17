@@ -20,7 +20,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `qwen-asr-service.ts` | 709 | 通义千问 ASR（同步短音频 + 异步长音频） |
-| `dashscope-asr-service.ts` | ~660 | Qwen/腾讯兼容的实时 ASR 客户端（FIFO 音频缓冲、连接 ID 命名空间、心跳保活、长录制重连） |
+| `dashscope-asr-service.ts` | ~660 | Qwen/腾讯兼容的实时 ASR 客户端（默认 Qwen Realtime 2026-02-10；首次连接与重连均保留 FIFO PCM、连接 ID 命名空间、心跳保活）；浏览器只连自有 proxy、不接触 DashScope Key；Recorder 结束后用完整原声 batch 定稿并按 session 隔离回填 |
 | `asr/ws-url.ts` | 13 | ASR WebSocket 候选地址构建（http→ws、https→wss、8443 fallback） |
 | `transcript-enhancer.ts` | 473 | 转录文本增强（规则→词库→LLM 分层纠错） |
 | `media-tooling.ts` | 244 | ffmpeg/ffprobe 调用、转码、公网 URL 解析 |
@@ -44,7 +44,8 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `lesson-digest-service.ts` | ~340 | 课堂结构化分段总结：segments + 图片锚点 → LLM 生成分段 digest + fallback 兜底；`normalizeLessonDigestOutput` 用前一段结束时间安全补齐模型遗漏的时间边界。桌面移动共享 |
 | `tutor-service.ts` | 273 | AI 家教：引用匹配 + LLM 解释 |
 | `learning-intent-service.ts` | ~220 | 深度学习意图确认：当前表达定义目标边界，历史上下文不能静默收窄宽泛愿望；只在学习路径确有歧义时生成 1-3 个动态单选/多选问题，用户作答后再次整理为最终计划，模型不可用时返回确定性计划 |
-| `workshop-readiness-service.ts` | ~220 | 应用矩阵内容适配判断：先用证据阈值拦截过短材料，再由模型判断学习内容类型、可用应用与可选推荐；允许 `not_ready` / 无推荐，避免把闲聊或不可靠转录包装成课程 |
+| `learning-memory-distillation-service.ts` | ~170 | 全局学习问答持久化后的独立学习理解整理：不依赖用户手动选择模式，只从本轮真实表达/作答提炼最多 2 条，支持替换近义旧理解；拒绝愿望、建议、人格与敏感推断，证据不足返回空数组，不读取或改写客观学习现场 |
+| `workshop-readiness-service.ts` | ~220 | 应用矩阵内容适配判断：先用证据阈值拦截过短材料，再由模型判断学习内容类型、可用应用与可选推荐；允许 `not_ready` / 无推荐，避免把闲聊或不可靠转录包装成课程。官方试听课直接采用策划过的 ready 评估，真实短片段仍严格限制 |
 | `dify-service.ts` | 354 | Dify Agent 集成（提问引导 + 联网检索） |
 | `teaching-suggestion.ts` | 256 | 教学改进建议生成 |
 | `gemini-image-service.ts` | 361 | Gemini 图像生成（via undyingapi 代理） |
@@ -100,7 +101,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `classroom-data-service.ts` | 1007 | 课堂数据共享（学生↔教师读写） |
-| `classroom-flow-service.ts` | ~215 | 课中课堂脉络生成：让默认可用模型基于实时转录自主判断当前讲解、近期推进与课后保留点；只约束渲染 JSON，不用关键词树替模型决定课堂结构 |
+| `classroom-flow-service.ts` | ~225 | 课中课堂脉络生成：让默认可用模型基于实时转录自主判断当前讲解、近期推进与课后保留点；只约束渲染 JSON，不用关键词树替模型决定课堂结构；模型返回的内部 enum / 英文标识会在服务端丢弃，不能泄漏到用户界面 |
 | `meetmind-service.ts` | 436 | 核心业务整合（Open Notebook + LongCut） |
 | `note-service.ts` | 393 | 个人笔记 CRUD |
 | `notebook-service.ts` | 314 | Open Notebook（向量搜索/嵌入/笔记管理） |

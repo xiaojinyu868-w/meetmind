@@ -15,8 +15,21 @@ function compact(value: string | undefined, max: number): string {
   return `${normalized.slice(0, Math.max(1, max - 1))}…`;
 }
 
+export function toLearningActivityPreview(value: string, max = 220): string {
+  const plainText = value
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^>\s?/gm, '')
+    .replace(/^[-*+]\s+/gm, '')
+    .replace(/^\d+\.\s+/gm, '')
+    .replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, '$1')
+    .replace(/`{1,3}([^`]*)`{1,3}/g, '$1');
+  return compact(plainText, max);
+}
+
 export function createEmptyLearningContext(): LearningContextState {
-  return { memories: [], recentActivities: [] };
+  return { memories: [], recentActivities: [], coursePreferences: [] };
 }
 
 export function learningContextFromProfile(
@@ -28,6 +41,7 @@ export function learningContextFromProfile(
     recentActivities: (profile.recentLearningActivities || []).slice(
       -MAX_RECENT_LEARNING_ACTIVITIES,
     ),
+    coursePreferences: (profile.courseContextPreferences || []).slice(-32),
     activeThread: profile.activeLearningThread,
   };
 }

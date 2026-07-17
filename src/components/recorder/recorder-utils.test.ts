@@ -5,6 +5,7 @@ import {
   mergeRealtimeTranscriptSegment,
   normalizeRecorderErrorDetail,
   normalizeRecorderErrorMessage,
+  StreamingPcmResampler,
 } from './recorder-utils';
 
 function segment(params: Pick<TranscriptSegment, 'id' | 'text' | 'startMs' | 'endMs'>): TranscriptSegment {
@@ -63,6 +64,36 @@ describe('mergeRealtimeTranscriptSegment', () => {
     expect(result.action).toBe('append');
     expect(result.segments[1].startMs).toBeGreaterThan(result.segments[0].endMs);
     expect(result.segments[1].endMs).toBeGreaterThan(result.segments[1].startMs);
+  });
+});
+
+describe('StreamingPcmResampler', () => {
+  it('preserves fractional phase across 44.1kHz microphone chunks', () => {
+    const source = Float32Array.from({ length: 44_100 }, (_, index) =>
+      Math.sin((2 * Math.PI * 440 * index) / 44_100)
+    );
+    const whole = new StreamingPcmResampler(44_100, 16_000).process(source);
+    const chunkedResampler = new StreamingPcmResampler(44_100, 16_000);
+    const chunks: Float32Array[] = [];
+    for (let offset = 0; offset < source.length; offset += 2_048) {
+      chunks.push(chunkedResampler.process(source.slice(offset, offset + 2_048)));
+    }
+    const chunked = Float32Array.from(chunks.flatMap((chunk) => Array.from(chunk)));
+
+    expect(chunked.length).toBe(whole.length);
+    expect(chunked.length).toBe(16_000);
+    for (let index = 0; index < whole.length; index += 257) {
+      expect(chunked[index]).toBeCloseTo(whole[index], 6);
+    }
+  });
+
+  it('can be reset between lessons', () => {
+    const resampler = new StreamingPcmResampler(44_100, 16_000);
+    const source = Float32Array.from({ length: 4_410 }, (_, index) => index / 4_410);
+    const first = resampler.process(source);
+    resampler.reset();
+    const second = resampler.process(source);
+    expect(Array.from(second)).toEqual(Array.from(first));
   });
 });
 

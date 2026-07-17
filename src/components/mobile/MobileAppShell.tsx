@@ -35,7 +35,8 @@ export interface MobileAppShellProps {
   children?: React.ReactNode;
   collectionFeedItems: SourceIngestItem[];
   workspaceEchoes: Array<{ id: string; title: string; body: string; chips?: string[]; takeaway?: string; createdAt?: string }>;
-  onStartRecording: () => void;
+  /** 返回 true 后才进入录课页，避免权限失败时出现假的 00:00 录课态。 */
+  onStartRecording: () => Promise<boolean>;
   onOpenFilePicker: (mode: 'audio' | 'support' | 'all') => void;
   onOpenReview: (item: SourceIngestItem) => void;
   composerText: string;
@@ -59,10 +60,6 @@ export interface MobileAppShellProps {
   onPhotoCaptured: (file: File, capturedAtMs: number) => void;
   reviewSheetContent?: React.ReactNode;
   reviewSheetPreview?: string;
-  flashcardsContent?: React.ReactNode;
-  quizContent?: React.ReactNode;
-  cheatsheetContent?: React.ReactNode;
-  mindmapContent?: React.ReactNode;
   classmateContent?: React.ReactNode;
   /** 点击 Echo 卡打开 echo 详情 */
   onOpenEcho?: () => void;
@@ -198,10 +195,7 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
                 <img src="/images/octo-buddy/idle.png" alt="" className="h-full w-full object-cover" />
               </div>
             </div>
-            <div>
-              <p className="text-[13px] font-semibold text-ink leading-tight">MeetMind</p>
-              <p className="font-mono text-[9px] text-ink-muted">{new Date().toLocaleDateString('zh-CN',{month:'numeric',day:'numeric',weekday:'short'})}</p>
-            </div>
+            <p className="text-[14px] font-semibold leading-tight text-ink">MeetMind</p>
           </div>
           <div className="flex items-center gap-2">
             <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted" onClick={() => p.onOpenSearch?.()} aria-label={COPY.globalAsk.title} title={COPY.globalAsk.title}>
@@ -218,8 +212,9 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
       <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-20 mm-mobile-scroll" style={{ WebkitOverflowScrolling: 'touch' }}>
         <MobileLearningCommandCenter
           onStartRecording={() => {
-            p.onStartRecording();
-            push('recording');
+            void p.onStartRecording().then((started) => {
+              if (started) push('recording');
+            });
           }}
           onAddMaterial={() => p.onOpenFilePicker('all')}
           onCapturePhoto={() => triggerCamera(0)}
@@ -293,7 +288,7 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
 
         {p.collectionFeedItems.length === 0 && !flashPhoto ? (
           <div className="rounded-[16px] border border-dashed border-divider bg-canvas/40 p-6 text-center">
-            <p className="text-[12px] text-ink-muted">还没有内容。录一节课或速记一句开始吧。</p>
+            <p className="text-[13px] text-ink-muted">{COPY.mobileHome.recentEmpty}</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -403,7 +398,9 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
   const [flash, setFlash] = useState(false);
   const [classmateSheet, setClassmateSheet] = useState(false);
   const [recordingPane, setRecordingPane] = useState<'flow' | 'transcript'>('flow');
-  const [transMode, setTransMode] = useState<'off' | 'en-zh' | 'zh-en'>('off');
+  const [transMode, setTransMode] = useState<'off' | 'en-zh' | 'zh-en'>(
+    p.demoMode ? 'en-zh' : 'off',
+  );
   const transLabels: Array<{ mode: typeof transMode; label: string }> = [
     { mode: 'off', label: '译' },
     { mode: 'en-zh', label: 'EN→中' },
@@ -481,7 +478,7 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
       {/* 顶栏 */}
       <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60 z-20">
         <div className="flex items-center gap-2.5">
-          <button onClick={() => pop()} className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1">
+          <button aria-label={COPY.navigation.back} onClick={() => pop()} className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1">
             <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
           </button>
           <div className="flex items-center gap-1.5">
@@ -510,7 +507,7 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 5h7M9 3v2c0 4.418-2.686 8-6 8" /></svg>
             <span>{transLabels[transIdx].label}</span>
           </button>
-          <button onClick={finishLesson} className="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-white active:scale-90 transition">
+          <button aria-label={COPY.mobileJourney.finishLesson} onClick={finishLesson} className="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-white active:scale-90 transition">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
           </button>
         </div>
@@ -669,7 +666,7 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
       {flash && <div className="absolute inset-0 z-50 bg-white pointer-events-none" style={{ opacity: 0.8, transition: 'opacity 0.15s' }} />}
 
       {/* 拍照悬浮按钮 */}
-      <button type="button" onClick={() => triggerCamera(elapsedSeconds * 1000)}
+      <button type="button" aria-label={COPY.mobileHome.photo} onClick={() => triggerCamera(elapsedSeconds * 1000)}
         className="fixed bottom-[5.5rem] left-4 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-vermilion text-white shadow-card active:scale-90 transition lg:hidden relative">
         <Camera size={18} strokeWidth={2} />
         {photoCount > 0 && (
@@ -700,7 +697,7 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
               <span className="text-[12px] font-medium text-ink">课堂同桌</span>
               <span className="font-mono text-[9px] text-vermilion bg-vermilion-mist px-1.5 py-0.5 rounded">听课中</span>
             </div>
-            <button onClick={() => setClassmateSheet(false)} className="flex h-7 w-7 items-center justify-center rounded-full text-ink-muted"><ChevronDown size={14} strokeWidth={2} /></button>
+            <button aria-label={COPY.mobileJourney.collapseClassmate} onClick={() => setClassmateSheet(false)} className="flex h-7 w-7 items-center justify-center rounded-full text-ink-muted"><ChevronDown size={14} strokeWidth={2} /></button>
           </div>
           {/* Suggestion chips */}
           <div className="flex-shrink-0 px-3 py-2 border-b border-divider/40">
@@ -734,7 +731,7 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
         <button onClick={finishLesson}
           className="flex w-full items-center justify-center gap-2.5 rounded-full bg-ink py-3.5 text-[13.5px] font-medium text-white active:scale-[0.995] transition">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
-          {p.demoMode ? COPY.mobileHome.demoFinish : '结束这节课'}
+          {p.demoMode ? COPY.mobileHome.demoFinish : COPY.mobileJourney.finishLesson}
         </button>
       </div>
     </div>
@@ -872,7 +869,9 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
   const { assessment: workshopReadiness } = useWorkshopReadiness({
     transcript: segments,
     contextTitle: reviewContext?.title || selectedItem?.title,
-    contextType: reviewContext?.contentType || selectedItem?.type || 'review',
+    contextType: p.demoMode
+      ? 'demo'
+      : reviewContext?.contentType || selectedItem?.type || 'review',
     activeAnchorCount: 0,
   });
   const allowedWorkshopApps = new Set(
@@ -922,7 +921,7 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
       {/* 顶栏 */}
       <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60 z-20">
         <div className="flex items-center gap-3">
-          <button onClick={() => pop()} className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1">
+          <button aria-label={COPY.navigation.back} onClick={() => pop()} className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1">
             <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
           </button>
           <div className="min-w-0 flex-1">
@@ -944,7 +943,7 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
       {p.totalDuration>0 && (
         <div className={`flex-shrink-0 bg-paper px-4 py-2 border-b border-divider/60 z-10 transition-all duration-300 overflow-hidden ${playerCollapsed ? 'm-mini-player-collapsed' : ''}`}>
           <div className="flex items-center gap-3 rounded-2xl bg-paper-warm/70 px-3 py-2 ring-[0.5px] ring-divider">
-            <button onClick={p.onPlayPause} className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-ink text-white active:scale-90 transition">
+            <button aria-label={p.isPlaying ? COPY.mobileJourney.pauseAudio : COPY.mobileJourney.playAudio} onClick={p.onPlayPause} className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-ink text-white active:scale-90 transition">
               {p.isPlaying ? (
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
               ) : (
@@ -1115,129 +1114,6 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
   );
 }
 
-// ═══ 闪卡全屏 ═══
-
-function FlashcardsScreen({ p }: { p: MobileAppShellProps }) {
-  const { pop, reviewContext } = useMobileNav();
-  return (
-    <div className="flex-1 min-h-0 flex flex-col bg-paper m-page-in">
-      <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60">
-        <div className="flex items-center justify-between">
-          <button onClick={() => pop()} className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1">
-            <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
-          </button>
-          <div className="text-center">
-            <p className="text-[13px] font-semibold text-ink">闪卡练习</p>
-            {reviewContext?.title && <p className="font-mono text-[9px] text-ink-muted">{reviewContext.title}</p>}
-          </div>
-          <div className="w-8" />
-        </div>
-      </div>
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {p.flashcardsContent ?? (
-          <div className="flex flex-col items-center justify-center h-full">
-            <div className="h-16 w-16 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden mb-4 animate-pulse m-octo-breath">
-              <img src="/images/octo-buddy/thinking.png" alt="" className="h-full w-full object-cover" />
-            </div>
-            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-pine mb-1">正在生成</p>
-            <p className="text-[12px] text-ink-muted">闪卡生成中…</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ═══ 测验全屏 ═══
-
-function QuizScreen({ p }: { p: MobileAppShellProps }) {
-  const { pop } = useMobileNav();
-  return (
-    <div className="flex-1 min-h-0 flex flex-col bg-paper m-page-in">
-      <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60">
-        <div className="flex items-center justify-between">
-          <button onClick={() => pop()} className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1">
-            <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
-          </button>
-          <p className="text-[13px] font-semibold text-ink">随堂测验</p>
-          <div className="w-8" />
-        </div>
-      </div>
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {p.quizContent ?? (
-          <div className="flex flex-col items-center justify-center h-full">
-            <div className="h-16 w-16 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden mb-4 animate-pulse m-octo-breath">
-              <img src="/images/octo-buddy/thinking.png" alt="" className="h-full w-full object-cover" />
-            </div>
-            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-pine mb-1">正在生成</p>
-            <p className="text-[12px] text-ink-muted">测验生成中…</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ═══ 速查表全屏 ═══
-
-function CheatsheetScreen({ p }: { p: MobileAppShellProps }) {
-  const { pop } = useMobileNav();
-  return (
-    <div className="flex-1 min-h-0 flex flex-col bg-paper m-page-in">
-      <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60">
-        <div className="flex items-center justify-between">
-          <button onClick={() => pop()} className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1">
-            <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
-          </button>
-          <p className="text-[13px] font-semibold text-ink">考试速查表</p>
-          <div className="w-8" />
-        </div>
-      </div>
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {p.cheatsheetContent ?? (
-          <div className="flex flex-col items-center justify-center h-full">
-            <div className="h-16 w-16 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden mb-4 animate-pulse m-octo-breath">
-              <img src="/images/octo-buddy/thinking.png" alt="" className="h-full w-full object-cover" />
-            </div>
-            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-pine mb-1">正在生成</p>
-            <p className="text-[12px] text-ink-muted">速查表生成中…</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ═══ 思维导图全屏 ═══
-
-function MindmapScreen({ p }: { p: MobileAppShellProps }) {
-  const { pop } = useMobileNav();
-  return (
-    <div className="flex-1 min-h-0 flex flex-col bg-paper m-page-in">
-      <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60">
-        <div className="flex items-center justify-between">
-          <button onClick={() => pop()} className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1">
-            <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
-          </button>
-          <p className="text-[13px] font-semibold text-ink">思维导图</p>
-          <div className="w-8" />
-        </div>
-      </div>
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {p.mindmapContent ?? (
-          <div className="flex flex-col items-center justify-center h-full">
-            <div className="h-16 w-16 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden mb-4 animate-pulse m-octo-breath">
-              <img src="/images/octo-buddy/thinking.png" alt="" className="h-full w-full object-cover" />
-            </div>
-            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-pine mb-1">正在生成</p>
-            <p className="text-[12px] text-ink-muted">思维导图生成中…</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ═══ 应用矩阵 ═══
 
 function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
@@ -1258,7 +1134,9 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
   const { assessment } = useWorkshopReadiness({
     transcript: _p.segments,
     contextTitle: reviewContext?.title || _p.selectedReviewItem?.title,
-    contextType: reviewContext?.contentType || _p.selectedReviewItem?.type || 'review',
+    contextType: _p.demoMode
+      ? 'demo'
+      : reviewContext?.contentType || _p.selectedReviewItem?.type || 'review',
     activeAnchorCount: 0,
   });
   const allowed = new Set(assessment?.allowedAppKeys ?? WORKSHOP_APP_CATALOG.map((app) => app.key));
@@ -1281,7 +1159,7 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
     <div className="flex-1 min-h-0 flex flex-col bg-paper m-page-in">
       <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60">
         <div className="flex items-center gap-3">
-          <button onClick={() => pop()} className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1">
+          <button aria-label={COPY.navigation.back} onClick={() => pop()} className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1">
             <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
           </button>
           <div>
@@ -1290,39 +1168,41 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
           </div>
         </div>
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 mm-mobile-scroll" style={{ WebkitOverflowScrolling: 'touch' }}>
-        <p className="mb-3 text-[12px] leading-relaxed text-ink-muted">
-          {assessment?.status === 'not_ready' ? blockedBody : COPY.apps.matrix.mobileSubtitle}
-        </p>
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 mm-mobile-scroll" style={{ WebkitOverflowScrolling: 'touch' }}>
+        {assessment?.status === 'not_ready' ? (
+          <p className="mb-3 text-[12px] leading-relaxed text-ink-muted">{blockedBody}</p>
+        ) : null}
         {assessment?.status === 'not_ready' ? (
           <div className="rounded-[18px] border border-divider bg-white px-4 py-5">
             <p className="text-[15px] font-semibold text-ink">{blockedTitle}</p>
           </div>
         ) : null}
-        <div className="flex flex-col gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5">
           {apps.map((app, i) => (
+            (() => {
+              const isRecommended = app.key === recommendedKey;
+              const closesOddRemainder = Boolean(recommendedKey && apps.length % 2 === 0 && i === apps.length - 1);
+              const isWide = isRecommended || closesOddRemainder;
+              return (
             <button key={app.key} onClick={() => push(app.key)}
-              className={`rounded-[18px] border bg-white p-3.5 text-left active:scale-[0.99] transition m-card-in ${app.key === recommendedKey ? 'border-pine/35' : 'border-divider'}`}
+              className={`rounded-[18px] border bg-white p-3.5 text-left active:scale-[0.99] transition m-card-in ${isWide ? 'col-span-2' : ''} ${isRecommended ? 'border-pine/35' : 'border-divider'}`}
               style={{ animationDelay: `${i * 0.05}s` }}>
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[13px] bg-pine-mist text-pine">{iconByKey[app.key]}</div>
+              <div className={`flex ${isWide ? 'items-center gap-3' : 'h-full flex-col items-start'}`}>
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[12px] bg-pine-mist text-pine">{iconByKey[app.key]}</div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-[10px] font-semibold text-pine">{app.learningAction}</p>
-                    {app.key === recommendedKey ? <span className="rounded-full bg-vermilion-mist px-1.5 py-0.5 text-[9px] font-semibold text-vermilion">{COPY.apps.matrix.recommended}</span> : null}
+                  <div className={`flex items-center gap-2 ${isWide ? '' : 'mt-3'}`}>
+                    <p className="text-[9px] font-semibold text-pine">{app.learningAction}</p>
+                    {isRecommended ? <span className="rounded-full bg-vermilion-mist px-1.5 py-0.5 text-[9px] font-semibold text-vermilion">{COPY.apps.matrix.recommended}</span> : null}
                   </div>
                   <p className="mt-0.5 text-[14px] font-semibold text-ink">{app.name}</p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-ink-muted">{app.bestFor}</p>
-                  {app.key === recommendedKey ? (
-                    <p className="mt-1.5 border-l-2 border-vermilion pl-2 text-[10px] leading-relaxed text-ink-secondary">
-                      {assessment?.recommendedAppKey ? COPY.apps.matrix.recommendedByContent : recommendation.reason}
-                    </p>
-                  ) : null}
-                  <p className="mt-1.5 font-mono text-[9px] text-ink-muted/80">{app.timeLabel} · {app.outputType}</p>
+                  <p className={`mt-1 text-[10.5px] leading-relaxed text-ink-muted ${isWide ? '' : 'line-clamp-2'}`}>{app.bestFor}</p>
+                  <p className="mt-2 font-mono text-[8.5px] text-ink-muted/75">{app.timeLabel}</p>
                 </div>
-                <ChevronRight size={15} className="mt-3 flex-shrink-0 text-ink-muted" />
+                {isWide ? <ChevronRight size={15} className="flex-shrink-0 text-ink-muted" /> : null}
               </div>
             </button>
+              );
+            })()
           ))}
         </div>
       </div>
@@ -1337,7 +1217,7 @@ function CatalogAppScreen({ p, appKey }: { p: MobileAppShellProps; appKey: Works
     <div className="flex min-h-0 flex-1 flex-col bg-paper m-page-in">
       <div className="flex-shrink-0 border-b border-divider/60 bg-paper px-4 pb-2.5 pt-[max(env(safe-area-inset-top),12px)]">
         <div className="flex items-center justify-between">
-          <button onClick={() => pop()} className="-ml-1 flex h-8 w-8 items-center justify-center rounded-full text-ink-muted">
+          <button aria-label={COPY.navigation.back} onClick={() => pop()} className="-ml-1 flex h-8 w-8 items-center justify-center rounded-full text-ink-muted">
             <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
           </button>
           <div className="text-center">
@@ -1353,7 +1233,9 @@ function CatalogAppScreen({ p, appKey }: { p: MobileAppShellProps; appKey: Works
           sessionId={p.sessionId || 'mobile-session'}
           segments={p.segments}
           contextTitle={reviewContext?.title || p.selectedReviewItem?.title}
+          dataSource={p.demoMode ? 'demo' : 'live'}
           onSeek={p.onSeek}
+          onReturnToMatrix={pop}
         />
       </div>
     </div>
@@ -1368,7 +1250,7 @@ function ClassmateScreen({ p }: { p: MobileAppShellProps }) {
     <div className="flex-1 min-h-0 flex flex-col bg-paper m-page-in">
       <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60">
         <div className="flex items-center gap-3">
-          <button onClick={() => pop()} className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1">
+          <button aria-label={COPY.navigation.back} onClick={() => pop()} className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1">
             <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
           </button>
           <div className="flex items-center gap-2">
@@ -1402,7 +1284,7 @@ function EchoScreen({ p }: { p: MobileAppShellProps }) {
     <div className="flex-1 min-h-0 flex flex-col bg-[#FAF7F2] m-page-in">
       <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60">
         <div className="flex items-center gap-3">
-          <button onClick={() => pop()} className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1">
+          <button aria-label={COPY.navigation.back} onClick={() => pop()} className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1">
             <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
           </button>
           <div className="flex items-center gap-2">
@@ -1467,7 +1349,11 @@ function ScreenRouter({ p }: { p: MobileAppShellProps }) {
   if (currentScreen === 'home' && !hasKnownLearningContext && !p.isRecording && !hasEnteredEmptyHome) {
     return (
       <MobileFirstLearningScreen
-        onStartRecording={() => { p.onStartRecording(); push('recording'); }}
+        onStartRecording={() => {
+          void p.onStartRecording().then((started) => {
+            if (started) push('recording');
+          });
+        }}
         onAddMaterial={() => p.onOpenFilePicker('all')}
         onAsk={p.onOpenSearch}
         onTryDemo={p.onStartDemo ? () => {
@@ -1484,10 +1370,10 @@ function ScreenRouter({ p }: { p: MobileAppShellProps }) {
     case 'recording': return <RecordingScreen p={p} />;
     case 'processing': return <ProcessingScreen p={p} />;
     case 'review': return <ReviewScreen p={p} />;
-    case 'flashcards': return <FlashcardsScreen p={p} />;
-    case 'quiz': return <QuizScreen p={p} />;
-    case 'cheatsheet': return <CheatsheetScreen p={p} />;
-    case 'mindmap': return <MindmapScreen p={p} />;
+    case 'flashcards': return <CatalogAppScreen p={p} appKey="flashcards" />;
+    case 'quiz': return <CatalogAppScreen p={p} appKey="quiz" />;
+    case 'cheatsheet': return <CatalogAppScreen p={p} appKey="cheatsheet" />;
+    case 'mindmap': return <CatalogAppScreen p={p} appKey="mindmap" />;
     case 'audio-overview': return <CatalogAppScreen p={p} appKey="audio-overview" />;
     case 'infographic': return <CatalogAppScreen p={p} appKey="infographic" />;
     case 'apps': return <AppsScreen p={p} />;
@@ -1495,7 +1381,11 @@ function ScreenRouter({ p }: { p: MobileAppShellProps }) {
     case 'echo': return <EchoScreen p={p} />;
     case 'empty': return (
       <MobileFirstLearningScreen
-        onStartRecording={() => { p.onStartRecording(); push('recording'); }}
+        onStartRecording={() => {
+          void p.onStartRecording().then((started) => {
+            if (started) push('recording');
+          });
+        }}
         onAddMaterial={() => p.onOpenFilePicker('all')}
         onAsk={p.onOpenSearch}
         onTryDemo={p.onStartDemo ? () => {

@@ -25,19 +25,16 @@ export interface WorkshopAppCatalogItem {
   /**
    * 本应用支持的上下文层（PRD v1.1 §4.2）。
    *
-   * - 'class'：单节课层（本期所有应用必含）
-   * - 'unit'：跨课单元层（v1.1 推迟）
-   * - 'exam'：考试层（v1.1 推迟）
-   *
-   * 即使本期 tier='class' 是唯一落地的层，这里也按设计意图标注全集；
-   * `WorkshopYellowPage` 当前只过滤含 'class' 的应用。
+   * - 'class'：单节课层，只放课后立即使用仍然成立的学习动作
+   * - 'unit'：跨课单元层，允许比较、去重与压缩多节课
+   * - 'exam'：考试层，叠加大纲、真题与时间约束
    */
   supportedTiers: ContextTier[];
   /**
    * 主舞台层。用于 UI 排序 / 推荐 hint，不影响过滤。
    *
-   * 即使主舞台是 'unit'（如 mindmap），本期未落地时仍按 supportedTiers 包含的
-   * 'class' 层在课堂矩阵里展示其退化形态。
+   * 主舞台只表达产品价值最高的层，不得为了“能力丰富”把不成立的退化形态
+   * 强塞到单课矩阵。
    */
   primaryTier: ContextTier;
 }
@@ -48,19 +45,19 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     name: '考试速查表',
     category: '应试准备',
     headline: '一页纸考试速查表',
-    description: '把课堂核心定义、公式、易错点整成可打印的一页卡片，考前最后一刻复习。',
+    description: '把多节课、课件、笔记与考试范围压成可编辑、可打印的高密度参考表。',
     tags: ['考试', '速查', '一页纸', '打印'],
     coverImage: '/images/apps/study-report-cover.svg',
     pluginId: 'cheatsheet-gen',
-    intent: '生成考试速查表：核心定义、公式/步骤、易错点各一组，适合一页打印。',
+    intent: '基于跨课与考试范围生成速查表：去重核心定义、公式、条件、对比、易错点和题型套路。',
     outputType: '可打印卡片',
     learningAction: COPY.apps.matrix.catalogMeta.cheatsheet.action,
     bestFor: COPY.apps.matrix.catalogMeta.cheatsheet.bestFor,
     timeLabel: COPY.apps.matrix.catalogMeta.cheatsheet.time,
     renderMode: 'document',
     status: 'ready',
-    supportedTiers: ['class', 'unit', 'exam'],
-    primaryTier: 'class',
+    supportedTiers: ['unit', 'exam'],
+    primaryTier: 'exam',
   },
   {
     key: 'audio-overview',
@@ -140,7 +137,7 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
   },
   {
     key: 'infographic',
-    name: '信息图应用',
+    name: '课堂信息图',
     category: '视觉表达',
     headline: '一张图带走这节课',
     description: '一键生成"一张图带走这节课"卡片：上=课程名+老师+日期，中=3 核心概念+老师金句，下=一句话总结。结构干净，可直接分享。',
@@ -165,4 +162,10 @@ export function isWorkshopAppKey(value: string): value is WorkshopAppKey {
 
 export function getWorkshopAppByKey(key: string): WorkshopAppCatalogItem | undefined {
   return WORKSHOP_APP_CATALOG.find((item) => item.key === key);
+}
+
+export function getWorkshopAppKeysForTier(tier: ContextTier): WorkshopAppKey[] {
+  return WORKSHOP_APP_CATALOG
+    .filter((item) => item.supportedTiers.includes(tier))
+    .map((item) => item.key);
 }

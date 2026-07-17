@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Anchor, TranscriptSegment } from '@/types';
-import type { AppExecutionResult, DataSourceType } from '@/lib/ai-native/types';
+import type { AppExecutionResult, ContextPack, DataSourceType } from '@/lib/ai-native/types';
 import type { WorkshopAppCatalogItem } from '@/lib/ai-native/app-catalog';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { COPY } from '@/lib/ui/copy';
@@ -236,13 +236,25 @@ function resolveExecuteTimeoutMs(appKey: string): number {
  */
 function slimTranscript(
   segments: TranscriptSegment[]
-): Array<Pick<TranscriptSegment, 'id' | 'text' | 'startMs' | 'endMs'>> {
+): TranscriptSegment[] {
   return segments.map((s) => ({
     id: s.id,
     text: s.text,
     startMs: s.startMs,
     endMs: s.endMs,
+    confidence: s.confidence ?? 1,
+    isFinal: s.isFinal ?? true,
   }));
+}
+
+function slimContextPack(pack: ContextPack): ContextPack {
+  return {
+    ...pack,
+    lessons: pack.lessons.map((lesson) => ({
+      ...lesson,
+      transcript: slimTranscript(lesson.transcript),
+    })),
+  };
 }
 
 interface UseAppExecutionParams {
@@ -257,6 +269,8 @@ interface UseAppExecutionParams {
   contextTitle?: string;
   model?: string;
   autoRun?: boolean;
+  /** 跨课 / 考试学习对象；存在时 API 不再使用单课 input。 */
+  contextPack?: ContextPack;
 }
 
 export interface UseAppExecutionReturn {
@@ -282,6 +296,7 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
     contextTitle,
     model,
     autoRun = true,
+    contextPack,
   } = params;
   const { accessToken } = useAuth();
   const [result, setResult] = useState<AppExecutionResult | null>(null);
@@ -291,12 +306,10 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
   const syncFromCache = useCallback(() => {
     const cachedResult = readCachedAppResult(sessionId, app.key);
     const cachedTask = readCachedTaskState(sessionId, app.key);
-    if (cachedResult) {
-      setResult(cachedResult);
-    }
-    if (cachedTask) {
-      setTaskState(cachedTask);
-    }
+    // Changing a multi-lesson scope changes this cache key. Explicitly clear
+    // the prior scope so its result never flashes under the new selection.
+    setResult(cachedResult);
+    setTaskState(cachedTask ?? nowTaskState('idle'));
   }, [app.key, sessionId]);
 
   useEffect(() => {
@@ -323,7 +336,8 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
   const executeInternal = useCallback(
     async (force: boolean) => {
       if (!force && result) return result;
-      if (transcript.length === 0) {
+      const hasContextPackTranscript = contextPack?.lessons.some((lesson) => lesson.transcript.length > 0) ?? false;
+      if (transcript.length === 0 && !hasContextPackTranscript) {
         const emptyState = nowTaskState('error', '当前会话缺少可用课堂内容，请先导入或录制。');
         setTaskState(emptyState);
         writeCachedTaskState(sessionId, app.key, emptyState);
@@ -352,12 +366,14 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
             body: JSON.stringify({
               appKey: app.key,
               model,
+              contextTier: contextPack?.tier,
+              contextPack: contextPack ? slimContextPack(contextPack) : undefined,
               goal: {
                 intent: app.intent,
                 expectedOutput: 'mixed',
                 appKey: app.key,
               },
-              input: {
+              input: contextPack ? undefined : {
                 sessionId,
                 dataSource,
                 transcript: slimTranscript(transcript),
@@ -367,7 +383,7 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
                   contextType: dataSource,
                 },
               },
-              memory: {
+              memory: contextPack ? undefined : {
                 summary: summaryOverview,
                 keyDifficulties,
                 terminologyHint: terminologyHint || undefined,
@@ -394,6 +410,9 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
           }
           if (data?.error === 'APP_NOT_SUITABLE') {
             throw new Error(COPY.apps.matrix.executeNotSuitable);
+          }
+          if (data?.error === 'MULTI_LESSON_CONTEXT_REQUIRED') {
+            throw new Error(COPY.apps.matrix.executeNeedsMultipleLessons);
           }
           throw new Error(data?.error || '应用执行失败');
         }
@@ -425,7 +444,7 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
         return null;
       }
     },
-    [accessToken, anchors, app.intent, app.key, contextTitle, dataSource, keyDifficulties, model, result, sessionId, summaryOverview, terminologyHint, transcript]
+    [accessToken, anchors, app.intent, app.key, contextPack, contextTitle, dataSource, keyDifficulties, model, result, sessionId, summaryOverview, terminologyHint, transcript]
   );
 
   useEffect(() => {

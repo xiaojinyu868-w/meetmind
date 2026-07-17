@@ -143,6 +143,8 @@ export type PendingRecordedAudio = {
   blob: Blob;
   baseSegments: TranscriptSegment[];
   baseOffsetMs: number;
+  /** 完整原声定稿时，用新结果替换 realtime 临时转录，而不是追加。 */
+  replaceExistingTranscript?: boolean;
 };
 
 // ── Collection Pulse ─────────────────────────────────────────────

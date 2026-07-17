@@ -66,11 +66,7 @@ import { ClassroomChipRow, type ClassroomDynamicChip } from './ClassroomChipRow'
 
 const IN_CLASS_EXCLUDED_SKILL_APP_KEYS: readonly WorkshopAppKey[] = ['flashcards', 'quiz'];
 
-const DEFAULT_LIGHT_PROMPTS = [
-  '刚才那句我没跟上',
-  '这段在讲什么？',
-  '帮我抓一下题眼',
-];
+const DEFAULT_LIGHT_PROMPTS = [...COPY.companion.defaultLightPrompts];
 
 export type CompanionMode = 'idle' | 'listening' | 'reflecting';
 
@@ -155,7 +151,7 @@ function Header({
 }) {
   // v7 companion-head：octo-stage 圆形 + 呼吸光环 + 名称 + mono pine 状态点
   if (mode === 'listening') {
-    const statusLabel = afterClass ? '听完了' : COPY.listening.hearing;
+    const statusLabel = afterClass ? COPY.companion.afterClassStatus : COPY.listening.hearing;
     return (
       <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-divider/80 bg-paper-warm/40 px-5 py-4 pr-11">
         <div className="flex min-w-0 items-center gap-3 text-ink">
@@ -194,7 +190,7 @@ function Header({
       <div className="min-w-0">
         <p className="text-[14px] font-semibold tracking-[-0.01em] text-ink">{COPY.identity.name}</p>
         <p className="mt-0.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
-          待命中
+          {COPY.companion.idleStatus}
         </p>
       </div>
     </div>
@@ -313,29 +309,25 @@ function EmptyCompanion({
   mode,
   onPickSkill,
   onOpenApp,
+  suggestedPrompts,
+  afterClass,
+  onAfterClassAction,
 }: {
   mode: CompanionMode;
   onPickSkill: (prompt: string) => void;
   onOpenApp?: (appKey: WorkshopAppKey) => void;
+  suggestedPrompts: string[];
+  afterClass: boolean;
+  onAfterClassAction?: () => void;
 }) {
   if (mode === 'listening') {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
-        <p className="text-[15px] font-medium text-ink-secondary">
-          {COPY.companion.emptyListeningPrimary}
-        </p>
-        <p className="mt-2 max-w-[18rem] text-[13px] leading-[1.75] text-ink-muted">
-          {COPY.companion.emptyListeningSecondary}
-        </p>
-        <p className="mt-6 text-[12px] font-medium uppercase tracking-[0.18em] text-ink-muted/80">
-          {COPY.companion.actionPrompt}
-        </p>
-        <SkillChipRow
-          variant="grid"
-          onPick={onPickSkill}
-          onSay={onPickSkill}
-          onOpenApp={onOpenApp}
-          excludeAppKeys={IN_CLASS_EXCLUDED_SKILL_APP_KEYS}
+      <div className="flex flex-1 flex-col justify-start pt-2">
+        <ListeningStarterCard
+          onPickSkill={onPickSkill}
+          suggestedPrompts={suggestedPrompts}
+          afterClass={afterClass}
+          onAfterClassAction={onAfterClassAction}
         />
       </div>
     );
@@ -371,14 +363,23 @@ function ListeningStarterCard({
   afterClass?: boolean;
   onAfterClassAction?: () => void;
 }) {
+  if (!afterClass) {
+    return (
+      <div className="flex items-center gap-2.5 px-6 py-2 text-[13px] text-ink-muted">
+        <OctoBuddySprite mood="listening" size="sm" className="flex-shrink-0" />
+        <span>{COPY.companion.listeningStarter}</span>
+      </div>
+    );
+  }
+
   return (
     <div className="px-6 pb-5">
       <div className="rounded-[22px] border border-divider bg-[#F2EDE3] px-4 py-4">
         <div className="flex items-start gap-3">
-          <OctoBuddySprite mood={afterClass ? 'happy' : 'listening'} size="md" className="-ml-1 -mt-1 flex-shrink-0" />
+          <OctoBuddySprite mood="happy" size="md" className="-ml-1 -mt-1 flex-shrink-0" />
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-medium leading-6 text-ink-secondary">
-              {afterClass ? '听完了，换我带你练一下。' : '卡住就点一句，我接着这段讲。'}
+              {COPY.companion.afterClassStarter}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {suggestedPrompts.slice(0, 3).map((prompt, index) => (
@@ -451,7 +452,7 @@ function StreamingBubble({
           <OctoBuddySprite mood="thinking" size="sm" />
         </div>
         <ThinkingStrip>
-          <span className="text-pine">{pendingLabel || '正在想…'}</span>
+          <span className="text-pine">{pendingLabel || COPY.companion.pending}</span>
         </ThinkingStrip>
       </div>
     );
@@ -518,7 +519,14 @@ export function ClassroomCompanionPanel({
       {/* 消息流 */}
       <div className="flex-1 overflow-y-auto pt-3 pb-5">
         {!hasMainContent ? (
-          <EmptyCompanion mode={mode} onPickSkill={onSend} onOpenApp={onOpenApp} />
+          <EmptyCompanion
+            mode={mode}
+            onPickSkill={onSend}
+            onOpenApp={onOpenApp}
+            suggestedPrompts={suggestedPrompts}
+            afterClass={afterClass}
+            onAfterClassAction={onAfterClassAction}
+          />
         ) : (
           <div className="flex flex-col">
             {visibleMessages.map((m) => (

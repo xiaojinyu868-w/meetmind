@@ -23,7 +23,6 @@ import { DefaultChatTransport } from 'ai';
 import { conversationMessageToUIMessage, resolveTutorAgentHistoryLabel } from './tutor-agent-history';
 import { formatRecentLearningActivityForTutorAgent, resolveTutorAgentLaunchText } from './tutor-agent-adapter';
 import { resolveTutorMessageRenderPlan } from './tutor-message-rendering';
-import { SkillChipRow } from './SkillChipRow';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { getPreference } from '@/lib/db';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
@@ -47,9 +46,6 @@ import {
   AI_MODEL_PREFERENCE_KEY,
   resolveExplicitAiModelPreference,
 } from '@/lib/utils/ai-model-preference';
-import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
-import { ALL_WORKSHOP_APP_KEYS } from '@/lib/ai-native/workshop-readiness';
-import type { WorkshopReadinessStatus } from '@/lib/ai-native/types';
 import { COPY } from '@/lib/ui/copy';
 
 export interface TutorAgentPanelTranscriptSegment {
@@ -110,12 +106,6 @@ export interface TutorAgentPanelProps {
   /** 外层触发开新对话时递增。 */
   newConversationNonce?: number;
   onNewConversation?: () => void;
-  /** 点 SkillChip 的结构化 app（速查表/闪卡/测验/导图/学习报告）时直接打开 WorkshopWindow */
-  onOpenApp?: (appKey: WorkshopAppKey) => void;
-  /** 当前材料真正支持的结构化应用；其余 chip 不在这个 surface 出现。 */
-  availableAppKeys?: readonly WorkshopAppKey[];
-  /** 材料不足时保留自由提问，但不伪装成一节可加工的课程。 */
-  workshopReadinessStatus?: WorkshopReadinessStatus;
 }
 
 /**
@@ -206,9 +196,6 @@ export function TutorAgentPanel({
   onLaunchQuestionConsumed,
   newConversationNonce = 0,
   onNewConversation,
-  onOpenApp,
-  availableAppKeys,
-  workshopReadinessStatus,
 }: TutorAgentPanelProps) {
   const { user } = useAuth();
   const userId = getEffectiveUserId(user?.id);
@@ -220,11 +207,6 @@ export function TutorAgentPanel({
   const persistedMessageIdsRef = React.useRef<Set<string>>(new Set());
   const lastLaunchQuestionNonceRef = React.useRef<number | null>(null);
   const lastNewConversationNonceRef = React.useRef(newConversationNonce);
-  const excludedAppKeys = React.useMemo(() => {
-    if (!availableAppKeys) return undefined;
-    const allowed = new Set(availableAppKeys);
-    return ALL_WORKSHOP_APP_KEYS.filter((key) => !allowed.has(key));
-  }, [availableAppKeys]);
 
   React.useEffect(() => {
     let alive = true;
@@ -571,19 +553,21 @@ export function TutorAgentPanel({
             <OctoAvatar mood="listening" size="lg" aura className="mb-4" />
             <div className="mx-auto max-w-[20rem] text-[15px] leading-[1.75] text-ink-secondary">
               <span className="font-serif italic text-pine">{COPY.identity.name}</span>
-              {workshopReadinessStatus === 'not_ready'
-                ? COPY.tutor.shortContextBody
-                : COPY.tutor.emptyAfterName}
+              {COPY.tutor.emptyAfterName}
             </div>
-            {workshopReadinessStatus !== 'not_ready' ? (
-              <SkillChipRow
-                onPick={onPickSkill}
-                onSay={onPickSkill}
-                onOpenApp={onOpenApp}
-                excludeAppKeys={excludedAppKeys}
-                disabled={busy}
-              />
-            ) : null}
+            <div className="mt-4 grid w-full max-w-[20rem] gap-2">
+              {COPY.tutor.reviewStarters.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => onPickSkill(prompt)}
+                  disabled={busy}
+                  className="min-h-11 rounded-2xl border border-divider bg-card px-4 py-2.5 text-left text-[13px] leading-5 text-ink-secondary transition hover:border-pine/35 hover:text-ink disabled:opacity-50"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
           </div>
         }
         variant="paper"

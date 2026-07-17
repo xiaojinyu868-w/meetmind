@@ -15,12 +15,13 @@
 ```
 tests/eval/
 ├── asr/
-│   ├── datasets/            # JSONL，每行 { id, audio_path, reference, tags }
+│   ├── datasets/            # JSONL，每行 { id, audio, audioDurationMs, reference, tags }
 │   ├── graders/
 │   │   ├── cer.ts           # 基础 CER（按字切的 Levenshtein）
 │   │   ├── wer.ts           # 英文或分词后 WER
+│   │   ├── diarization.ts   # DER（匿名声纹先做最优标签对齐，含 miss / false alarm / confusion）
 │   │   └── llm-judge.ts     # qwen3.5-plus 对"语义等价但字面不同"兜底打分
-│   ├── fixtures/            # 冻结的音频测试样本（生成脚本 + 元数据）
+│   ├── fixtures/            # 冻结的 16kHz/mono 音频样本 + DOMAIN.md
 │   ├── runs/                # 每次 run 的 JSONL 结果（.gitignore，只存摘要）
 │   └── runner.ts            # 跑全量或单条，输出 results.jsonl
 ├── tutor/
@@ -40,9 +41,10 @@ tests/eval/
 
 ### 跑全量
 ```bash
-npm run eval:asr        # 跑 ASR 全量
-npm run eval:tutor      # 跑 Tutor 全量
-npm run eval            # 两个都跑
+make eval-asr            # 冻结 hypothesis 的快速回归
+make eval-asr-real       # 本地短音频 batch / 公网 URL filetrans；自动读取 .env.local / .env
+ASR_EVAL_TRANSPORT=realtime make eval-asr-real  # 真实产品 WS 链路
+make eval-tutor
 ```
 
 ### 单条调试
@@ -56,17 +58,17 @@ npx tsx tests/eval/tutor/runner.ts --id tool-flashcards-01
 并在 stdout 打一份 summary，便于 CI grep：
 
 ```
-[asr-eval] 23/30 passed  avg_cer=4.2%  95p_cer=8.1%  regressions=0
+[asr-eval] 30 case(s) | avg_cer=4.2% | avg_der=8.5% | diarization_cases=6 | failed=0
 ```
 
 ## 冻结 fixture
 
-- **ASR fixture**：音频文件太大不入 git；提供生成脚本 `fixtures/generate.ts`（CosyVoice 合成 + MUSAN 混噪）+ 元数据 JSON
+- **ASR fixture**：短而有人工 reference 的 16kHz/mono 音频可冻结入库；当前 clean/5/10/20dB 同源样本见 `asr/fixtures/DOMAIN.md`。较大的真实课堂原声仍不入 git。
 - **Tutor fixture**：课堂转写 JSON 直接入 git；作为"唯一事实"锚定 Tutor 引用的时间戳
 
 ## 添加新 case 的流程
 
-1. 在 `datasets/` 追加一行 JSONL
+1. 在 `datasets/` 追加一行 JSONL；说话人 case 同时提供 `referenceSpeakers` / `hypothesisSpeakers` 和 `metrics:["diarization"]`，避免 DER seed 稀释 CER
 2. 如果是新类型的断言，在 `graders/` 加一个 TS 文件
 3. 跑 `npm run eval:<domain>` 本地验证
 4. 提 PR —— CI 会重新跑全量，**回归红灯卡合并**

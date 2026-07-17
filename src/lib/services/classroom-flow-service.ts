@@ -73,11 +73,11 @@ export async function generateClassroomFlow(
     "id": "稳定且简短的 id",
     "title": "老师此刻讲到的内容",
     "summary": "一句帮助学生跟上的说明",
-    "teachingMove": "可选：老师此刻在定义、推导、举例、比较、讨论或总结什么",
+    "teachingMove": "可选：用自然中文短语说明老师此刻在定义、推导、举例、比较、讨论或总结什么；不得输出 listening_detail 之类枚举名或英文标识",
     "anchorMs": 课堂中大致开始位置
   },
   "recent": [
-    {"id":"...","title":"刚才完成的一步","summary":"可选的一句关系说明","teachingMove":"可选","anchorMs":0}
+    {"id":"...","title":"刚才完成的一步","summary":"可选的一句关系说明","teachingMove":"可选的自然中文短语","anchorMs":0}
   ],
   "keep": [
     {"id":"...","kind":"definition|formula|example|question|contrast|conclusion|other","text":"值得课后回来的一点","reason":"可选：为什么值得留下","anchorMs":0}
@@ -171,7 +171,7 @@ function sanitizeMoment(
     id: cleanId(value.id, fallbackId),
     title,
     summary: cleanText(value.summary, 120) || undefined,
-    teachingMove: cleanText(value.teachingMove, 48) || undefined,
+    teachingMove: sanitizeTeachingMove(value.teachingMove),
     anchorMs: clampMs(value.anchorMs, elapsedMs, 0),
   };
 }
@@ -200,6 +200,15 @@ function sanitizeSignal(
 function cleanText(value: unknown, maxLength: number): string {
   if (typeof value !== 'string') return '';
   return value.replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
+function sanitizeTeachingMove(value: unknown): string | undefined {
+  const text = cleanText(value, 48);
+  if (!text) return undefined;
+  // 模型偶尔会把内部 schema / enum（如 listening_detail）原样返回。
+  // 这类开发者标识没有用户价值，宁可不显示，也不在前端翻译一套假标签。
+  if (/^[a-z][a-z0-9_-]*$/i.test(text)) return undefined;
+  return text;
 }
 
 function cleanId(value: unknown, fallback: string): string {

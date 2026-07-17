@@ -22,10 +22,10 @@ page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → r
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `types.ts` | ~270 | 核心类型（AppPlugin, AppExecutionContext, AppCard 等）+ ContextPack 上下文契约 + Workshop readiness 契约 |
-| `context-pack.ts` | 175 | ContextPack 适配器 + renderTranscriptWithAnnotations 渲染（PR-2 完整化） |
-| `app-catalog.ts` | ~175 | 应用目录定义（6 个应用，含 learningAction / bestFor / timeLabel 与 supportedTiers / primaryTier） |
+| `context-pack.ts` | ~420 | ContextPack 适配器 + 标记渲染；unit/exam 多课按时间展平供插件消费，同时保留 session/title/offset 供引用还原 |
+| `app-catalog.ts` | ~175 | 应用目录全集定义（含 learningAction / bestFor / timeLabel 与 supportedTiers / primaryTier）；单课不包含考试速查表 |
 | `app-catalog.test.ts` | — | 应用目录用户面文案护栏 |
-| `workshop-readiness.ts` | ~175 | 浏览器 / 服务端共用的纯内容证据门：安全 fallback、模型结果清洗、应用白名单 |
+| `workshop-readiness.ts` | ~175 | 浏览器 / 服务端共用的纯内容证据门：安全 fallback、模型结果清洗、按 class / unit / exam 收口应用白名单 |
 | `evidence-grounding.ts` | ~115 | 生成后证据校验：模型时间戳仅作候选，题面 / 条目 / 节点必须与真实原文语义匹配；匹配失败由各插件降级或剔除 |
 | `context-builder.ts` | 83 | 从请求构建执行上下文 |
 | `registry.ts` | 65 | 插件注册中心 |
@@ -45,7 +45,7 @@ page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → r
 | `flashcards.plugin.ts` | 308 | 闪卡 |
 | `quiz.plugin.ts` | 275 | 测验 |
 | `class-check.plugin.ts` | 264 | 随堂检验（智能版，基于知识点结构；视频内触发，不在 catalog） |
-| `cheatsheet.plugin.ts` | — | 速查表 |
+| `cheatsheet.plugin.ts` | — | unit/exam 考试速查表；课堂、大纲、真题分源回锚 |
 | `fallback.plugin.ts` | 43 | 兜底 |
 | `index.ts` | — | 插件注册（7 个插件） |
 

@@ -255,6 +255,13 @@ function isLikelyHallucination(finalText, durationMs) {
   const textLen = trimmedText.length;
   if (!textLen) return true;
 
+  const normalizedToken = trimmedText
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}]+/gu, ' ')
+    .trim();
+  const normalizedCompactToken = normalizedToken.replace(/\s+/g, '');
+
   if (durationMs > 0 && durationMs < 300 && textLen >= 3) {
     return true;
   }
@@ -264,6 +271,31 @@ function isLikelyHallucination(finalText, durationMs) {
     if (suspiciousSingleTokens.includes(trimmedText.toLowerCase())) {
       return true;
     }
+  }
+
+  // 嘈杂教室里，键盘声、呼吸和远处人声容易被多语种模型解码成极短的
+  // 英文附和词。这些片段即使真实存在，也不构成课堂笔记信息；
+  // Qwen Realtime 不返回可信词级时间戳，代理的 VAD 时间会把前后静音也
+  // 算进去，因此 1.5s 上限过严，手机噪声产生的 "Agree / Yeah / I see"
+  // 常落在 2-3s。只对封闭的低信息词表放宽到 3s，完整句不受影响。
+  if (durationMs > 0 && durationMs <= 3000) {
+    const lowInformationUtterances = new Set([
+      '嗯', '啊', '哦', '呃', '唉', '哼', '嗯嗯', '啊对', '对', '好', '好的',
+      'uh', 'um', 'ah', 'oh', 'yeah', 'yep', 'yes', 'ok', 'okay', 'i see', 'agree', 'thanks', 'thank you',
+    ]);
+    if (lowInformationUtterances.has(normalizedToken) || lowInformationUtterances.has(normalizedCompactToken)) {
+      return true;
+    }
+  }
+
+  // 物理上不可能的语速是另一种稳定的噪声幻觉信号。阈值故意保守：
+  // 中文 > 16 字/秒或英文 > 9 词/秒才丢弃。
+  if (durationMs >= 300) {
+    const durationSec = durationMs / 1000;
+    const cjkCount = (trimmedText.match(/[\u3400-\u9fff]/g) || []).length;
+    const latinWordCount = (trimmedText.match(/[A-Za-z]+(?:'[A-Za-z]+)?/g) || []).length;
+    if (cjkCount >= 4 && cjkCount / durationSec > 16) return true;
+    if (latinWordCount >= 4 && latinWordCount / durationSec > 9) return true;
   }
 
   return false;

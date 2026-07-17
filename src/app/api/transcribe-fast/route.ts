@@ -168,18 +168,17 @@ async function submitAsyncTask(
   fileUrl: string,
   apiKey: string,
   language: string = 'auto',
-  contextHint: string = ''
+  _contextHint: string = ''
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
   // Qwen 官方：混合语种或不确定时省略 language 参数（M7.6 修复课堂中英夹杂）
   const langParam = language === 'auto' ? {} : { language };
   const requestBody = {
-    model: 'qwen3-asr-flash-filetrans',
+    model: process.env.DASHSCOPE_ASR_FILE_MODEL || 'qwen3-asr-flash-filetrans-2025-11-17',
     input: { file_url: fileUrl },
     parameters: {
       channel_id: [0],
       ...langParam,
       enable_itn: true,
-      ...(contextHint ? { corpus: { text: contextHint } } : {}),
     },
   };
 
@@ -550,7 +549,8 @@ export async function POST(request: NextRequest) {
       segments: outputSegments,
       language,
       mode: 'parallel',
-      contextHintUsed: Boolean(contextHint),
+      // filetrans 本身不消费 corpus；只有可选 post-edit 真正读取了 hint 时才标记。
+      contextHintUsed: postEditEnabled && Boolean(contextHint),
       // 部分失败时给前端提示（不影响 success=true）
       partialFailure: result.failedSegmentIndices.length > 0
         ? { failedIndices: result.failedSegmentIndices, totalSegments: segments.length }

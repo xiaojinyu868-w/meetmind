@@ -24,14 +24,14 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 | `ClassroomLayout.tsx` | ~270 | 左右分栏容器；同桌只在真实录课 / 示例课听课态可见，无课堂上下文时隐藏右栏、Octo Buddy 和移动端问同学入口；录课态右栏默认 340px，把宽度优先留给课堂脉络并保留拖拽放大 |
 | `ClassroomLeftPanel.tsx` | ~690 | 视图管理器（list ↔ recording 淡入切换）+ 首页能力旅程（听懂现场 / 连起资料 / 练成结果）+ **ActiveLessonPill 置顶活动条** + StickyStartBar 底部主 CTA；零存量态把录音来源选择传给 Hero；试听课完成态透传课后引导动作 |
 | `ClassroomHomeCommandCenter.tsx` | ~105 | 有历史课堂时的桌面首页续学控制台：只保留日期、续学主叙事、真实恢复现场、问课堂与放材料入口；不再重复解释能力，让最近课堂进入首屏 |
-| `ClassroomCompanionPanel.tsx` | ~585 | 右侧同桌面板（header/气泡/流式气泡/thinking/输入栏）；课中 / 课后 starter 都用 Octo Buddy 像素章鱼 + 轻问题 chip 引导用户开口，不做重功能卡 |
+| `ClassroomCompanionPanel.tsx` | ~575 | 右侧同桌面板（header/气泡/流式气泡/thinking/输入栏）；课中不写入自动寒暄消息，header + 轻量 Octo 在场信号承接第一次互动，问题快通道只在输入区保留一套，避免上下两组重复入口；快捷动作发出的用户消息保持自然人话，内部教学指令只留在后台 prompt；课后 starter 同样不做重功能卡 |
 | `InlineAppCard.tsx` | ~160 | 对话内应用承载卡（真实应用 UI 复用 `apps/windows/AppRenderSurface`，不再手写一套窄版） |
 | `OctoBuddy.tsx` | ~660 | Octo Buddy 像素 IP（Sprite + 悬浮球）；Sprite 自带呼吸 / 听课 / 开心动画，右侧同桌内嵌也必须动起来 |
 | `ClassroomHero.tsx` | ~280 | 课堂零存量首屏；左侧定位与录音入口，右侧展示真实示例；存在未完成学习线索时，主叙事上方显示 `ContextRecoveryCard`，可直接接回全局 Ask |
 | `ClassroomLaunchpad.tsx` | ~100 | 课堂首页能力入口：让开始课堂、放入材料、搜索并继续问第一眼可见；只呈现三条学习路径，不做完整功能黄页 |
 | `ClassroomLessonCard.tsx` | ~160 | 一张课的卡片（四种时态视觉差异：upcoming/recording/processing/ready） |
 | `ClassroomRecordingView.tsx` | ~640 | 录课中视图（宽桌面左侧实时文字 + 中间课堂脉络；移动端和中等宽度桌面在“脉络 / 原话”之间切换，避免三栏硬挤；含翻译与试听课音频控制）。试听课默认 EN→中，音频结束后只引导点击“结束这节课”，由上层切到课后复习页 / 应用矩阵 |
-| `ClassroomFlowCanvas.tsx` | ~240 | 课中中间主画布：突出“正在讲”，以低权重时间线呈现近期推进，并将真正值得回来的定义/公式/问题留到课后；不画课中思维导图 |
+| `ClassroomFlowCanvas.tsx` | ~220 | 课中中间主画布：空态只显示真实听课状态，不用解释文案教育用户；内容出现后突出“正在讲”，以低权重时间线呈现近期推进，并将真正值得回来的定义/公式/问题留到课后；不画课中思维导图 |
 | `ClassroomRecordingView.model.ts` | ~16 | 录课视图纯模型：翻译模式循环 + 会话级默认翻译模式解析 |
 | `types.ts` | ~55 | Lesson / LessonStatus / ClassroomPaneState / CompanionMessage / CompanionCard |
 | `demoData.ts` | ~90 | Demo 数据（暂未使用，保留供 storybook/演示） |
@@ -56,6 +56,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 - **全局主 CTA 不允许被滚走**：底部 StickyStartBar 常驻；已在录音时变灰提示"正在录一节课"
 - **AI 同桌是"有上下文才出现"的**：空课堂 / 未听课时不显示右栏、Octo Buddy 或问同学入口，避免无上下文拒答；真实录课或示例课听课态才自动展开到可拖拽右栏
 - **电脑内录必须首屏可见**：零存量态不能只给一个“开始录课”按钮；录音来源 rail 要直接露出“电脑声音”，否则用户不会知道可以录网课 / 系统声音
+- **听准优先于分人**：首页与录课中不让用户选择 ASR 供应商或“单人 / 多人”模式；实时字幕固定走高准确率 Qwen。说话人只在课后定稿后静默判断，至少两位稳定发言证据成立才显示匿名“发言者 A / B”，不自动猜老师或真实姓名。
 - **首页入口不能互相重复**：有历史课堂时，顶部只展示“放入材料 / 搜索”两条补充上下文动作；录课与声音来源统一由底部常驻栏承接。顶部能力旅程解释输入之后会得到什么，不能再塞一个重复的录课卡。
 - **试听课必须有生长感**：左侧音频和转录、中间课堂脉络、右侧同桌轻问题要同步出现；中间不能等后端或长期停在空态，示例课用本地脉络随音频秒数推进；音频结束后必须由 Octo Buddy 提醒用户点击“结束这节课”进入既有课后复习页 / 应用矩阵，而不是在课中页面承载完整课后学习，也不能回到“原声已保留”的失败卡片
 - **Octo Buddy 是 IP，不是图标**：内嵌在右侧同桌里的章鱼也必须动起来（呼吸 / 听课 / 开心），不能只作为静态头像

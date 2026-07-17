@@ -92,5 +92,6 @@ export function buildExecutionContext(payload: AppExecuteRequest): AppExecutionC
     memory,
     goal: normalizeGoal(payload.goal, appKey),
     model: resolvedModel,
+    contextTier: payload.contextTier ?? 'class',
   };
 }

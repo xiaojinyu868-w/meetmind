@@ -223,4 +223,18 @@ describe('isLikelyHallucination', () => {
   it('flags empty text', () => {
     expect(isLikelyHallucination('', 5000)).toBe(true);
   });
+  it('filters short low-information utterances commonly hallucinated from classroom noise', () => {
+    expect(isLikelyHallucination('Yeah.', 900)).toBe(true);
+    expect(isLikelyHallucination('I see.', 1200)).toBe(true);
+    expect(isLikelyHallucination('Agree.', 2600)).toBe(true);
+    expect(isLikelyHallucination('啊，对。', 800)).toBe(true);
+  });
+  it('keeps the same words when they are part of a longer, plausible utterance', () => {
+    expect(isLikelyHallucination('Yes, this is the central argument.', 2400)).toBe(false);
+    expect(isLikelyHallucination('I agree with the first interpretation.', 2200)).toBe(false);
+  });
+  it('filters physically implausible speech rates', () => {
+    expect(isLikelyHallucination('这是一段不可能在短时间说完的话', 500)).toBe(true);
+    expect(isLikelyHallucination('one two three four five six', 400)).toBe(true);
+  });
 });

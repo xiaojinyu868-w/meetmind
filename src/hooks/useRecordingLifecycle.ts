@@ -17,7 +17,10 @@ import { classroomDataService } from '@/lib/services/classroom-data-service';
 import { memoryService } from '@/lib/services/memory-service';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
 import { uploadRecordingAudio } from '@/lib/services/upload-recording-audio';
-import { runDiarizationForSession } from '@/lib/services/asr/diarization-service';
+import {
+  runDiarizationForSession,
+  shouldRunPostBatchDiarization,
+} from '@/lib/services/asr/diarization-service';
 import { resolveLiveRecordingAppendOffset } from '@/lib/capture/live-recording';
 import {
   mergeWorkspaceCaptures,
@@ -26,6 +29,7 @@ import {
   readJsonApiResponse,
 } from '@/lib/utils/page-utils';
 import { UIConfig } from '@/lib/config';
+import { COPY } from '@/lib/ui/copy';
 import type { TranscriptSegment } from '@/types';
 import type {
   SourceIngestItem,
@@ -177,7 +181,6 @@ export function useRecordingLifecycle(
   }, [accessToken, isAuthenticated, refreshDailyEcho, user?.id]);
 
   // ── handleRecordingStart ───────────────────────────────────────
-
   const handleRecordingStart = useCallback((newSessionId: string) => {
     // ── 核心判定：是不是"同一节课续录" ──
     //
@@ -251,7 +254,7 @@ export function useRecordingLifecycle(
 
   // ── handleRecordingStop ────────────────────────────────────────
 
-  const handleRecordingStop = useCallback((blob?: Blob, meta?: { recordingId?: string; sessionId?: string; isContinuation?: boolean; durationMs?: number }) => {
+  const handleRecordingStop = useCallback((blob?: Blob, meta?: { recordingId?: string; sessionId?: string; isContinuation?: boolean; durationMs?: number; finalPassPending?: boolean }) => {
     // Store actions (pure writers)
     const uiAct = useUIStore.getState().actions;
     const sessionAct = useSessionStore.getState().actions;
@@ -456,8 +459,13 @@ export function useRecordingLifecycle(
       // 如果实时多人模式（腾讯云）已经产出 speakerId，跳过课后 diarization——
       // 课后 diarization 走 DashScope Fun-ASR 非实时接口，声纹模型独立，
       // 两套引擎的 speakerId 编号无对应关系，混用会导致说话人标签错乱。
-      const hasRealtimeSpeakerId = finalSegments.some((s) => s.speakerId);
-      if (finalSegments.length > 0 && !hasRealtimeSpeakerId) {
+      // 完整原声定稿开启时，不能让 diarization 和 batch final pass 并发。
+      // 否则较晚返回的说话人结果会拿 realtime 草稿覆盖更准确的定稿文本。
+      // final pass 完成后由 useTranscriptHandlers 基于定稿 segments 再做说话人整理。
+      if (
+        shouldRunPostBatchDiarization(finalSegments, pendingBaseOffsetMs)
+        && !meta?.finalPassPending
+      ) {
         void runDiarizationForSession(
           blob,
           effectiveSessionId,
@@ -469,7 +477,7 @@ export function useRecordingLifecycle(
         ).catch(() => undefined);
       }
 
-      if (finalSegments.length === 0) {
+      if (finalSegments.length === 0 || meta?.finalPassPending) {
         pendingRecordedAudiosRef.current.set(recordingId, {
           recordingId,
           itemId: audioCaptureId,
@@ -480,6 +488,7 @@ export function useRecordingLifecycle(
           blob,
           baseSegments: pendingBaseSegments,
           baseOffsetMs: pendingBaseOffsetMs,
+          replaceExistingTranscript: Boolean(meta?.finalPassPending && !meta?.isContinuation),
         });
       }
     } else {
@@ -535,17 +544,17 @@ export function useRecordingLifecycle(
     // 在 review apps tab 才出现，用户不会自己摸过去 = K 系数掉一半。
     //
     // 新逻辑：
-    //   - classroom tab 录完 → 跳 review apps（dispatcher 第一眼可见）
+    //   - classroom tab 且已有有效转录 → 跳 review apps（dispatcher 第一眼可见）
+    //   - 空课堂 / 仍等最终转写 → 留在课堂列表，避免展示 0 段内容的空应用矩阵
     //   - record / 其他 tab 录完 → setViewMode('record')（保持原行为）
     const uiState = useUIStore.getState();
     const currentViewMode = uiState.viewMode;
     if (currentViewMode === 'classroom') {
-      uiAct.setViewMode('review');
-      uiAct.setReviewTab('apps');
-      // 一句温柔提示，让 viewMode 切换不显得突兀，并把"递结晶"那条入口推到用户面前
-      toast.success('这节课结束了 · 应用矩阵已就位', {
-        description: '挑一个产物，可以收着也可以递给同学',
-      });
+      if (finalSegments.length > 0) {
+        uiAct.setViewMode('review');
+        uiAct.setReviewTab('apps');
+        toast.success(COPY.recording.finished);
+      }
     } else {
       uiAct.setViewMode('record');
     }

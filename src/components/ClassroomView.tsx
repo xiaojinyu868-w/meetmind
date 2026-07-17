@@ -396,10 +396,6 @@ export function ClassroomView({
   const setRecorderAudioSource = useCaptureEditorStore(
     (s) => s.actions.setRecorderAudioSource,
   );
-  const recorderSpeakerDiarization = useCaptureEditorStore((s) => s.recorderSpeakerDiarization);
-  const setRecorderSpeakerDiarization = useCaptureEditorStore(
-    (s) => s.actions.setRecorderSpeakerDiarization,
-  );
 
   // ── 预知气泡：AI 同桌的"主动性"，只在录课中工作 ──
   // M14: foresight 引擎复用 —— 输出从"折叠药丸"形态升级为 composer 上方的动态 chip 行
@@ -571,8 +567,6 @@ export function ClassroomView({
         onFinishDemo={handleOpenDemoReview}
         audioSource={recorderAudioSource}
         onChangeAudioSource={setRecorderAudioSource}
-        speakerDiarization={recorderSpeakerDiarization}
-        onChangeSpeakerDiarization={setRecorderSpeakerDiarization}
         onOpenApp={onOpenApp}
         onRenameLesson={onRenameLesson}
         onQuickPhoto={onQuickPhoto}
@@ -580,7 +574,7 @@ export function ClassroomView({
         onSearch={onSearch}
       />
     ),
-    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, classroomFlow, classroomFlowNewIds, isUnderstandingClassroomFlow, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, recorderSpeakerDiarization, setRecorderSpeakerDiarization, onOpenApp, onRenameLesson, onQuickPhoto, onAddMaterial, onSearch],
+    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, classroomFlow, classroomFlowNewIds, isUnderstandingClassroomFlow, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, onOpenApp, onRenameLesson, onQuickPhoto, onAddMaterial, onSearch],
   );
 
   const demoSuggestedPrompts = useMemo(

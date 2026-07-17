@@ -43,7 +43,7 @@ components/
 |------|------|------|
 | `Recorder.tsx` | 1694 | 录音主组件（采集/实时转录/暂停/恢复；实时 final 进入 `recorder-utils.mergeRealtimeTranscriptSegment` 去重/修时间戳），支持 `recorderRef` 普通 prop 供首页按需加载，子模块在 `recorder/` |
 | `TranscriptFlowView.tsx` | 778 | 转录内容流式视图 |
-| `LessonDigestCard.tsx` | ~220 | 课堂结构化笔记纯展示组件（飞书妙记式分段总结 + 图片内联 + 时间戳跳转 + 原文折叠 + 长按标记困惑；桌面移动共用） |
+| `LessonDigestCard.tsx` | ~220 | 课堂结构化笔记纯展示组件（飞书妙记式分段总结 + 图片内联 + 时间戳跳转 + 原文折叠 + 长按标记困惑；桌面移动共用）；标题不再叠加“课堂总结”等重复说明，降级路径不向用户暴露 LLM 等内部术语 |
 | `WaveformPlayer.tsx` | 638 | 波形音频播放器 |
 | `VoiceMicButton.tsx` | ~200 | 语音麦克风按钮 |
 
@@ -53,10 +53,11 @@ components/
 |------|------|------|
 | `AITutor.tsx` | 1940 | 旧 AI 家教 / legacy fallback（移动端文字和语音主链路已移出），子模块在 `tutor/` |
 | `AIChat.tsx` | 691 | AI 对话组件 |
-| `GlobalAskPanel.tsx` | ~500 | 全局 Ask MeetMind：基于 ChatBase 的多轮问答；普通问答直接回答，深度学习在消息流内保留用户原问题并仅在真实歧义时追问；接入当前材料、可控长期记忆、会话恢复与学习进展确认 |
-| `LearningIntentConfirmationCard.tsx` / `learning-intent-confirmation-model.ts` / `LearningProgressMemoryCard.tsx` | ~250 | 深度学习的两道用户确认边界：开始前不再让用户编辑 AI 计划；若学习路径确有歧义，逐步显现模型动态生成的 1-3 个单选/多选问题，单选后自然进入下一问，最后一次确认后自动细化并开始；结束后逐条确认哪些进展可进入长期记忆 |
+| `GlobalAskPanel.tsx` | ~500 | 全局 Ask MeetMind：基于 ChatBase 的多轮问答；普通问答直接回答，深度学习在消息流内保留用户原问题并仅在真实歧义时追问；接入当前材料、模型管理的长期学习理解、客观最近学习现场与会话恢复 |
+| `LearningIntentConfirmationCard.tsx` / `learning-intent-confirmation-model.ts` | ~210 | 深度学习的轻确认：若学习路径确有歧义，逐步显现模型动态生成的 1-3 个选择问题；学习理解在回答结束后静默整理，不把内部记忆标记塞进消息流 |
+| `LearningProgressMemoryCard.tsx` | ~50 | 旧学习进展 marker 的反馈卡，当前 `GlobalAskPanel` 不再使用；保留仅供迁移期兼容，勿在新链路继续扩展 |
 | `LearningContextStatus.tsx` | ~40 | 全局 Ask 的上下文状态条；只显示实际接入的当前材料、最近学习与长期记忆数量，不暴露模型内部推理 |
-| `LearningMemoryPanel.tsx` / `ContextRecoveryCard.tsx` | ~230 | 长期记忆可见可控（添加/暂停/删除）与首页学习现场恢复入口 |
+| `LearningMemoryPanel.tsx` / `CourseContextSection.tsx` / `CourseAssessmentCard.tsx` / `CourseCheatsheetWorkspace.tsx` / `ContextRecoveryCard.tsx` | ~980 | 「我的上下文」单页连续视图：不使用嵌套 Tab，依次呈现可纠正的学习理解、由真实 session 自动归组的课堂上下文、客观最近学习现场；课程内按需出现轻量考试对象，单元/考试均由学生确认多课范围后进入打印型速查表 |
 | `AISearchPanel.tsx` | ~740 | 旧单轮 Workspace AI 搜索面板；主入口已由 `GlobalAskPanel` 替代，保留作迁移参考 |
 | `WordExplainer.tsx` | 562 | 术语解释器 |
 | `StreamingMarkdown.tsx` | 391 | 统一流式 Markdown 渲染（GFM 表格 / 数学公式 / [MM:SS] 与 [t=MM:SS] 时间戳 / [资料N]） |
@@ -117,16 +118,18 @@ components/
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `WorkshopYellowPage.tsx` | ~910 | 六类学习动作矩阵：基于显式课堂信号突出一个“现在最适合”，首次点击后台完成，做好后进入统一学习工作区；分享入口后置 |
-| `apps/WorkshopAppCard.tsx` | ~135 | 应用卡统一层级：学习动作、适用场景、时间投入、状态与单一主操作 |
+| `WorkshopYellowPage.tsx` | ~960 | 六类学习动作矩阵：一个有依据的首选 + 五项两列紧凑能力；首次点击后台完成，任务托盘仅承接进行中/失败，做好后进入统一学习工作区；分享入口后置 |
+| `apps/WorkshopAppCard.tsx` | ~170 | 应用卡统一层级：首选完整卡 + 次要能力紧凑卡；学习动作、适用场景、状态与单一主操作 |
 | `windows/WorkshopWindowManager.tsx` | ~580 | 浮窗管理器 |
 | `windows/InfographicWindow.tsx` | ~700 | 信息图浮窗，类型/常量/工具已拆到 `infographic-window-data.ts` |
 | `windows/infographic-window-data.ts` | 305 | 信息图类型/场景预设/风格预设/纯工具函数 |
 | `windows/MindmapWindow.tsx` | ~691 | 思维导图浮窗，布局引擎已拆到 `mindmap-layout.ts` |
 | `windows/mindmap-layout.ts` | 168 | 思维导图布局引擎（纯函数，有测试） |
-| `windows/QuizWindow.tsx` | ~720 | 测验浮窗 |
-| `windows/FlashcardsWindow.tsx` | ~470 | 闪卡浮窗 |
-| `windows/PodcastWindow.tsx` | ~470 | 播客浮窗 |
+| `windows/FlashcardsWindow.tsx` | ~470 | 主动回忆闪卡：按需提示、翻面自评、薄弱卡复习与原声证据回跳 |
+| `windows/QuizWindow.tsx` | ~500 | 课堂测验：客观题反馈、主观题对照自评、薄弱题复练与原声证据回跳 |
+| `windows/CheatsheetWindow.tsx` / `windows/cheatsheet-window-model.ts` | ~800 | 跨课考试速查表：纸面轻编辑、A4/Letter 与单双面约束、真实分页预览、浏览器打印 / PDF |
+| `windows/PodcastWindow.tsx` | ~470 | 音频概览：播放优先、制作详情折叠、稳定错误兜底 |
+| `windows/AppWindowPlaceholder.tsx` | ~100 | 六类应用共用的整理中 / 空结果 / 失败状态 |
 | `hooks/useAppExecution.ts` | ~370 | 应用执行 hook |
 
 ## ⚠️ 超标文件（>500 行）

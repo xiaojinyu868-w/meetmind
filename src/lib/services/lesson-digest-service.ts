@@ -235,7 +235,7 @@ function buildFallbackDigest(
 
   return {
     title: '课堂笔记',
-    overview: '自动生成的分段摘要（LLM 降级版）。',
+    overview: '',
     sections: sections.length > 0 ? sections : [{
       heading: '课堂内容',
       text: '暂无可用转录内容。',
@@ -258,7 +258,7 @@ export function normalizeLessonDigestOutput(
   lessonTitle?: string,
 ): LessonDigest {
   const title = cleanText(llmOutput.title || '') || lessonTitle || '课堂笔记';
-  const overview = cleanText(llmOutput.overview || '') || '这节课的结构化笔记。';
+  const overview = cleanText(llmOutput.overview || '');
   const sections: DigestSection[] = [];
 
   for (const [index, section] of (llmOutput.sections || []).entries()) {

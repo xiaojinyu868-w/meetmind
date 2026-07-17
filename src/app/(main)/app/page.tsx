@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { toast } from 'sonner';
 import { useUIActions, useUIStore, type MobileSubPage } from '@/stores/ui-store';
 import { usePlayerStore } from '@/stores/player-store';
 import { useSessionStore } from '@/stores/session-store';
@@ -160,7 +161,6 @@ const MobileAppShell = dynamic(() => import('@/components/mobile/MobileAppShell'
 const SafeAITutor = dynamic(() => import('@/components/SafeAITutor').then(m => ({ default: m.SafeAITutor })), { ssr: false });
 const MobileAIChatPanel = dynamic(() => import('@/components/mobile/MobileAIChatPanel').then(m => ({ default: m.MobileAIChatPanel })), { ssr: false });
 const MobileCollectionSheet = dynamic(() => import('@/components/mobile/MobileCollectionSheet').then(m => ({ default: m.MobileCollectionSheet })), { ssr: false });
-const MobileAppRunner = dynamic(() => import('@/components/mobile/MobileAppRunner').then(m => ({ default: m.MobileAppRunner })), { ssr: false });
 const MobileAppsSubPage = dynamic(() => import('@/components/mobile/MobileAppsSubPage').then(m => ({ default: m.MobileAppsSubPage })), { ssr: false });
 const MobileSimpleSubPage = dynamic(() => import('@/components/mobile/MobileAppsSubPage').then(m => ({ default: m.MobileSimpleSubPage })), { ssr: false });
 
@@ -325,7 +325,6 @@ function StudentAppContent({
   // 录音来源（麦克风 / 电脑声音 / 两路都录）——仅传给课堂挂载点的 Recorder，
   // 收集页永远走默认 'mic'（备忘录场景不需要电脑声采集）。
   const recorderAudioSource = useCaptureEditorStore((s) => s.recorderAudioSource);
-  const recorderSpeakerDiarization = useCaptureEditorStore((s) => s.recorderSpeakerDiarization);
 
   // Capture Editor Store setter aliases
   const setSegments = captureEditorActions.setSegments;
@@ -1728,7 +1727,6 @@ function StudentAppContent({
               onTranscriptEnhanced={handleTranscriptEnhanced}
               onAnchorMark={handleAnchorMark}
               contextHint={liveASRContextHint}
-              speakerDiarization={recorderSpeakerDiarization}
             />
           </div>
         </div>
@@ -1936,12 +1934,14 @@ function StudentAppContent({
             setCurrentTime(0);
             setIsPlaying(false);
           }}
-          onStartRecording={() => {
-            if (recorderRef.current) {
-              void recorderRef.current.startRecording();
-            } else {
-              captureEditorActions.setRecorderAutoStartSignal(Date.now());
+          onStartRecording={async () => {
+            // 只有 Recorder 真正拿到音频流并开始保存原声后，MobileAppShell 才进入录课页。
+            // handleRecordingStart 会在这个 Promise 返回前同步隔离新 session 和清空旧课。
+            if (!recorderRef.current) {
+              toast.error(COPY.recording.startFailed(COPY.recording.recorderNotReady));
+              return false;
             }
+            return recorderRef.current.startRecording();
           }}
           onOpenFilePicker={(mode) => handleSourceFileButtonClick(mode)}
           onOpenReview={(item) => openReviewFromCollection(item)}
@@ -2016,41 +2016,6 @@ function StudentAppContent({
             />
           }
           reviewSheetPreview={segments.length > 0 ? '这节课有问题随时问我' : '问我任何事'}
-          flashcardsContent={
-            <MobileAppRunner
-              appKey="flashcards"
-              sessionId={sessionId || 'mobile-session'}
-              segments={segments}
-              contextTitle={reviewContextTitle}
-              onSeek={(ms) => handleUnifiedSeek(ms)}
-            />
-          }
-          quizContent={
-            <MobileAppRunner
-              appKey="quiz"
-              sessionId={sessionId || 'mobile-session'}
-              segments={segments}
-              contextTitle={reviewContextTitle}
-              onSeek={(ms) => handleUnifiedSeek(ms)}
-            />
-          }
-          cheatsheetContent={
-            <MobileAppRunner
-              appKey="cheatsheet"
-              sessionId={sessionId || 'mobile-session'}
-              segments={segments}
-              contextTitle={reviewContextTitle}
-            />
-          }
-          mindmapContent={
-            <MobileAppRunner
-              appKey="mindmap"
-              sessionId={sessionId || 'mobile-session'}
-              segments={segments}
-              contextTitle={reviewContextTitle}
-              onSeek={(ms) => handleUnifiedSeek(ms)}
-            />
-          }
           classmateContent={
             <SafeAITutor
               isMobile={true}
@@ -2094,7 +2059,6 @@ function StudentAppContent({
               onAnchorMark={handleAnchorMark}
               contextHint={liveASRContextHint}
               audioSource={recorderAudioSource}
-              speakerDiarization={recorderSpeakerDiarization}
             />
           </div>
           {(audioBlob || audioUrl) && dataSource !== 'demo' && (
@@ -2249,7 +2213,6 @@ function StudentAppContent({
               onAnchorMark={handleAnchorMark}
               contextHint={liveASRContextHint}
               audioSource={recorderAudioSource}
-              speakerDiarization={recorderSpeakerDiarization}
             />
           </div>
         </div>

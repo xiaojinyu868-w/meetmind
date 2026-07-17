@@ -39,4 +39,81 @@ describe('buildCheatsheetSections evidence grounding', () => {
     expect(sections[0].items[0].emphasis).toBe('normal');
     expect(sections[0].items[1].emphasis).toBe('strong');
   });
+
+  it('restores a grounded citation to the source lesson and its local time', () => {
+    const multiLessonTranscript: TranscriptSegment[] = [
+      {
+        id: 'lesson-a:s1',
+        text: '需求价格弹性衡量需求量变动对价格变动的敏感程度。',
+        startMs: 0,
+        endMs: 8_000,
+        isFinal: true,
+        sourceItemId: 'lesson-a',
+        sourceTitle: '第一讲 · 需求',
+      },
+      {
+        id: 'lesson-b:s1',
+        text: '边际成本是额外生产一个单位所增加的成本。',
+        startMs: 9_000,
+        endMs: 16_000,
+        isFinal: true,
+        sourceItemId: 'lesson-b',
+        sourceTitle: '第二讲 · 成本',
+      },
+    ];
+
+    const sections = buildCheatsheetSections(
+      multiLessonTranscript,
+      {
+        sections: [{
+          key: 'definition',
+          items: [{ term: '边际成本', body: '额外生产一单位增加的成本', startMs: 9_000 }],
+        }],
+      },
+      [
+        { sessionId: 'lesson-a', title: '第一讲 · 需求', offsetMs: 0, durationMs: 8_000 },
+        { sessionId: 'lesson-b', title: '第二讲 · 成本', offsetMs: 9_000, durationMs: 7_000 },
+      ],
+    );
+
+    expect(sections[0].items[0].citation).toMatchObject({
+      sourceId: 'lesson-b',
+      sourceTitle: '第二讲 · 成本',
+      sourceStartMs: 0,
+      sourceEndMs: 7_000,
+    });
+  });
+
+  it('grounds exam-only claims in the supplied syllabus instead of a nearby lesson', () => {
+    const sections = buildCheatsheetSections(
+      transcript,
+      {
+        sections: [{
+          key: 'definition',
+          items: [{
+            term: '考试范围',
+            body: '需求价格弹性与税收归宿',
+            sourceId: 'exam-syllabus',
+          }],
+        }],
+      },
+      [],
+      [{
+        id: 'exam-syllabus',
+        text: '考试范围包括需求价格弹性与税收归宿。',
+        startMs: 0,
+        endMs: 0,
+        confidence: 1,
+        isFinal: true,
+        sourceItemId: 'exam-syllabus',
+        sourceTitle: '考试大纲',
+      }],
+    );
+
+    expect(sections[0].items[0].citation).toMatchObject({
+      sourceId: 'exam-syllabus',
+      sourceTitle: '考试大纲',
+      sourceKind: 'syllabus',
+    });
+  });
 });

@@ -9,6 +9,10 @@ export interface RecorderCallbackMeta {
   sessionId?: string;
   isContinuation?: boolean;
   durationMs?: number;
+  /** 实时字幕已先交付，完整原声仍会在后台做一次高精度定稿。 */
+  finalPassPending?: boolean;
+  /** 这是已有 realtime 结果之上的非阻断定稿；失败时保留已有文字和原声。 */
+  finalPassOnly?: boolean;
 }
 
 export interface RecorderProps {
@@ -59,7 +63,8 @@ export interface RecorderProps {
 }
 
 export interface RecorderHandle {
-  startRecording: () => Promise<void>;
+  /** 只有原声采集已真正启动时才返回 true。 */
+  startRecording: () => Promise<boolean>;
   stopRecording: () => Promise<void>;
   pauseRecording: () => void;
   resumeRecording: () => Promise<void>;

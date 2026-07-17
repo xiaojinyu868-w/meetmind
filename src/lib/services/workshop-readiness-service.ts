@@ -27,21 +27,29 @@ export async function assessWorkshopReadiness(
 ): Promise<WorkshopReadinessAssessment> {
   const fallback = fallbackWorkshopReadiness(input);
   if (fallback.status === 'not_ready') return fallback;
+  // 官方试听课的内容和证据由产品内置，不需要再让模型把 90 秒样本误判成
+  // “只支持一两个应用”。这也避免访客首轮额外消耗一次 readiness 调用。
+  if (input.contextType?.trim().toLowerCase() === 'demo') return fallback;
 
   const transcriptContext = buildPromptTranscriptContext(input.transcript, {
     maxChars: 9_000,
     includeIndex: true,
     includeTimestamp: true,
   });
+  const contextTier = input.contextTier ?? 'class';
+  const tierAppKeys = fallback.allowedAppKeys;
 
   const system = `你是学习产品的内容判断层。你的职责不是尽量生成应用，而是判断当前材料是否足以支持一个有证据、不会夸大的学习产物。
+
+当前学习对象层级：${contextTier}
+这一层产品允许的应用：${tierAppKeys.join(', ') || '无'}
 
 输出 JSON：
 {
   "status": "ready|limited|not_ready",
   "contentKind": "lecture|discussion|reading|casual|administrative|fragment|unreliable|unknown",
   "recommendedAppKey": "cheatsheet|flashcards|quiz|mindmap|infographic|audio-overview|null",
-  "allowedAppKeys": ["ready 时必须返回全部六个 app key；limited 时只返回当前可靠的 app key"],
+  "allowedAppKeys": ["ready 时返回当前层允许的全部 app key；limited 时只返回当前可靠的 app key"],
   "reason": "ready|partial_learning|insufficient_content|not_learning|unreliable_transcript",
   "confidence": "high|medium|low"
 }
@@ -50,9 +58,10 @@ export async function assessWorkshopReadiness(
 - 允许结论是 not_ready。闲聊、寒暄、行政通知、零散句子、严重错乱的转录不能包装成课程。
 - 必须结合场景标题和来源类型判断。语言听力材料、案例对话、题目讲解和练习原文仍是学习内容，不能只因为原文是对话就判成日常闲聊。
 - 不得因为产品有六个应用就硬选一个。recommendedAppKey 可以为 null。
-- cheatsheet 只适合原文里真实存在定义、公式、步骤、框架或可核对要点的内容，不能默认推荐，更不能擅自引入“考试、必考、老师强调”。
+- class（单节课）绝不允许 cheatsheet；单课的高价值交付是检验、回忆、结构与复述，不是假装考试范围已经完整。
+- cheatsheet 只属于 unit / exam：必须建立在多节课堂或明确考试范围之上，并且原文里真实存在定义、公式、条件、步骤、对比或可核对要点。不能默认推荐，更不能擅自引入“必考、老师强调、高频考点”。
 - flashcards 适合可独立回忆的稳定知识；quiz 适合存在可检验命题；mindmap 适合多个主题及其关系；infographic 适合结构完整且值得视觉表达的内容；audio-overview 需要足够丰富的多段内容。
-- ready 表示材料足以支撑完整学习加工；allowedAppKeys 必须包含全部六个应用，recommendedAppKey 只负责指出此刻最值得先做的一项。
+- ready 表示材料足以支撑当前层的完整学习加工；allowedAppKeys 必须等于上面列出的当前层应用集合，recommendedAppKey 只负责指出此刻最值得先做的一项。
 - limited 表示材料确有学习价值但只支持一两个低风险应用；allowedAppKeys 最多 2 个，其余能力由前端保留展示但暂不允许生成。
 - not_ready 时 recommendedAppKey 必须为 null，allowedAppKeys 必须为空。
 - 只判断材料支持什么，不推断用户学习风格或能力。

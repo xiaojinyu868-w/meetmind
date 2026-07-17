@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { TranscriptSegment } from '@/types';
 import { EvidenceChip } from '@/components/apps/evidence/EvidenceChip';
+import { COPY } from '@/lib/ui/copy';
 import {
   treeToMarkdown,
   markdownToTree,
@@ -19,6 +20,7 @@ import {
   getBranchHue,
   branchIndexOf,
   measureText,
+  compactVisualLabel,
   getFontSize,
   buildLayoutTree,
   assignPositions,
@@ -34,8 +36,8 @@ interface MindmapWindowProps {
   result: AppExecutionResult | null;
   transcript: TranscriptSegment[];
   onSeek?: (startMs: number) => void;
-  /** 在"查看结果"类场景（复习工作区 / 独立结果页）默认进入全屏沉浸态——思维导图全屏才有用 */
-  defaultFullscreen?: boolean;
+  /** 窄屏可以先给可读大纲；全屏始终由用户主动触发。 */
+  defaultViewMode?: ViewMode;
 }
 
 interface MindmapPayload {
@@ -137,9 +139,11 @@ function CustomMindmapRenderer({
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
   const isAnimatingRef = useRef(false);
 
-  // treeChildren 变化时重新整图展开
+  // 手机首屏先看清主干；桌面画布更宽，默认展开整图。
+  // 用户仍可随时点“展开”查看全部节点。
   useEffect(() => {
-    setExpandedSet(buildFullExpandedSet(treeChildren));
+    const isCompactViewport = window.matchMedia('(max-width: 639px)').matches;
+    setExpandedSet(isCompactViewport ? new Set<string>(['root']) : buildFullExpandedSet(treeChildren));
   }, [treeChildren]);
 
   const toggleNode = useCallback((id: string) => {
@@ -153,13 +157,15 @@ function CustomMindmapRenderer({
 
   // 构建布局
   const layout = useMemo(() => {
+    const rootLabel = compactVisualLabel(rootTitle, FONT_SIZE_ROOT, 260);
     const rootNode: LayoutNode = {
       id: 'root',
-      title: rootTitle,
+      title: rootLabel,
+      fullTitle: rootTitle,
       depth: 0,
       x: 0,
       y: 0,
-      width: measureText(rootTitle, FONT_SIZE_ROOT) + NODE_PAD_X * 2,
+      width: measureText(rootLabel, FONT_SIZE_ROOT) + NODE_PAD_X * 2,
       height: 40,
       children: buildLayoutTree(treeChildren, 1, expandedSet, 'root'),
       expanded: true,
@@ -226,12 +232,13 @@ function CustomMindmapRenderer({
   }, []);
 
   // 拖拽平移
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = { startX: e.clientX, startY: e.clientY, originX: transform.x, originY: transform.y, moved: false };
   }, [transform.x, transform.y]);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag) return;
     const dx = e.clientX - drag.startX;
@@ -242,7 +249,10 @@ function CustomMindmapRenderer({
     setTransform((t) => ({ ...t, x: nextX, y: nextY }));
   }, []);
 
-  const handleMouseUp = useCallback(() => { dragRef.current = null; }, []);
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    dragRef.current = null;
+  }, []);
 
   const zoomBy = useCallback((factor: number) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -283,11 +293,11 @@ function CustomMindmapRenderer({
     <div
       ref={containerRef}
       className={`relative overflow-hidden ${className || ''}`}
-      style={{ background: PALETTE.bg, cursor: dragRef.current?.moved ? 'grabbing' : 'grab', ...style }}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      style={{ background: PALETTE.bg, cursor: dragRef.current?.moved ? 'grabbing' : 'grab', touchAction: 'none', ...style }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
     >
       {/* 极淡纸纹 */}
       <div
@@ -296,8 +306,8 @@ function CustomMindmapRenderer({
       />
 
       <svg
-        width="100%"
-        height="100%"
+        width={svgWidth}
+        height={svgHeight}
         style={{
           position: 'absolute',
           top: 0,
@@ -306,7 +316,6 @@ function CustomMindmapRenderer({
           transformOrigin: '0 0',
           transition: dragRef.current ? 'none' : 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
-        viewBox={`0 0 ${svgWidth} ${svgHeight}`}
       >
         <g transform={`translate(${offsetX}, ${offsetY})`}>
           {/* 连线 —— 从父节点墨线右端流向子节点墨线左端，颜色随子节点所属主干 */}
@@ -348,6 +357,7 @@ function CustomMindmapRenderer({
               // 根：墨松绿胶囊，白字，整张图的起点（贴左侧）
               return (
                 <g key={node.id}>
+                  <title>{node.fullTitle}</title>
                   <rect
                     x={node.x}
                     y={node.y}
@@ -376,6 +386,7 @@ function CustomMindmapRenderer({
 
             return (
               <g key={node.id}>
+                <title>{node.fullTitle}</title>
                 {/* 文字 */}
                 <text
                   x={node.x}
@@ -455,7 +466,7 @@ function CustomMindmapRenderer({
         <span className="mx-0.5 h-5 w-px" style={{ background: PALETTE.border }} />
         <button type="button" onClick={expandAll} className="rounded-lg px-2 text-[12px] transition-colors" style={ctrlBtnStyle} title="全部展开">展开</button>
         <button type="button" onClick={collapseAll} className="rounded-lg px-2 text-[12px] transition-colors" style={ctrlBtnStyle} title="只看主干">主干</button>
-        {onToggleFullscreen && (
+        {onToggleFullscreen && !isFullscreen && (
           <>
             <span className="mx-0.5 h-5 w-px" style={{ background: PALETTE.border }} />
             <button type="button" onClick={onToggleFullscreen} className={ctrlBtn} style={ctrlBtnStyle} title={isFullscreen ? '退出全屏' : '全屏查看'}>
@@ -472,7 +483,8 @@ function CustomMindmapRenderer({
       {/* 底部提示 */}
       <div className="pointer-events-none absolute bottom-3 left-3 z-10">
         <p className="rounded-full px-3 py-1 text-[11px]" style={{ background: `${PALETTE.bgSurface}cc`, border: `1px solid ${PALETTE.border}`, color: PALETTE.textMuted }}>
-          滚轮缩放 · 拖拽平移
+          <span className="sm:hidden">{COPY.apps.mindmap.mobileGestureHint}</span>
+          <span className="hidden sm:inline">{COPY.apps.mindmap.desktopGestureHint}</span>
         </p>
       </div>
     </div>
@@ -549,11 +561,27 @@ function OutlineNode({
 /*  主组件                                                              */
 /* ================================================================== */
 
-export function MindmapWindow({ result, transcript, onSeek, defaultFullscreen = false }: MindmapWindowProps) {
+export function MindmapWindow({ result, transcript, onSeek, defaultViewMode = 'mindmap' }: MindmapWindowProps) {
   const { root, children, markdown } = useMemo(() => normalizePayload(result), [result]);
-  const [viewMode, setViewMode] = useState<ViewMode>('mindmap');
+  // 手机或三栏中的窄学习区优先给可读大纲；宽画布才默认展示整图。
+  const shellRef = useRef<HTMLElement>(null);
+  const userSelectedViewRef = useRef(false);
+  const [viewMode, setViewMode] = useState<ViewMode>(defaultViewMode);
   const [copyFeedback, setCopyFeedback] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(defaultFullscreen);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const syncViewToContainer = () => {
+      if (userSelectedViewRef.current) return;
+      setViewMode(shell.getBoundingClientRect().width < 680 ? 'outline' : defaultViewMode);
+    };
+    syncViewToContainer();
+    const observer = new ResizeObserver(syncViewToContainer);
+    observer.observe(shell);
+    return () => observer.disconnect();
+  }, [defaultViewMode, result]);
 
   const totalNodes = useMemo(() => {
     const count = (nodes: MindmapNode[]): number => nodes.reduce((sum, n) => sum + 1 + count(n.children || []), 0);
@@ -635,7 +663,16 @@ export function MindmapWindow({ result, transcript, onSeek, defaultFullscreen = 
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
             );
             return (
-              <button key={mode} type="button" onClick={() => setViewMode(mode)} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-200" style={{ background: isActive ? PALETTE.accent : 'transparent', color: isActive ? '#fff' : PALETTE.textSecondary }}>
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  userSelectedViewRef.current = true;
+                  setViewMode(mode);
+                }}
+                className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-200"
+                style={{ background: isActive ? PALETTE.accent : 'transparent', color: isActive ? '#fff' : PALETTE.textSecondary }}
+              >
                 {icon}{label}
               </button>
             );
@@ -706,7 +743,11 @@ export function MindmapWindow({ result, transcript, onSeek, defaultFullscreen = 
   }
 
   return (
-    <section className="flex h-full flex-col gap-0 animate-fade-in" data-testid="mindmap-window">
+    <section
+      ref={shellRef}
+      className="flex h-[clamp(30rem,calc(100dvh-7rem),52rem)] min-h-[30rem] flex-col gap-0 animate-fade-in"
+      data-testid="mindmap-window"
+    >
       {toolbar}
       {body}
     </section>
