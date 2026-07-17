@@ -75,6 +75,11 @@ function setStoredToken(token: string | null): void {
   }
 }
 
+/** 扫码登录等同源认证流程成功后写入统一 access token。 */
+export function writeStoredAccessToken(token: string): void {
+  setStoredToken(token);
+}
+
 function normalizeText(value: string | null | undefined, limit?: number): string | undefined {
   const normalized = (value || '').replace(/\s+/g, ' ').trim();
   if (!normalized) return undefined;

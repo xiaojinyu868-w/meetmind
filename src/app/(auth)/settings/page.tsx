@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { getPreference, setPreference } from '@/lib/db';
+import { COPY } from '@/lib/ui/copy';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   AI_MODEL_AUTO_VALUE,
@@ -25,6 +26,8 @@ const IntentDialogContainer = dynamic(
   () => import('@/components/intent/IntentDialogContainer').then((m) => ({ default: m.IntentDialogContainer })),
   { ssr: false },
 );
+const WechatQrAuthDialog = dynamic(() => import('@/components/WechatQrAuthDialog'), { ssr: false });
+const WECHAT_LOGIN_ENABLED = process.env.NEXT_PUBLIC_ENABLE_WECHAT_LOGIN === 'true';
 
 const SETTINGS_KEYS = {
   AUTO_SAVE: 'settings_auto_save',
@@ -94,6 +97,7 @@ export default function SettingsPage() {
   const [saveMessage, setSaveMessage] = useState<BannerMessage | null>(null);
   const [showLearnerEdit, setShowLearnerEdit] = useState(false);
   const [showIntentDialog, setShowIntentDialog] = useState(false);
+  const [showWechatQr, setShowWechatQr] = useState(false);
 
   // R9-2 修返回 bug：之前用 canGoBack state 判断，初始 false 让首次渲染是 <Link href="/">,
   // 即使 useEffect 后改成 true 也来不及——用户点击触发的仍是死链跳首页。
@@ -375,6 +379,16 @@ export default function SettingsPage() {
                   </button>
                 </div>
                 <GroupDivider />
+                {WECHAT_LOGIN_ENABLED && (
+                  <>
+                    <ActionButtonRow
+                      label={COPY.wechatQr.bindAction}
+                      tone="default"
+                      onClick={() => setShowWechatQr(true)}
+                    />
+                    <GroupDivider />
+                  </>
+                )}
                 <ActionLinkRow href="/profile/password" label="修改密码" />
                 <GroupDivider />
                 <ActionButtonRow label="退出登录" tone="danger" onClick={handleLogout} />
@@ -537,6 +551,13 @@ export default function SettingsPage() {
             onClose={() => setShowIntentDialog(false)}
           />
         )}
+
+        <WechatQrAuthDialog
+          open={showWechatQr}
+          mode="bind"
+          onClose={() => setShowWechatQr(false)}
+          onBound={() => showMessage('success', COPY.wechatQr.boundToast)}
+        />
 
         {showLearnerEdit && (
           <LearnerOnboardingModal

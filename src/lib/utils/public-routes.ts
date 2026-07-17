@@ -13,6 +13,7 @@ const PUBLIC_ROUTES = [
   '/api/auth/refresh',
   '/api/auth/wechat',
   '/api/auth/wechat/callback',
+  '/api/auth/wechat/qr',
   '/api/wechat/mp',
   '/api/wechat/bind',
   '/api/wechat/bind/callback',

@@ -6,7 +6,8 @@
 
 | 文件 | 职责 |
 |------|------|
-| `useAuth.tsx` | 认证 Provider + hook（JWT + 刷新） |
+| `useAuth.tsx` | 认证 Provider + hook（JWT + 刷新）；导出统一 access token 读写供扫码登录复用 |
+| `useWechatQrAuth.ts` | 公众号二维码创建、轮询、登录落盘与绑定完成状态机 |
 | `useSSEStream.ts` | 通用 SSE 流式请求 hook |
 | `useClassroomData.ts` | 课堂数据加载 hook |
 

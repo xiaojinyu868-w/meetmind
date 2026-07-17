@@ -24,6 +24,7 @@ import { OctoAvatar } from '@/components/ui/octo-avatar';
 
 // Performance: Lazy-load agreement modal (contains ~300 lines of legal text)
 const AgreementModal = dynamic(() => import('@/components/AgreementModal'), { ssr: false });
+const WechatQrAuthDialog = dynamic(() => import('@/components/WechatQrAuthDialog'), { ssr: false });
 
 type LoginMethod = 'password' | 'code';
 type LoginType = 'email' | 'phone';
@@ -86,8 +87,8 @@ function LoginForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGuestLoading, setIsGuestLoading] = useState(false);
   const [wechatAuthUrl, setWechatAuthUrl] = useState<string | null>(null);
-  const [wechatOnly, setWechatOnly] = useState(false);
-  const [showWechatGuide, setShowWechatGuide] = useState(false);
+  const [wechatEnvironment, setWechatEnvironment] = useState<'checking' | 'wechat' | 'desktop'>('checking');
+  const [showWechatQr, setShowWechatQr] = useState(false);
   const [showAgreement, setShowAgreement] = useState<AgreementType>(null);
   
   const [isSendingCode, setIsSendingCode] = useState(false);
@@ -131,35 +132,32 @@ function LoginForm() {
     router.prefetch('/app');
   }, [router]);
 
-  // 异步获取微信授权 URL，不阻塞 UI 渲染
+  // 微信内沿用静默网页授权；桌面端不再跳转或复制链接，直接打开带参二维码。
   useEffect(() => {
-    if (!WECHAT_LOGIN_ENABLED || isAuthenticated) {
+    const inWechat = /MicroMessenger/i.test(window.navigator.userAgent);
+    setWechatEnvironment(inWechat ? 'wechat' : 'desktop');
+
+    if (!WECHAT_LOGIN_ENABLED || isAuthenticated || !inWechat) {
       setWechatAuthUrl(null);
-      setWechatOnly(false);
       return;
     }
 
-    // 直接调用 API 而不是 getWechatAuthUrl()，以便获取 wechatOnly 标记
     const fetchWechatUrl = async () => {
       try {
         const response = await fetch('/api/auth/wechat');
         const data = await response.json();
-        if (data.success) {
-          setWechatAuthUrl(data.authUrl || null);
-          setWechatOnly(!!data.wechatOnly);
-        }
+        if (data.success) setWechatAuthUrl(data.authUrl || null);
       } catch {
-        // 静默失败
+        setWechatAuthUrl(null);
       }
     };
-    
+
     if ('requestIdleCallback' in window) {
       const idleId = requestIdleCallback(() => { void fetchWechatUrl(); }, { timeout: 3000 });
       return () => cancelIdleCallback(idleId);
-    } else {
-      const timer = setTimeout(() => { void fetchWechatUrl(); }, 500);
-      return () => clearTimeout(timer);
     }
+    const timer = setTimeout(() => { void fetchWechatUrl(); }, 500);
+    return () => clearTimeout(timer);
   }, [isAuthenticated]);
 
   useEffect(() => {
@@ -539,29 +537,30 @@ function LoginForm() {
               </RippleButton>
             </form>
 
-            {/* 微信登录 */}
-            {WECHAT_LOGIN_ENABLED && (wechatAuthUrl || wechatOnly) && (
+            {/* 微信内直接授权；桌面端原地扫码，不离开当前登录现场。 */}
+            {WECHAT_LOGIN_ENABLED && wechatEnvironment !== 'checking' && (
               <div className="mt-5 border-t border-divider pt-5">
-                {wechatAuthUrl ? (
+                {wechatEnvironment === 'wechat' ? (
                   <a
-                    href={wechatAuthUrl}
-                    className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl transition-all bg-[#2D6A4F] hover:bg-[#06AE56] text-white font-medium"
+                    href={wechatAuthUrl || undefined}
+                    aria-disabled={!wechatAuthUrl}
+                    className={`flex w-full items-center justify-center gap-3 rounded-xl bg-pine px-4 py-3 font-medium text-white transition hover:bg-pine-dark ${!wechatAuthUrl ? 'pointer-events-none opacity-60' : ''}`}
                   >
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 01.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 01.598.082l1.584.926a.272.272 0 00.14.045c.134 0 .24-.111.24-.247 0-.06-.023-.12-.038-.177l-.327-1.233a.582.582 0 01-.023-.156.49.49 0 01.201-.398C23.024 18.48 24 16.82 24 14.98c0-3.21-2.931-5.837-6.656-6.088V8.89c-.135-.01-.269-.03-.406-.03zm-2.344 3.356c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.969-.982z"/>
+                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                      <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 01.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18z" />
                     </svg>
-                    <span>微信登录</span>
+                    <span>{wechatAuthUrl ? COPY.wechatQr.inWechatAction : COPY.wechatQr.loading}</span>
                   </a>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setShowWechatGuide(true)}
-                    className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl transition-all bg-[#2D6A4F] hover:bg-[#06AE56] text-white font-medium"
+                    onClick={() => setShowWechatQr(true)}
+                    className="flex w-full items-center justify-center gap-3 rounded-xl bg-pine px-4 py-3 font-medium text-white transition hover:bg-pine-dark"
                   >
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 01.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 01.598.082l1.584.926a.272.272 0 00.14.045c.134 0 .24-.111.24-.247 0-.06-.023-.12-.038-.177l-.327-1.233a.582.582 0 01-.023-.156.49.49 0 01.201-.398C23.024 18.48 24 16.82 24 14.98c0-3.21-2.931-5.837-6.656-6.088V8.89c-.135-.01-.269-.03-.406-.03zm-2.344 3.356c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.969-.982z"/>
+                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                      <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 01.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18z" />
                     </svg>
-                    <span>微信登录</span>
+                    <span>{COPY.wechatQr.loginAction}</span>
                   </button>
                 )}
               </div>
@@ -593,59 +592,12 @@ function LoginForm() {
       {/* 协议弹窗 - 动态加载 */}
       {showAgreement && <AgreementModal type={showAgreement} onClose={() => setShowAgreement(null)} />}
 
-      {/* 微信登录引导弹窗 */}
-      {showWechatGuide && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowWechatGuide(false)}>
-          <div
-            className="w-full max-w-sm rounded-2xl border border-divider bg-white p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex flex-col items-center text-center">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#2D6A4F]/10">
-                <svg className="h-8 w-8 text-[#2D6A4F]" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 01.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18z"/>
-                </svg>
-              </div>
-              <h3 className="mb-2 text-lg font-semibold text-ink">请在微信中打开</h3>
-              <p className="mb-1 text-sm text-ink-muted">
-                微信登录需要在微信内置浏览器中完成
-              </p>
-              <p className="mb-5 text-sm text-ink-muted">
-                请复制以下链接，在微信中打开：
-              </p>
-              <div className="mb-4 w-full rounded-lg bg-paper-warm px-3 py-2.5">
-                <p className="break-all text-xs text-ink-secondary select-all">
-                  {typeof window !== 'undefined' ? window.location.origin + '/login' : 'https://capture.meetmind.online/login'}
-                </p>
-              </div>
-              <div className="flex w-full gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowWechatGuide(false)}
-                  className="flex-1 rounded-xl border border-divider py-2.5 text-sm font-medium text-ink-secondary transition hover:bg-paper-warm"
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const url = (typeof window !== 'undefined' ? window.location.origin : 'https://capture.meetmind.online') + '/login';
-                    navigator.clipboard?.writeText(url).then(() => {
-                      setShowWechatGuide(false);
-                      setError('链接已复制，请在微信中粘贴打开');
-                    }).catch(() => {
-                      // clipboard API 不可用时静默失败
-                    });
-                  }}
-                  className="flex-1 rounded-xl bg-[#2D6A4F] py-2.5 text-sm font-medium text-white transition hover:bg-[#06AE56]"
-                >
-                  复制链接
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <WechatQrAuthDialog
+        open={showWechatQr}
+        mode="login"
+        redirectTo={resolveRedirect()}
+        onClose={() => setShowWechatQr(false)}
+      />
 
       {/* 动画样式 */}
       <style jsx>{`

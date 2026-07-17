@@ -9,14 +9,12 @@ const TOKEN_KEY = 'meetmind_access_token';
 interface WechatCaptureClientProps {
   token: string;
   isBound: boolean;
-  openId: string;
   workspaceName?: string | null;
 }
 
 export default function WechatCaptureClient({
   token,
   isBound: initialBound,
-  openId,
   workspaceName: initialWorkspaceName,
 }: WechatCaptureClientProps) {
   const [bound, setBound] = useState(initialBound);
@@ -129,7 +127,7 @@ export default function WechatCaptureClient({
         </div>
       ) : null}
 
-      <WechatBindForm openId={openId} linkToken={token} onBound={handleBound} />
+      <WechatBindForm linkToken={token} onBound={handleBound} />
     </section>
   );
 }

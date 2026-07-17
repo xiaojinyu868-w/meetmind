@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from 'react';
 
 interface WechatBindFormProps {
-  openId: string;
   linkToken: string;
   onBound: (nickname: string) => void;
 }
@@ -12,7 +11,7 @@ type FallbackMode = 'code' | 'password';
 
 const TOKEN_KEY = 'meetmind_access_token';
 
-export default function WechatBindForm({ openId, linkToken, onBound }: WechatBindFormProps) {
+export default function WechatBindForm({ linkToken, onBound }: WechatBindFormProps) {
   const [wechatLoading, setWechatLoading] = useState(false);
   const [showFallback, setShowFallback] = useState(false);
   const [fallbackMode, setFallbackMode] = useState<FallbackMode>('code');
@@ -120,10 +119,10 @@ export default function WechatBindForm({ openId, linkToken, onBound }: WechatBin
 
       if (fallbackMode === 'code') {
         if (!email.trim() || !code.trim()) return;
-        payload = { mode: 'code', email: email.trim(), code: code.trim(), openId, linkToken };
+        payload = { mode: 'code', email: email.trim(), code: code.trim(), linkToken };
       } else {
         if (!username.trim() || !password.trim()) return;
-        payload = { mode: 'password', username: username.trim(), password: password.trim(), openId, linkToken };
+        payload = { mode: 'password', username: username.trim(), password: password.trim(), linkToken };
       }
 
       const res = await fetch('/api/wechat/bind', {

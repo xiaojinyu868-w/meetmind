@@ -596,15 +596,17 @@ AI 的职责是：
 - `PUBLIC_DOMAIN` 或 `PUBLIC_HOST`
   - 原来的 filetrans 路线需要公网可访问地址
 - `WECHAT_MP_TOKEN`
-  - 服务号消息推送验签
+  - 服务号消息推送验签；桌面扫码登录的 `subscribe/SCAN` 事件也走同一回调
 - `WECHAT_MP_PUBLIC_BASE_URL`
   - 服务号回执里的 H5 链接基址
-
-如果要继续做微信绑定 / 网页授权，还要确认：
-
-- `WECHAT_APP_ID`
-- `WECHAT_APP_SECRET`
+- `NEXT_PUBLIC_ENABLE_WECHAT_LOGIN=true`
+  - 显示桌面公众号扫码登录与设置页绑定入口
+- `WECHAT_APP_ID` / `WECHAT_APP_SECRET`
+  - 同一个已认证公众号的 AppID/Secret，用于创建临时带参二维码，也用于微信内 OAuth
 - `WECHAT_REDIRECT_URI`
+  - 仅微信内 OAuth 回调使用；桌面扫码通过 `/api/wechat/mp` 回调，不依赖浏览器跳转
+
+联调桌面扫码时还要确认公众号具备临时二维码接口权限，且服务器已执行最新 Prisma migration。扫码事件只更新 `WechatQrAuthChallenge`，不得作为 Capture 进入收集流。
 
 如果缺这些值，不要把联调失败误判成产品链路坏了。
 

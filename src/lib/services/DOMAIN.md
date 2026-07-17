@@ -89,12 +89,19 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `wechat-auth-service.ts` | 413 | 微信 OAuth 2.0 登录 |
+| `wechat-auth-service.ts` | ~330 | 微信内置浏览器 OAuth 2.0；身份注册/绑定委托给 `wechat-identity-service` |
+| `wechat-identity-service.ts` | ~90 | openId 统一身份语义：真实 owner 登录、首次账号创建、登录态绑定与收集流归属同步 |
+| `wechat-identity-claim-service.ts` | ~150 | Prisma 事务内创建 User + AuthProvider；唯一键竞争后只返回真实 openId owner，首次登录仅签发一次会话 |
+| `wechat-oauth-state-service.ts` | ~40 | Capture 微信内 OAuth 的数据库一次性 state；原子消费，支持多实例并防登录 CSRF/重放 |
+| `wechat-qr-auth-service.ts` | ~270 | 公众号带参二维码挑战状态机、扫码事件提取、有效挑战复用、官方临时二维码请求 |
+| `wechat-qr-auth-repository.ts` | ~150 | Prisma 挑战仓库；CAS 约束 pending→scanned→processing→终态，按 24 小时清理过期记录 |
+| `wechat-qr-auth-runtime.ts` | ~35 | 装配挑战仓库、公众号 access token 与统一身份服务 |
+| `wechat-qr-auth-client.ts` | ~75 | 浏览器创建/轮询二维码挑战的同源客户端 |
 | `wechat-mp-service.ts` | 252 | 公众号消息解析（XML/签名验证） |
-| `wechat-media-service.ts` | 222 | 媒体下载（图片/语音/视频 + 转码） |
+| `wechat-media-service.ts` | 222 | 公众号 access token 缓存 + 媒体下载（图片/语音/视频 + 转码） |
 | `wechat-inbox-service.ts` | 195 | 消息智能路由（角色推断/echo/tutor）；微信正文解析状态通过 `received/processing/ready/failed` 同步进 provenance |
 | `wechat-voice-utils.ts` | 58 | 语音工具（预览文本/路径规范化） |
-| `wechat-web-session-service.ts` | 52 | Web 会话临时存储（内存 Map, 2min TTL） |
+| `wechat-web-session-service.ts` | 52 | OAuth Web 会话临时存储（内存 Map, 2min TTL） |
 
 ### 🏫 课堂 / 教学
 
