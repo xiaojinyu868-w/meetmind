@@ -204,6 +204,7 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
   const context = useLearningContext();
   const [view, setView] = useState<'overview' | 'courses' | 'recent'>(() => initialFocus === 'cheatsheet' ? 'courses' : 'overview');
   const [showAllRecent, setShowAllRecent] = useState(false);
+  const [focusCheatsheet, setFocusCheatsheet] = useState(initialFocus === 'cheatsheet');
   const [cheatsheetScope, setCheatsheetScope] = useState<{
     courses: CourseContextGroup[];
     initialCourseKeys?: string[];
@@ -301,8 +302,11 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
               preferences={context.coursePreferences || []}
               saving={context.saving}
               onUpdatePreference={context.updateCoursePreference}
-              onOpenCheatsheet={(courses, initialCourseKeys) => setCheatsheetScope({ courses, initialCourseKeys })}
-              focusCheatsheet={initialFocus === 'cheatsheet'}
+              onOpenCheatsheet={(courses, initialCourseKeys) => {
+                setFocusCheatsheet(false);
+                setCheatsheetScope({ courses, initialCourseKeys });
+              }}
+              focusCheatsheet={focusCheatsheet}
               standalone
             />
           ) : null}
