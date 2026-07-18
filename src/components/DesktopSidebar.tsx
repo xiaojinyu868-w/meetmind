@@ -17,6 +17,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { COPY } from '@/lib/ui/copy';
+import { useAdminLens } from '@/components/admin/AdminLensProvider';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Mic,
@@ -31,6 +32,7 @@ import {
   PanelLeftOpen,
   Boxes,
   Sparkles,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 const ICON_SM = 15;
@@ -90,6 +92,7 @@ export function DesktopSidebar({
   const effectiveCollapsed = collapsed || focusMode;
   const [showUserMenu, setShowUserMenu] = useState(false);
   const { user, isAuthenticated, isCheckingAuth, logout } = useAuth();
+  const { enabled: adminLensEnabled, toggle: toggleAdminLens } = useAdminLens();
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
@@ -302,14 +305,17 @@ export function DesktopSidebar({
               }`}
               title={effectiveCollapsed ? user.nickname : undefined}
             >
-              <Avatar className="h-7 w-7 flex-shrink-0">
-                {user.avatar ? (
-                  <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
-                ) : null}
-                <AvatarFallback className="bg-divider text-[12px]">
-                  <User size={13} strokeWidth={ICON_STROKE} className="text-ink-secondary" />
-                </AvatarFallback>
-              </Avatar>
+              <span className="relative flex-shrink-0">
+                <Avatar className="h-7 w-7">
+                  {user.avatar ? (
+                    <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
+                  ) : null}
+                  <AvatarFallback className="bg-divider text-[12px]">
+                    <User size={13} strokeWidth={ICON_STROKE} className="text-ink-secondary" />
+                  </AvatarFallback>
+                </Avatar>
+                {adminLensEnabled ? <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-paper bg-vermilion" aria-hidden /> : null}
+              </span>
               {!effectiveCollapsed && (
                 <div className="min-w-0 flex-1 text-left">
                   <p className="truncate text-[13px] font-medium text-ink">{user.nickname}</p>
@@ -350,6 +356,19 @@ export function DesktopSidebar({
                       {label}
                     </Link>
                   ))}
+                  {user.role === 'admin' ? (
+                    <button
+                      type="button"
+                      onClick={toggleAdminLens}
+                      className={`flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] transition-colors ${adminLensEnabled ? 'bg-vermilion/[0.04] text-vermilion' : 'text-ink-secondary hover:bg-paper hover:text-ink'}`}
+                      aria-pressed={adminLensEnabled}
+                      title={COPY.adminAi.managementViewHint}
+                    >
+                      <SlidersHorizontal size={ICON_SM} strokeWidth={ICON_STROKE} className={adminLensEnabled ? 'text-vermilion' : 'text-ink-muted'} />
+                      <span className="flex-1">{COPY.adminAi.managementView}</span>
+                      <span className="text-[10px] text-ink-muted">{adminLensEnabled ? COPY.adminAi.managementViewEnabled : COPY.adminAi.managementViewDisabled}</span>
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={handleLogout}

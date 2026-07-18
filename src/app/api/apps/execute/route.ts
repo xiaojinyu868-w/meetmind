@@ -12,6 +12,14 @@ import {
   type ContextTier,
 } from '@/lib/ai-native';
 import { assessWorkshopReadiness } from '@/lib/services/workshop-readiness-service';
+import { buildControlledAppPrompt } from '@/lib/services/ai-control-service';
+
+const GOVERNED_APP_KEYS = ['flashcards', 'quiz', 'mindmap', 'cheatsheet', 'infographic', 'audio-overview'] as const;
+type GovernedAppKey = typeof GOVERNED_APP_KEYS[number];
+
+function isGovernedAppKey(value: string): value is GovernedAppKey {
+  return GOVERNED_APP_KEYS.some((key) => key === value);
+}
 
 function parseServerTimeoutMs(
   envValue: string | undefined,
@@ -146,6 +154,9 @@ export async function POST(request: NextRequest) {
     const context = contextPack
       ? buildExecutionContextFromPack(contextPack, baseContext.goal, baseContext.model)
       : baseContext;
+    if (isGovernedAppKey(appKey)) {
+      context.runtimeControl = await buildControlledAppPrompt(appKey);
+    }
     const readiness = await assessWorkshopReadiness({
       transcript: context.input.transcript,
       contextTitle: typeof context.input.metadata?.title === 'string' ? context.input.metadata.title : undefined,

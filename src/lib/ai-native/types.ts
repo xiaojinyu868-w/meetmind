@@ -86,6 +86,14 @@ export interface AppExecutionContext {
   model?: string;
   /** 当前学习对象层级；旧调用缺省为 class。 */
   contextTier?: ContextTier;
+  /**
+   * 仅由服务端执行入口注入的运行时治理结果。插件文件会被部分客户端渲染器
+   * 复用类型/纯函数，因此插件不得直接 import Prisma-backed 管理员服务。
+   */
+  runtimeControl?: {
+    systemPrompt: string;
+    modelId?: string;
+  };
 }
 
 export type CardPriority = 'high' | 'medium' | 'low';

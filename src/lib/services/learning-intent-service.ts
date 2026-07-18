@@ -1,5 +1,7 @@
 import { chat } from '@/lib/services/llm-service';
 import { createLogger } from '@/lib/logger';
+import { buildLearningIntentUserPrompt } from '@/lib/prompts/learning-understanding-prompts';
+import { buildControlledLearningIntentPrompt } from '@/lib/services/ai-control-service';
 import type {
   ConfirmLearningIntentInput,
   LearningContextFocus,
@@ -102,40 +104,7 @@ export function sanitizeLearningIntentPlan(
   };
 }
 
-export function buildLearningIntentSystemPrompt(isFinalizing: boolean): string {
-  return `你负责在一次深度学习会话开始前，理解学生这一次真正想完成什么。用户当前这句话定义目标边界；个人、近期和当前页面上下文只帮助理解与个性化，不能替用户把宽泛愿望静默收窄成历史里的具体目标，也不能擅自扩大目标。
-
-当用户明确说“继续”“上次”“那篇”“这个”等指向已有上下文时，可以用上下文补全所指。除此之外，如果上下文提供了多个合理方向而用户尚未选择，把这些方向变成一个真正影响学习路径的选择题，不要替他选。
-
-输出 JSON：
-{
-  "title": "一句自然的会话标题",
-  "outcome": "这次结束时学生应该能做到什么",
-  "approach": "understand|practice|synthesize|create",
-  "contextFocus": "personal|current|mixed",
-  "checkpoints": ["最多三个自然检查点"],
-  "confidence": "high|medium|low",
-  "questions": [{
-    "id": "稳定的英文短 id",
-    "prompt": "一个真正影响学习路径、像同学自然问出口的短问题",
-    "kind": "single|multiple",
-    "options": [{ "id": "稳定的英文短 id", "label": "自然、具体的选项" }]
-  }]
-}
-
-规则：
-- checkpoints 是模型接下来会做的事，不是给用户的任务清单。
-- 能从用户当前表达或其明确指向的上下文判断的内容直接判断，不要再问。
-- confidence 仅供内部判断，不会展示给用户；只要没有必须由用户决定的歧义，就直接开始，并让教学过程自适应校准。
-- 只有答案会明显改变讲解深度、练习方式或最终产物时，才生成 questions；默认只问信息量最高的一题。
-- questions 通常最多 1 个；只有两个问题彼此独立、无法合并且都足以改变路径时才允许 2 个。每题 2-4 个选项；优先单选，确实可并存才用多选。
-- 问题直接问本身，尽量不超过 22 个汉字；不要写“为了给你匹配 / 为了更好地帮助 / 请告诉我”之类的系统解释。
-- 选项是用户一眼能扫完的具体方向，中文通常 4-14 字；不要在选项里塞括号、举例和第二层说明。
-- 不要为了确认学习风格、年级、基础或目标是否“足够具体”而提问；能先用一个小解释或小练习动态判断，就直接开始。
-- 不询问年级、身份等已经存在于个人上下文的信息。
-${isFinalizing ? '- 用户已经回答过问题：吸收答案并返回最终计划，questions 必须为空数组。' : '- 意图已足够清楚时，questions 返回空数组。'}
-仅输出 JSON。`;
-}
+export { buildLearningIntentSystemPrompt } from '@/lib/prompts/learning-understanding-prompts';
 
 export async function confirmLearningIntent(
   input: ConfirmLearningIntentInput,
@@ -143,11 +112,9 @@ export async function confirmLearningIntent(
   const query = compact(input.query, 2_000);
   if (!query) return fallbackPlan(query);
 
-  const context = [
-    input.learnerContext ? `长期个人上下文：\n${compact(input.learnerContext, 2_500)}` : '',
-    input.recentContext ? `最近学习现场：\n${compact(input.recentContext, 2_500)}` : '',
-    input.activeContext ? `当前页面上下文：\n${compact(input.activeContext, 3_500)}` : '',
-  ].filter(Boolean).join('\n\n');
+  const learnerContext = compact(input.learnerContext, 2_500);
+  const recentContext = compact(input.recentContext, 2_500);
+  const activeContext = compact(input.activeContext, 3_500);
 
   const answered = input.answers?.flatMap((answer) => {
     const questionId = compact(answer.questionId, 24);
@@ -160,18 +127,23 @@ export async function confirmLearningIntent(
   }).slice(0, 3) ?? [];
   const isFinalizing = answered.length > 0;
 
-  const system = buildLearningIntentSystemPrompt(isFinalizing);
-
   try {
+    const controlled = await buildControlledLearningIntentPrompt(isFinalizing);
     const response = await chat(
       [
-        { role: 'system', content: system },
+        { role: 'system', content: controlled.systemPrompt },
         {
           role: 'user',
-          content: `${context ? `${context}\n\n` : ''}用户这次说：\n${query}${answered.length > 0 ? `\n\n用户对关键问题的选择：\n${answered.join('\n')}` : ''}`,
+          content: buildLearningIntentUserPrompt({
+            query,
+            ...(learnerContext ? { learnerContext } : {}),
+            ...(recentContext ? { recentContext } : {}),
+            ...(activeContext ? { activeContext } : {}),
+            answered,
+          }),
         },
       ],
-      undefined,
+      controlled.modelId,
       { temperature: 0.25, maxTokens: 800, responseFormat: 'json_object' },
     );
     return sanitizeLearningIntentPlan(JSON.parse(response.content), query, !isFinalizing);

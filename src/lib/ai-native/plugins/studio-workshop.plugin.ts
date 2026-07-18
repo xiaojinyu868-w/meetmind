@@ -26,6 +26,10 @@ import type {
   AppPluginTools,
 } from '../types';
 import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
+import {
+  buildInfographicSystemPrompt,
+  buildInfographicUserPrompt,
+} from '../app-prompts';
 
 import type { StudioMode, StudioOutput } from './studio-workshop.types';
 import {
@@ -58,18 +62,20 @@ async function generateStudioOutput(
   model: string,
   mode: StudioMode,
   transcriptContext: string,
-  anchorContext: string
+  anchorContext: string,
+  controlledSystemPrompt?: string,
 ): Promise<StudioOutput | null> {
-  const response = await chat(
-    [
-      {
-        role: 'system',
-        content:
-          `你是${modeRole(mode)}，目标是把课堂内容转成可直接使用的学习产物。严格基于课堂证据，不编造。输出纯 JSON。`,
-      },
-      {
-        role: 'user',
-        content: `应用目标：${context.goal.intent}
+  const systemPrompt = controlledSystemPrompt || (mode === 'infographic'
+    ? buildInfographicSystemPrompt()
+    : `你是${modeRole(mode)}，目标是把课堂内容转成可直接使用的学习产物。严格基于课堂证据，不编造。输出纯 JSON。`);
+  const userPrompt = mode === 'infographic'
+    ? buildInfographicUserPrompt({
+        goalIntent: context.goal.intent,
+        transcriptContext,
+        anchorContext,
+        terminologyHint: context.memory.terminologyHint,
+      })
+    : `应用目标：${context.goal.intent}
 应用形态：${MODE_HINTS[mode]}
 用户目标：用更低的认知成本完成课堂复盘，直接可用，不要"模板化空话"。
 
@@ -84,11 +90,20 @@ ${modeContract(mode)}
 课堂原文：
 ${transcriptContext}
 
-${anchorContext ? `学习者关注点：\n${anchorContext}` : ''}${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
+${anchorContext ? `学习者关注点：\n${anchorContext}` : ''}${buildTerminologyHintBlock(context.memory.terminologyHint)}`;
+  const response = await chat(
+    [
+      {
+        role: 'system',
+        content: systemPrompt,
+      },
+      {
+        role: 'user',
+        content: userPrompt,
       },
     ],
     model,
-    { temperature: 0.25, maxTokens: 2800 }
+    { temperature: 0.25, maxTokens: 2800, responseFormat: 'json_object' }
   );
 
   return parseJsonResponse<StudioOutput>(response.content);
@@ -119,7 +134,7 @@ export const studioWorkshopPlugin: AppPlugin = {
     });
     const anchorContext = buildPromptAnchorContext(context.input.anchors, 12);
     const evidenceSegments = pickEvidenceSegments(context.input.transcript, 8);
-    const model = context.model || DEFAULT_MODEL_ID;
+    const model = context.runtimeControl?.modelId || context.model || DEFAULT_MODEL_ID;
     const trace: string[] = [
       `intent=${context.goal.intent}`,
       `app_key=${context.goal.appKey || 'none'}`,
@@ -134,7 +149,7 @@ export const studioWorkshopPlugin: AppPlugin = {
     let podcastPlan: import('./studio-workshop.types').PodcastPlan | null = null;
     if (mode === 'podcast') {
       try {
-        podcastPlan = await generatePodcastPlan(context, model);
+        podcastPlan = await generatePodcastPlan(context, model, context.runtimeControl?.systemPrompt);
         trace.push('llm=podcast_plan_enabled');
       } catch {
         podcastPlan = null;
@@ -143,7 +158,7 @@ export const studioWorkshopPlugin: AppPlugin = {
       trace.push('podcast_pipeline=volc_direct');
     } else {
       try {
-        output = await generateStudioOutput(context, model, mode, promptContext.text, anchorContext);
+        output = await generateStudioOutput(context, model, mode, promptContext.text, anchorContext, context.runtimeControl?.systemPrompt);
         trace.push('llm=enabled');
       } catch {
         output = null;

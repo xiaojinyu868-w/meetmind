@@ -27,6 +27,7 @@ src/app/
 │   └── loading.tsx            # 加载态
 │
 ├── feedback/page.tsx          # 反馈页（215行）
+├── admin/ai-control/page.tsx  # 管理员 AI 控制中心（上下文 / prompt / 模型 / 版本）
 ├── help/page.tsx             # 帮助页（317行）
 ├── all-notes/page.tsx         # 笔记聚合（440行）
 ├── page.tsx                   # 根页面重定向
@@ -80,6 +81,7 @@ src/app/
 | `feedback/page.tsx` | 215 | 用户反馈表单 |
 | `help/page.tsx` | 317 | 帮助文档页面 |
 | `all-notes/page.tsx` | 440 | 跨 session 的笔记聚合页 |
+| `admin/ai-control/page.tsx` | — | 管理员专属 AI 控制中心；复杂编辑与版本管理留在独立页面，产品现场仅提供带本次真实上下文的轻入口 |
 | `wechat/capture/[token]/page.tsx` | 152 | 接收微信推送的 capture 数据 |
 
 ## 最近的 God File 偿还

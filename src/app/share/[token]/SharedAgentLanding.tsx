@@ -86,6 +86,29 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
   /** P0：从 ?autoClaim=1 触发的自动领取，与手动 claim 分开管理避免双调 */
   const autoClaimAttemptedRef = React.useRef(false);
 
+  const sharedInspectorContext = React.useMemo(() => {
+    if (!share) return {};
+    const transcriptDigest = share.snapshot.transcriptDigest.segments.map((segment) => {
+      const minutes = Math.floor(segment.startSec / 60).toString().padStart(2, '0');
+      const seconds = Math.floor(segment.startSec % 60).toString().padStart(2, '0');
+      return `[${minutes}:${seconds}] ${segment.speaker?.trim() ? `${segment.speaker.trim()}：` : ''}${segment.text}`;
+    }).join('\n');
+    const artifactLabels: Record<string, string> = {
+      cheatsheet: '一张考试速查表', mindmap: '一张思维导图', quiz: '一组课堂测验',
+      flashcards: '一组课堂闪卡', infographic: '一张课堂信息图', 'audio-overview': '一期课堂播客',
+      notes: '一份课堂笔记', 'chat-only': '一段对这节课的对话',
+    };
+    return {
+      shared: {
+        sharerNickname: share.snapshot.sharerNickname ?? share.sharerNickname ?? '一位同学',
+        courseTitle: share.snapshot.title || share.title,
+        transcriptDigest,
+        artifactDescription: artifactLabels[share.snapshot.artifactKind] ?? '一份分享产物',
+        extraContext: share.snapshot.conversationContext,
+      },
+    };
+  }, [share]);
+
   // 拉取 share
   React.useEffect(() => {
     let cancelled = false;
@@ -376,6 +399,7 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
             courseTitle={share.title}
             sharerNickname={sharerNickname}
             authToken={accessToken ?? undefined}
+            inspectorContext={sharedInspectorContext}
           />
         ) : null}
 

@@ -14,6 +14,21 @@ Tutor 的唯一新主链路是 `POST /api/tutor/agent`，由 `buildTutorSystemPr
 
 当前 prompt telemetry 版本：`2026-07-tutor-v10-start-with-value`。goal 首次会面和 global deep 都遵循“先帮助、后理解”：不做画像或目标访谈，意图确认后立即交付第一个有效学习动作，仅在真实需要用户决定时追问。
 
+### 管理员 AI 控制中心
+
+`/admin/ai-control` 提供 Tutor 六种 mode、Tutor 上下游的“学习意图确认 / 长期学习理解整理”，以及应用矩阵全部六条生成链路的可观测与安全调优界面：
+
+- 展示每条链路的产品入口、会注入的上下文字段、示例或从产品现场带入的真实上下文。
+- 服务端预览基线 prompt、管理员追加指令、不可覆盖合同和最终系统输入；预览不调用模型。
+- 管理员主动试跑时，同一份上下文与测试问题会分别运行当前线上配置和正在编辑的配置，返回两版真实回答、实际使用模型与耗时。试跑不写入用户对话、不保存或发布配置，但会产生两次模型调用成本。
+- 支持 mode 级模型路由、草稿、发布与回滚。版本存储在 `AiControlRevision`，运行时读取最新已发布版本并做短缓存。
+- 管理员不能替换完整基线 prompt，只能追加行为指令。隐私、引用、时间戳和模式边界等合同始终在追加指令之后重新附加。
+- 意图确认与学习理解整理共用 `learning-understanding-prompts.ts` 的代码基线；真实 API 链路和控制中心预览/对比读取同一份 system prompt 与 user input 拼装，避免后台展示一套、线上实际运行另一套。意图链路额外锁住“当前表达优先、无真实歧义不追问”，记忆链路额外锁住“只以用户表现为证据、敏感推断与建议不入库”。
+- 六类应用共用 `ai-native/app-prompts.ts` 的版本化基线。闪卡、测验、考试速查表、信息图与播客计划按各自结构化 JSON 合同试跑；思维导图保留单课轻结构 Markdown。速查表复用跨课来源与考试范围拼装；信息图强制一个中心命题、手机可读和证据化视觉关系；播客将去时间戳的朗读语料与带时间戳的章节定位证据分开，避免模型猜回放位置或把时间读进音频。管理员不能绕过课堂证据回锚、认知动作、学习层级、输出格式和视觉 / 音频价值边界。
+- 没有已发布调整时，`/api/tutor/agent` 与代码内基线行为完全一致。
+
+管理员默认看到与普通用户相同的产品，只有主动打开会话级“管理视图”后，产品界面才在真实 AI 功能旁显示轻量的“查看本次 AI”入口；退出登录或新浏览器会话会自动关闭。点击入口先在当前学习现场打开右侧透镜，使用当前线上 override 重建本次上下文字段、请求模型和最终系统输入；需要持久调整时才把上下文与最近一条用户问题暂存在 `sessionStorage` 后深链到控制中心。普通用户不渲染入口，现场上下文不写 URL、运行日志或额外持久化。服务端接口 `/api/admin/ai-control` 会再次验证 JWT 与 `user.role === 'admin'`。透镜显示的是请求模型；provider 异常后的最终备用通道以真实试跑结果或后端 telemetry 为准。
+
 ---
 
 ## 历史：M3 Agent loop 方案（已被 M14.6 纯对话链路替代）
@@ -74,7 +89,7 @@ M3 Tutor（历史）：
 
 ### `src/app/api/tutor/agent/route.ts`
 
-新 endpoint（和旧 `/api/tutor` 并存，灰度友好）。请求体可带 `model`，设置页会把用户选择透传进来；服务端用 `resolveTutorAgentProviderFallbacks(env, { modelId })` 生成 DeepSeek / DashScope / OpenAI-compatible 候选，并始终用 `.chat()` 走 `/chat/completions`。
+新 endpoint（和旧 `/api/tutor` 并存，灰度友好）。请求体可带 `model`，设置页会把用户选择透传进来；管理员已启用并发布的 mode 级模型路由优先于请求体选择。服务端用 `resolveTutorAgentProviderFallbacks(env, { modelId })` 生成 StepFun / DeepSeek / DashScope / OpenAI-compatible 候选，并始终用 `.chat()` 走 `/chat/completions`。
 
 #### 场景时序：时间引用仅属于课后复习
 
@@ -162,7 +177,7 @@ make eval-tutor-real         # 真实调 streamText + tools（优先当前模型
 |---|---|---|---|
 | Agent loop | Vercel AI SDK v6 | LangGraph / OpenAI Agents SDK | 零迁移，已装 ai@6 |
 | 工具协议 | `tool() + zod` | MCP | Workshop 是内部工具，MCP v2 还 pre-alpha |
-| Prompt 管理 | git + `PROMPT_VERSION` | LangSmith / Braintrust / Humanloop | 规模小 |
+| Prompt 管理 | git 基线 + 管理员追加指令版本 | 任意替换完整 prompt | 保留可评测基线和硬合同，同时支持不发版调优与回滚 |
 | Eval grader | TS + Promptfoo | Python (Ragas/DeepEval) | TS 单栈 |
 | Observability | Sentry `vercelAIIntegration` | LangSmith / Langfuse | 一行集成 |
 

@@ -11,9 +11,9 @@ page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → r
 1. 前端先带转录 + 锚点 + 术语上下文调用 readiness；客观证据门守住空内容底线，模型只负责内容分类与可选推荐
 2. 客观证据充足时，当前 `contextTier` 的全部应用都可由用户主动执行；模型误判不得降为整页不可用
 3. `/api/apps/execute` 再做一次服务端 readiness 校验，只阻止证据不足或跨层调用
-4. `context-builder.ts` 构建 `AppExecutionContext`
+4. `context-builder.ts` 构建 `AppExecutionContext`；服务端执行路由再为已治理应用注入 `runtimeControl`
 5. `registry.ts` 查找对应 plugin，Plugin 调用 LLM 生成结果；运行故障继续包装成稳定结果，但 `CONTENT_NOT_READY` 这类语义拒绝必须透传给 API，不能伪装成成功产物
-6. 前端浮窗渲染结果
+6. 前端浮窗渲染结果。插件不得直接依赖 Prisma-backed 管理服务，因为部分插件模块也被客户端渲染器复用
 
 ## 文件索引
 
@@ -31,6 +31,8 @@ page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → r
 | `registry.ts` | ~85 | 插件注册中心；区分运行故障与 `CONTENT_NOT_READY` 语义拒绝 |
 | `registry.test.ts` | — | 插件运行故障兜底与内容拒绝透传契约 |
 | `prompt-context.ts` | 101 | Prompt 上下文构建（转录 + 锚点 + 术语） |
+| `app-prompts.ts` | ~450 | 应用矩阵六类应用的版本化 System/User Prompt 基线；含速查表跨课来源拼装、播客去时间戳朗读语料与带时间戳章节证据的分离构建，真实插件、产品现场管理员透镜与控制中心共同复用 |
+| `app-prompts.test.ts` | ~150 | 六类应用 Prompt 的证据、认知动作、防泄题、打印 / 手机阅读、音频章节定位与输出格式合同测试 |
 | `tools.ts` | 48 | 插件工具注入 |
 | `index.ts` | 38 | barrel 导出 |
 
@@ -40,7 +42,7 @@ page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → r
 |------|------|------|
 | `studio-workshop.plugin.ts` | ~340 | Studio Workshop 主文件（manifest + canHandle + run + generateStudioOutput） |
 | `studio-workshop.types.ts` | ~210 | 类型/接口（7个） + MODE_HINTS + 模式检测/解析辅助函数 |
-| `studio-workshop.podcast.ts` | ~290 | 播客管线（plan 生成/文本组装/时间戳污染检测/round cards/叙述清洗） |
+| `studio-workshop.podcast.ts` | ~240 | 播客管线（复用共享 Prompt，plan 生成 / 文本组装 / 时间戳污染检测 / round cards / 叙述清洗） |
 | `studio-workshop.renderers.ts` | ~180 | 渲染负载构建器（slides/infographic/table/audio/script/document） |
 | `mindmap.plugin.ts` | 372 | 思维导图（含 tree↔markdown 转换） |
 | `flashcards.plugin.ts` | 308 | 闪卡 |

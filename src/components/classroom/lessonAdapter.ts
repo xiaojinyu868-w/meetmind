@@ -5,7 +5,7 @@
  * 真实数据源是 IndexedDB 的 `audioSessions` 表（+ 一些关联表）。
  *
  * 这个适配器只做"折叠"——不改 schema，不引入新字段：
- *   - title       ← session.topic ?? 默认占位
+ *   - title       ← 用户命名 → 重点 → 总结 → 转录 → 来源类型（时间只做元信息）
  *   - durationMin ← Math.round(session.duration / 60000)
  *   - keyPoints   ← highlightTopics 的数量（异步，可选）
  *   - hasEcho     ← 暂时由调用方传入（来自 useEchoStore）
@@ -18,6 +18,7 @@
  */
 
 import type { AudioSession } from '@/lib/db/schema';
+import { COPY } from '@/lib/ui/copy';
 import { resolvePendingAudioFailureStatus } from '@/lib/utils/page-utils';
 import type { Lesson, LessonStatus } from './types';
 
@@ -30,6 +31,59 @@ export interface LessonExtras {
   hasEcho?: boolean;
   /** 关联预习材料数（来自 collection） */
   linkedMaterials?: number;
+  /** 只用于给未命名课堂形成可识别标题的已落地证据。 */
+  titleEvidence?: {
+    highlightTitles?: string[];
+    summaryOverview?: string;
+    transcriptPreview?: string;
+  };
+}
+
+const GENERIC_TITLES = new Set(['', '课堂', '课堂录音', '课堂回顾', '未命名课堂', '新课堂', '一节课', '未知学科', '未知课程']);
+
+function compactTitle(value: string | undefined): string {
+  return (value || '').replace(/\s+/g, ' ').trim();
+}
+
+function isMeaningfulTitle(value: string | undefined): value is string {
+  const title = compactTitle(value);
+  return title.length > 0
+    && title.length <= 100
+    && !GENERIC_TITLES.has(title)
+    && !/^(?:https?:\/\/|www\.)/iu.test(title)
+    && !/(?:bilibili\.com|b23\.tv|youtube\.com|youtu\.be|mp\.weixin\.qq\.com)/iu.test(title)
+    && !/^\d{1,2}:\d{2}(?::\d{2})?(?:\s*的课)?$/u.test(title)
+    && !/^(?:20\d{2}[./-])?\d{1,2}[./-]\d{1,2}(?:\s+\d{1,2}:\d{2})?(?:\s*的课)?$/u.test(title)
+    && !/^\d{1,2}\s*月\s*\d{1,2}\s*日(?:\s+\d{1,2}:\d{2})?(?:\s*的课)?$/u.test(title);
+}
+
+function trimEvidenceSentence(value: string): string {
+  return compactTitle(value)
+    .replace(/^(?:老师|讲师|speaker\s*\d*)[：:]\s*/iu, '')
+    .replace(/^(?:(?:嗯+|呃+|啊+|这个|那个|然后|就是|那么|好的?|同学们(?:大家)?好)[，,。.!！?？\s]*)+/u, '')
+    .replace(/^(?:今天|这节课)(?:我们)?(?:主要)?(?:来)?(?:学习|讲解?|讨论|介绍|复习|看看?|聊聊?)[的：:，,\s]*/u, '')
+    .replace(/^[，,。.!！?？：:\s]+|[，,。.!！?？：:\s]+$/gu, '');
+}
+
+function looksLikeLessonTitle(value: string): boolean {
+  const semanticLength = value.replace(/[\p{P}\p{S}\s]/gu, '').length;
+  if (semanticLength < 8) return false;
+  if (/^(?:但是|所以|然后|而且|不过|因为|如果|其实|就是|那|还得|我觉得|我认为)/u.test(value)) return false;
+  if (/(?:我|我们|你|你们|他|她|他们|她们)/u.test(value)) return false;
+  if (/(?:吧|呢|啊|呀|嘛|呗|对吧)$/u.test(value)) return false;
+  return true;
+}
+
+function titleFromEvidence(value: string | undefined): string | undefined {
+  const source = compactTitle(value);
+  if (!source) return undefined;
+  const candidate = source
+    .split(/[。！？!?；;\n]+/u)
+    .slice(0, 8)
+    .map(trimEvidenceSentence)
+    .find(looksLikeLessonTitle);
+  if (!candidate) return undefined;
+  return candidate.length > 28 ? `${candidate.slice(0, 28)}…` : candidate;
 }
 
 function pad2(n: number): string {
@@ -113,11 +167,17 @@ function deriveStatusText(session: AudioSession, status: LessonStatus): string |
   return resolvePendingAudioFailureStatus(session.transcriptionError || '');
 }
 
-function deriveTitle(session: AudioSession): string {
-  if (session.topic && session.topic.trim()) return session.topic;
-  // fallback：用创建时间生成"X 月 X 日 X 点录的课"
-  const d = session.createdAt instanceof Date ? session.createdAt : new Date(session.createdAt);
-  return `${d.getMonth() + 1} 月 ${d.getDate()} 日的课`;
+function deriveTitle(session: AudioSession, evidence?: LessonExtras['titleEvidence']): string {
+  if (isMeaningfulTitle(session.topic)) return compactTitle(session.topic);
+  const highlightTitle = evidence?.highlightTitles?.find(isMeaningfulTitle);
+  if (highlightTitle) return compactTitle(highlightTitle);
+  const summaryTitle = titleFromEvidence(evidence?.summaryOverview);
+  if (summaryTitle) return summaryTitle;
+  const transcriptTitle = titleFromEvidence(evidence?.transcriptPreview);
+  if (transcriptTitle) return transcriptTitle;
+  if (session.sourceType === 'video-file' || session.sourceType === 'video-link') return COPY.globalAsk.courseContextVideoLesson;
+  if (session.sourceType === 'upload') return COPY.globalAsk.courseContextUploadLesson;
+  return COPY.globalAsk.courseContextRecordingLesson;
 }
 
 export function audioSessionToLesson(
@@ -136,7 +196,7 @@ export function audioSessionToLesson(
 
   return {
     id: session.sessionId,
-    title: deriveTitle(session),
+    title: deriveTitle(session, extras.titleEvidence),
     date: formatDate(created),
     time: formatTime(created),
     durationMin: status === 'recording' ? undefined : durationMin,

@@ -28,6 +28,7 @@ components/
 │   └── hooks/         # 应用执行 hook
 ├── intent/DOMAIN.md   # M11：「聊聊你想要的」对话式目标共建（IntentDialog 沉浸式 + Container + SummaryCard）
 ├── realtime/DOMAIN.md # M11：实时语音通话视觉模板（RealtimeOrb 呼吸光晕 + IntentVoiceCallScreen）
+├── admin/DOMAIN.md    # 管理员会话级管理视图、现场 AI 透镜与独立控制中心
 ├── mobile/DOMAIN.md   # 移动端专用组件（18 个）
 ├── business/DOMAIN.md # 业务展示组件（6 个）
 ├── layout/DOMAIN.md   # 布局组件（3 个）
@@ -53,12 +54,12 @@ components/
 |------|------|------|
 | `AITutor.tsx` | 1940 | 旧 AI 家教 / legacy fallback（移动端文字和语音主链路已移出），子模块在 `tutor/` |
 | `AIChat.tsx` | 691 | AI 对话组件 |
-| `GlobalAskPanel.tsx` / `GlobalAskWelcome.tsx` / `GlobalAskContextDrawer.tsx` | ~650 | 全局 Ask MeetMind：基于 ChatBase 的多轮问答；空态把输入作为唯一主动作，在输入内轻量选择“直接回答 / 陪我学会”，不再用顶部模式面板或常驻统计侧栏暴露系统结构；参考范围按需从右侧打开，深度学习仅在答案会改变路线时逐题追问 |
+| `GlobalAskPanel.tsx` / `GlobalAskWelcome.tsx` / `GlobalAskContextDrawer.tsx` | ~650 | 全局 Ask MeetMind：基于 ChatBase 的多轮问答；空态把输入作为唯一主动作，在输入内轻量选择“直接回答 / 陪我学会”；参考范围按需从右侧打开，深度学习仅在答案会改变路线时逐题追问；管理员额外看到“查看本次 AI”轻入口，将当前真实上下文带到独立控制中心，普通用户完全不可见 |
 | `LearningIntentConfirmationCard.tsx` / `learning-intent-confirmation-model.ts` | ~210 | 深度学习的轻确认：若学习路径确有歧义，逐步显现模型动态生成的 1-3 个选择问题；学习理解在回答结束后静默整理，不把内部记忆标记塞进消息流 |
 | `LearningProgressMemoryCard.tsx` | ~50 | 旧学习进展 marker 的反馈卡，当前 `GlobalAskPanel` 不再使用；保留仅供迁移期兼容，勿在新链路继续扩展 |
-| `LearningMemoryPanel.tsx` / `CourseContextSection.tsx` / `CourseAssessmentCard.tsx` / `CourseCheatsheetWorkspace.tsx` / `ContextRecoveryCard.tsx` | ~1100 | 「我的上下文」采用消费级总览→具体内容层级：总览只展开模型对用户的长期理解，并以两条安静入口进入“课程与考试”或“最近学习现场”，不再把三类内容一次性纵向铺满；从复习页进入考试速查表时直接打开范围选择。范围选择支持跨课程与课次级多选；桌面为课程侧栏 + 课次画布，手机为横向课程选择带 + 仅展开已选课次，避免表单长页。课程支持可信名称、用户标签与边界纠正，再进入可打印速查表 |
+| `LearningMemoryPanel.tsx` / `CourseContextSection.tsx` / `CourseAssessmentCard.tsx` / `CourseCheatsheetWorkspace.tsx` / `ContextRecoveryCard.tsx` | ~1100 | 「我的上下文」采用消费级总览→具体内容层级：总览只展开模型对用户的长期理解，并以两条安静入口进入“课程与考试”或“最近学习现场”，不再把三类内容一次性纵向铺满；从复习页进入考试速查表时直接打开范围选择，返回时也直接回到原应用矩阵，不绕经上下文总览。范围选择支持跨课程与课次级多选；桌面为课程侧栏 + 课次画布，手机为横向课程选择带 + 仅展开已选课次，避免表单长页。课程支持可信名称、用户标签与边界纠正，再进入可打印速查表 |
 | `AISearchPanel.tsx` | ~740 | 旧单轮 Workspace AI 搜索面板；主入口已由 `GlobalAskPanel` 替代，保留作迁移参考 |
-| `WordExplainer.tsx` | 562 | 术语解释器 |
+| `WordExplainer.tsx` | ~580 | 术语解释器；管理员透镜复用本次选区、附近语境和最近提问 |
 | `StreamingMarkdown.tsx` | 391 | 统一流式 Markdown 渲染（GFM 表格 / 数学公式 / [MM:SS] 与 [t=MM:SS] 时间戳 / [资料N]） |
 | `ThinkingVisualizer.tsx` | ~300 | AI 思维过程可视化 |
 | `ThinkingGuideRenderer.tsx` | ~260 | 思维引导渲染 |
@@ -88,7 +89,7 @@ components/
 | `ClassroomView.model.ts` | ~10 | 课堂页纯交互模型（demo 录课态停止按钮应退出 demo，不走真实录音/stale DB 清理） |
 | `SharedWorkspacePanel.tsx` | ~78 | shared workspace 统一面板（仅 apps）；支持在中间工作区打开具体应用而不是只弹浮窗 |
 | `ReviewWorkspacePanel.tsx` | ~193 | desktop review 左侧证据面板（timeline / anchor detail；M15 起移除单课 feed tab，信息流改走侧栏全局入口） |
-| `ReviewTutorPanel.tsx` | ~268 | desktop review 右侧 Tutor 面板（历史对话、SafeAITutor / TutorAgentPanel 统一容器；音频波形已上移到左证据栏） |
+| `ReviewTutorPanel.tsx` | ~268 | desktop review 右侧 Tutor 面板（历史对话、SafeAITutor / TutorAgentPanel 统一容器；音频波形已上移到左证据栏）；顶部只用“整节课 / 困惑点”表达当前对话范围，不再用重复说明文字挤压默认窄栏 |
 | `CollectionSelectionBar.tsx` | 94 | 收集上下文多选操作条（问 Tutor / 引用 / 批量归档删除） |
 | `CollectionComposerContextPreview.tsx` | 62 | composer 上方的引用与链接预览条 |
 | `CollectionComposerBar.tsx` | 168 | collection composer 输入区容器（预览 / textarea / 发送 / 听写 / 上传） |

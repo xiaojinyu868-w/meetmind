@@ -10,6 +10,7 @@ import type { ConversationHistory } from '@/types/conversation';
 import type { ActionItem } from '@/types/page-types';
 import type { TutorLaunchImage } from '@/components/tutor/tutor-types';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
+import { COPY } from '@/lib/ui/copy';
 
 interface ReviewTutorPanelProps {
   audioSrc?: string | Blob;
@@ -129,34 +130,33 @@ export function ReviewTutorPanel({
             style={{ background: '#F2EDE3', borderColor: 'var(--edu-border-light)' }}
           >
             <button
+              type="button"
               onClick={onClearSelectedAnchor}
-              className={`px-3 py-1.5 text-xs rounded-lg transition-all flex items-center gap-1.5 ${
+              aria-pressed={!selectedAnchor}
+              className={`flex flex-shrink-0 items-center whitespace-nowrap rounded-lg px-3 py-1.5 text-xs transition-all ${
                 !selectedAnchor
                   ? 'bg-[#1C1B19] text-white'
                   : 'bg-white text-ink-secondary hover:text-[#5C5A55] hover:bg-[#F2EDE3] border border-divider'
               }`}
-              title="基于整节课内容与 AI 对话"
+              title={COPY.reviewTutor.wholeLessonTitle}
             >
-              <span>对话</span>
-              整节课对话
+              {COPY.reviewTutor.wholeLesson}
             </button>
             {selectedAnchor && (
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-[#E8E2D5] text-xs">
                 <span className={`w-2 h-2 rounded-full ${selectedAnchor.resolved ? 'bg-mint' : 'bg-[#FADEC9] animate-pulse'}`} />
-                <span className="text-[#1C1B19] font-medium">困惑点</span>
+                <span className="text-[#1C1B19] font-medium">{COPY.reviewTutor.confusion}</span>
                 <button
+                  type="button"
                   onClick={onClearSelectedAnchor}
                   className="ml-1 text-ink-muted hover:text-ink-secondary"
-                  title="返回整节课对话"
+                  title={COPY.reviewTutor.backToWholeLesson}
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
-            )}
-            {!selectedAnchor && anchors.length > 0 && (
-              <span className="text-xs text-ink-muted ml-auto">点击左侧困惑点可切换到针对性解答</span>
             )}
           </div>
         )}

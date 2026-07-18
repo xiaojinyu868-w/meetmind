@@ -33,6 +33,12 @@ import { COPY } from '@/lib/ui/copy';
 import { createLogger } from '@/lib/logger';
 import { recommendWorkshopApp } from './workshop-recommendation';
 import { useWorkshopReadiness } from './hooks/useWorkshopReadiness';
+import { AdminAiInspectorLink } from '@/components/admin/AdminAiInspectorLink';
+import { buildPromptAnchorContext, buildPromptTranscriptContext } from '@/lib/ai-native/prompt-context';
+import {
+  buildAudioOverviewChapterEvidence,
+  buildAudioOverviewNarrationCorpus,
+} from '@/lib/ai-native/app-prompts';
 
 const DOCK_STORAGE_PREFIX = 'app_workspace_dock:';
 const log = createLogger('workshop-matrix');
@@ -278,6 +284,52 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     () => anchors.filter((anchor) => !anchor.cancelled && !anchor.resolved).length,
     [anchors],
   );
+  const governedAppContexts = useMemo(() => {
+    const anchorContext = buildPromptAnchorContext(anchors, 12);
+    return {
+      flashcards: {
+        transcriptContext: buildPromptTranscriptContext(transcript, {
+          maxChars: 8_000,
+          includeIndex: true,
+          includeTimestamp: true,
+          minCharsPerSegment: 48,
+        }).text,
+        anchorContext,
+      },
+      quiz: {
+        transcriptContext: buildPromptTranscriptContext(transcript, {
+          maxChars: 8_000,
+          includeIndex: true,
+          includeTimestamp: false,
+          minCharsPerSegment: 52,
+        }).text,
+        anchorContext,
+      },
+      mindmap: {
+        transcriptContext: buildPromptTranscriptContext(transcript, {
+          maxChars: 8_000,
+          includeIndex: false,
+          includeTimestamp: false,
+          minCharsPerSegment: 52,
+        }).text,
+        anchorContext,
+      },
+      infographic: {
+        transcriptContext: buildPromptTranscriptContext(transcript, {
+          maxChars: 8_000,
+          includeIndex: true,
+          includeTimestamp: false,
+          minCharsPerSegment: 56,
+        }).text,
+        anchorContext,
+      },
+      'audio-overview': {
+        narrationCorpus: buildAudioOverviewNarrationCorpus(transcript, 12_000),
+        chapterEvidenceContext: buildAudioOverviewChapterEvidence(transcript),
+        anchorContext: buildPromptAnchorContext(anchors, 10),
+      },
+    };
+  }, [anchors, transcript]);
 
   const { assessment, isAssessing, failed: readinessFailed } = useWorkshopReadiness({
     transcript,
@@ -817,6 +869,14 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
             courseTitle={props.contextTitle}
             summary={summaryOverview}
             className={styles.secondaryAction}
+          />
+        ) : undefined}
+        adminAction={app.key === 'flashcards' || app.key === 'quiz' || app.key === 'mindmap' || app.key === 'infographic' || app.key === 'audio-overview' ? (
+          <AdminAiInspectorLink
+            controlKey={`app:${app.key}`}
+            context={{ goalIntent: app.intent, ...governedAppContexts[app.key] }}
+            query={app.intent}
+            compact
           />
         ) : undefined}
       />

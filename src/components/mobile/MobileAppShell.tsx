@@ -18,7 +18,7 @@ import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import { toast } from 'sonner';
-import { Mic, Camera, Paperclip, ArrowUp, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Sparkles, MapPin, ExternalLink, Headphones, Newspaper, Image as ImageIcon, Pause, Play } from 'lucide-react';
+import { Mic, Camera, Paperclip, ArrowUp, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Sparkles, MapPin, ExternalLink, Headphones, Newspaper, Image as ImageIcon, Pause, Play, UserRound } from 'lucide-react';
 import type { SourceIngestItem } from '@/types/page-types';
 import type { TranscriptSegment } from '@/types';
 import { getSpeakerLabel, getSpeakerColorClass } from '@/lib/services/asr/diarization-service';
@@ -37,6 +37,7 @@ import { useLearningContext } from '@/hooks/useLearningContext';
 import { MobileFirstLearningScreen } from './MobileFirstLearningScreen';
 import { selectDemoLiveSegments } from '@/components/classroom/DemoLessonLoader';
 import { GUEST_DEMO_LESSON_TITLE } from '@/components/classroom/guest-demo-entry';
+import { useAdminLens } from '@/components/admin/AdminLensProvider';
 
 export interface MobileAppShellProps {
   children?: React.ReactNode;
@@ -149,6 +150,7 @@ function groupByDate(items: SourceIngestItem[]): Array<{ label: string; items: S
 
 function HomeScreen({ p }: { p: MobileAppShellProps }) {
   const { push } = useMobileNav();
+  const { enabled: adminLensEnabled } = useAdminLens();
   const learning = useLearningContext();
   const echo = p.workspaceEchoes[0];
   const [flashPhoto, setFlashPhoto] = useState<{ url: string; time: string } | null>(null);
@@ -214,9 +216,24 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
             <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted" onClick={() => p.onOpenSearch?.()} aria-label={COPY.globalAsk.title} title={COPY.globalAsk.title}>
               <Sparkles size={16} strokeWidth={2} />
             </button>
-            <button className="h-7 w-7 rounded-full bg-paper-warm ring-1 ring-divider flex items-center justify-center text-[10px] font-medium text-ink-muted overflow-hidden active:scale-95 transition" onClick={() => p.onOpenProfile?.()}>
-              {p.userAvatar ? <img src={p.userAvatar} alt="" className="h-full w-full object-cover" /> : (p.userNickname?.[0] || '林')}
-            </button>
+            <span className="relative">
+              <button
+                type="button"
+                className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-paper-warm text-[10px] font-medium text-ink-muted ring-1 ring-divider transition active:scale-95"
+                onClick={() => p.onOpenProfile?.()}
+                aria-label={COPY.mobileHome.openProfile}
+                title={COPY.mobileHome.openProfile}
+              >
+                {p.userAvatar ? (
+                  <img src={p.userAvatar} alt="" className="h-full w-full object-cover" />
+                ) : p.userNickname?.trim() ? (
+                  p.userNickname.trim()[0]
+                ) : (
+                  <UserRound size={14} strokeWidth={1.8} aria-hidden />
+                )}
+              </button>
+              {adminLensEnabled ? <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-paper bg-vermilion" aria-hidden /> : null}
+            </span>
           </div>
         </div>
       </div>
@@ -269,7 +286,7 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
           </button>
         )}
 
-        {/* 收集流 — 按日期分组 */}
+        {/* 最近收下的原件——与上方活跃学习线分层，避免“上下文为空”的假矛盾。 */}
         <div className="flex items-center gap-3 px-1 pb-3">
           <span className="text-[13px] font-semibold text-ink-secondary">{COPY.mobileHome.recentLabel}</span>
           <span className="ml-1 h-px flex-1 bg-divider" />

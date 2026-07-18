@@ -24,12 +24,12 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 | `ClassroomLayout.tsx` | ~270 | 左右分栏容器；同桌只在真实录课 / 示例课听课态可见，无课堂上下文时隐藏右栏、Octo Buddy 和移动端问同学入口；录课态右栏默认 340px，把宽度优先留给课堂脉络并保留拖拽放大 |
 | `ClassroomLeftPanel.tsx` | ~690 | 视图管理器（list ↔ recording 淡入切换）+ 首页能力旅程（听懂现场 / 连起资料 / 练成结果）+ **ActiveLessonPill 置顶活动条** + StickyStartBar 底部主 CTA；零存量态把录音来源选择传给 Hero；试听课完成态透传课后引导动作 |
 | `ClassroomHomeCommandCenter.tsx` | ~105 | 有历史课堂时的桌面首页续学控制台：只保留日期、续学主叙事、真实恢复现场、问课堂与放材料入口；不再重复解释能力，让最近课堂进入首屏 |
-| `ClassroomCompanionPanel.tsx` | ~575 | 右侧同桌面板（header/气泡/流式气泡/thinking/输入栏）；课中不写入自动寒暄消息，header + 轻量 Octo 在场信号承接第一次互动，问题快通道只在输入区保留一套，避免上下两组重复入口；快捷动作发出的用户消息保持自然人话，内部教学指令只留在后台 prompt；课后 starter 同样不做重功能卡 |
+| `ClassroomCompanionPanel.tsx` | ~590 | 右侧同桌面板（header/气泡/流式气泡/thinking/输入栏）；课中不写入自动寒暄消息，header + 轻量 Octo 在场信号承接第一次互动，问题快通道只在输入区保留一套，避免上下两组重复入口；管理员透镜读取与真实课中请求相同的转录、recentFocus、学习理解与最近问题；课后 starter 同样不做重功能卡 |
 | `InlineAppCard.tsx` | ~160 | 对话内应用承载卡（真实应用 UI 复用 `apps/windows/AppRenderSurface`，不再手写一套窄版） |
 | `OctoBuddy.tsx` | ~660 | Octo Buddy 像素 IP（Sprite + 悬浮球）；Sprite 自带呼吸 / 听课 / 开心动画，右侧同桌内嵌也必须动起来 |
 | `ClassroomHero.tsx` | ~280 | 课堂零存量首屏；左侧定位与录音入口，右侧展示真实示例；存在未完成学习线索时，主叙事上方显示 `ContextRecoveryCard`，可直接接回全局 Ask |
 | `ClassroomLaunchpad.tsx` | ~100 | 课堂首页能力入口：让开始课堂、放入材料、搜索并继续问第一眼可见；只呈现三条学习路径，不做完整功能黄页 |
-| `ClassroomLessonCard.tsx` | ~160 | 一张课的卡片（四种时态视觉差异：upcoming/recording/processing/ready） |
+| `ClassroomLessonCard.tsx` | ~160 | 一张课的卡片（四种时态视觉差异：upcoming/recording/processing/ready）；时间只显示为元信息，不再伪装成课堂标题 |
 | `ClassroomRecordingView.tsx` | ~640 | 录课中视图（宽桌面左侧实时文字 + 中间课堂脉络；移动端和中等宽度桌面在“脉络 / 原话”之间切换，避免三栏硬挤；含翻译与试听课音频控制）。试听课默认 EN→中，音频结束后只引导点击“结束这节课”，由上层切到课后复习页 / 应用矩阵 |
 | `ClassroomFlowCanvas.tsx` | ~220 | 课中中间主画布：空态只显示真实听课状态，不用解释文案教育用户；内容出现后突出“正在讲”，以低权重时间线呈现近期推进，并将真正值得回来的定义/公式/问题留到课后；不画课中思维导图 |
 | `ClassroomRecordingView.model.ts` | ~16 | 录课视图纯模型：翻译模式循环 + 会话级默认翻译模式解析 |
@@ -38,7 +38,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 | `DemoLessonLoader.ts` | ~50 | 试听课 loader：把 demo segments / anchors / timeline / audioUrl 写入课堂现场 |
 | `demo-classroom-flow.ts` | ~105 | 试听课课堂脉络：按真实音频秒数推进“正在讲 / 刚才经过 / 留到课后”，与实时转录同步生长 |
 | `guest-demo-entry.ts` | ~110 | 访客试听入口模型：显式 `entry=demo`、默认闪卡产物、静态首屏 flashcards result + 稳定识别器 |
-| `lessonAdapter.ts` | ~90 | `AudioSession + extras → Lesson` 纯函数适配器 |
+| `lessonAdapter.ts` | ~200 | `AudioSession + extras → Lesson` 纯函数适配器；课堂标题遵循“用户命名 → 重点 → 总结 → 转录 → 来源类型”的证据优先级，拒绝 URL / 时间 / 日期冒充标题 |
 | `composeFirstHello.ts` | ~130 | 同桌第一句话的动态生成（6 个情境分支，纯函数可测） |
 | `index.ts` | — | Barrel export |
 
@@ -69,7 +69,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 | `page.tsx` → `ClassroomView` | 通过 `isRecording` 驱动左侧切到 recording 态 |
 | `page.tsx` → `ClassroomView` | 访客 `entry=demo` 通过 `autoLoadDemo` 直接进入 demo 课堂现场；只有显式 `autoOpenDemoAppKey` 才打开应用 |
 | `useClassroomCompanion` → `/api/tutor` | 复用 `useSimpleSSEStream`，`globalMode: true` + stream SSE |
-| `useClassroomLessons` → Dexie | `useLiveQuery` 三个表（audioSessions + transcripts + highlightTopics）+ adapter |
+| `useClassroomLessons` → Dexie | `useLiveQuery` 聚合 audioSessions / transcripts / highlightTopics / classSummaries，把已落地内容证据交给 adapter 形成可识别标题 |
 
 ## 最近约定
 

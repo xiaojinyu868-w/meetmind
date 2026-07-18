@@ -179,20 +179,39 @@ export function useClassroomLessons(): UseClassroomLessonsResult {
   ) ?? [];
 
   // ── 2. transcripts：有转录的 sessionId 集合（判断 ready vs processing） ──
-  const transcriptSessionIds = useLiveQuery(async () => {
+  const transcriptEvidenceBySession = useLiveQuery(async () => {
     const rows = await db.transcripts.toArray();
-    return new Set(rows.map((r) => r.sessionId));
-  }) ?? new Set<string>();
-
-  // ── 3. highlightTopics：按 session 计数 keyPoints ──
-  const highlightCountBySession = useLiveQuery(async () => {
-    const rows = await db.highlightTopics.toArray();
-    const map = new Map<string, number>();
-    for (const r of rows) {
-      map.set(r.sessionId, (map.get(r.sessionId) ?? 0) + 1);
+    const map = new Map<string, { hasTranscript: boolean; preview: string }>();
+    rows.sort((a, b) => a.startMs - b.startMs);
+    for (const row of rows) {
+      const current = map.get(row.sessionId) ?? { hasTranscript: false, preview: '' };
+      current.hasTranscript = true;
+      if (row.isFinal && row.text.trim() && current.preview.length < 900) {
+        current.preview = `${current.preview} ${row.text.trim()}`.trim().slice(0, 900);
+      }
+      map.set(row.sessionId, current);
     }
     return map;
-  }) ?? new Map<string, number>();
+  }) ?? new Map<string, { hasTranscript: boolean; preview: string }>();
+
+  // ── 3. highlightTopics：按 session 计数 keyPoints ──
+  const highlightEvidenceBySession = useLiveQuery(async () => {
+    const rows = await db.highlightTopics.toArray();
+    const map = new Map<string, { count: number; titles: string[] }>();
+    for (const r of rows) {
+      const current = map.get(r.sessionId) ?? { count: 0, titles: [] };
+      current.count += 1;
+      if (r.title?.trim() && current.titles.length < 3) current.titles.push(r.title.trim());
+      map.set(r.sessionId, current);
+    }
+    return map;
+  }) ?? new Map<string, { count: number; titles: string[] }>();
+
+  const summaryOverviewBySession = useLiveQuery(async () => {
+    const rows = await db.classSummaries.toArray();
+    rows.sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
+    return new Map(rows.map((row) => [row.sessionId, row.overview]));
+  }) ?? new Map<string, string>();
 
   // ── 4. reviewed set：从 preferences 读，本地状态维护 ──
   const [reviewedSet, setReviewedSet] = useState<Set<string>>(new Set());
@@ -280,10 +299,17 @@ export function useClassroomLessons(): UseClassroomLessonsResult {
       uniqSessions.push(s);
     }
     return uniqSessions.map((s) => {
+      const transcriptEvidence = transcriptEvidenceBySession.get(s.sessionId);
+      const highlightEvidence = highlightEvidenceBySession.get(s.sessionId);
       const lesson = audioSessionToLesson(s, {
-        hasTranscript: transcriptSessionIds.has(s.sessionId),
-        highlightCount: highlightCountBySession.get(s.sessionId),
+        hasTranscript: transcriptEvidence?.hasTranscript ?? false,
+        highlightCount: highlightEvidence?.count,
         hasEcho: sessionIdsWithEcho.has(s.sessionId),
+        titleEvidence: {
+          highlightTitles: highlightEvidence?.titles,
+          summaryOverview: summaryOverviewBySession.get(s.sessionId),
+          transcriptPreview: transcriptEvidence?.preview,
+        },
       });
       // 覆盖 reviewed（adapter 默认给 false）
       lesson.reviewed = reviewedSet.has(s.sessionId);
@@ -292,7 +318,7 @@ export function useClassroomLessons(): UseClassroomLessonsResult {
       if (materials && materials > 0) lesson.linkedMaterials = materials;
       return lesson;
     });
-  }, [sessions, transcriptSessionIds, highlightCountBySession, sessionIdsWithEcho, reviewedSet, materialsCountByDate]);
+  }, [sessions, transcriptEvidenceBySession, highlightEvidenceBySession, summaryOverviewBySession, sessionIdsWithEcho, reviewedSet, materialsCountByDate]);
 
   return { lessons, markReviewed, cleanupStaleRecording };
 }

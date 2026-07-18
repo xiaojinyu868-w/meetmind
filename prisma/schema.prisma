@@ -662,3 +662,20 @@ model AgentPack {
   @@index([userId, archivedAt])
   @@index([createdAt])
 }
+
+/// AI 控制台的提示词 / 模型覆盖版本。
+/// 代码中的默认 prompt 永远保留为基线；这里只存管理员显式创建的 draft / published 叠加层。
+model AiControlRevision {
+  id            String    @id @default(cuid())
+  controlKey    String
+  version       Int
+  status        String    @default("draft") // draft | published | archived
+  overrideJson  String
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  publishedAt   DateTime?
+
+  @@unique([controlKey, version])
+  @@index([controlKey, status, createdAt])
+  @@index([publishedAt])
+}

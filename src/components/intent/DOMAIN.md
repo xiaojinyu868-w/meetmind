@@ -15,7 +15,7 @@
 
 | 文件 | 职责 |
 |---|---|
-| `IntentDialog.tsx` | 全屏文字对话主体。`useChat` 打 `/api/tutor/agent` mode='goal'。内置文字+语音+文件三种输入。 |
+| `IntentDialog.tsx` | 全屏文字对话主体。`useChat` 打 `/api/tutor/agent` mode='goal'。内置文字+语音+文件三种输入；管理员可在现场透镜检查实际 goal 上下文与最近用户表达。 |
 | `IntentSummaryCard.tsx` | AI 提炼出的"我听到的是..."卡片，用户可编辑标题/摘要后点"就是这样"保存。 |
 | `IntentDialogContainer.tsx` | 对外封装：打包文字态 + 通话态 + saveLearnerProfile。父组件只 open/onClose。 |
 

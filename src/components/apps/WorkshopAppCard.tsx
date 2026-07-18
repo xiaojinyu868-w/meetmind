@@ -34,6 +34,7 @@ interface WorkshopAppCardProps {
   onProgress: () => void;
   compact?: boolean;
   shareAction?: ReactNode;
+  adminAction?: ReactNode;
 }
 
 const APP_ICONS: Record<WorkshopAppKey, typeof Layers> = {
@@ -67,6 +68,7 @@ export function WorkshopAppCard({
   onProgress,
   compact = false,
   shareAction,
+  adminAction,
 }: WorkshopAppCardProps) {
   const Icon = APP_ICONS[app.key];
   const cardClassName = [
@@ -172,6 +174,7 @@ export function WorkshopAppCard({
             </span>
           </button>
         )}
+        {adminAction}
       </div>
     </article>
   );

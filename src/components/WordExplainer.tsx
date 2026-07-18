@@ -28,6 +28,7 @@ import {
   useChatFileUpload,
 } from '@/components/chat';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
+import { AdminAiInspectorLink } from '@/components/admin/AdminAiInspectorLink';
 import { VoiceMicButton } from './VoiceMicButton';
 import type { TextSelectionInfo } from '@/hooks/useTextSelection';
 
@@ -94,6 +95,15 @@ export function WordExplainer({
     return fileUpload.attachedFiles.map((f) => ({ title: f.title, content: f.text }));
   }, [fileUpload.attachedFiles]);
 
+  const agentContext = useMemo(() => ({
+    word: {
+      selectionText: selection.text,
+      nearbyContext: selection.context,
+      fullTranscriptTail,
+    },
+    ...(supportMaterials ? { supportMaterials } : {}),
+  }), [fullTranscriptTail, selection.context, selection.text, supportMaterials]);
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -103,21 +113,18 @@ export function WordExplainer({
           sessionId,
           mode: 'word' as const,
           transcript: [],
-          context: {
-            word: {
-              selectionText: selection.text,
-              nearbyContext: selection.context,
-              fullTranscriptTail,
-            },
-            ...(supportMaterials ? { supportMaterials } : {}),
-          },
+          context: agentContext,
           options: {},
         }),
       }),
-    [accessToken, sessionId, selection.text, selection.context, fullTranscriptTail, supportMaterials],
+    [accessToken, agentContext, sessionId],
   );
 
   const { messages, sendMessage, status, stop } = useChat({ transport });
+  const inspectorQuery = useMemo(() => {
+    const latestUserMessage = [...messages].reverse().find((message) => message.role === 'user');
+    return latestUserMessage ? collectMessageText(latestUserMessage) : `请解释「${selection.text}」`;
+  }, [messages, selection.text]);
   const busy = status === 'submitted' || status === 'streaming';
   const isThinking =
     status === 'submitted' ||
@@ -299,6 +306,7 @@ export function WordExplainer({
             </span>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
+            <AdminAiInspectorLink controlKey="tutor:word" context={agentContext} query={inspectorQuery} compact />
             {busy && (
               <button
                 onClick={() => stop()}

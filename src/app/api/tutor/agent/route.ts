@@ -34,12 +34,10 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from 'ai';
-import { createOpenAI } from '@ai-sdk/openai';
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 import {
-  buildTutorSystemPrompt,
   PROMPT_VERSIONS,
   type TutorMode,
   type TutorSystemContext,
@@ -48,6 +46,7 @@ import { createLogger, track } from '@/lib/logger';
 import { ModelDefaults } from '@/lib/config/app.config';
 import {
   formatTutorAgentUserError,
+  createTutorAgentChatModel,
   resolveTutorAgentProviderFallbacks,
   resolveTutorFirstTokenTimeoutMs,
   shouldFallbackTutorAgentError,
@@ -59,6 +58,7 @@ import {
   SharedAgentSnapshotSchema,
   type SharedAgentSnapshot,
 } from '@/lib/services/share-agent-service';
+import { buildControlledTutorPrompt } from '@/lib/services/ai-control-service';
 
 const log = createLogger('tutor-agent');
 
@@ -316,31 +316,9 @@ function createTutorAttemptStream({
         const provider = providers[attemptIndex];
         if (!provider.apiKey) continue;
 
-        const { apiKey, baseURL, modelId } = provider;
-        // M13: qwen3.x-plus / qwen3-* 是 thinking/reasoning 模型，默认会输出大量
-        // reasoning_content（一次回复 200-300 reasoning tokens 拖慢 TTFT 5-10s）。
-        // 透传 enable_thinking=false 关闭推理，让它当普通快速对话模型用。
-        // AI SDK 的 createOpenAI 不暴露透传非标 OpenAI 字段的 API，只能 fetch hook 注入。
-        const isQwenThinkingModel = /^qwen3?\.?(\d+)?[-.]?plus/i.test(modelId) || /^qwen3/i.test(modelId);
-        const openaiOptions: Parameters<typeof createOpenAI>[0] = { apiKey, baseURL };
-        if (isQwenThinkingModel) {
-          openaiOptions.fetch = async (url, init) => {
-            if (init?.body && typeof init.body === 'string') {
-              try {
-                const body = JSON.parse(init.body);
-                if (body.enable_thinking === undefined) {
-                  body.enable_thinking = false;
-                  init = { ...init, body: JSON.stringify(body) };
-                }
-              } catch {
-                /* keep init.body as-is */
-              }
-            }
-            return fetch(url, init);
-          };
-        }
-        const openai = createOpenAI(openaiOptions);
-        const model = openai.chat(modelId);
+  const { modelId } = provider;
+        // 正式 Tutor 与管理员试跑共用模型构造，确保 Qwen thinking 等 provider 细节完全一致。
+        const model = createTutorAgentChatModel(provider);
         const firstTokenController = new AbortController();
         const firstTokenTimer = setTimeout(() => {
           firstTokenController.abort(new Error(`Tutor first token timeout after ${firstTokenTimeoutMs}ms`));
@@ -531,7 +509,8 @@ export async function POST(request: NextRequest) {
       sharedShareId = resolved.shareId;
     }
 
-    const requestModel = parsed.data.model || (
+    const controlled = await buildControlledTutorPrompt(mode as TutorMode, context, options);
+    const requestModel = controlled.modelId || parsed.data.model || (
       mode === 'global' && context.global?.depth === 'quick'
         ? ModelDefaults.tutorQuick
         : undefined
@@ -545,11 +524,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const systemPrompt = buildTutorSystemPrompt(mode as TutorMode, context, options);
     const stream = createTutorAttemptStream({
       providers,
       body: parsed.data,
-      systemPrompt,
+      systemPrompt: controlled.systemPrompt,
       modelMessages: await convertToModelMessages(messages as UIMessage[]),
     });
 

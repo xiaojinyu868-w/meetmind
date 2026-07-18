@@ -9,7 +9,8 @@ import type {
   AppPluginTools,
   ContextPack,
 } from '../types';
-import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
+import { buildCheatsheetScopePromptContext, buildCheatsheetSystemPrompt, buildCheatsheetUserPrompt } from '../app-prompts';
+import { buildPromptAnchorContext, buildPromptTranscriptContext } from '../prompt-context';
 import { resolveGroundedEvidence } from '../evidence-grounding';
 
 /**
@@ -264,95 +265,36 @@ function getExamEvidence(context: AppExecutionContext): TranscriptSegment[] {
 async function generateCheatsheetWithLLM(
   context: AppExecutionContext,
   model: string,
+  systemPrompt: string,
   transcriptContext: string,
   anchorContext: string,
 ): Promise<CheatsheetLLMOutput | null> {
   const lessonSources = getLessonSources(context);
   const exam = context.input.metadata?.exam as ContextPack['exam'] | undefined;
-  const sourceSummary = lessonSources.length > 0
-    ? lessonSources.map((source, index) => `${index + 1}. ${source.title}（sourceId=${source.sessionId}）`).join('\n')
-    : '当前课程单元';
-  const paperScope = exam?.pastPapers
-    ?.filter((paper) => paper.content?.trim())
-    .map((paper, index) => `真题来源 sourceId=past-paper:${index} · ${paper.title}\n${paper.content.trim().slice(0, 8_000)}`)
-    .join('\n\n');
-  const examScope = [
-    exam?.name ? `考试：${exam.name}` : '',
-    exam?.mode === 'open-book' ? '考试方式：开卷，可携带纸面资料' : '',
-    exam?.mode === 'closed-book' ? '考试方式：闭卷，速查表仅用于考前复习' : '',
-    exam?.syllabus?.trim() ? `考试大纲 sourceId=exam-syllabus：\n${exam.syllabus.trim().slice(0, 8_000)}` : '',
-    paperScope || '',
-  ].filter(Boolean).join('\n');
+  const scopeContext = buildCheatsheetScopePromptContext({
+    contextTier: context.contextTier === 'exam' ? 'exam' : 'unit',
+    lessonSources,
+    exam,
+  });
   const response = await chat(
     [
       {
         role: 'system',
-        content:
-          '你是考试速查表内容编辑器，不是考题预测器。把多节课堂与明确考试范围压成可打印的高密度参考页；每条必须能被原始材料支持。没有大纲、真题或老师明确措辞时，禁止写“必考、高频、一定考”。只输出 JSON。',
+        content: systemPrompt,
       },
       {
         role: 'user',
-        content: `学习目标：${context.goal.intent}
-学习对象：${context.contextTier === 'exam' ? '一门考试' : '一个课程单元'}
-课堂来源（共 ${lessonSources.length || 1} 节）：
-${sourceSummary}
-${examScope ? `\n考试范围证据：\n${examScope}\n` : ''}
-应用场景：学生会打印或导出 PDF；可能在开卷考试中带入考场，也可能用于考前最后压缩。内容必须便于纸面扫读和快速定位。
-
-请生成考试速查表内容草案，分成 3-6 个语义区块，每区块 2-8 条目。页数、纸张和排版由前端根据用户约束处理。
-区块 key 从下列枚举中选（label 会在前端被映射成中文，但 key 必须是英文小写）：
-  - definition   核心定义（术语 → 一句话释义）
-  - formula      关键公式（含推导/条件，如有 LaTeX 写到 latex 字段）
-  - process      流程步骤（有顺序的方法/算法）
-  - contrast     关键对比（A vs B 的差异，一行一对）
-  - pitfall      易错点（选择题/判断题常踩的坑）
-  - exemplar     例题套路（只有课堂例题、练习或真题明确支持时才输出）
-
-并非所有课堂都包含全部六类——只输出真有内容的区块。
-
-最小输出契约：
-{
-  "title": "一句话标题（≤14 字，像'机器学习基础 · 考试速查'）",
-  "overview": "这张卡最适合的用法（一句话，≤40 字）",
-  "sections": [
-    {
-      "key": "definition",
-      "items": [
-        { "term": "术语", "body": "支持 Markdown 的紧凑解释", "emphasis": "normal", "sourceId": "课堂 sessionId", "startMs": 12000, "endMs": 21000 }
-      ]
-    },
-    {
-      "key": "formula",
-      "items": [
-        { "term": "公式名", "body": "描述/条件", "latex": "E = mc^2", "emphasis": "strong", "startMs": 60000, "endMs": 72000 }
-      ]
-    }
-  ]
-}
-
-质量要求：
-- 默认每条 item 的 body 必须极简——通常一句话、约 60 字内，没空写废话
-- body 支持 GFM Markdown：粗体、列表、引用、代码和表格；只有对比关系用 2-5 行小表格会明显更快时才使用表格
-- 流程 / 因果 / 层级或小规模数据对比只有在文字更难扫读时，才可在 body 中放一个 mermaid 代码块；仅限 flowchart / pie / xychart-beta，流程图最多 6 个节点，图中数值必须直接来自证据，禁止装饰性图表
-- 公式优先写入 latex 字段；body 只补变量含义、成立条件或易错边界，不重复抄公式
-- 富文本仍必须适合 2-4 栏纸面：禁止长段落、宽表格、超过 6 个节点的流程图、代码长清单
-- term 是短标签（2-8 字），便于扫读
-- 跨课先去重，再保留定义的适用条件、公式变量、易混对比和可执行步骤；不要把每节课摘要简单拼接
-- emphasis 字段：只有老师明确"反复强调 / 划重点 / 一定考 / 这是必考点"，或真题/大纲直接支持的，标 "strong"；
-  其他常规要点标 "normal"。每个 section 内 strong 不超过 1/3，否则失去"标重点"的信号意义
-- 避免"嗯/呃/这个"等口头禅
-- 用 startMs/endMs 指向课堂证据（毫秒）
-- sourceId 必须从上面的课堂 / 大纲 / 真题来源中选择；引用大纲或真题时可省略时间
-- 全部输出都必须基于下面的课堂原文，不允许编造
-
-课堂原文：
-${transcriptContext}
-
-${anchorContext ? `学习者关注点：\n${anchorContext}\n` : ''}${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
+        content: buildCheatsheetUserPrompt({
+          goalIntent: context.goal.intent,
+          ...scopeContext,
+          transcriptContext,
+          anchorContext,
+          terminologyHint: context.memory.terminologyHint,
+        }),
       },
     ],
     model,
-    { temperature: 0.25, maxTokens: 4200 },
+    { temperature: 0.25, maxTokens: 4200, responseFormat: 'json_object' },
   );
   return parseJsonResponse<CheatsheetLLMOutput>(response.content);
 }
@@ -447,11 +389,12 @@ export const cheatsheetPlugin: AppPlugin = {
       minCharsPerSegment: 48,
     });
     const anchorCtx = buildPromptAnchorContext(context.input.anchors, 12);
-    const model = context.model || DEFAULT_MODEL_ID;
+    const systemPrompt = context.runtimeControl?.systemPrompt || buildCheatsheetSystemPrompt();
+    const model = context.runtimeControl?.modelId || context.model || DEFAULT_MODEL_ID;
 
     let llmOutput: CheatsheetLLMOutput | null = null;
     try {
-      llmOutput = await generateCheatsheetWithLLM(context, model, promptCtx.text, anchorCtx);
+      llmOutput = await generateCheatsheetWithLLM(context, model, systemPrompt, promptCtx.text, anchorCtx);
     } catch {
       llmOutput = null;
     }

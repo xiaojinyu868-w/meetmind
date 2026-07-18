@@ -6,14 +6,14 @@
 
 ```
 apps route.ts → lib/ai-native/plugins/*.ts（插件系统）
-apps route.ts → lib/services/llm-service.ts
+apps route.ts → lib/services/ai-control-service.ts（仅服务端注入已发布 Prompt / 模型覆盖）
 ```
 
 ## 路由清单
 
 | 路由 | 方法 | 职责 |
 |------|------|------|
-| `/api/apps/execute` | POST | 执行 AI-Native 应用插件；材料不足、插件拒绝低价值成品时统一返回 `422 CONTENT_NOT_READY` |
+| `/api/apps/execute` | POST | 执行 AI-Native 应用插件；服务端为应用矩阵六类应用注入 `runtimeControl`，插件不能反向依赖 Prisma；材料不足、插件拒绝低价值成品时统一返回 `422 CONTENT_NOT_READY` |
 | `/api/apps/plugins` | GET | 获取已注册插件列表 |
 | `/api/apps/catalog` | GET | 获取应用目录（分类/标签） |
 | `/api/apps/infographic/generate-image` | POST | Gemini 生成信息图 |

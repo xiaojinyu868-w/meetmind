@@ -1,5 +1,7 @@
 import { chat } from '@/lib/services/llm-service';
 import { createLogger } from '@/lib/logger';
+import { buildLearningMemoryUserPrompt } from '@/lib/prompts/learning-understanding-prompts';
+import { buildControlledLearningMemoryPrompt } from '@/lib/services/ai-control-service';
 import type { LearningMemoryKind } from '@/types/user';
 
 const log = createLogger('learning-memory-distillation');
@@ -37,28 +39,7 @@ function compact(value: unknown, max: number): string {
   return `${normalized.slice(0, Math.max(1, max - 1))}…`;
 }
 
-export function buildLearningMemoryDistillationPrompt(): string {
-  return `你在一次学习对话结束后，静默维护 MeetMind 对学习者的理解。你不是总结对话，而是判断：学习者在这一轮亲自说出或表现出的内容，是否足以形成一条以后仍有帮助的学习理解。
-
-只允许记录：
-- preference：用户明确表达、且与学习方式有关的偏好
-- strength：用户通过自己的解释、作答或作品表现出的能力
-- challenge：用户的回答暴露出的具体理解困难或反复混淆
-- topic：用户明确正在持续关注的学习主题
-- progress：相对已有理解，这一轮已经学会、厘清或完成的进展
-
-严格边界：
-- 证据必须来自用户自己的表达或作答；不能把助手讲过的知识当成用户已经掌握
-- 不记录愿望、计划、下一步建议、人格判断、身份、情绪、健康或其他敏感信息
-- 一次偶然措辞不足以推断稳定偏好；证据不足就返回空数组
-- title 用自然中文描述用户，不要写“用户表示”“本轮对话”或课程总结
-- 最多两条；宁缺毋滥
-- existingMemories 中已有同义理解时，用 replaceId 更新它，不要新增近义重复
-- 只能使用 existingMemories 里真实存在的 id 作为 replaceId
-
-只输出 JSON：
-{"memories":[{"kind":"progress","title":"已经能区分相关关系与因果关系","detail":"能指出共同原因如何同时影响两个变量","replaceId":"可选的既有记忆 id"}]}`;
-}
+export { buildLearningMemoryDistillationPrompt } from '@/lib/prompts/learning-understanding-prompts';
 
 export function sanitizeDistilledLearningMemories(
   raw: unknown,
@@ -104,15 +85,16 @@ export async function distillLearningMemories(
   if (!userText || !assistantText) return [];
 
   try {
+    const controlled = await buildControlledLearningMemoryPrompt();
     const response = await chat(
       [
-        { role: 'system', content: buildLearningMemoryDistillationPrompt() },
+        { role: 'system', content: controlled.systemPrompt },
         {
           role: 'user',
-          content: `已有学习理解：\n${existingMemories.length > 0 ? JSON.stringify(existingMemories) : '[]'}\n\n学习者这一轮说：\n${userText}\n\n助手随后回答：\n${assistantText}`,
+          content: buildLearningMemoryUserPrompt({ userText, assistantText, existingMemories }),
         },
       ],
-      undefined,
+      controlled.modelId,
       { temperature: 0.1, maxTokens: 500, responseFormat: 'json_object' },
     );
     return sanitizeDistilledLearningMemories(JSON.parse(response.content), existingMemories);

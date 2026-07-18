@@ -31,6 +31,7 @@ import {
   collectMessageText,
   useChatComposer,
 } from '@/components/chat';
+import { AdminAiInspectorLink } from '@/components/admin/AdminAiInspectorLink';
 
 interface SharedAgentChatProps {
   shareToken: string;
@@ -38,6 +39,8 @@ interface SharedAgentChatProps {
   sharerNickname: string;
   /** 用户登录时的 access token —— 用来在 chat 埋点里带上 visitorUserId（可选） */
   authToken?: string;
+  /** 公开分享快照重建出的 shared prompt context，仅管理员现场透镜使用。 */
+  inspectorContext: Record<string, unknown>;
 }
 
 export function SharedAgentChat({
@@ -45,6 +48,7 @@ export function SharedAgentChat({
   courseTitle,
   sharerNickname,
   authToken,
+  inspectorContext,
 }: SharedAgentChatProps) {
   const sessionId = React.useMemo(() => `share-${shareToken}`, [shareToken]);
 
@@ -71,6 +75,10 @@ export function SharedAgentChat({
 
   const { messages, sendMessage, status, stop } = useChat({ transport });
   const busy = status === 'submitted' || status === 'streaming';
+  const inspectorQuery = React.useMemo(() => {
+    const latestUserMessage = [...messages].reverse().find((message) => message.role === 'user');
+    return latestUserMessage ? collectMessageText(latestUserMessage) : '';
+  }, [messages]);
 
   const composer = useChatComposer({
     draftKey: sessionId,
@@ -105,6 +113,8 @@ export function SharedAgentChat({
           </span>
           <span className="truncate text-[12px] text-ink-muted">{courseTitle}</span>
         </div>
+        <div className="ml-auto flex items-center gap-2">
+          <AdminAiInspectorLink controlKey="tutor:shared" context={inspectorContext} query={inspectorQuery} compact />
         {busy ? (
           <span className="ml-auto font-mono text-[10.5px] uppercase tracking-caps text-pine">
             在听
@@ -114,6 +124,7 @@ export function SharedAgentChat({
             就绪
           </span>
         )}
+        </div>
       </div>
 
       {/* 消息流（限高 55vh，max-w 不限制——share 卡片本身就是受限宽度） */}

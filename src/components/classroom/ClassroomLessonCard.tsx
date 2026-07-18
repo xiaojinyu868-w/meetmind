@@ -25,13 +25,6 @@ import { ChevronRight, Sparkles, Check, Pencil } from 'lucide-react';
 import { COPY } from '@/lib/ui/copy';
 import type { Lesson } from './types';
 
-const PLACEHOLDER_LESSON_TITLES = new Set([
-  '课堂录音',
-  '未命名课堂',
-  '新课堂',
-  '一节课',
-]);
-
 export interface ClassroomLessonCardProps {
   lesson: Lesson;
   onClick: () => void;
@@ -193,9 +186,8 @@ export function ClassroomLessonCard({ lesson, onClick, featured = false, onRenam
   const [editValue, setEditValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // placeholder 标题（"课堂录音 / 未命名课堂"）→ 用时间区分
-  const isPlaceholderTitle = PLACEHOLDER_LESSON_TITLES.has(lesson.title.trim());
-  const displayTitle = isPlaceholderTitle ? `${lesson.time} 的课` : lesson.title;
+  // 时间只属于元信息，不冒充课程名称；未命名时 adapter 会用课堂证据或来源类型兜底。
+  const displayTitle = lesson.title;
 
   const paddingClass = featured ? 'px-5 py-4' : 'px-5 py-3.5';
   const titleClass = featured

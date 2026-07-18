@@ -28,6 +28,7 @@ import { DefaultChatTransport, type UIMessage } from 'ai';
 import { X, Phone, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
+import { AdminAiInspectorLink } from '@/components/admin/AdminAiInspectorLink';
 import {
   ChatBubble,
   ChatComposer,
@@ -159,6 +160,15 @@ export function IntentDialog({
     }));
   }, [fileUpload.attachedFiles]);
 
+  const agentContext = React.useMemo(() => ({
+    goal: {
+      existingGoals: existingGoalsContext,
+      existingBio: existingBioContext,
+      sessionHint,
+    },
+    supportMaterials,
+  }), [existingBioContext, existingGoalsContext, sessionHint, supportMaterials]);
+
   const transport = React.useMemo(
     () =>
       new DefaultChatTransport({
@@ -168,22 +178,19 @@ export function IntentDialog({
           sessionId,
           mode: 'goal' as const,
           transcript: [],
-          context: {
-            goal: {
-              existingGoals: existingGoalsContext,
-              existingBio: existingBioContext,
-              sessionHint,
-            },
-            supportMaterials,
-          },
+          context: agentContext,
           options: {},
         }),
       }),
-    [authToken, sessionId, existingGoalsContext, existingBioContext, sessionHint, supportMaterials],
+    [agentContext, authToken, sessionId],
   );
 
   const { messages, sendMessage, status, stop } = useChat({ transport });
   const busy = status === 'submitted' || status === 'streaming';
+  const inspectorQuery = React.useMemo(() => {
+    const latestUserMessage = [...messages].reverse().find((message) => message.role === 'user');
+    return latestUserMessage ? collectMessageText(latestUserMessage) : (sessionHint || '');
+  }, [messages, sessionHint]);
 
   const composer = useChatComposer({
     draftKey: sessionId,
@@ -344,6 +351,7 @@ export function IntentDialog({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <AdminAiInspectorLink controlKey="tutor:goal" context={agentContext} query={inspectorQuery} compact />
           {onSwitchToCall ? (
             <button
               type="button"

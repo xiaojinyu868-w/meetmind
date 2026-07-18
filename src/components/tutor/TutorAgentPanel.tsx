@@ -47,6 +47,7 @@ import {
   resolveExplicitAiModelPreference,
 } from '@/lib/utils/ai-model-preference';
 import { COPY } from '@/lib/ui/copy';
+import { AdminAiInspectorLink } from '@/components/admin/AdminAiInspectorLink';
 
 export interface TutorAgentPanelTranscriptSegment {
   id: string;
@@ -269,6 +270,10 @@ export function TutorAgentPanel({
   );
 
   const { messages, setMessages, sendMessage, status, error, stop } = useChat({ transport });
+  const inspectorQuery = React.useMemo(() => {
+    const latestUserMessage = [...messages].reverse().find((message) => message.role === 'user');
+    return latestUserMessage ? collectMessageText(latestUserMessage) : '';
+  }, [messages]);
 
   const busy = status === 'submitted' || status === 'streaming';
 
@@ -523,6 +528,13 @@ export function TutorAgentPanel({
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <AdminAiInspectorLink
+            controlKey={mode === 'in-class' ? 'tutor:in-class' : 'tutor:review'}
+            context={agentContext}
+            options={options}
+            query={inspectorQuery}
+            compact
+          />
           {onShowHistory ? (
             <button
               type="button"

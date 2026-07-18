@@ -11,7 +11,11 @@ import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
 import { AppWindowShell } from '@/components/apps/windows/AppWindowShell';
 import { ShareArtifactAction } from '@/components/share/ShareArtifactAction';
+import { AdminAiInspectorLink } from '@/components/admin/AdminAiInspectorLink';
 import type { AppTaskState } from '@/components/apps/hooks/useAppExecution';
+import { buildExecutionContextFromPack } from '@/lib/ai-native/context-pack';
+import { buildCheatsheetScopePromptContext } from '@/lib/ai-native/app-prompts';
+import { buildPromptAnchorContext, buildPromptTranscriptContext } from '@/lib/ai-native/prompt-context';
 
 interface CourseCheatsheetWorkspaceProps {
   courses: CourseContextGroup[];
@@ -80,6 +84,39 @@ export function CourseCheatsheetWorkspace({ courses, initialCourseKeys = [], onB
     [selectedCourse.assessment, selectedCourse.courseKey, selectedCourse.lessons],
   );
   const context = useCourseContextPack(selectedCourse);
+  const governedPromptContext = useMemo(() => {
+    if (!context.pack) return null;
+    const executionContext = buildExecutionContextFromPack(context.pack, {
+      intent: app.intent,
+      appKey: 'cheatsheet',
+    });
+    const lessonSources = Array.isArray(executionContext.input.metadata?.lessonSources)
+      ? executionContext.input.metadata.lessonSources.flatMap((source) => {
+          if (!source || typeof source !== 'object') return [];
+          const value = source as { sessionId?: unknown; title?: unknown };
+          return typeof value.sessionId === 'string' && typeof value.title === 'string'
+            ? [{ sessionId: value.sessionId, title: value.title }]
+            : [];
+        })
+      : [];
+    const scope = buildCheatsheetScopePromptContext({
+      contextTier: context.pack.tier === 'exam' ? 'exam' : 'unit',
+      lessonSources,
+      exam: context.pack.exam,
+    });
+    return {
+      goalIntent: app.intent,
+      ...scope,
+      transcriptContext: buildPromptTranscriptContext(executionContext.input.transcript, {
+        maxChars: 48_000,
+        includeIndex: true,
+        includeTimestamp: true,
+        minCharsPerSegment: 48,
+      }).text,
+      anchorContext: buildPromptAnchorContext(executionContext.input.anchors, 12),
+      terminologyHint: executionContext.memory.terminologyHint,
+    };
+  }, [app.intent, context.pack]);
   const shareContext = useMemo(() => context.pack?.lessons
     .map((lesson) => {
       const fallback = lesson.transcript.map((segment) => segment.text.trim()).filter(Boolean).join(' ').slice(0, 500);
@@ -282,15 +319,27 @@ export function CourseCheatsheetWorkspace({ courses, initialCourseKeys = [], onB
       showPrimaryAction={started && Boolean(execution.result)}
       onBack={onBack}
       backLabel={COPY.globalAsk.courseContextBackToCourse}
-      headerActions={execution.result ? (
-        <ShareArtifactAction
-          appKey="cheatsheet"
-          result={execution.result}
-          sessionId={executionId}
-          courseTitle={selectedCourse.assessment?.name || selectedCourse.title}
-          summary={shareContext}
-        />
-      ) : undefined}
+      headerActions={(
+        <div className="flex items-center gap-2">
+          {execution.result ? (
+            <ShareArtifactAction
+              appKey="cheatsheet"
+              result={execution.result}
+              sessionId={executionId}
+              courseTitle={selectedCourse.assessment?.name || selectedCourse.title}
+              summary={shareContext}
+            />
+          ) : null}
+          {governedPromptContext ? (
+            <AdminAiInspectorLink
+              controlKey="app:cheatsheet"
+              context={governedPromptContext}
+              query={app.intent}
+              compact
+            />
+          ) : null}
+        </div>
+      )}
     >
       {content}
     </AppWindowShell>

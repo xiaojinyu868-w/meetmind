@@ -142,6 +142,7 @@ export function ClassroomView({
     markListening,
     retryInlineApp,
     handleInlineAppInteraction,
+    adminInspector,
   } = useClassroomCompanion({ lessons, isRecording: companionIsRecording, onOpenApp });
 
   // 真实录音或显式访客试听入口 → 自动进入 recording 全屏态。
@@ -612,9 +613,10 @@ export function ClassroomView({
         onAfterClassAction={handleOpenDemoReview}
         onMarkMoment={handleMarkMoment}
         dynamicChips={dynamicChips}
+        adminInspector={adminInspector}
       />
     ),
-    [companionMode, messages, streamingMessage, isThinking, handleSend, onOpenApp, foresights, handleForesightAccept, dismissForesight, handleInlineAction, handleInlineAppInteraction, retryInlineApp, isDemoRecordingPane, demoSuggestedPrompts, demoComplete, handleOpenDemoReview, handleMarkMoment, dynamicChips],
+    [companionMode, messages, streamingMessage, isThinking, handleSend, onOpenApp, foresights, handleForesightAccept, dismissForesight, handleInlineAction, handleInlineAppInteraction, retryInlineApp, isDemoRecordingPane, demoSuggestedPrompts, demoComplete, handleOpenDemoReview, handleMarkMoment, dynamicChips, adminInspector],
   );
 
   return (

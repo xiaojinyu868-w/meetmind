@@ -7,6 +7,7 @@ import dynamic from 'next/dynamic';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { getPreference, setPreference } from '@/lib/db';
 import { COPY } from '@/lib/ui/copy';
+import { useAdminLens } from '@/components/admin/AdminLensProvider';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   AI_MODEL_AUTO_VALUE,
@@ -86,6 +87,7 @@ const roleLabels: Record<string, string> = {
 
 export default function SettingsPage() {
   const { user, isAuthenticated, isCheckingAuth, updateProfile, logout, saveLearnerProfile, onboardingCompleted } = useAuth();
+  const { enabled: adminLensEnabled, setEnabled: setAdminLensEnabled } = useAdminLens();
   const router = useRouter();
   const [settings, setSettings] = useState<SettingsState>(DEFAULT_SETTINGS);
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
@@ -574,6 +576,24 @@ export default function SettingsPage() {
             onClose={() => setShowLearnerEdit(false)}
           />
         )}
+
+        {user?.role === 'admin' ? (
+          <SettingSection
+            caption={COPY.adminAi.settingsCaption}
+            description={COPY.adminAi.settingsDescription}
+          >
+            <SettingGroup>
+              <ToggleRow
+                label={COPY.adminAi.managementView}
+                hint={COPY.adminAi.managementViewHint}
+                checked={adminLensEnabled}
+                onChange={setAdminLensEnabled}
+              />
+              <GroupDivider />
+              <ActionLinkRow href="/admin/ai-control" label={COPY.adminAi.openControlCenter} />
+            </SettingGroup>
+          </SettingSection>
+        ) : null}
 
         <SettingSection
           caption="学习偏好"

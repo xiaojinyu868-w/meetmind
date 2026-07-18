@@ -119,6 +119,12 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/analytics` | POST | 行为数据上报 |
 | `/api/analytics/stats` | GET | 统计数据查询 |
 
+### 🛠️ 管理员 AI 控制
+
+| 路由 | 方法 | 职责 |
+|------|------|------|
+| `/api/admin/ai-control` | GET/POST | 仅管理员可用；读取 Tutor 六模式、学习意图确认、长期学习理解整理，以及应用矩阵全部六类应用的上下文输入、运行选项、模型路由与提示词版本，并执行 prompt 预览、线上/候选真实结果对比、保存草稿、发布与回滚。对比复用各链路真实的 system/user input 与 provider/输出格式合同：导图走 Markdown 文本，其余应用走各自结构化 JSON；播客试跑到脚本与章节计划为止，不触发收费 TTS。不持久化对话，并复用 Tutor 限流。管理员指令只能追加，不能覆盖隐私、引用、场景、用户证据、学习层级和应用证据合同。 |
+
 ### 🩺 运行维护
 
 | 路由 | 方法 | 职责 |

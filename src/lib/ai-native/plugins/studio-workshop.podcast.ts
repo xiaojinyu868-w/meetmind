@@ -9,7 +9,13 @@ import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { chat } from '@/lib/services/llm-service';
 import type { VolcPodcastResult } from '@/lib/services/volc-podcast';
 import type { AppExecutionContext, AppExecutionResult } from '../types';
-import { buildPromptAnchorContext, buildPromptTranscriptContext } from '../prompt-context';
+import { buildPromptAnchorContext } from '../prompt-context';
+import {
+  buildAudioOverviewChapterEvidence,
+  buildAudioOverviewNarrationCorpus,
+  buildAudioOverviewSystemPrompt,
+  buildAudioOverviewUserPrompt,
+} from '../app-prompts';
 import type { PodcastPlan } from './studio-workshop.types';
 import { formatTimestamp } from './studio-workshop.types';
 
@@ -63,13 +69,7 @@ export function sanitizePodcastNarration(text: string): string {
 // ── Corpus & speaker normalisation ─────────────────────────────────
 
 export function buildPodcastTranscriptCorpus(transcript: TranscriptSegment[], maxChars: number = 9000): string {
-  const promptContext = buildPromptTranscriptContext(transcript, {
-    maxChars: Math.max(12_000, maxChars * 2),
-    includeIndex: false,
-    includeTimestamp: false,
-    minCharsPerSegment: 56,
-  });
-  const merged = promptContext.text
+  const merged = buildAudioOverviewNarrationCorpus(transcript, maxChars)
     .split('\n')
     .map((line) => sanitizePodcastNarration(line))
     .filter(Boolean)
@@ -123,78 +123,35 @@ export function hasTimestampPollution(rounds: VolcPodcastResult['rounds']): bool
 
 // ── LLM plan generation ───────────────────────────────────────────
 
-export async function generatePodcastPlan(context: AppExecutionContext, model: string): Promise<PodcastPlan | null> {
+export async function generatePodcastPlan(
+  context: AppExecutionContext,
+  model: string,
+  systemPrompt = buildAudioOverviewSystemPrompt(),
+): Promise<PodcastPlan | null> {
   const corpus = buildPodcastTranscriptCorpus(context.input.transcript, 12000);
   if (!corpus) return null;
+  const chapterEvidenceContext = buildAudioOverviewChapterEvidence(context.input.transcript);
   const anchorHints = buildPromptAnchorContext(context.input.anchors, 10);
-  const learnerProfile =
-    (context.input.metadata?.studentName && `Student profile: ${context.input.metadata.studentName}`) ||
-    'Student profile: needs efficient review and wants to capture the class essence, not raw transcript.';
 
   const response = await chat(
     [
       {
         role: 'system',
-        content:
-          'You are a rigorous educational audio editor with strong cognitive-science background. Turn a class into a natural two-host learning conversation. Adapt tone to the subject instead of forcing jokes. Use only class evidence and output JSON only.',
+        content: systemPrompt,
       },
       {
         role: 'user',
-        content: `Layer 1 - Render contract (required for frontend):
-Output JSON with this top-level shape:
-{
-  "title": "podcast title",
-  "opening": "opening line",
-  "keyTakeaways": ["takeaway1", "takeaway2"],
-  "learnerProfile": "who this learner is",
-  "structure": [
-    { "title": "chapter title", "focus": "what this chapter covers", "startMs": 0, "endMs": 60000 }
-  ],
-  "tone": "tone guidance",
-  "script": [
-    { "speaker": "Host A", "text": "line" },
-    { "speaker": "Host B", "text": "line" }
-  ]
-}
-
-Layer 2 - Role and intent:
-Turn this class into an audio-first understanding and review map.
-Goals:
-1) Reveal the causal chain, conceptual contrasts, or method logic that holds the class together.
-2) Reduce cognitive friction using an analogy only when it is accurate and genuinely clarifies the idea.
-3) Preserve uncertainty, conditions, and competing views when the class contains them.
-4) Each chapter in "structure" should have clear startMs/endMs (in milliseconds) referencing the original class transcript timestamps. This enables quick chapter navigation in the player.
-
-Audience:
-${learnerProfile}
-
-Hard constraints:
-- Output must be natural Simplified Chinese in script.text.
-- Do NOT output timestamps like 08:25, segment IDs in script text.
-- Use only "Host A" and "Host B" as speaker values.
-- Avoid fake banter, repetitive greetings, empty praise, and reading bullet points aloud.
-- Each host turn should move the explanation forward: question, clarification, example, counterexample, or synthesis.
-- Each "structure" entry MUST include "startMs" and "endMs" fields (integer milliseconds from the class recording).
-- "structure" should have 3-6 entries covering the full class content.
-
-PRD v1.1 §5.5 length constraint (CRITICAL):
-- Target final audio duration: 6-10 minutes.
-- This means total script.text character count across ALL lines should be 900-1500 Chinese characters (Chinese TTS averages ~150 chars/min).
-- Be selective: skip lower-value content rather than rush through everything.
-- Use vivid analogies and clear pacing instead of trying to summarise the whole class.
-
-Class topic:
-${sanitizePodcastNarration(context.goal.intent)}
-
-Class evidence:
-${corpus}
-
-${anchorHints ? `Learner concerns:
-${anchorHints}` : ''}`,
+        content: buildAudioOverviewUserPrompt({
+          goalIntent: context.goal.intent,
+          narrationCorpus: corpus,
+          chapterEvidenceContext,
+          anchorContext: anchorHints,
+          terminologyHint: context.memory.terminologyHint,
+        }),
       },
     ],
     model,
-    { temperature: 0.5, maxTokens: 2600 }
+    { temperature: 0.5, maxTokens: 2600, responseFormat: 'json_object' }
   );
 
   return parseJsonResponse<PodcastPlan>(response.content);

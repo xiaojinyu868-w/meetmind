@@ -228,7 +228,11 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
     );
   }
 
-  const backFromCurrentView = view === 'overview' ? onBack : () => setView('overview');
+  // 从复习页的“考试速查表”直达课程范围时，返回应该回到原来的应用矩阵，
+  // 不能先把用户送进并非此次旅程目标的“我的上下文”总览。
+  const backFromCurrentView = view === 'overview' || initialFocus === 'cheatsheet'
+    ? onBack
+    : () => setView('overview');
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">

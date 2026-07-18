@@ -7,6 +7,7 @@ import { NetworkStatusBanner } from '@/components/NetworkStatusBanner';
 import { Toaster } from 'sonner';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { COPY } from '@/lib/ui/copy';
+import { AdminLensProvider } from '@/components/admin/AdminLensProvider';
 
 export const metadata: Metadata = {
   title: `MeetMind - ${COPY.identity.tagline}`,
@@ -54,14 +55,16 @@ export default function RootLayout({
       </head>
       <body>
         <AuthProvider>
-          <SWRProvider>
-            <AnalyticsProvider>
-              <NetworkStatusBanner />
-              <ServiceWorkerRegister />
-              {children}
-              <Toaster position="top-center" richColors closeButton />
-            </AnalyticsProvider>
-          </SWRProvider>
+          <AdminLensProvider>
+            <SWRProvider>
+              <AnalyticsProvider>
+                <NetworkStatusBanner />
+                <ServiceWorkerRegister />
+                {children}
+                <Toaster position="top-center" richColors closeButton />
+              </AnalyticsProvider>
+            </SWRProvider>
+          </AdminLensProvider>
         </AuthProvider>
       </body>
     </html>

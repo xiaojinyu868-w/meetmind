@@ -63,6 +63,7 @@ import {
 import { normalizeCompanionMarkdown } from './companion-markdown-utils';
 // M14: 课堂同桌 chip 行（稳定 + 动态）
 import { ClassroomChipRow, type ClassroomDynamicChip } from './ClassroomChipRow';
+import { AdminAiInspectorLink } from '@/components/admin/AdminAiInspectorLink';
 
 const IN_CLASS_EXCLUDED_SKILL_APP_KEYS: readonly WorkshopAppKey[] = ['flashcards', 'quiz'];
 
@@ -139,15 +140,22 @@ export interface ClassroomCompanionPanelProps {
    * 用户**不点也行**，不强制读。
    */
   dynamicChips?: ClassroomDynamicChip[];
+  adminInspector?: {
+    context: Record<string, unknown>;
+    options: Record<string, unknown>;
+    query: string;
+  };
 }
 
 /** 顶部标题栏：不同 mode 不同呈现 */
 function Header({
   mode,
   afterClass = false,
+  adminAction,
 }: {
   mode: CompanionMode;
   afterClass?: boolean;
+  adminAction?: React.ReactNode;
 }) {
   // v7 companion-head：octo-stage 圆形 + 呼吸光环 + 名称 + mono pine 状态点
   if (mode === 'listening') {
@@ -175,6 +183,7 @@ function Header({
           </div>
         </div>
         <div className="flex flex-shrink-0 items-center gap-2 text-ink-muted/70">
+          {adminAction}
           {/* M14: 移除"2 个预感"折叠药丸——错位形态。预感能力下沉到 composer chip 行（点输入框时浮）。 */}
           <Radio size={14} strokeWidth={1.6} className="text-pine/65" />
         </div>
@@ -193,6 +202,7 @@ function Header({
           {COPY.companion.idleStatus}
         </p>
       </div>
+      <div className="ml-auto">{adminAction}</div>
     </div>
   );
 }
@@ -488,6 +498,7 @@ export function ClassroomCompanionPanel({
   onAfterClassAction,
   onMarkMoment,
   dynamicChips = [],
+  adminInspector,
 }: ClassroomCompanionPanelProps) {
   const effectivePlaceholder = placeholder ?? (
     mode === 'listening' ? COPY.companion.placeholderListening : COPY.companion.placeholderIdle
@@ -514,6 +525,7 @@ export function ClassroomCompanionPanel({
       <Header
         mode={mode}
         afterClass={afterClass}
+        adminAction={adminInspector ? <AdminAiInspectorLink controlKey="tutor:in-class" context={adminInspector.context} options={adminInspector.options} query={adminInspector.query} compact /> : undefined}
       />
 
       {/* 消息流 */}

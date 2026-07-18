@@ -2,8 +2,9 @@ import type { TranscriptSegment } from '@/types';
 import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
-import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
+import { buildPromptAnchorContext, buildPromptTranscriptContext } from '../prompt-context';
 import { resolveGroundedEvidence } from '../evidence-grounding';
+import { buildFlashcardsSystemPrompt, buildFlashcardsUserPrompt } from '../app-prompts';
 
 const TARGET_CARD_COUNT = 8;
 
@@ -120,7 +121,8 @@ async function generateDeckWithLLM(
   context: AppExecutionContext,
   model: string,
   transcriptContext: string,
-  anchorContext: string
+  anchorContext: string,
+  systemPrompt: string,
 ): Promise<FlashcardLLMOutput | null> {
   // 提示词哲学：描述用户和目标，不描述路径。
   // 难度分级、卡片数量、措辞风格——交给模型自己判断。
@@ -128,36 +130,20 @@ async function generateDeckWithLLM(
     [
       {
         role: 'system',
-        content:
-          '你是一位深谙认知科学和间隔重复理论的学习教练。学生刚上完一节课，需要通过主动回忆来真正记住核心知识，而不仅仅是机械背诵。把这节课的内容转化为一组让他"看到题就能在脑子里把答案重建出来"的闪卡。',
+        content: systemPrompt,
       },
       {
         role: 'user',
-        content: `${context.goal.intent ? `他的学习目标：${context.goal.intent}\n\n` : ''}${anchorContext ? `他听课时的困惑点（这些地方更容易出问题，值得多覆盖）：\n${anchorContext}\n\n` : ''}课堂原文：
-${transcriptContext}
-
-输出 JSON：
-{
-  "deckTitle": string,
-  "overview": string,
-  "cards": [
-    { "question": string, "answer": string, "startMs": number, "endMs": number, "hint"?: string, "difficulty"?: "core"|"challenge"|"transfer" }
-  ]
-}
-
-质量合同：
-- 共 8 张左右；以核心概念为主，保留 1-2 张需要比较、推理或迁移到新情境的卡
-- 一张卡只检验一个认知动作；题面脱离原文也能读懂，不问“老师讲了什么”“这段主要说什么”
-- answer 用 1-3 句话给出可核对的最小完整答案，不把整段转录搬过来
-- hint 只能给思考方向，不能直接泄露答案关键词
-- 困惑点优先覆盖，但没有课堂证据的内容宁可不出
-- startMs/endMs 必须指向真正支持答案的原文位置，不能按卡片顺序平均分配
-
-只输出 JSON，不解释。${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
+        content: buildFlashcardsUserPrompt({
+          goalIntent: context.goal.intent,
+          transcriptContext,
+          anchorContext,
+          terminologyHint: context.memory.terminologyHint,
+        }),
       },
     ],
     model,
-    { temperature: 0.4, maxTokens: 2400 }
+    { temperature: 0.4, maxTokens: 2400, responseFormat: 'json_object' }
   );
 
   return parseJsonResponse<FlashcardLLMOutput>(response.content);
@@ -303,11 +289,12 @@ export const flashcardsPlugin: AppPlugin = {
       context.input.transcript,
       Math.min(TARGET_CARD_COUNT, Math.max(4, Math.ceil(context.input.transcript.length / 3)))
     );
-    const model = context.model || DEFAULT_MODEL_ID;
+    const systemPrompt = context.runtimeControl?.systemPrompt || buildFlashcardsSystemPrompt();
+    const model = context.runtimeControl?.modelId || context.model || DEFAULT_MODEL_ID;
 
     let llmOutput: FlashcardLLMOutput | null = null;
     try {
-      llmOutput = await generateDeckWithLLM(context, model, promptContext.text, anchorContext);
+      llmOutput = await generateDeckWithLLM(context, model, promptContext.text, anchorContext, systemPrompt);
     } catch {
       llmOutput = null;
     }

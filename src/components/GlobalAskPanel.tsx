@@ -42,6 +42,7 @@ import {
   useChatComposer,
   useChatFileUpload,
 } from '@/components/chat';
+import { AdminAiInspectorLink } from '@/components/admin/AdminAiInspectorLink';
 
 interface GlobalAskPanelProps {
   open: boolean;
@@ -167,6 +168,10 @@ export function GlobalAskPanel({
   const busy = status === 'submitted' || status === 'streaming';
   const latestMessage = messages[messages.length - 1];
   const latestText = latestMessage ? collectMessageText(latestMessage) : '';
+  const inspectorQuery = React.useMemo(() => {
+    const latestUserMessage = [...messages].reverse().find((message) => message.role === 'user');
+    return latestUserMessage ? collectMessageText(latestUserMessage) : pendingQuery;
+  }, [messages, pendingQuery]);
   const showThinking = busy && (latestMessage?.role === 'user' || !latestText.trim());
 
   React.useEffect(() => {
@@ -389,6 +394,7 @@ export function GlobalAskPanel({
             </div>
           </div>
           <div className="flex items-center gap-1.5">
+            <AdminAiInspectorLink controlKey="tutor:global" context={agentContext} query={inspectorQuery} compact={isMobile} />
             <button type="button" onClick={() => setContextOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-divider bg-white px-3 text-[11.5px] text-ink-secondary hover:border-pine/25 hover:text-pine" aria-label={COPY.globalAsk.contextRailTitle} title={COPY.globalAsk.contextRailTitle}>
               <Layers3 size={13} /> <span className="hidden sm:inline">{COPY.globalAsk.contextAction}</span>
             </button>

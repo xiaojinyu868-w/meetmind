@@ -53,6 +53,12 @@ export interface UseClassroomCompanionReturn {
   retryInlineApp: (messageId: string) => void;
   /** inline 模式：用户在内联卡片里答题/翻闪卡时，由此抛事件给 hook 处理 */
   handleInlineAppInteraction: (messageId: string, event: InlineAppInteraction) => void;
+  /** 与当前课中请求同源的上下文快照，仅供管理员现场透镜。 */
+  adminInspector: {
+    context: Record<string, unknown>;
+    options: Record<string, unknown>;
+    query: string;
+  };
 }
 
 export interface UseClassroomCompanionInput {
@@ -156,6 +162,7 @@ export function useClassroomCompanion(
   // 但又不能把 messages 放进那些 callback 的依赖里（否则回调身份每次 render 都变）。
   const messagesRef = useRef<CompanionMessage[]>([]);
   const quizAttemptsRef = useRef<CompanionQuizAttempt[]>([]);
+  const latestSupportMaterialsRef = useRef<Array<{ title: string; content: string }> | undefined>();
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
@@ -568,6 +575,7 @@ export function useClassroomCompanion(
   ) => {
     const trimmed = text.trim();
     if (!trimmed) return;
+    latestSupportMaterialsRef.current = supportMaterials;
 
     // 1. 先把用户消息 commit 进 messages
     const userMsg: CompanionMessage = {
@@ -778,6 +786,16 @@ export function useClassroomCompanion(
     stopStream();
   }, [stopStream]);
 
+  const inspectorBody = buildInClassTutorAgentBody({
+    messages: [],
+    sessionId,
+    segments,
+    model: preferredModel,
+    learnerProfile: formatLearnerProfileForTutorAgent(user?.learnerProfile),
+    supportMaterials: latestSupportMaterialsRef.current,
+  });
+  const latestUserMessage = [...messages].reverse().find((message) => message.role === 'user');
+
   return {
     messages,
     streamingMessage,
@@ -787,5 +805,10 @@ export function useClassroomCompanion(
     markListening,
     retryInlineApp,
     handleInlineAppInteraction,
+    adminInspector: {
+      context: inspectorBody.context,
+      options: inspectorBody.options,
+      query: latestUserMessage?.content || '',
+    },
   };
 }

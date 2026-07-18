@@ -1,7 +1,8 @@
 import type { TranscriptSegment } from '@/types';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
-import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
+import { buildMindmapSystemPrompt, buildMindmapUserPrompt } from '../app-prompts';
+import { buildPromptAnchorContext, buildPromptTranscriptContext } from '../prompt-context';
 import { resolveGroundedEvidence } from '../evidence-grounding';
 
 /* ------------------------------------------------------------------ */
@@ -211,6 +212,7 @@ export function groundMindmapNodes(
 async function generateMindMap(
   context: AppExecutionContext,
   model: string,
+  systemPrompt: string,
   transcriptContext: string,
   anchorContext: string
 ): Promise<MindmapLLMOutput | null> {
@@ -220,12 +222,16 @@ async function generateMindMap(
     [
       {
         role: 'system',
-        content: '你是一位深谙认知科学的知识架构师。你帮一位刚听完课的学生整理一张"扫一眼就能看出这节课讲了什么、几个大块"的结构图——不是详尽的课后笔记，是他余光扫到就能定位自己在课里哪一段的轻量地图。每个节点要像地图标签，用能区分含义的短语命名，不要把解释句、应用建议或多个事实塞进一个节点；完整解释留在原课堂和后续问答里。直接输出 Markdown 大纲（# 根主题 + - 子节点缩进），不要 JSON。',
+        content: systemPrompt,
       },
       {
         role: 'user',
-        content: `${context.goal.intent ? `他的目标：${context.goal.intent}\n\n` : ''}${anchorContext ? `他听课时的困惑点（这些主题值得在主干层出现）：\n${anchorContext}\n\n` : ''}课堂原文：
-${transcriptContext}${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
+        content: buildMindmapUserPrompt({
+          goalIntent: context.goal.intent,
+          transcriptContext,
+          anchorContext,
+          terminologyHint: context.memory.terminologyHint,
+        }),
       },
     ],
     model,
@@ -310,11 +316,12 @@ export const mindmapPlugin: AppPlugin = {
       minCharsPerSegment: 52,
     });
     const anchorContext = buildPromptAnchorContext(context.input.anchors, 12);
-    const model = context.model || DEFAULT_MODEL_ID;
+    const systemPrompt = context.runtimeControl?.systemPrompt || buildMindmapSystemPrompt();
+    const model = context.runtimeControl?.modelId || context.model || DEFAULT_MODEL_ID;
 
     let llmOutput: MindmapLLMOutput | null = null;
     try {
-      llmOutput = await generateMindMap(context, model, promptContext.text, anchorContext);
+      llmOutput = await generateMindMap(context, model, systemPrompt, promptContext.text, anchorContext);
     } catch {
       llmOutput = null;
     }

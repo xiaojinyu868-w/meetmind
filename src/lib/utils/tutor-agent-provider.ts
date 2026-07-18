@@ -1,3 +1,5 @@
+import { createOpenAI } from '@ai-sdk/openai';
+
 type EnvLike = Record<string, string | undefined>;
 
 export interface TutorAgentProviderConfig {
@@ -11,6 +13,29 @@ export interface TutorAgentProviderConfig {
 
 export interface TutorAgentProviderOptions {
   modelId?: string;
+}
+
+export function createTutorAgentChatModel(provider: TutorAgentProviderConfig) {
+  const { apiKey, baseURL, modelId } = provider;
+  const isQwenThinkingModel = /^qwen3?\.?\d*[-.]?plus/i.test(modelId) || /^qwen3/i.test(modelId);
+  const openaiOptions: Parameters<typeof createOpenAI>[0] = { apiKey, baseURL };
+  if (isQwenThinkingModel) {
+    openaiOptions.fetch = async (url, init) => {
+      if (init?.body && typeof init.body === 'string') {
+        try {
+          const body = JSON.parse(init.body) as Record<string, unknown>;
+          if (body.enable_thinking === undefined) {
+            body.enable_thinking = false;
+            init = { ...init, body: JSON.stringify(body) };
+          }
+        } catch {
+          // 保留 provider 原请求体；试跑与正式 Tutor 使用同一兼容策略。
+        }
+      }
+      return fetch(url, init);
+    };
+  }
+  return createOpenAI(openaiOptions).chat(modelId);
 }
 
 const DEFAULT_DASHSCOPE_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';

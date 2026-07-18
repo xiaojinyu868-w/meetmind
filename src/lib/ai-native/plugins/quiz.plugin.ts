@@ -2,8 +2,9 @@ import type { TranscriptSegment } from '@/types';
 import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
-import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
+import { buildPromptAnchorContext, buildPromptTranscriptContext } from '../prompt-context';
 import { resolveGroundedEvidence } from '../evidence-grounding';
+import { buildQuizSystemPrompt, buildQuizUserPrompt } from '../app-prompts';
 
 const TARGET_QUESTION_COUNT = 6;
 
@@ -128,7 +129,8 @@ async function generateQuizWithLLM(
   context: AppExecutionContext,
   model: string,
   transcriptContext: string,
-  anchorContext: string
+  anchorContext: string,
+  systemPrompt: string,
 ): Promise<QuizLLMOutput | null> {
   // 提示词哲学：描述用户和目标，不描述路径。
   // 题型混搭、题数、迷惑项怎么设计、解析多详细——交给模型自己判断。
@@ -136,34 +138,16 @@ async function generateQuizWithLLM(
     [
       {
         role: 'system',
-        content:
-          '你是一位经验丰富的命题研究员，擅长设计能区分"真懂"和"以为自己懂"的测试题。学生刚上完一节课，想检验自己对课堂内容的理解程度。题目类型可以是单选、判断、填空、简答任意组合，由你按内容性质决定哪种最合适。' +
-          '单选题的每个干扰项都必须来自课堂内容里真实存在的、似是而非的理解偏差或易混淆概念，写成具体、自洽、有信息量的陈述；严禁出现"该片段主要讨论了X""跳过了这个话题""仅做了简单引用，未做实质分析"这类与具体知识无关、一眼就是模板的空话选项。如果一道题凑不出 3 个有内容的干扰项，就把它出成简答题而不是硬凑选择题。' +
-          '题目会显示在三栏学习界面的中间窄区，阅读成本必须低：每题只检验一个判断；中文题干尽量不超过 32 字，英文题干尽量不超过 24 个词；中文选项尽量不超过 24 字，英文选项尽量不超过 16 个词。不要反复写“根据上下文”“Based on the context”等无信息铺垫，直接提问。通常生成 4-6 道互不重复的题，内容不足时宁可少出。题面与选项优先沿用课堂原文的主要语言，explanation 使用简体中文帮助复盘。',
+        content: systemPrompt,
       },
       {
         role: 'user',
-        content: `${context.goal.intent ? `他的学习目标：${context.goal.intent}\n\n` : ''}${anchorContext ? `他听课时的困惑点（这些地方更容易出问题，值得重点检验）：\n${anchorContext}\n\n` : ''}课堂原文：
-${transcriptContext}
-
-输出 JSON：
-{
-  "title": string,
-  "strategy": string,
-  "questions": [
-    {
-      "stem": string,
-      "type": "single" | "judge" | "fill" | "short",
-      "options": string[],   // single ≥ 2 项；judge 用 ["正确","错误"]；fill / short 留空
-      "answer": string,      // single 用选项字母；judge 用 "正确"/"错误"；fill / short 用答案文本
-      "explanation": string,
-      "startMs": number,
-      "endMs": number
-    }
-  ]
-}
-
-只输出 JSON，不解释。${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
+        content: buildQuizUserPrompt({
+          goalIntent: context.goal.intent,
+          transcriptContext,
+          anchorContext,
+          terminologyHint: context.memory.terminologyHint,
+        }),
       },
     ],
     model,
@@ -291,11 +275,12 @@ export const quizPlugin: AppPlugin = {
       context.input.transcript,
       Math.min(TARGET_QUESTION_COUNT, Math.max(4, Math.ceil(context.input.transcript.length / 4)))
     );
-    const model = context.model || DEFAULT_MODEL_ID;
+    const systemPrompt = context.runtimeControl?.systemPrompt || buildQuizSystemPrompt();
+    const model = context.runtimeControl?.modelId || context.model || DEFAULT_MODEL_ID;
 
     let llmOutput: QuizLLMOutput | null = null;
     try {
-      llmOutput = await generateQuizWithLLM(context, model, promptContext.text, anchorContext);
+      llmOutput = await generateQuizWithLLM(context, model, promptContext.text, anchorContext, systemPrompt);
       if (!llmOutput) {
         console.warn('[quiz-plugin] LLM returned null (JSON parse failed). model=', model, 'transcript_chars=', promptContext.text.length);
       } else if (!Array.isArray(llmOutput.questions) || llmOutput.questions.length === 0) {

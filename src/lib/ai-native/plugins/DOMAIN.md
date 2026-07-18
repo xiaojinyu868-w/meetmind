@@ -20,6 +20,10 @@
 | `fallback.plugin.ts` | 兜底 |
 | `index.ts` | 插件注册（7 个插件） |
 
+应用的可评测 Prompt 基线统一放在上级 `../app-prompts.ts`；应用矩阵全部六类应用均已接入管理员运行时控制，真实插件执行、产品现场透镜、控制中心预览和线上/候选试跑共用同一份 System/User Prompt。导图是单课轻结构 Markdown；速查表要求跨课 / 考试证据与可打印 JSON；信息图只保留一个中心命题并限制手机阅读负担；播客把可朗读语料与章节时间证据分离，避免把时间读进音频或让模型猜章节。管理员只可追加指令和选择模型，证据回锚、层级边界、输出格式、视觉 / 音频价值合同不可覆盖。
+
+运行时治理必须由服务端 `/api/apps/execute` 读取后写入 `AppExecutionContext.runtimeControl`；插件自身不得静态 import Prisma-backed `ai-control-service`。插件模块可能被客户端窗口复用类型或纯函数，破坏该边界会把 `better-sqlite3` 打进浏览器构建。
+
 ## 已清理（M14.6+）
 
 以下 plugin 已删除——它们只能通过 `tutor-tools.ts` 的 tool-calling 触发，但 M14.6 起 `agent/route.ts` 纯对话 `tools = {}`，这三个变成无入口死代码：

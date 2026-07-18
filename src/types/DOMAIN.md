@@ -18,6 +18,7 @@
 | `conversation.ts` | 121 | 对话历史类型 | `ConversationType`, `MessageRole`, `ConversationHistory`, `ConversationMessage` |
 | `classroom-flow.ts` | ~35 | 课中课堂脉络契约 | `ClassroomFlowState`, `ClassroomMoment`, `ClassroomSignal` |
 | `learning-intent.ts` | ~45 | 深度学习开始前的交互式意图契约 | `LearningIntentPlan`, `LearningIntentQuestion`, `LearningIntentAnswer`, `LearningIntentApproach`, `LearningContextFocus` |
+| `ai-control.ts` | ~120 | 管理员 AI 控制台的 Tutor / 理解层 / 应用链路目录、提示词覆盖、版本、预览与真实结果对比契约 | `AiControlKey`, `AiPromptOverride`, `AiControlItem`, `AiPromptPreview`, `AiControlComparison` |
 
 ## 使用约定
 

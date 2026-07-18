@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { useUIActions, useUIStore, type MobileSubPage } from '@/stores/ui-store';
@@ -189,6 +189,7 @@ function StudentAppContent({
   initialGlobalAskView?: 'ask' | 'memory';
   initialMemoryFocus?: 'cheatsheet';
 }) {
+  const router = useRouter();
   // ==================== Zustand Store 订阅 ====================
   const uiActions = useUIStore((s) => s.actions);
   const playerActions = usePlayerStore((s) => s.actions);
@@ -257,8 +258,10 @@ function StudentAppContent({
     const url = new URL(window.location.href);
     url.searchParams.delete('workspace');
     url.searchParams.delete('intent');
-    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
-  }, [initialGlobalAskView, setShowAISearch]);
+    // 必须同步 Next Router 自己的路由状态；只改 history 会导致第二次点击
+    // “考试速查表”时 Router 误以为仍在同一 URL，从而出现看似可点的死入口。
+    router.replace(`${url.pathname}${url.search}${url.hash}`, { scroll: false });
+  }, [initialGlobalAskView, router, setShowAISearch]);
 
   // Collection Store — 收集流状态
   const collectionActions = useCollectionStore((s) => s.actions);

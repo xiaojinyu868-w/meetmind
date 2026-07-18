@@ -22,7 +22,7 @@ Visitors can open a shared lesson without logging in. Logged-in visitors can cla
 |---|---|
 | `[token]/page.tsx` | Next.js route shell. |
 | `[token]/SharedAgentLanding.tsx` | Public landing UI. |
-| `[token]/SharedAgentChat.tsx` | Shared-mode tutor chat. |
+| `[token]/SharedAgentChat.tsx` | Shared-mode tutor chat；管理员透镜使用公开分享快照重建与服务端一致的 shared context，不读取访问者私人画像。 |
 
 ## Boundaries
 

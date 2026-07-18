@@ -9,7 +9,7 @@
 | `tutor-types.ts` | Tutor 共享类型定义 |
 | `tutor-utils.ts` | Tutor 工具函数（纯函数） |
 | `TutorWidgets.tsx` | Tutor 小组件集合 |
-| `TutorAgentPanel.tsx` | M10 复习态 AI 同桌面板（AI SDK v6；结构化应用只交给中间学习工作区，右栏空态仅保留“讲主线 / 从标记开始”两个对话动作，不再复制应用矩阵） |
+| `TutorAgentPanel.tsx` | M10 复习态 AI 同桌面板（AI SDK v6；结构化应用只交给中间学习工作区，右栏空态仅保留“讲主线 / 从标记开始”两个对话动作，不再复制应用矩阵；管理员顶栏轻入口可将本次真实 review / in-class 上下文带到 AI 控制中心） |
 | `tutor-inline-app-cache.ts` | 复习对话内联应用缓存桥接：读取 / 写入应用矩阵同一份 `app_workspace_result:*` 缓存，并用 running 状态避免同一 app 重复并发执行 |
 | `tutor-agent-history.ts` | TutorAgentPanel 历史消息转换与状态文案 helper |
 | `tutor-agent-adapter.ts` | SafeAITutor / TutorAgentPanel 的 context / launchQuestion / learnerProfile / recent learning activity 纯适配 helper；个人画像、近期对话和应用交互动态只作为模型上下文，不做硬规则 |
