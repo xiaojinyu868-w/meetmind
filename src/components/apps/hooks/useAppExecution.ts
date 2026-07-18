@@ -438,6 +438,12 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
               : error instanceof Error
                 ? error.message
                 : '应用执行失败';
+        // 语义上的“材料不成立”意味着旧产物也不能继续代表当前范围。
+        // 清掉结果与缓存，避免页面一边说没做好，一边还允许分享旧的伪成品。
+        if (message === COPY.apps.matrix.executeNotReady) {
+          setResult(null);
+          removeCacheEntry(buildResultCacheKey(sessionId, app.key));
+        }
         const failedState = nowTaskState('error', message);
         setTaskState(failedState);
         writeCachedTaskState(sessionId, app.key, failedState);

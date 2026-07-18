@@ -72,10 +72,9 @@ describe('compactVisualLabel', () => {
     expect(compactVisualLabel('核心概念', 14, 120)).toBe('核心概念');
   });
 
-  it('只裁剪画布标签并保留省略号', () => {
-    const compacted = compactVisualLabel('这是一段会把整张思维导图横向撑得很宽的完整解释', 14, 120);
-    expect(compacted.endsWith('…')).toBe(true);
-    expect(measureText(compacted, 14)).toBeLessThanOrEqual(120);
+  it('长标签也保留完整内容，不用省略号制造信息缺口', () => {
+    const label = '这是一段会把整张思维导图横向撑得很宽的完整解释';
+    expect(compactVisualLabel(label, 14, 120)).toBe(label);
   });
 });
 
@@ -112,10 +111,10 @@ describe('buildLayoutTree', () => {
     expect(tree[0].children[0].depth).toBe(1);
   });
 
-  it('长节点只缩短画布标签，完整标题仍保留', () => {
+  it('长节点在画布和数据中都保留完整标题', () => {
     const fullTitle = '应用建议：建立情绪映射，当听到 calm down 和 confused 时反向检索语境';
     const tree = buildLayoutTree([{ title: fullTitle, children: [] }] as any, 1, new Set(), 'root');
-    expect(tree[0].title.endsWith('…')).toBe(true);
+    expect(tree[0].title).toBe(fullTitle);
     expect(tree[0].fullTitle).toBe(fullTitle);
   });
 

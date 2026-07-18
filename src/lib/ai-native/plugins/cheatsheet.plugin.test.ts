@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TranscriptSegment } from '@/types';
-import { buildCheatsheetSections } from './cheatsheet.plugin';
+import { buildCheatsheetSections, isRejectedCheatsheetDraft } from './cheatsheet.plugin';
 
 const transcript: TranscriptSegment[] = [
   { id: 's1', text: '机会成本是为了得到某个选择而放弃的最佳替代方案。', startMs: 0, endMs: 8_000, isFinal: true },
@@ -115,5 +115,24 @@ describe('buildCheatsheetSections evidence grounding', () => {
       sourceTitle: '考试大纲',
       sourceKind: 'syllabus',
     });
+  });
+});
+
+describe('cheatsheet content-quality gate', () => {
+  it('rejects an unavailable or explicitly invalid draft instead of wrapping raw chat as key points', () => {
+    expect(isRejectedCheatsheetDraft(null)).toBe(true);
+    expect(isRejectedCheatsheetDraft({
+      title: '无效数据 · 无法生成速查表',
+      overview: '课堂原文是生活闲聊，不含学科考点。',
+      sections: [{ key: 'definition', items: [{ term: '要点 1', body: '随便聊聊。' }] }],
+    })).toBe(true);
+  });
+
+  it('keeps a grounded academic draft', () => {
+    expect(isRejectedCheatsheetDraft({
+      title: '微观经济学考试速查',
+      overview: '用于开卷考试时快速定位定义与公式。',
+      sections: [{ key: 'definition', items: [{ term: '机会成本', body: '放弃的最佳替代方案。' }] }],
+    })).toBe(false);
   });
 });

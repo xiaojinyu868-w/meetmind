@@ -125,6 +125,17 @@ function cleanText(value: string): string {
     .trim();
 }
 
+const NOT_READY_OUTPUT_PATTERN = /无法生成|不能生成|不适合生成|无效数据|不含(?:任何)?(?:学科|知识|考点|课程)内容|材料不足|内容不足|cannot generate|not enough (?:course|learning|academic) content/i;
+
+/**
+ * 模型已经判断材料不具备学习价值时，必须尊重这个判断。
+ * 禁止再把原文逐句包装成“要点”，那只会制造一个形式完整的假成品。
+ */
+export function isRejectedCheatsheetDraft(output: CheatsheetLLMOutput | null): boolean {
+  if (!output) return true;
+  return NOT_READY_OUTPUT_PATTERN.test(`${cleanText(output.title ?? '')} ${cleanText(output.overview ?? '')}`);
+}
+
 function toTimestamp(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.floor(value));
   if (typeof value === 'string') {
@@ -394,27 +405,11 @@ export function buildCheatsheetSections(
   return sections;
 }
 
-function buildFallbackSection(
-  transcript: TranscriptSegment[],
-  tools: AppPluginTools,
-  lessonSources: LessonSourceMeta[] = [],
-): CheatsheetSection {
-  const pickable = transcript.filter((s) => cleanText(s.text).length > 12).slice(0, 5);
-  const items: CheatsheetItem[] = pickable.map((seg, i) => ({
-    id: `fallback-${i + 1}`,
-    term: `要点 ${i + 1}`,
-    body: cleanText(tools.summarizeSegments([seg], 80) || seg.text).slice(0, 120),
-    emphasis: 'normal',
-    citation: buildCitation(seg, lessonSources),
-  }));
-  return { key: 'definition', label: SECTION_LABELS.definition, items };
-}
-
 export const cheatsheetPlugin: AppPlugin = {
   manifest: {
     id: 'cheatsheet-gen',
     name: '考试速查表',
-    version: '0.1.0',
+    version: '0.2.0',
     description: '把多节课堂与考试范围压成可编辑、可打印的高密度参考页。',
     tags: ['student', 'exam', 'cheatsheet', 'print'],
     capabilities: ['section-blocks', 'citation', 'print'],
@@ -447,10 +442,10 @@ export const cheatsheetPlugin: AppPlugin = {
       llmOutput = null;
     }
 
-    let sections = buildCheatsheetSections(context.input.transcript, llmOutput, lessonSources, examEvidence);
-    if (sections.length === 0) {
-      sections = [buildFallbackSection(context.input.transcript, tools, lessonSources)];
-    }
+    if (isRejectedCheatsheetDraft(llmOutput)) throw new Error('CONTENT_NOT_READY');
+
+    const sections = buildCheatsheetSections(context.input.transcript, llmOutput, lessonSources, examEvidence);
+    if (sections.length === 0) throw new Error('CONTENT_NOT_READY');
 
     const title = cleanText(llmOutput?.title ?? '') || '课程考试速查表';
     const overview =
@@ -473,7 +468,7 @@ export const cheatsheetPlugin: AppPlugin = {
 
     return {
       pluginId: 'cheatsheet-gen',
-      version: '0.1.0',
+      version: '0.2.0',
       model,
       trace: [
         `intent=${context.goal.intent}`,
@@ -483,7 +478,7 @@ export const cheatsheetPlugin: AppPlugin = {
         `lesson_sources=${lessonSources.length}`,
         `prompt_segments=${promptCtx.usedSegments}/${promptCtx.totalSegments}`,
         `prompt_truncated=${promptCtx.truncated ? 'yes' : 'no'}`,
-        `llm=${llmOutput ? 'ok' : 'fallback'}`,
+        'llm=ok',
         `sections=${sections.length}`,
       ],
       cards: [

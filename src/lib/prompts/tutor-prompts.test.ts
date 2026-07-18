@@ -80,6 +80,9 @@ describe('buildTutorSystemPrompt — global Ask 与深度学习', () => {
     expect(prompt).toMatch(/真正理解反向传播/);
     expect(prompt).toMatch(/更喜欢用图理解/);
     expect(prompt).toMatch(/刚完成神经网络闪卡/);
+    expect(prompt).toMatch(/第一轮，必须真正开始学习/);
+    expect(prompt).toMatch(/先给一段可用的解释、示例、对比或微型练习/);
+    expect(prompt).toMatch(/不要再让他自我归类/);
     expect(prompt).toMatch(/不要在正文里输出任何学习记忆标记/);
     expect(prompt).toMatch(/独立流程依据真实互动静默整理/);
     expect(prompt).not.toMatch(/---学习进展---/);

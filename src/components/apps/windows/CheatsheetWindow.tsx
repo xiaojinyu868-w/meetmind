@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
-import { Printer, Copy, Check, ChevronDown, ChevronRight, X, RotateCcw, Settings2, PencilLine } from 'lucide-react';
+import { Printer, Copy, Check, ChevronDown, ChevronRight, X, RotateCcw, Settings2, PencilLine, MoreHorizontal } from 'lucide-react';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import { CompanionMarkdown } from '@/components/classroom/CompanionMarkdown';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
@@ -100,11 +100,13 @@ function ItemRow({
   const [draftTerm, setDraftTerm] = useState(item.term);
   const [draftBody, setDraftBody] = useState(item.body);
   const [draftLatex, setDraftLatex] = useState(item.latex || '');
+  const [actionsOpen, setActionsOpen] = useState(false);
 
   const beginEdit = () => {
     setDraftTerm(item.term);
     setDraftBody(item.body);
     setDraftLatex(item.latex || '');
+    setActionsOpen(false);
     setEditing(true);
   };
 
@@ -165,7 +167,7 @@ function ItemRow({
           className="mt-[5px] inline-block h-[4px] w-[4px] flex-shrink-0 rounded-full"
           style={{ backgroundColor: isStrong ? accent.dot : 'rgba(0,0,0,0.45)' }}
         />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 pr-7 sm:pr-0">
           <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
             <strong
               className="font-semibold tracking-[-0.005em] text-ink"
@@ -200,11 +202,11 @@ function ItemRow({
                 {citation}
               </span>
             ) : null}
-            {/* 删除按钮：hover 才显，避免视觉污染；打印时不渲染 */}
+            {/* 桌面端悬停出现；触屏端由下方显式菜单承接。 */}
             <button
               type="button"
               onClick={beginEdit}
-              className="print:hidden absolute right-7 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/80 text-ink-muted opacity-0 ring-[0.5px] ring-[#1C1B19]/[0.18] transition group-hover:opacity-100 hover:bg-white hover:text-pine hover:ring-pine/35 active:scale-90"
+              className="print:hidden absolute right-7 top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-white/80 text-ink-muted opacity-0 ring-[0.5px] ring-[#1C1B19]/[0.18] transition group-hover:opacity-100 hover:bg-white hover:text-pine hover:ring-pine/35 active:scale-90 sm:inline-flex"
               title={COPY.apps.cheatsheet.editItem}
               aria-label={COPY.apps.cheatsheet.editItem}
             >
@@ -213,7 +215,7 @@ function ItemRow({
             <button
               type="button"
               onClick={onHide}
-              className="print:hidden absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/80 text-ink-muted opacity-0 ring-[0.5px] ring-[#1C1B19]/[0.18] transition group-hover:opacity-100 hover:bg-white hover:text-[#B5483C] hover:ring-[#B5483C]/40 active:scale-90"
+              className="print:hidden absolute right-1 top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-white/80 text-ink-muted opacity-0 ring-[0.5px] ring-[#1C1B19]/[0.18] transition group-hover:opacity-100 hover:bg-white hover:text-[#B5483C] hover:ring-[#B5483C]/40 active:scale-90 sm:inline-flex"
               title={COPY.apps.cheatsheet.hideItem}
               aria-label={COPY.apps.cheatsheet.hideItem}
             >
@@ -242,8 +244,42 @@ function ItemRow({
               </div>
             </div>
           ) : null}
+          {actionsOpen ? (
+            <div className="print:hidden mt-2 flex items-center justify-end gap-1.5 border-t border-divider/60 pt-2 sm:hidden">
+              <button
+                type="button"
+                onClick={beginEdit}
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-paper-warm px-3 text-[11px] font-medium text-ink-secondary"
+              >
+                <PencilLine size={11} strokeWidth={1.9} aria-hidden />
+                {COPY.apps.cheatsheet.editShort}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActionsOpen(false);
+                  onHide();
+                }}
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-paper-warm px-3 text-[11px] font-medium text-vermilion"
+              >
+                <X size={11} strokeWidth={2} aria-hidden />
+                {COPY.apps.cheatsheet.hideShort}
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
+      {!editing ? (
+        <button
+          type="button"
+          onClick={() => setActionsOpen((open) => !open)}
+          className="print:hidden absolute right-1 top-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-ink-muted transition active:bg-paper-warm sm:hidden"
+          aria-expanded={actionsOpen}
+          aria-label={COPY.apps.cheatsheet.itemActions}
+        >
+          <MoreHorizontal size={15} strokeWidth={1.9} aria-hidden />
+        </button>
+      ) : null}
     </li>
   );
 }
@@ -560,7 +596,7 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
               </p>
             ) : null}
           </div>
-          <div className="flex w-full flex-shrink-0 items-center gap-2 sm:w-auto">
+          <div className="hidden w-full flex-shrink-0 items-center gap-2 sm:flex sm:w-auto">
             <button
               type="button"
               onClick={() => setSettingsOpen((open) => !open)}
@@ -714,6 +750,35 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
             </article>
           ))}
         </div>
+      </div>
+
+      {/* 手机端长文档始终保留成品出口；分享仍在结果页顶栏，避免和产物编辑耦合。 */}
+      <div className="print:hidden sticky bottom-0 z-10 grid grid-cols-[auto_auto_minmax(0,1fr)] gap-2 border-t border-divider bg-white/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 backdrop-blur-xl sm:hidden">
+        <button
+          type="button"
+          onClick={() => setSettingsOpen((open) => !open)}
+          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full border border-divider bg-white px-3 text-[11.5px] font-medium text-ink-secondary"
+          aria-expanded={settingsOpen}
+        >
+          <Settings2 size={13} strokeWidth={1.8} aria-hidden />
+          {COPY.apps.cheatsheet.mobileLayout}
+        </button>
+        <button
+          type="button"
+          onClick={handleCopyMarkdown}
+          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full border border-divider bg-white px-3 text-[11.5px] font-medium text-ink-secondary"
+        >
+          {copyState === 'done' ? <Check size={13} strokeWidth={2} aria-hidden /> : <Copy size={13} strokeWidth={1.8} aria-hidden />}
+          {copyState === 'done' ? COPY.apps.cheatsheet.copied : COPY.apps.cheatsheet.mobileCopy}
+        </button>
+        <button
+          type="button"
+          onClick={handlePrint}
+          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full bg-ink px-4 text-[11.5px] font-medium text-white active:scale-[0.98]"
+        >
+          <Printer size={13} strokeWidth={1.8} aria-hidden />
+          {COPY.apps.cheatsheet.mobilePrint}
+        </button>
       </div>
 
       {/* 打印样式：纸张、方向与分页和屏幕预览保持同源。 */}

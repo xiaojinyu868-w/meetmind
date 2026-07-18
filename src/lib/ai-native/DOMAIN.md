@@ -12,7 +12,7 @@ page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → r
 2. 客观证据充足时，当前 `contextTier` 的全部应用都可由用户主动执行；模型误判不得降为整页不可用
 3. `/api/apps/execute` 再做一次服务端 readiness 校验，只阻止证据不足或跨层调用
 4. `context-builder.ts` 构建 `AppExecutionContext`
-5. `registry.ts` 查找对应 plugin，Plugin 调用 LLM 生成结果
+5. `registry.ts` 查找对应 plugin，Plugin 调用 LLM 生成结果；运行故障继续包装成稳定结果，但 `CONTENT_NOT_READY` 这类语义拒绝必须透传给 API，不能伪装成成功产物
 6. 前端浮窗渲染结果
 
 ## 文件索引
@@ -28,7 +28,8 @@ page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → r
 | `workshop-readiness.ts` | ~190 | 浏览器 / 服务端共用的内容证据门：安全 fallback、模型结果清洗、按 class / unit / exam 收口应用白名单；客观证据充足时模型只能推荐、不能撤销能力 |
 | `evidence-grounding.ts` | ~115 | 生成后证据校验：模型时间戳仅作候选，题面 / 条目 / 节点必须与真实原文语义匹配；匹配失败由各插件降级或剔除 |
 | `context-builder.ts` | 83 | 从请求构建执行上下文 |
-| `registry.ts` | 65 | 插件注册中心 |
+| `registry.ts` | ~85 | 插件注册中心；区分运行故障与 `CONTENT_NOT_READY` 语义拒绝 |
+| `registry.test.ts` | — | 插件运行故障兜底与内容拒绝透传契约 |
 | `prompt-context.ts` | 101 | Prompt 上下文构建（转录 + 锚点 + 术语） |
 | `tools.ts` | 48 | 插件工具注入 |
 | `index.ts` | 38 | barrel 导出 |

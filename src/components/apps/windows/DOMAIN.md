@@ -44,14 +44,15 @@ src/components/apps/windows/
 - v7 米白纸感（`PALETTE.bg` 近白），不是深色画布；落在复习工作区里不突兀。
 - 节点 = **文字坐在一道墨线上**（朱批/松墨手感），不是七彩填色方块。
 - **按一级主干分配颜色**：每条主干 + 整棵子树共享一种双签名色（pine / vermilion 家族交替，见 `BRANCH_HUES` / `getBranchHue`），一眼看出"我在哪条主干"——这是可读性的真正来源，而不是按 depth 彩虹。
-- **默认整图展开 + 自适应**（`buildFullExpandedSet` + `fitToView`，带 `MIN_READABLE_SCALE` 可读下限），独立页必须给画布稳定的可视高度，不能出现“做好了但空白”。长解释只在画布标签层按估算像素收短，`fullTitle` 与大纲仍保留完整内容，避免一条节点把整张图横向撑出屏幕。
+- **默认整图展开 + 自适应**（`buildFullExpandedSet` + `fitToView`，带 `MIN_READABLE_SCALE` 可读下限），独立页必须给画布稳定的可视高度，不能出现“做好了但空白”。节点必须展示完整内容，不用省略号制造信息缺口；长分支由无限画布缩放和平移承接。
 - **全屏沉浸阅读**：右上角 / 控制条「全屏」把导图 portal 到 `document.body` 全屏层（Esc 退出），给一块真正看得清的大画布。
+- 从窄栏的大纲态点击「全屏」必须直接进入导图画布，不能先放大大纲。
 - 滚轮缩放**以光标为锚**（光标下内容不动），拖拽平移；这是"顺手"的关键。
 
 布局引擎纯函数（可单元测试，见 `mindmap-layout.test.ts`）：
 - `getBranchHue()` / `branchIndexOf()` — 按一级主干取色
 - `getHueByDepth()` — 旧的按深度取色（保留供测试 / 大纲兜底）
-- `measureText()` / `compactVisualLabel()` / `getFontSize()` — 文本宽度、画布短标签与字号
+- `measureText()` / `compactVisualLabel()` / `getFontSize()` — 文本宽度、完整标签正规化与字号
 - `buildLayoutTree()` / `subtreeHeight()` / `assignPositions()` / `flattenLayout()` / `boundingBox()` — 树布局
 
 ### QuizWindow（课堂测验）
@@ -85,7 +86,7 @@ src/components/apps/windows/
 
 ### 速查表 / 音频概览 / 共用状态
 
-- `CheatsheetWindow` 默认先交付可打印成品，只在用户点纸张摘要后展开排版约束；“考前整理 / 带进考场”会设置不同默认纸张组合，随后仍可调整 A4/Letter、横纵向、1–3 张、单双面、字号与黑白。学生直接在纸面预览上改、删、收起，不先进入文档工作台。
+- `CheatsheetWindow` 默认先交付可打印成品，只在用户点纸张摘要后展开排版约束；“考前整理 / 带进考场”会设置不同默认纸张组合，随后仍可调整 A4/Letter、横纵向、1–3 张、单双面、字号与黑白。学生直接在纸面预览上改、删、收起，不先进入文档工作台。触屏端每条内容通过可见的更多按钮展开“编辑 / 不打印”，并在长文档底部持续保留“排版 / 复制 / 打印 PDF”动作条，不能依赖 hover 或要求滚回页首。
 - 分页必须由 `cheatsheet-window-model.ts` 的同一容量模型驱动屏幕和打印，每个打印页保留标题、区块名与页码；多课堂引用显示课次 + 课内时间，大纲 / 真题引用不得伪造时间戳。
 - `PodcastWindow` 把“能否立刻听”作为第一任务；音频成功时脚本与章节默认折叠，音频失败时保留稳定重试动作并直接展开已经生成的脚本，让一次失败仍然有可用产物，且不透出 provider 原始错误。
 - 失败产物中若混入“播客音频未生成 / 403 Forbidden / 建连失败”等技术章节，必须在 `podcast-window-model.ts` 过滤；前端只保留可重试状态、脚本和真实课堂证据。

@@ -7,6 +7,8 @@ export type CourseContextOrigin = 'subject' | 'topic' | 'schedule' | 'single';
 export interface CourseContextLesson {
   sessionId: string;
   title: string;
+  courseKey?: string;
+  courseTitle?: string;
   occurredAt: string;
   durationMin: number;
   sourceType: AudioSession['sourceType'];
@@ -22,6 +24,7 @@ export interface CourseContextGroup {
   latestAt: string;
   totalDurationMin: number;
   sourceCounts: { recordings: number; uploads: number; videos: number };
+  tags: string[];
   lessons: CourseContextLesson[];
   assessment?: CourseAssessmentEntry;
   /** 这是一节被用户从自动课程分组中移出的课堂，可随时放回。 */
@@ -45,13 +48,29 @@ function compact(value: string | undefined): string {
   return (value || '').replace(/\s+/g, ' ').trim();
 }
 
+function looksLikeUrl(value: string): boolean {
+  return /^(?:https?:\/\/|www\.)/i.test(value)
+    || /(?:bilibili\.com|b23\.tv|youtube\.com|youtu\.be|mp\.weixin\.qq\.com)/i.test(value);
+}
+
+function looksLikeTemporalLabel(value: string): boolean {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  return /^(?:20\d{2}[./-])?\d{1,2}[./-]\d{1,2}(?:\s+\d{1,2}:\d{2})?$/u.test(normalized)
+    || /^\d{1,2}:\d{2}(?::\d{2})?$/u.test(normalized)
+    || /^周[一二三四五六日天](?:的课)?$/u.test(normalized);
+}
+
 function normalizedKey(value: string): string {
   return value.toLocaleLowerCase('zh-CN').replace(/[\s·•—–_\-：:，,。.!！?？()（）\[\]【】]/g, '');
 }
 
 function isMeaningfulLabel(value: string | undefined): value is string {
   const label = compact(value);
-  return label.length > 0 && !GENERIC_LABELS.has(label);
+  return label.length > 0
+    && label.length <= 120
+    && !GENERIC_LABELS.has(label)
+    && !looksLikeUrl(label)
+    && !looksLikeTemporalLabel(label);
 }
 
 /**
@@ -71,12 +90,8 @@ function toDate(value: Date | string): Date {
 }
 
 function dateTitle(date: Date): string {
-  return COPY.globalAsk.courseContextFallbackTitle(date.getMonth() + 1, date.getDate());
-}
-
-function lessonDateTitle(date: Date): string {
-  const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-  return COPY.globalAsk.courseContextLessonFallbackTitle(date.getMonth() + 1, date.getDate(), time);
+  void date;
+  return COPY.globalAsk.courseContextUntitled;
 }
 
 function roundedHalfHour(date: Date): number {
@@ -89,7 +104,16 @@ function scheduleKey(date: Date): string {
 }
 
 function scheduleTitle(date: Date): string {
-  return COPY.globalAsk.courseContextScheduleTitle(WEEKDAYS[date.getDay()]);
+  void date;
+  return COPY.globalAsk.courseContextUntitled;
+}
+
+function lessonFallbackTitle(session: AudioSession): string {
+  if (session.sourceType === 'video-file' || session.sourceType === 'video-link') {
+    return COPY.globalAsk.courseContextVideoLesson;
+  }
+  if (session.sourceType === 'upload') return COPY.globalAsk.courseContextUploadLesson;
+  return COPY.globalAsk.courseContextRecordingLesson;
 }
 
 function recurringSchedule(lessons: CourseContextLesson[]): string | undefined {
@@ -184,7 +208,7 @@ export function buildCourseContextGroups(
     const seed: Seed = excluded
       ? {
           key: `session:${session.sessionId}`,
-          title: isMeaningfulLabel(session.topic) ? compact(session.topic) : lessonDateTitle(createdAt),
+          title: isMeaningfulLabel(session.topic) ? compact(session.topic) : lessonFallbackTitle(session),
           origin: 'single',
           confidence: 'unclassified',
           detachedFromCourseKey: inferredSeed.key,
@@ -203,7 +227,9 @@ export function buildCourseContextGroups(
         const occurred = toDate(session.createdAt);
         return {
           sessionId: session.sessionId,
-          title: isMeaningfulLabel(session.topic) ? compact(session.topic) : lessonDateTitle(occurred),
+          title: isMeaningfulLabel(session.topic) ? compact(session.topic) : lessonFallbackTitle(session),
+          courseKey: seed.key,
+          courseTitle: compact(preference?.displayName) || seed.title,
           occurredAt: occurred.toISOString(),
           durationMin: Math.max(0, Math.round((session.duration || 0) / 60_000)),
           sourceType: session.sourceType,
@@ -220,6 +246,7 @@ export function buildCourseContextGroups(
       latestAt: lessons[0]?.occurredAt || new Date(0).toISOString(),
       totalDurationMin: lessons.reduce((sum, lesson) => sum + lesson.durationMin, 0),
       sourceCounts: sourceCounts(lessons),
+      tags: Array.isArray(preference?.tags) ? preference.tags.filter(Boolean).slice(0, 6) : [],
       lessons,
       assessment: assessments
         .filter((assessment) => assessment?.status === 'active' && assessment.id && assessment.name)

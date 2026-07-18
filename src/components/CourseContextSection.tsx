@@ -12,6 +12,7 @@ import {
   Pause,
   PencilLine,
   Play,
+  Tag,
   Undo2,
   Unlink,
   X,
@@ -28,10 +29,11 @@ interface CourseContextSectionProps {
   saving: boolean;
   onUpdatePreference: (
     courseKey: string,
-    patch: Partial<Pick<CourseContextPreference, 'displayName' | 'status' | 'confirmedByUser' | 'excludedSessionIds' | 'assessments'>>,
+    patch: Partial<Pick<CourseContextPreference, 'displayName' | 'tags' | 'status' | 'confirmedByUser' | 'excludedSessionIds' | 'assessments'>>,
   ) => Promise<void>;
-  onOpenCheatsheet: (course: CourseContextGroup) => void;
+  onOpenCheatsheet: (courses: CourseContextGroup[], initialCourseKeys?: string[]) => void;
   focusCheatsheet?: boolean;
+  standalone?: boolean;
 }
 
 function formatDate(value: string): string {
@@ -56,6 +58,7 @@ function CourseCard({
   preference,
   onDetachLesson,
   onRestoreLesson,
+  cheatsheetCourses,
 }: {
   course: CourseContextGroup;
   saving: boolean;
@@ -64,10 +67,12 @@ function CourseCard({
   preference?: CourseContextPreference;
   onDetachLesson: (course: CourseContextGroup, sessionId: string) => Promise<void>;
   onRestoreLesson: (course: CourseContextGroup) => Promise<void>;
+  cheatsheetCourses: CourseContextGroup[];
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(course.title);
+  const [draftTags, setDraftTags] = useState(course.tags.join('、'));
   const paused = course.status === 'paused';
 
   return (
@@ -98,6 +103,7 @@ function CourseCard({
                       onClick={async () => {
                         await onUpdatePreference(course.courseKey, {
                           displayName: draft.trim(),
+                          tags: draftTags.split(/[、,，]/u).map((tag) => tag.trim()).filter(Boolean),
                           confirmedByUser: true,
                         });
                         setEditing(false);
@@ -109,7 +115,7 @@ function CourseCard({
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setDraft(course.title); setEditing(false); }}
+                      onClick={() => { setDraft(course.title); setDraftTags(course.tags.join('、')); setEditing(false); }}
                       className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted hover:bg-paper-warm"
                       aria-label={COPY.globalAsk.courseContextCancel}
                     >
@@ -119,6 +125,18 @@ function CourseCard({
                 ) : (
                   <h3 className="truncate text-[16px] font-semibold leading-6 text-ink sm:text-[17px]">{course.title}</h3>
                 )}
+                {editing ? (
+                  <label className="mt-2 flex items-center gap-2 rounded-xl border border-divider bg-canvas px-3 py-2">
+                    <Tag size={12} className="flex-shrink-0 text-ink-muted" />
+                    <span className="sr-only">{COPY.globalAsk.courseContextTags}</span>
+                    <input
+                      value={draftTags}
+                      onChange={(event) => setDraftTags(event.target.value)}
+                      placeholder={COPY.globalAsk.courseContextTagsHint}
+                      className="min-w-0 flex-1 bg-transparent text-[11.5px] text-ink outline-none placeholder:text-ink-muted"
+                    />
+                  </label>
+                ) : null}
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-muted">
                   <span>{COPY.globalAsk.courseContextLessons(course.lessons.length)}</span>
                   {course.totalDurationMin > 0 ? <span>{COPY.globalAsk.courseContextMinutes(course.totalDurationMin)}</span> : null}
@@ -126,6 +144,11 @@ function CourseCard({
                     <span className="inline-flex items-center gap-1"><CalendarDays size={11} />{course.scheduleLabel}</span>
                   ) : null}
                 </div>
+                {!editing && course.tags.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {course.tags.map((tag) => <span key={tag} className="rounded-full bg-paper-warm px-2 py-1 text-[9.5px] text-ink-muted">{tag}</span>)}
+                  </div>
+                ) : null}
               </div>
               <span className={cn(
                 'flex-shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium',
@@ -159,7 +182,7 @@ function CourseCard({
             {!editing ? (
               <button
                 type="button"
-                onClick={() => { setDraft(course.title); setEditing(true); }}
+                onClick={() => { setDraft(course.title); setDraftTags(course.tags.join('、')); setEditing(true); }}
                 className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[11.5px] text-ink-muted hover:bg-white hover:text-pine"
               >
                 <PencilLine size={12} />{COPY.globalAsk.courseContextRename}
@@ -184,10 +207,10 @@ function CourseCard({
                 <Check size={12} />{COPY.globalAsk.courseContextConfirm}
               </button>
             ) : null}
-            {!paused && !course.assessment && course.lessons.length >= 2 && course.confidence === 'confirmed' ? (
+            {!paused && !course.assessment && course.confidence === 'confirmed' && cheatsheetCourses.reduce((sum, item) => sum + item.lessons.length, 0) >= 2 ? (
               <button
                 type="button"
-                onClick={() => onOpenCheatsheet(course)}
+                onClick={() => onOpenCheatsheet(cheatsheetCourses, [course.courseKey])}
                 className="inline-flex items-center gap-1.5 rounded-full bg-pine px-3.5 py-2 text-[11.5px] font-medium text-white"
               >
                 <FileText size={12} />{COPY.globalAsk.courseContextCheatsheet}
@@ -210,7 +233,7 @@ function CourseCard({
               preference={preference}
               saving={saving}
               onUpdatePreference={onUpdatePreference}
-              onOpenCheatsheet={onOpenCheatsheet}
+              onOpenCheatsheet={(selectedCourse) => onOpenCheatsheet(cheatsheetCourses, [selectedCourse.courseKey])}
             />
           ) : null}
           {course.lessons.map((lesson) => (
@@ -244,9 +267,11 @@ export function CourseContextSection({
   onUpdatePreference,
   onOpenCheatsheet,
   focusCheatsheet = false,
+  standalone = false,
 }: CourseContextSectionProps) {
   const sessions = useAudioSessions();
   const sectionRef = useRef<HTMLElement | null>(null);
+  const focusedScopeOpenedRef = useRef(false);
   const courses = useMemo(
     () => buildCourseContextGroups(sessions, preferences),
     [preferences, sessions],
@@ -255,18 +280,27 @@ export function CourseContextSection({
     () => courses.filter((course) => (
       course.status === 'active'
       && !course.detachedFromCourseKey
-      && course.lessons.length >= 2
+      && course.lessons.length >= 1
     )),
     [courses],
+  );
+  const eligibleCheatsheetLessonCount = useMemo(
+    () => eligibleCheatsheetCourses.reduce((sum, course) => sum + course.lessons.length, 0),
+    [eligibleCheatsheetCourses],
   );
 
   useEffect(() => {
     if (!focusCheatsheet) return;
+    if (eligibleCheatsheetLessonCount >= 2 && !focusedScopeOpenedRef.current) {
+      focusedScopeOpenedRef.current = true;
+      onOpenCheatsheet(eligibleCheatsheetCourses);
+      return;
+    }
     const frame = window.requestAnimationFrame(() => {
       sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [focusCheatsheet]);
+  }, [eligibleCheatsheetCourses, eligibleCheatsheetLessonCount, focusCheatsheet, onOpenCheatsheet]);
   const detachLesson = async (course: CourseContextGroup, sessionId: string) => {
     const preference = preferences.find((item) => item.courseKey === course.courseKey);
     const excludedSessionIds = Array.from(new Set([...(preference?.excludedSessionIds || []), sessionId]));
@@ -282,7 +316,7 @@ export function CourseContextSection({
   };
 
   return (
-    <section ref={sectionRef} className="mt-10 scroll-mt-4 border-t border-divider pt-8 sm:mt-12 sm:pt-10">
+    <section ref={sectionRef} className={cn('scroll-mt-4', !standalone && 'mt-10 border-t border-divider pt-8 sm:mt-12 sm:pt-10')}>
       <div className="mb-5 flex items-end justify-between gap-4 px-1">
         <div>
           <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.12em] text-vermilion">{COPY.globalAsk.memoryCoursesTab}</p>
@@ -293,13 +327,13 @@ export function CourseContextSection({
 
       <div
         className={cn(
-          'mb-4 rounded-[22px] border bg-white px-4 py-4 sm:px-5 sm:py-5',
+          'mb-5 border-y px-1 py-5 sm:py-6',
           focusCheatsheet ? 'border-pine/40' : 'border-divider',
         )}
         data-testid="course-cheatsheet-launcher"
       >
-        <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[14px] bg-pine-fog text-pine">
+        <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+          <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[14px] bg-pine-fog text-pine sm:h-11 sm:w-11">
             <FileText size={17} strokeWidth={1.8} />
           </span>
           <div className="min-w-0 flex-1">
@@ -309,35 +343,30 @@ export function CourseContextSection({
             <h3 className="mt-1 text-[17px] font-semibold text-ink">{COPY.globalAsk.courseCheatsheetEntryTitle}</h3>
             <p className="mt-1.5 text-[12px] leading-5 text-ink-secondary">{COPY.globalAsk.courseCheatsheetEntryBody}</p>
           </div>
+          {eligibleCheatsheetLessonCount >= 2 ? (
+            <button
+              type="button"
+              onClick={() => onOpenCheatsheet(eligibleCheatsheetCourses)}
+              className="ml-auto hidden min-h-10 shrink-0 items-center justify-center rounded-full bg-pine px-4 text-[11.5px] font-medium text-white sm:inline-flex"
+            >
+              {COPY.globalAsk.courseCheatsheetEntryAction}
+            </button>
+          ) : <span className="ml-auto hidden max-w-[170px] shrink-0 text-right text-[10.5px] leading-5 text-ink-muted sm:block">{COPY.globalAsk.courseCheatsheetEntryEmpty}</span>}
         </div>
 
-        {eligibleCheatsheetCourses.length > 0 ? (
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {eligibleCheatsheetCourses.map((course) => (
-              <button
-                key={course.courseKey}
-                type="button"
-                onClick={() => onOpenCheatsheet(course)}
-                className="flex min-h-12 items-center justify-between gap-3 rounded-[15px] border border-divider bg-canvas px-3.5 py-3 text-left hover:border-pine/30 hover:bg-pine-fog"
-              >
-                <span className="min-w-0">
-                  <strong className="block truncate text-[13px] font-semibold text-ink">{course.title}</strong>
-                  <span className="mt-0.5 block text-[10.5px] text-ink-muted">{COPY.globalAsk.courseContextLessons(course.lessons.length)}</span>
-                </span>
-                <span className="flex-shrink-0 text-[11px] font-medium text-pine">{COPY.globalAsk.courseCheatsheetEntryCourseAction}</span>
-              </button>
-            ))}
+        {eligibleCheatsheetLessonCount >= 2 ? (
+          <div className="mt-3 flex items-center justify-between gap-3 pl-[52px] sm:hidden">
+            <p className="text-[10.5px] text-ink-muted">{COPY.globalAsk.courseCheatsheetEntryAvailable(eligibleCheatsheetCourses.length, eligibleCheatsheetLessonCount)}</p>
+            <button type="button" onClick={() => onOpenCheatsheet(eligibleCheatsheetCourses)} className="shrink-0 rounded-full bg-pine px-4 py-2.5 text-[11.5px] font-medium text-white">
+              {COPY.globalAsk.courseCheatsheetEntryAction}
+            </button>
           </div>
-        ) : (
-          <p className="mt-4 rounded-[15px] bg-canvas px-3.5 py-3 text-[11.5px] leading-5 text-ink-muted">
-            {COPY.globalAsk.courseCheatsheetEntryEmpty}
-          </p>
-        )}
+        ) : <p className="mt-3 pl-[52px] text-[10.5px] leading-5 text-ink-muted sm:hidden">{COPY.globalAsk.courseCheatsheetEntryEmpty}</p>}
       </div>
 
       <div className="space-y-3">
         {courses.length === 0 ? (
-          <div className="rounded-[22px] border border-dashed border-divider bg-white px-5 py-10 text-center text-[12.5px] leading-6 text-ink-muted">
+          <div className="border-b border-divider px-1 py-8 text-[12.5px] leading-6 text-ink-muted">
             {COPY.globalAsk.courseContextEmpty}
           </div>
         ) : courses.map((course) => (
@@ -350,6 +379,7 @@ export function CourseContextSection({
             preference={preferences.find((item) => item.courseKey === course.courseKey)}
             onDetachLesson={detachLesson}
             onRestoreLesson={restoreLesson}
+            cheatsheetCourses={eligibleCheatsheetCourses}
           />
         ))}
       </div>

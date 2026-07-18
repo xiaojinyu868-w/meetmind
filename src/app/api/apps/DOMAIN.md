@@ -13,7 +13,7 @@ apps route.ts → lib/services/llm-service.ts
 
 | 路由 | 方法 | 职责 |
 |------|------|------|
-| `/api/apps/execute` | POST | 执行 AI-Native 应用插件 |
+| `/api/apps/execute` | POST | 执行 AI-Native 应用插件；材料不足、插件拒绝低价值成品时统一返回 `422 CONTENT_NOT_READY` |
 | `/api/apps/plugins` | GET | 获取已注册插件列表 |
 | `/api/apps/catalog` | GET | 获取应用目录（分类/标签） |
 | `/api/apps/infographic/generate-image` | POST | Gemini 生成信息图 |
@@ -22,7 +22,7 @@ apps route.ts → lib/services/llm-service.ts
 
 ```
 src/app/api/apps/
-├── execute/route.ts                     # 待确认
+├── execute/route.ts                     # tier / readiness / 插件执行与统一错误契约
 ├── plugins/route.ts                     # 待确认
 ├── catalog/route.ts                     # 待确认
 └── infographic/

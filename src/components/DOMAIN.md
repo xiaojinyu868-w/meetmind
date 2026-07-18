@@ -53,11 +53,10 @@ components/
 |------|------|------|
 | `AITutor.tsx` | 1940 | 旧 AI 家教 / legacy fallback（移动端文字和语音主链路已移出），子模块在 `tutor/` |
 | `AIChat.tsx` | 691 | AI 对话组件 |
-| `GlobalAskPanel.tsx` | ~500 | 全局 Ask MeetMind：基于 ChatBase 的多轮问答；普通问答直接回答，深度学习在消息流内保留用户原问题并仅在真实歧义时追问；接入当前材料、模型管理的长期学习理解、客观最近学习现场与会话恢复 |
+| `GlobalAskPanel.tsx` / `GlobalAskWelcome.tsx` / `GlobalAskContextDrawer.tsx` | ~650 | 全局 Ask MeetMind：基于 ChatBase 的多轮问答；空态把输入作为唯一主动作，在输入内轻量选择“直接回答 / 陪我学会”，不再用顶部模式面板或常驻统计侧栏暴露系统结构；参考范围按需从右侧打开，深度学习仅在答案会改变路线时逐题追问 |
 | `LearningIntentConfirmationCard.tsx` / `learning-intent-confirmation-model.ts` | ~210 | 深度学习的轻确认：若学习路径确有歧义，逐步显现模型动态生成的 1-3 个选择问题；学习理解在回答结束后静默整理，不把内部记忆标记塞进消息流 |
 | `LearningProgressMemoryCard.tsx` | ~50 | 旧学习进展 marker 的反馈卡，当前 `GlobalAskPanel` 不再使用；保留仅供迁移期兼容，勿在新链路继续扩展 |
-| `LearningContextStatus.tsx` | ~40 | 全局 Ask 的上下文状态条；只显示实际接入的当前材料、最近学习与长期记忆数量，不暴露模型内部推理 |
-| `LearningMemoryPanel.tsx` / `CourseContextSection.tsx` / `CourseAssessmentCard.tsx` / `CourseCheatsheetWorkspace.tsx` / `ContextRecoveryCard.tsx` | ~980 | 「我的上下文」单页连续视图：不使用嵌套 Tab，依次呈现可纠正的学习理解、由真实 session 自动归组的课堂上下文、客观最近学习现场；课堂上下文顶部显性提供考试速查表并列出可用课程，单元/考试均由学生确认多课范围后进入打印型速查表 |
+| `LearningMemoryPanel.tsx` / `CourseContextSection.tsx` / `CourseAssessmentCard.tsx` / `CourseCheatsheetWorkspace.tsx` / `ContextRecoveryCard.tsx` | ~1100 | 「我的上下文」采用消费级总览→具体内容层级：总览只展开模型对用户的长期理解，并以两条安静入口进入“课程与考试”或“最近学习现场”，不再把三类内容一次性纵向铺满；从复习页进入考试速查表时直接打开范围选择。范围选择支持跨课程与课次级多选；桌面为课程侧栏 + 课次画布，手机为横向课程选择带 + 仅展开已选课次，避免表单长页。课程支持可信名称、用户标签与边界纠正，再进入可打印速查表 |
 | `AISearchPanel.tsx` | ~740 | 旧单轮 Workspace AI 搜索面板；主入口已由 `GlobalAskPanel` 替代，保留作迁移参考 |
 | `WordExplainer.tsx` | 562 | 术语解释器 |
 | `StreamingMarkdown.tsx` | 391 | 统一流式 Markdown 渲染（GFM 表格 / 数学公式 / [MM:SS] 与 [t=MM:SS] 时间戳 / [资料N]） |

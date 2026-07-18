@@ -9,7 +9,7 @@ import type { MindmapNode } from '@/lib/ai-native/plugins/mindmap.plugin';
 
 export interface LayoutNode {
   id: string;
-  /** 画布上显示的短标签。完整内容保留在 fullTitle，并可在大纲中阅读。 */
+  /** 画布上展示的完整标签。画布通过缩放和平移承接长内容，不静默截断。 */
   title: string;
   fullTitle: string;
   depth: number;
@@ -149,21 +149,11 @@ export function measureText(text: string, fontSize: number): number {
 }
 
 /**
- * 思维导图是“定位地图”，不是把整段笔记横着铺进 SVG。
- * 这里只裁剪画布标签，数据与大纲仍保留完整标题；按估算像素而不是中英文字符数裁剪，
- * 避免英文节点特别宽、中文节点又被裁得过短。
+ * 导图节点是学习内容本身，不能用省略号让学生猜缺失信息。
+ * 参数保留用于兼容旧调用方；长标签交给无限画布的缩放和平移承接。
  */
-export function compactVisualLabel(text: string, fontSize: number, maxWidth = 260): string {
-  const normalized = text.replace(/\s+/g, ' ').trim();
-  if (!normalized || measureText(normalized, fontSize) <= maxWidth) return normalized;
-
-  const suffix = '…';
-  let result = '';
-  for (const char of normalized) {
-    if (measureText(`${result}${char}${suffix}`, fontSize) > maxWidth) break;
-    result += char;
-  }
-  return `${result.trimEnd()}${suffix}`;
+export function compactVisualLabel(text: string, _fontSize: number, _maxWidth = 260): string {
+  return text.replace(/\s+/g, ' ').trim();
 }
 
 export function getFontSize(depth: number): number {

@@ -5,6 +5,8 @@ import {
   ArrowLeft,
   BookOpen,
   Check,
+  ChevronRight,
+  Clock3,
   Compass,
   FileText,
   Lightbulb,
@@ -200,8 +202,12 @@ function MemoryCard({
 
 export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, initialFocus }: LearningMemoryPanelProps) {
   const context = useLearningContext();
+  const [view, setView] = useState<'overview' | 'courses' | 'recent'>(() => initialFocus === 'cheatsheet' ? 'courses' : 'overview');
   const [showAllRecent, setShowAllRecent] = useState(false);
-  const [activeCourse, setActiveCourse] = useState<CourseContextGroup | null>(null);
+  const [cheatsheetScope, setCheatsheetScope] = useState<{
+    courses: CourseContextGroup[];
+    initialCourseKeys?: string[];
+  } | null>(null);
 
   const memories = useMemo(() => context.memories
     .slice()
@@ -211,16 +217,24 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)), [context.recentActivities]);
   const visibleActivities = showAllRecent ? recentActivities : recentActivities.slice(0, 3);
 
-  if (activeCourse) {
-    return <CourseCheatsheetWorkspace course={activeCourse} onBack={() => setActiveCourse(null)} />;
+  if (cheatsheetScope) {
+    return (
+      <CourseCheatsheetWorkspace
+        courses={cheatsheetScope.courses}
+        initialCourseKeys={cheatsheetScope.initialCourseKeys}
+        onBack={() => setCheatsheetScope(null)}
+      />
+    );
   }
+
+  const backFromCurrentView = view === 'overview' ? onBack : () => setView('overview');
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">
       <header className="flex flex-shrink-0 items-center gap-3 border-b border-divider bg-white px-4 py-3.5 sm:px-6 sm:py-4">
         <button
           type="button"
-          onClick={onBack}
+          onClick={backFromCurrentView}
           className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-paper-warm hover:text-pine"
           aria-label={COPY.globalAsk.memoryBack}
         >
@@ -230,8 +244,8 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-6 sm:px-6 sm:pb-10 sm:pt-9">
-        <div className="mx-auto max-w-[720px]">
-          <section>
+        <div className="mx-auto max-w-[820px]">
+          {view === 'overview' ? <section>
             <div className="mb-5 flex items-end justify-between gap-4 px-1">
               <div className="min-w-0">
                 <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.12em] text-vermilion">{COPY.globalAsk.memoryUnderstandingTab}</p>
@@ -250,24 +264,50 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
 
             <div className="space-y-3">
               {memories.length === 0 ? (
-                <div className="rounded-[22px] border border-dashed border-divider bg-white px-5 py-10 text-center text-[12.5px] leading-6 text-ink-muted">
+                <div className="border-y border-divider px-1 py-7 text-[12.5px] leading-6 text-ink-muted sm:py-9">
                   {COPY.globalAsk.memoryEmpty}
                 </div>
               ) : memories.map((memory) => (
                 <MemoryCard key={memory.id} memory={memory} context={context} />
               ))}
             </div>
-          </section>
+          </section> : null}
 
-          <CourseContextSection
-            preferences={context.coursePreferences || []}
-            saving={context.saving}
-            onUpdatePreference={context.updateCoursePreference}
-            onOpenCheatsheet={setActiveCourse}
-            focusCheatsheet={initialFocus === 'cheatsheet'}
-          />
+          {view === 'overview' ? (
+            <nav className="mt-9 border-t border-divider" aria-label={COPY.globalAsk.contextLibraryNavigation}>
+              <button type="button" onClick={() => setView('courses')} className="group flex w-full items-center gap-4 border-b border-divider py-5 text-left sm:py-6">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-pine-fog text-pine"><BookOpen size={16} /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.11em] text-vermilion">{COPY.globalAsk.memoryCoursesTab}</span>
+                  <span className="mt-1 block text-[15px] font-semibold text-ink">{COPY.globalAsk.contextCoursesOverviewTitle}</span>
+                  <span className="mt-1 block text-[11.5px] leading-5 text-ink-muted">{COPY.globalAsk.contextCoursesOverviewBody}</span>
+                </span>
+                <ChevronRight size={15} className="shrink-0 text-ink-muted transition group-hover:translate-x-0.5 group-hover:text-pine" />
+              </button>
+              <button type="button" onClick={() => setView('recent')} className="group flex w-full items-center gap-4 border-b border-divider py-5 text-left sm:py-6">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-paper-warm text-pine"><Clock3 size={16} /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.11em] text-pine">{COPY.globalAsk.memoryRecentTab}</span>
+                  <span className="mt-1 block text-[15px] font-semibold text-ink">{COPY.globalAsk.recentTitle}</span>
+                  <span className="mt-1 block truncate text-[11.5px] leading-5 text-ink-muted">{recentActivities[0]?.title || COPY.globalAsk.recentEmpty}</span>
+                </span>
+                <ChevronRight size={15} className="shrink-0 text-ink-muted transition group-hover:translate-x-0.5 group-hover:text-pine" />
+              </button>
+            </nav>
+          ) : null}
 
-          <section className="mt-10 border-t border-divider pt-8 sm:mt-12 sm:pt-10">
+          {view === 'courses' ? (
+            <CourseContextSection
+              preferences={context.coursePreferences || []}
+              saving={context.saving}
+              onUpdatePreference={context.updateCoursePreference}
+              onOpenCheatsheet={(courses, initialCourseKeys) => setCheatsheetScope({ courses, initialCourseKeys })}
+              focusCheatsheet={initialFocus === 'cheatsheet'}
+              standalone
+            />
+          ) : null}
+
+          {view === 'recent' ? <section>
             <div className="mb-5 flex items-end justify-between gap-4 px-1">
               <div>
                 <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.12em] text-pine">{COPY.globalAsk.memoryRecentTab}</p>
@@ -302,7 +342,7 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
 
             <div className="space-y-3">
               {recentActivities.length === 0 ? (
-                <div className="rounded-[22px] border border-dashed border-divider bg-white px-5 py-10 text-center text-[12.5px] leading-6 text-ink-muted">
+                <div className="border-y border-divider px-1 py-8 text-[12.5px] leading-6 text-ink-muted">
                   {COPY.globalAsk.recentEmpty}
                 </div>
               ) : visibleActivities.map((activity) => {
@@ -339,7 +379,7 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
                   : COPY.globalAsk.recentShowAll(recentActivities.length)}
               </button>
             ) : null}
-          </section>
+          </section> : null}
         </div>
       </div>
     </div>

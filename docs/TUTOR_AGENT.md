@@ -7,12 +7,12 @@ Tutor 的唯一新主链路是 `POST /api/tutor/agent`，由 `buildTutorSystemPr
 全局 Ask MeetMind 使用 `mode='global'`：
 
 - quick：直接回答，不做意图确认，也不在正文里生成记忆标记；回答持久化后仍由独立流程判断用户是否真实表现出值得长期保留的学习理解。
-- deep：先调用 `/api/tutor/intent` 得到 `LearningIntentPlan`。模型应先利用已有课堂和个人上下文；没有真实歧义时前端立即开始，不展示内部置信度或额外确认卡。只有答案会明显改变路径时才暂停，并通常只返回 1 个动态选择问题（两个问题彼此独立且都足以改变路径时最多 2 个）。前端回传包含问题与选项语义的 `answers[{questionId, question, optionIds, optionLabels}]` 后取得最终计划并自动开始。主回答保持自然纯文本。
+- deep：先调用 `/api/tutor/intent` 得到 `LearningIntentPlan`。模型应先利用已有课堂和个人上下文；没有真实歧义时前端立即开始，不展示内部置信度或额外确认卡。只有答案会明显改变路径时才暂停，并通常只返回 1 个动态选择问题（两个问题彼此独立且都足以改变路径时最多 2 个）。前端回传包含问题与选项语义的 `answers[{questionId, question, optionIds, optionLabels}]` 后取得最终计划并自动开始。意图确认后的第一轮必须执行第一个检查点，先给解释、示例、对比或微型练习；禁止继续追问目标、难点、水平与偏好等元问题。若仍需诊断，应从一个当场可答的小任务里判断，而不是让用户再次自我归类。
 - 上下文整理不依赖 quick / deep 开关：任一全局学习问答持久化后，`/api/tutor/memory` 都依据本轮用户真实表达/作答静默判断是否形成最多 2 条新增或更新的学习理解。证据不足返回空数组，愿望、建议、人格与敏感推断不能进入长期理解；访客态与 Tutor 主链路一致可用，route 内限流。
 - `LearnerProfile.memories` 是模型整理、用户可纠正/暂停/忘记的学习理解；`recentLearningActivities` 是课堂、提问、材料和应用等客观学习现场，始终保持独立，不被自动升级或改写成对用户的判断。
 - `GlobalAskPanel` 基于 ChatBase，`useGlobalAskHistory` 只恢复 `metadata.scope='global-ask'` 的 IndexedDB 对话，避免误接某节课的复习聊天。
 
-当前 prompt telemetry 版本：`2026-07-tutor-v9-consumer-context`。goal 首次会面改为“先帮助、后理解”：不做画像访谈，模型静默维护稳定上下文，仅在真实需要用户决定时追问。
+当前 prompt telemetry 版本：`2026-07-tutor-v10-start-with-value`。goal 首次会面和 global deep 都遵循“先帮助、后理解”：不做画像或目标访谈，意图确认后立即交付第一个有效学习动作，仅在真实需要用户决定时追问。
 
 ---
 

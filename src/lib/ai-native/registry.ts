@@ -7,6 +7,12 @@ function getErrorMessage(error: unknown): string {
   return 'Unknown plugin execution error';
 }
 
+const SEMANTIC_REJECTIONS = new Set(['CONTENT_NOT_READY']);
+
+function shouldRethrowPluginError(error: unknown): error is Error {
+  return error instanceof Error && SEMANTIC_REJECTIONS.has(error.message);
+}
+
 export class AppPluginRegistry {
   private readonly plugins = new Map<string, AppPlugin>();
 
@@ -52,6 +58,9 @@ export class AppPluginRegistry {
     try {
       return await plugin.run(context, tools);
     } catch (error) {
+      // “材料不值得生成”是可信的产品判断，不是插件崩溃。交给 API 以 422
+      // 返回，让前端呈现范围不足状态；禁止包装成一份伪成功的空产物。
+      if (shouldRethrowPluginError(error)) throw error;
       return {
         pluginId: plugin.manifest.id,
         version: plugin.manifest.version,

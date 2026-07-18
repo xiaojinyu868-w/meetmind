@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import { BrainCircuit, ChevronRight, FileText, History, Plus, Sparkles, X } from 'lucide-react';
+import { Layers3, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import useAuth from '@/lib/hooks/useAuth';
 import { cn } from '@/lib/utils';
@@ -30,7 +30,8 @@ import type { LearningIntentAnswer, LearningIntentPlan } from '@/types/learning-
 import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { LearningIntentConfirmationCard } from '@/components/LearningIntentConfirmationCard';
 import { LearningMemoryPanel } from '@/components/LearningMemoryPanel';
-import { LearningContextStatus } from '@/components/LearningContextStatus';
+import { GlobalAskContextDrawer } from '@/components/GlobalAskContextDrawer';
+import { GlobalAskWelcome } from '@/components/GlobalAskWelcome';
 import {
   ChatBubble,
   ChatComposer,
@@ -69,6 +70,7 @@ export function GlobalAskPanel({
   const sourceItems = useCollectionStore((state) => state.sourceItems);
   const [depth, setDepth] = React.useState<AskDepth>('quick');
   const [view, setView] = React.useState<'ask' | 'memory'>('ask');
+  const [contextOpen, setContextOpen] = React.useState(false);
   const [intentPlan, setIntentPlan] = React.useState<LearningIntentPlan | null>(null);
   const [activeIntent, setActiveIntent] = React.useState<LearningIntentPlan | null>(null);
   const [pendingQuery, setPendingQuery] = React.useState('');
@@ -172,6 +174,7 @@ export function GlobalAskPanel({
     setActiveIntent(null);
     setIntentPlan(null);
     setPendingQuery('');
+    setContextOpen(false);
   }, [open]);
 
   const handleDepthRestored = React.useCallback((restoredDepth: AskDepth) => {
@@ -313,13 +316,48 @@ export function GlobalAskPanel({
   }, [pendingQuery, sendQuick]);
 
   const visibleSources = sourceItems.filter((item) => item.status !== 'failed').slice(-3).reverse();
+  const currentContextCount = currentMaterials.length + fileUpload.attachedFiles.length;
+  const recentContextCount = learning.recentActivities.length;
+  const memoryContextCount = learning.memories.filter((memory) => memory.status === 'active').length;
+  const contextSummary = COPY.globalAsk.contextSummary(currentContextCount, recentContextCount, memoryContextCount);
+  const showWelcome = messages.length === 0 && !intentPlan && !intentBusy && !pendingQuery;
+
+  const handleDepthChange = React.useCallback((nextDepth: AskDepth) => {
+    setDepth(nextDepth);
+    if (nextDepth === 'quick') {
+      setIntentPlan(null);
+      setActiveIntent(null);
+    }
+  }, []);
+
+  const renderComposer = (embedded: boolean) => (
+    <ChatComposer
+      containerRef={composerRef}
+      textareaProps={composer.textareaProps}
+      onSubmit={composer.submit}
+      busy={busy || intentBusy}
+      onStop={stop}
+      attachedFiles={fileUpload.attachedFiles}
+      onAddFiles={fileUpload.addFiles}
+      onRemoveFile={fileUpload.removeFile}
+      uploadBusy={fileUpload.busy}
+      uploadError={fileUpload.error}
+      onRetryUpload={fileUpload.retryLast}
+      isDragging={fileUpload.isDragging}
+      capabilities={{ file: true, mic: true }}
+      onVoiceTranscript={(text) => composer.setValue([composer.value, text].filter(Boolean).join(' '))}
+      placeholder={effectiveDepth === 'deep' ? COPY.globalAsk.composerDeep : COPY.globalAsk.composerQuick}
+      statusLabel={intentBusy ? COPY.globalAsk.preparingIntent : undefined}
+      className={embedded ? '!border-0 !bg-transparent !px-0 !pb-3 !pt-0' : undefined}
+    />
+  );
 
   if (!open) return null;
   if (view === 'memory') {
     return (
       <div className={cn('fixed inset-0 z-[80]', !isMobile && 'left-[var(--sidebar-width,0px)]')}>
         <LearningMemoryPanel
-          onBack={() => setView('ask')}
+          onBack={initialView === 'memory' ? onClose : () => setView('ask')}
           initialFocus={memoryFocus}
           onTalkToMeetMind={() => {
             setView('ask');
@@ -341,99 +379,53 @@ export function GlobalAskPanel({
 
   return (
     <div className="fixed inset-0 z-[80] flex bg-canvas/95 backdrop-blur-xl">
-      <div className={cn('flex min-w-0 flex-1 flex-col bg-white', !isMobile && 'mx-auto my-3 max-w-[1120px] overflow-hidden rounded-[28px] border border-divider shadow-float')}>
+      <div className={cn('relative flex min-w-0 flex-1 flex-col overflow-hidden bg-white', !isMobile && 'mx-auto my-3 max-w-[1060px] rounded-[28px] border border-divider shadow-float')}>
         <header className="flex items-center gap-3 border-b border-divider bg-paper px-4 py-3 sm:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-2xl border border-pine/15 bg-pine-fog text-pine"><Sparkles size={16} /></span>
+            <OctoAvatar mood="listening" size="sm" />
             <div className="min-w-0">
               <h1 className="truncate text-[15px] font-semibold text-ink">{COPY.globalAsk.title}</h1>
               <p className="hidden truncate text-[11.5px] text-ink-muted sm:block">{history.hydrated ? (history.restoredTitle ? `${COPY.globalAsk.historyRestored} · ${history.restoredTitle}` : COPY.globalAsk.subtitle) : COPY.globalAsk.historyLoading}</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            <button type="button" onClick={() => setView('memory')} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-divider bg-white px-3 text-[11.5px] text-ink-secondary hover:border-pine/25 hover:text-pine" aria-label={COPY.globalAsk.memoryAction} title={COPY.globalAsk.memoryAction}>
-              <History size={13} /> <span className="hidden sm:inline">{COPY.globalAsk.memoryAction}</span>
+            <button type="button" onClick={() => setContextOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-divider bg-white px-3 text-[11.5px] text-ink-secondary hover:border-pine/25 hover:text-pine" aria-label={COPY.globalAsk.contextRailTitle} title={COPY.globalAsk.contextRailTitle}>
+              <Layers3 size={13} /> <span className="hidden sm:inline">{COPY.globalAsk.contextAction}</span>
             </button>
             {messages.length > 0 ? <button type="button" onClick={startNewConversation} className="flex h-9 w-9 items-center justify-center rounded-full border border-divider bg-white text-ink-muted hover:text-pine" aria-label={COPY.globalAsk.newConversation}><Plus size={14} /></button> : null}
             <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-paper-warm hover:text-ink" aria-label={COPY.globalAsk.close}><X size={16} /></button>
           </div>
         </header>
 
-        <div className="flex items-center justify-between gap-3 border-b border-divider bg-white px-4 py-2 sm:px-6">
-          <button
-            type="button"
-            aria-pressed={effectiveDepth === 'deep'}
-            onClick={() => {
-              if (effectiveDepth === 'deep') {
-                setDepth('quick');
-                setIntentPlan(null);
-                setActiveIntent(null);
-                return;
-              }
-              setDepth('deep');
-            }}
-            className={cn(
-              'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[11.5px] transition',
-              effectiveDepth === 'deep'
-                ? 'bg-pine text-white'
-                : 'border border-divider bg-paper text-ink-secondary hover:border-pine/25 hover:text-pine',
-            )}
-          >
-            <BrainCircuit size={13} />
-            {COPY.globalAsk.deepMode}
-          </button>
-          <LearningContextStatus
-            currentCount={currentMaterials.length + fileUpload.attachedFiles.length}
-            recentCount={learning.recentActivities.length}
-            memoryCount={learning.memories.filter((memory) => memory.status === 'active').length}
-          />
-        </div>
-
-        <ChatMessageList
-          watchKey={`${messages.length}:${latestText.length}:${intentBusy ? 1 : 0}`}
-          showEmpty={messages.length === 0 && !intentPlan && !intentBusy}
-          variant="paper"
-          contentMaxWidth="max-w-3xl"
-          innerClassName="space-y-4"
-          emptyState={
-            <div className="mx-auto flex max-w-xl flex-col items-center pt-8 text-center sm:pt-14">
-              <OctoAvatar mood="listening" size="lg" aura className="mb-5" />
-              <h2 className="font-serif text-[25px] italic tracking-[-0.025em] text-ink">{COPY.globalAsk.emptyTitle}</h2>
-              <p className="mt-2 max-w-lg text-[13px] leading-6 text-ink-secondary">{COPY.globalAsk.emptyBody}</p>
-              {learning.activeThread?.status === 'active' ? (
-                <button
-                  type="button"
-                  onClick={() => {
+        <div className="flex min-h-0 flex-1">
+          <main className="flex min-w-0 flex-1 flex-col">
+            <ChatMessageList
+              watchKey={`${messages.length}:${latestText.length}:${intentBusy ? 1 : 0}`}
+              showEmpty={showWelcome}
+              variant="paper"
+              contentMaxWidth="max-w-3xl"
+              innerClassName="space-y-4"
+              emptyState={
+                <GlobalAskWelcome
+                  depth={effectiveDepth}
+                  activeThread={learning.activeThread}
+                  composer={renderComposer(true)}
+                  contextSummary={contextSummary}
+                  onDepthChange={handleDepthChange}
+                  onOpenContext={() => setContextOpen(true)}
+                  onChoosePrompt={(prompt) => {
+                    composer.setValue(prompt);
+                    window.setTimeout(() => composer.textareaRef.current?.focus(), 0);
+                  }}
+                  onResumeThread={() => {
                     setDepth('deep');
                     if (learning.activeThread) setActiveIntent(learningThreadToIntent(learning.activeThread));
                     composer.setValue(learning.activeThread?.intent || '');
                     window.setTimeout(() => composer.textareaRef.current?.focus(), 0);
                   }}
-                  className="mt-6 w-full rounded-[18px] border border-pine/15 bg-pine-fog px-4 py-4 text-left transition hover:bg-pine-mist"
-                >
-                  <span className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.1em] text-pine">{COPY.globalAsk.threadTitle}</span>
-                  <span className="mt-1.5 block text-[14px] font-semibold text-ink">{learning.activeThread.title}</span>
-                  {learning.activeThread.lastSummary ? <span className="mt-1 block line-clamp-2 text-[11.5px] leading-5 text-ink-secondary">{learning.activeThread.lastSummary}</span> : null}
-                  <span className="mt-3 inline-flex items-center gap-1 text-[11.5px] font-medium text-pine">{COPY.globalAsk.threadResume}<ChevronRight size={13} /></span>
-                </button>
-              ) : null}
-              {visibleSources.length > 0 ? (
-                <div className="mt-7 w-full text-left">
-                  <p className="mb-2 px-1 font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-muted">{COPY.globalAsk.sourceContext}</p>
-                  <div className="space-y-1.5">
-                    {visibleSources.map((source) => (
-                      <button key={source.id} type="button" onClick={() => onNavigateToCapture?.(source.id)} className="flex w-full items-center gap-3 rounded-xl border border-divider bg-paper px-3.5 py-3 text-left hover:border-pine/20 hover:bg-pine-fog">
-                        <FileText size={13} className="text-pine" />
-                        <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-secondary">{source.title}</span>
-                        <ChevronRight size={13} className="text-ink-muted" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          }
-        >
+                />
+              }
+            >
           {messages.map((message, index) => {
             const text = collectMessageText(message);
             const isStreaming = busy && index === messages.length - 1 && message.role === 'assistant';
@@ -463,26 +455,30 @@ export function GlobalAskPanel({
           ) : null}
           {showThinking ? <ChatThinkingStripBubble label={COPY.globalAsk.thinking} avatar={<OctoAvatar mood="thinking" size="sm" aura />} /> : null}
           {error ? <div className="rounded-xl border border-vermilion/15 bg-vermilion-fog px-4 py-3 text-[12.5px] text-vermilion">{COPY.globalAsk.responseError}</div> : null}
-        </ChatMessageList>
+            </ChatMessageList>
 
-        <ChatComposer
-          containerRef={composerRef}
-          textareaProps={composer.textareaProps}
-          onSubmit={composer.submit}
-          busy={busy || intentBusy}
-          onStop={stop}
-          attachedFiles={fileUpload.attachedFiles}
-          onAddFiles={fileUpload.addFiles}
-          onRemoveFile={fileUpload.removeFile}
-          uploadBusy={fileUpload.busy}
-          uploadError={fileUpload.error}
-          onRetryUpload={fileUpload.retryLast}
-          isDragging={fileUpload.isDragging}
-          capabilities={{ file: true, mic: true }}
-          onVoiceTranscript={(text) => composer.setValue([composer.value, text].filter(Boolean).join(' '))}
-          placeholder={effectiveDepth === 'deep' ? COPY.globalAsk.composerDeep : COPY.globalAsk.composerQuick}
-          statusLabel={intentBusy ? COPY.globalAsk.preparingIntent : undefined}
-        />
+            {!showWelcome ? renderComposer(false) : null}
+          </main>
+        </div>
+
+        {contextOpen ? (
+          <GlobalAskContextDrawer
+            currentCount={currentContextCount}
+            recentCount={recentContextCount}
+            memoryCount={memoryContextCount}
+            sources={visibleSources}
+            activeThread={learning.activeThread}
+            onClose={() => setContextOpen(false)}
+            onOpenMemory={() => {
+              setContextOpen(false);
+              setView('memory');
+            }}
+            onOpenSource={(sourceId) => {
+              setContextOpen(false);
+              onNavigateToCapture?.(sourceId);
+            }}
+          />
+        ) : null}
       </div>
     </div>
   );

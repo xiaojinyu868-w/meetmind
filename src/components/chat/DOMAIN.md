@@ -112,7 +112,7 @@ export function MyChatAdapter({ sessionId, authToken, ... }) {
 | `IntentDialog` | `components/intent/IntentDialog.tsx` | `goal` | `glass` | 沉浸式 octo blur 背景；marker=`intent-summary`；M11.4 bio 双 marker |
 | `TutorAgentPanel` | `components/tutor/TutorAgentPanel.tsx` | `review` / `in-class`（预留） | `paper` | 持久化到 `conversationService`；仅 `review` 提供时间戳跳转；M11 迁 |
 | `ClassroomCompanionPanel` | `components/classroom/ClassroomCompanionPanel.tsx` | `in-class` | `paper` | M14/M14.5 迁；Octo Buddy chip + inline app；不渲染时间戳回跳 |
-| `GlobalAskPanel` | `components/GlobalAskPanel.tsx` | `global` | `paper` | 统一以“问同学”承接问题，默认直接回答；“一起学”是可选动作而非要求用户理解的系统模式。没有真实歧义就自动开始，只有答案会改变学习路径时才渲染一个动态选择题 |
+| `GlobalAskPanel` | `components/GlobalAskPanel.tsx` | `global` | `paper` | 统一以“问同学”承接问题；空态把输入作为唯一主动作，在输入内部轻量选择“直接回答 / 陪我学会”，参考范围只在用户主动查看时以抽屉出现。没有真实歧义就自动开始，只有答案会改变学习路径时才逐题渲染动态选择；不能为了展示能力强迫用户填表 |
 | `SharedAgentChat` | `app/share/[token]/SharedAgentChat.tsx` | `shared` | `paper` | M11.5 迁；shareToken 认证 + 隐私铁律 |
 | `WordExplainer` | `components/WordExplainer.tsx` | `word` | `minimal` | M13 迁；选词解释浮窗 |
 

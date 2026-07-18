@@ -44,7 +44,7 @@ export interface UseLearningContextReturn extends LearningContextState {
   recordActivity: (draft: ActivityDraft) => Promise<void>;
   updateCoursePreference: (
     courseKey: string,
-    patch: Partial<Pick<CourseContextPreference, 'displayName' | 'status' | 'confirmedByUser' | 'excludedSessionIds' | 'assessments'>>,
+    patch: Partial<Pick<CourseContextPreference, 'displayName' | 'tags' | 'status' | 'confirmedByUser' | 'excludedSessionIds' | 'assessments'>>,
   ) => Promise<void>;
   setActiveThread: (thread?: LearningThreadEntry) => Promise<void>;
 }
@@ -179,13 +179,14 @@ export function useLearningContext(): UseLearningContextReturn {
 
   const updateCoursePreference = useCallback(async (
     courseKey: string,
-    patch: Partial<Pick<CourseContextPreference, 'displayName' | 'status' | 'confirmedByUser' | 'excludedSessionIds' | 'assessments'>>,
+    patch: Partial<Pick<CourseContextPreference, 'displayName' | 'tags' | 'status' | 'confirmedByUser' | 'excludedSessionIds' | 'assessments'>>,
   ) => {
     const existing = stateRef.current.coursePreferences || [];
     const current = existing.find((item) => item.courseKey === courseKey);
     const nextPreference: CourseContextPreference = {
       courseKey,
       displayName: current?.displayName,
+      tags: current?.tags,
       status: current?.status ?? 'active',
       confirmedByUser: current?.confirmedByUser,
       excludedSessionIds: current?.excludedSessionIds,
@@ -195,6 +196,12 @@ export function useLearningContext(): UseLearningContextReturn {
     };
     nextPreference.excludedSessionIds = Array.isArray(nextPreference.excludedSessionIds)
       ? Array.from(new Set(nextPreference.excludedSessionIds.filter(Boolean))).slice(-64)
+      : undefined;
+    nextPreference.tags = Array.isArray(nextPreference.tags)
+      ? Array.from(new Set(nextPreference.tags
+        .map((tag) => tag.replace(/\s+/g, ' ').trim().slice(0, 16))
+        .filter(Boolean)))
+        .slice(0, 6)
       : undefined;
     nextPreference.assessments = Array.isArray(nextPreference.assessments)
       ? nextPreference.assessments

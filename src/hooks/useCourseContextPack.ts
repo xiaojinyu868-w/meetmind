@@ -70,7 +70,7 @@ export function useCourseContextPack(course: CourseContextGroup): CourseContextP
         summary: summary?.overview,
         keyDifficulties: Array.isArray(summary?.keyDifficulties) ? summary.keyDifficulties : undefined,
         metadata: {
-          subject: course.title,
+          subject: lesson.courseTitle || course.title,
           sourceType: lesson.sourceType,
         },
       };

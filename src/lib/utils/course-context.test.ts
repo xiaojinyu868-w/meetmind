@@ -41,6 +41,7 @@ describe('course context grouping', () => {
     ], [{
       courseKey: 'topic:概率论',
       displayName: '概率论与数理统计',
+      tags: ['专业课', '期末重点'],
       status: 'paused',
       confirmedByUser: true,
       updatedAt: '2026-07-17T00:00:00.000Z',
@@ -49,8 +50,24 @@ describe('course context grouping', () => {
       title: '概率论与数理统计',
       status: 'paused',
       confidence: 'confirmed',
+      tags: ['专业课', '期末重点'],
     });
     expect(groups[0].lessons).toHaveLength(2);
+  });
+
+  it('does not expose links or bare timestamps as course and lesson titles', () => {
+    const groups = buildCourseContextGroups([
+      session({
+        sessionId: 'url-course',
+        subject: 'https://www.bilibili.com/video/BV123',
+        topic: '20:30',
+        sourceType: 'video-link',
+        createdAt: new Date('2026-07-17T12:30:00.000Z'),
+      }),
+    ]);
+
+    expect(groups[0].title).toBe('待命名课程');
+    expect(groups[0].lessons[0].title).toBe('视频课堂');
   });
 
   it('detaches a wrongly grouped lesson and can restore it without deleting the session', () => {

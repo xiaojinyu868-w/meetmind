@@ -570,6 +570,13 @@ export function MindmapWindow({ result, transcript, onSeek, defaultViewMode = 'm
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  const enterFullscreen = useCallback(() => {
+    // “全屏”是看导图的动作：即使当前因窄容器落在大纲，也直接进入完整画布。
+    userSelectedViewRef.current = true;
+    setViewMode('mindmap');
+    setIsFullscreen(true);
+  }, []);
+
   useEffect(() => {
     const shell = shellRef.current;
     if (!shell) return;
@@ -687,7 +694,7 @@ export function MindmapWindow({ result, transcript, onSeek, defaultViewMode = 'm
         </div>
       </div>
       <div className="flex items-center gap-1.5">
-        <button type="button" onClick={() => setIsFullscreen((p) => !p)} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all duration-200" style={{ border: `1px solid ${PALETTE.border}`, background: 'transparent', color: PALETTE.textSecondary }} title={isFullscreen ? '退出全屏' : '全屏查看'}>
+        <button type="button" onClick={isFullscreen ? () => setIsFullscreen(false) : enterFullscreen} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all duration-200" style={{ border: `1px solid ${PALETTE.border}`, background: 'transparent', color: PALETTE.textSecondary }} title={isFullscreen ? '退出全屏' : '全屏查看'}>
           {isFullscreen ? (
             <><svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M15 9h4.5M15 9V4.5M9 15v4.5M9 15H4.5m10.5 0h4.5m-4.5 0v4.5" /></svg>退出全屏</>
           ) : (
@@ -711,7 +718,7 @@ export function MindmapWindow({ result, transcript, onSeek, defaultViewMode = 'm
       className="min-h-0 flex-1"
       style={isFullscreen ? undefined : { borderRadius: '0 0 12px 12px', border: `1px solid ${PALETTE.border}`, borderTop: 'none' }}
       isFullscreen={isFullscreen}
-      onToggleFullscreen={() => setIsFullscreen((p) => !p)}
+      onToggleFullscreen={enterFullscreen}
     >
       {children}
     </CustomMindmapRenderer>

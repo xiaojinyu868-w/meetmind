@@ -12,7 +12,7 @@
 | 文件 | 行数 | 职责 | 核心类型 |
 |------|------|------|----------|
 | `index.ts` | ~410 | 核心领域类型 | `AnchorType`, `TranscriptSegment`, `SessionStatus`, `HighlightTopic`, `ClassSummary`, `FeedItem`（含外部内容类型、作者、出版时间与视角）, `Note`, `TutorResponse`, `ActionItem`, `ImportedVideoSource` |
-| `user.ts` | ~380 | 用户/认证与学习上下文类型；课程偏好只保存改名、确认、暂停、错归课堂排除和轻量考试边界，不复制课堂原件 | `UserRole`, `Permission`, `User`, `LearnerProfile`（含 `stage='unknown'`）、`LearningMemoryEntry`、`LearningActivityEntry`、`CourseContextPreference`、`CourseAssessmentEntry`、`LearningThreadEntry` |
+| `user.ts` | ~380 | 用户/认证与学习上下文类型；课程偏好只保存改名、标签、确认、暂停、错归课堂排除和轻量考试边界，不复制课堂原件 | `UserRole`, `Permission`, `User`, `LearnerProfile`（含 `stage='unknown'`）、`LearningMemoryEntry`、`LearningActivityEntry`、`CourseContextPreference`、`CourseAssessmentEntry`、`LearningThreadEntry` |
 | `page-types.ts` | 200 | 页面级类型（page.tsx 域） | `ViewMode`, `DataSource`, `WorkspaceTab`（含 `transcript`）, `SourceIngestItem`（含照片锚点与 `provenance` 来源契约）, `SourceProvenance`, `WechatCaptureMessage`, `WorkspaceEchoMessage` |
 | `dify.ts` | 203 | Dify 集成类型 | `ExtendedTutorRequest`, `GuidanceQuestion`, `Citation`, `WebSearchResult` |
 | `conversation.ts` | 121 | 对话历史类型 | `ConversationType`, `MessageRole`, `ConversationHistory`, `ConversationMessage` |

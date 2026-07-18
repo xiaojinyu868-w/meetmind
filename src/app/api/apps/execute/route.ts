@@ -196,6 +196,12 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    if (message === 'CONTENT_NOT_READY') {
+      return NextResponse.json(
+        { ok: false, error: 'CONTENT_NOT_READY' },
+        { status: 422 },
+      );
+    }
     return NextResponse.json(
       { ok: false, error: message },
       { status: 500 }

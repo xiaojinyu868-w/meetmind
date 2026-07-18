@@ -212,6 +212,8 @@ export interface CourseContextPreference {
   courseKey: string;
   /** 用户改过的课程名；空值时继续使用客观数据推导的名称。 */
   displayName?: string;
+  /** 用户确认的轻量课程标签，例如“专业课 / 期末重点”；不复制课堂内容。 */
+  tags?: string[];
   /** paused 只表示不再把这组课堂作为 AI 的跨课背景，不删除任何课堂。 */
   status: 'active' | 'paused';
   /** 用户改名或确认过后为 true；模型推测的课表归组不冒充用户确认。 */
