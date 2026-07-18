@@ -125,6 +125,16 @@ function cleanText(value: string): string {
     .trim();
 }
 
+/** 保留 Markdown 的换行、列表缩进、表格与代码围栏，只清理不可见控制字符。 */
+function cleanRichText(value: string): string {
+  return value
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]+/g, '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[^\S\n]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 const NOT_READY_OUTPUT_PATTERN = /无法生成|不能生成|不适合生成|无效数据|不含(?:任何)?(?:学科|知识|考点|课程)内容|材料不足|内容不足|cannot generate|not enough (?:course|learning|academic) content/i;
 
 /**
@@ -308,7 +318,7 @@ ${examScope ? `\n考试范围证据：\n${examScope}\n` : ''}
     {
       "key": "definition",
       "items": [
-        { "term": "术语", "body": "一句话定义（≤40 字）", "emphasis": "normal", "sourceId": "课堂 sessionId", "startMs": 12000, "endMs": 21000 }
+        { "term": "术语", "body": "支持 Markdown 的紧凑解释", "emphasis": "normal", "sourceId": "课堂 sessionId", "startMs": 12000, "endMs": 21000 }
       ]
     },
     {
@@ -321,7 +331,11 @@ ${examScope ? `\n考试范围证据：\n${examScope}\n` : ''}
 }
 
 质量要求：
-- 每条 item 的 body 必须极简——"一句话说清楚"，没空写废话
+- 默认每条 item 的 body 必须极简——通常一句话、约 60 字内，没空写废话
+- body 支持 GFM Markdown：粗体、列表、引用、代码和表格；只有对比关系用 2-5 行小表格会明显更快时才使用表格
+- 流程 / 因果 / 层级或小规模数据对比只有在文字更难扫读时，才可在 body 中放一个 mermaid 代码块；仅限 flowchart / pie / xychart-beta，流程图最多 6 个节点，图中数值必须直接来自证据，禁止装饰性图表
+- 公式优先写入 latex 字段；body 只补变量含义、成立条件或易错边界，不重复抄公式
+- 富文本仍必须适合 2-4 栏纸面：禁止长段落、宽表格、超过 6 个节点的流程图、代码长清单
 - term 是短标签（2-8 字），便于扫读
 - 跨课先去重，再保留定义的适用条件、公式变量、易混对比和可执行步骤；不要把每节课摘要简单拼接
 - emphasis 字段：只有老师明确"反复强调 / 划重点 / 一定考 / 这是必考点"，或真题/大纲直接支持的，标 "strong"；
@@ -338,7 +352,7 @@ ${anchorContext ? `学习者关注点：\n${anchorContext}\n` : ''}${buildTermin
       },
     ],
     model,
-    { temperature: 0.25, maxTokens: 3200 },
+    { temperature: 0.25, maxTokens: 4200 },
   );
   return parseJsonResponse<CheatsheetLLMOutput>(response.content);
 }
@@ -360,7 +374,7 @@ export function buildCheatsheetSections(
     const rawItems = Array.isArray(sd.items) ? sd.items : [];
     rawItems.forEach((item, index) => {
       const term = cleanText(item?.term ?? '');
-      const body = cleanText(item?.body ?? '');
+      const body = cleanRichText(item?.body ?? '');
       if (!term || !body) return;
       const startMs = toTimestamp(item?.startMs, 0);
       // endMs 当下未直接使用——保留 LLM 输出的语义但目前 evidence 段落以 transcript
@@ -371,7 +385,7 @@ export function buildCheatsheetSections(
         ? evidenceCorpus.filter((segment) => segment.sourceItemId === requestedSourceId)
         : evidenceCorpus;
       const grounding = resolveGroundedEvidence(
-        `${term} ${body} ${typeof item?.latex === 'string' ? item.latex : ''}`,
+        `${term} ${cleanText(body)} ${typeof item?.latex === 'string' ? item.latex : ''}`,
         sourceEvidence.length > 0 ? sourceEvidence : evidenceCorpus,
         startMs,
       );
@@ -387,7 +401,7 @@ export function buildCheatsheetSections(
       items.push({
         id: `${key}-${index + 1}`,
         term: term.slice(0, 32),
-        body: body.slice(0, 140),
+        body: body.slice(0, 1_600),
         latex: typeof item?.latex === 'string' && item.latex.trim() ? item.latex.trim() : undefined,
         emphasis: requestedEmphasis === 'strong' && hasExplicitEmphasis ? 'strong' : 'normal',
         citation: buildCitation(evidence, lessonSources),

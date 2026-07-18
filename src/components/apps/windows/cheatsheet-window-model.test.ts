@@ -4,6 +4,7 @@ import {
   OPEN_BOOK_PRINT_SETTINGS,
   REVIEW_PRINT_SETTINGS,
   citationLabel,
+  fitCheatsheetToTarget,
   pageCapacity,
   paginateCheatsheetSections,
   targetPageCount,
@@ -32,12 +33,42 @@ describe('cheatsheet print model', () => {
     expect(pageCapacity(OPEN_BOOK_PRINT_SETTINGS)).toBeGreaterThan(pageCapacity(REVIEW_PRINT_SETTINGS));
   });
 
+  it('uses explicit columns as real paper capacity', () => {
+    expect(pageCapacity({ ...REVIEW_PRINT_SETTINGS, columnCount: 3 }))
+      .toBeGreaterThan(pageCapacity({ ...REVIEW_PRINT_SETTINGS, columnCount: 2 }));
+  });
+
   it('splits dense sections across physical pages without losing items', () => {
     const source = section(80);
     const pages = paginateCheatsheetSections([source], REVIEW_PRINT_SETTINGS);
     expect(pages.length).toBeGreaterThan(2);
     expect(pages.flatMap((page) => page.sections).flatMap((item) => item.items)).toHaveLength(80);
     expect(pages.every((page) => page.sections[0]?.label === '核心定义')).toBe(true);
+    expect(pages.every((page) => page.columns.length <= REVIEW_PRINT_SETTINGS.columnCount)).toBe(true);
+    expect(pages.flatMap((page) => page.columns).every((column) => column.sections.length > 0)).toBe(true);
+  });
+
+  it('fits content by preserving readable type before using the densest layout', () => {
+    const fitted = fitCheatsheetToTarget([section(51)], {
+      ...REVIEW_PRINT_SETTINGS,
+      sheetCount: 1,
+    });
+    expect(paginateCheatsheetSections([section(51)], fitted).length).toBeLessThanOrEqual(1);
+    expect(fitted.columnCount).toBe(3);
+    expect(fitted.fontScale).not.toBe('comfortable');
+  });
+
+  it('reserves real paper space for tables and Mermaid instead of counting them as plain text', () => {
+    const plain = section(24);
+    const rich: CheatsheetSection = {
+      ...section(24),
+      items: section(24).items.map((item) => ({
+        ...item,
+        body: `${item.body}\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n\`\`\`mermaid\nflowchart LR\nA --> B\n\`\`\``,
+      })),
+    };
+    expect(paginateCheatsheetSections([rich], REVIEW_PRINT_SETTINGS).length)
+      .toBeGreaterThan(paginateCheatsheetSections([plain], REVIEW_PRINT_SETTINGS).length);
   });
 
   it('uses the lesson title and lesson-local time for multi-source citations', () => {

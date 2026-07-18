@@ -40,6 +40,29 @@ describe('buildCheatsheetSections evidence grounding', () => {
     expect(sections[0].items[1].emphasis).toBe('strong');
   });
 
+  it('preserves grounded Markdown tables and Mermaid blocks for print-rich rendering', () => {
+    const body = [
+      '**机会成本**是放弃的最佳替代方案。',
+      '',
+      '| 选择 | 放弃 |',
+      '| --- | --- |',
+      '| 读书 | 一小时休闲 |',
+      '',
+      '```mermaid',
+      'flowchart LR',
+      '  A[做出选择] --> B[放弃最佳替代方案]',
+      '```',
+    ].join('\n');
+    const sections = buildCheatsheetSections(transcript, {
+      sections: [{ key: 'definition', items: [{ term: '机会成本', body, latex: 'MC = \\frac{\\Delta TC}{\\Delta Q}' }] }],
+    });
+
+    expect(sections[0].items[0].body).toContain('| --- | --- |');
+    expect(sections[0].items[0].body).toContain('```mermaid\nflowchart LR');
+    expect(sections[0].items[0].body).toContain('\n  A[做出选择]');
+    expect(sections[0].items[0].latex).toBe('MC = \\frac{\\Delta TC}{\\Delta Q}');
+  });
+
   it('restores a grounded citation to the source lesson and its local time', () => {
     const multiLessonTranscript: TranscriptSegment[] = [
       {

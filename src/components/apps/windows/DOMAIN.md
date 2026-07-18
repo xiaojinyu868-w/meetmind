@@ -20,6 +20,7 @@ src/components/apps/windows/
 ├── QuizWindow.tsx              # 课堂测验（客观题即时反馈 + 主观题对照自评 + 薄弱题复练）
 ├── quiz-window-model.ts        # 测验题正规化、答案匹配、证据锚点与时间显示 helper
 ├── CheatsheetWindow.tsx        # 考试速查表：纸面轻编辑、打印约束与真实分页预览
+├── CheatsheetRichText.tsx      # 速查表紧凑富文本：GFM / KaTeX / 表格 / Mermaid，屏幕与打印共用
 ├── cheatsheet-window-model.ts  # 纸张预设、容量、分页、来源标签与 Markdown 纯函数
 ├── PodcastWindow.tsx           # 音频概览：优先播放、折叠制作详情与稳定失败兜底
 ├── podcast-window-model.ts     # 播客前端纯 helper：过滤 provider/HTTP 原始失败章节
@@ -86,8 +87,9 @@ src/components/apps/windows/
 
 ### 速查表 / 音频概览 / 共用状态
 
-- `CheatsheetWindow` 默认先交付可打印成品，只在用户点纸张摘要后展开排版约束；“考前整理 / 带进考场”会设置不同默认纸张组合，随后仍可调整 A4/Letter、横纵向、1–3 张、单双面、字号与黑白。学生直接在纸面预览上改、删、收起，不先进入文档工作台。触屏端每条内容通过可见的更多按钮展开“编辑 / 不打印”，并在长文档底部持续保留“排版 / 复制 / 打印 PDF”动作条，不能依赖 hover 或要求滚回页首。
-- 分页必须由 `cheatsheet-window-model.ts` 的同一容量模型驱动屏幕和打印，每个打印页保留标题、区块名与页码；多课堂引用显示课次 + 课内时间，大纲 / 真题引用不得伪造时间戳。
+- `CheatsheetWindow` 默认先交付可打印成品，只在用户点纸张摘要后展开排版约束；“考前整理 / 带进考场”会设置不同默认纸张组合，随后仍可调整 A4/Letter、横纵向、1–4 栏、1–3 张、单双面、字号与黑白。超出允许页数时可在不删除内容的前提下一键自动适配：优先保住可读字号，再增加分栏。学生直接在纸面预览上改、删、收起，不先进入文档工作台。触屏端每条内容通过可见的更多按钮展开“编辑 / 不打印”，并在长文档底部持续保留“排版 / 复制 / 打印 PDF”动作条，不能依赖 hover 或要求滚回页首。
+- 分页必须由 `cheatsheet-window-model.ts` 的同一“页 → 栏 → 语义区块”容量模型驱动屏幕和打印，避免卡片网格留下大片空白；打印态去除卡片圆角和多余留白，每页保留标题、区块名、页码与可核对来源。多课堂引用显示课次 + 课内时间，大纲 / 真题引用不得伪造时间戳。
+- 条目正文由 `CheatsheetRichText` 渲染 GFM（标题 / 列表 / 引用 / 代码 / 表格）、行内与块级 KaTeX、紧凑 Mermaid 图；表格和图表必须避免跨栏断裂，打印时隐藏图表工具栏并限制高度。富文本是为了压缩关系，不得把普通定义装饰成大图。
 - `PodcastWindow` 把“能否立刻听”作为第一任务；音频成功时脚本与章节默认折叠，音频失败时保留稳定重试动作并直接展开已经生成的脚本，让一次失败仍然有可用产物，且不透出 provider 原始错误。
 - 失败产物中若混入“播客音频未生成 / 403 Forbidden / 建连失败”等技术章节，必须在 `podcast-window-model.ts` 过滤；前端只保留可重试状态、脚本和真实课堂证据。
 - 播客只有真实音频，或至少真实脚本 / 章节存在时，才写入“最近学习现场”；禁止把 provider 调用结束当作用户已经得到可播放成品。
@@ -116,7 +118,7 @@ src/components/apps/windows/
 - `mindmap-layout.test.ts` — 布局、短标签与完整标题保留
 - `infographic-window-data.test.ts` — 首次先取智能草案、已有结果不重复生成、旧调用方 fallback
 - `flashcards-window-model.test.ts` / `quiz-window-model.test.ts` / `podcast-window-model.test.ts` — 三类结果正规化与失败清洗
-- `cheatsheet-window-model.test.ts` — 纸张容量、单双面页数、跨页不丢条目与多源引用标签
+- `cheatsheet-window-model.test.ts` — 纸张容量、单双面页数、跨页不丢条目、多源引用标签与富文本容量约束
 
 ## 证据标签（EvidenceLabel）
 

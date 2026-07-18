@@ -10,8 +10,8 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Printer, Copy, Check, ChevronDown, ChevronRight, X, RotateCcw, Settings2, PencilLine, MoreHorizontal } from 'lucide-react';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
-import { CompanionMarkdown } from '@/components/classroom/CompanionMarkdown';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
+import { CheatsheetRichText } from '@/components/apps/windows/CheatsheetRichText';
 import { COPY } from '@/lib/ui/copy';
 import type {
   CheatsheetItem,
@@ -22,11 +22,13 @@ import type {
 import {
   REVIEW_PRINT_SETTINGS,
   citationLabel,
+  fitCheatsheetToTarget,
   paginateCheatsheetSections,
   payloadToMarkdown,
   settingsForPurpose,
   targetPageCount,
   type CheatsheetColorMode,
+  type CheatsheetColumnCount,
   type CheatsheetFontScale,
   type CheatsheetOrientation,
   type CheatsheetPaperSize,
@@ -42,14 +44,14 @@ interface CheatsheetWindowProps {
 
 const SECTION_ACCENTS: Record<
   CheatsheetSectionKey,
-  { borderColor: string; dot: string; label: string; strongTint: string }
+  { borderColor: string; dot: string; label: string }
 > = {
-  definition: { borderColor: '#1C1B19', dot: '#1C1B19', label: 'text-[#1C1B19]', strongTint: '#F2EDE3' },
-  formula:    { borderColor: '#B8842B', dot: '#B8842B', label: 'text-[#2D4F3E]', strongTint: '#FBF2EF' },
-  process:    { borderColor: '#2D4F3E', dot: '#2D4F3E', label: 'text-[#2D4F3E]', strongTint: '#F2F6F3' },
-  contrast:   { borderColor: '#2D4F3E', dot: '#2D4F3E', label: 'text-[#2D4F3E]', strongTint: '#F2F6F3' },
-  pitfall:    { borderColor: '#B5483C', dot: '#B5483C', label: 'text-[#B5483C]', strongTint: '#FCEFEF' },
-  exemplar:   { borderColor: '#2D4F3E', dot: '#2D4F3E', label: 'text-[#2D4F3E]', strongTint: '#F2F6F3' },
+  definition: { borderColor: '#1C1B19', dot: '#1C1B19', label: 'text-[#1C1B19]' },
+  formula:    { borderColor: '#B8842B', dot: '#B8842B', label: 'text-[#2D4F3E]' },
+  process:    { borderColor: '#2D4F3E', dot: '#2D4F3E', label: 'text-[#2D4F3E]' },
+  contrast:   { borderColor: '#2D4F3E', dot: '#2D4F3E', label: 'text-[#2D4F3E]' },
+  pitfall:    { borderColor: '#B5483C', dot: '#B5483C', label: 'text-[#B5483C]' },
+  exemplar:   { borderColor: '#2D4F3E', dot: '#2D4F3E', label: 'text-[#2D4F3E]' },
 };
 
 /**
@@ -114,7 +116,7 @@ function ItemRow({
     <li
       className="group relative flex flex-col gap-1 rounded-md print:px-1 print:py-0.5"
       style={{
-        backgroundColor: isStrong ? accent.strongTint : 'transparent',
+        backgroundColor: 'transparent',
         paddingInline: '0.5rem',
         paddingBlock: 'var(--cs-item-pad-y, 0.375rem)',
       }}
@@ -173,7 +175,7 @@ function ItemRow({
               className="font-semibold tracking-[-0.005em] text-ink"
               style={{ fontSize: 'var(--cs-term, 13.5px)' }}
             >
-              {item.term}
+              {isStrong ? <mark className="bg-[#F2E4A8] px-0.5 text-inherit">{item.term}</mark> : item.term}
             </strong>
             {isStrong ? (
               <span
@@ -184,16 +186,24 @@ function ItemRow({
               />
             ) : null}
             {item.citation && citation && onSeek ? (
-              <button
-                type="button"
-                onClick={() => onSeek(item.citation!.startMs)}
-                className="print:hidden ml-auto inline-flex h-[22px] items-center rounded-full px-2 font-mono tabular-nums text-ink-secondary ring-[0.5px] ring-ink/[0.10] transition-all duration-150 hover:bg-pine/[0.10] hover:text-pine hover:ring-pine/30 active:scale-95"
-                style={{ fontSize: 'var(--cs-ts, 10.5px)' }}
-                title={COPY.apps.cheatsheet.seekTitle(citation)}
-                aria-label={COPY.apps.cheatsheet.seekTitle(citation)}
-              >
-                {citation}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => onSeek(item.citation!.startMs)}
+                  className="print:hidden ml-auto inline-flex h-[22px] items-center rounded-full px-2 font-mono tabular-nums text-ink-secondary ring-[0.5px] ring-ink/[0.10] transition-all duration-150 hover:bg-pine/[0.10] hover:text-pine hover:ring-pine/30 active:scale-95"
+                  style={{ fontSize: 'var(--cs-ts, 10.5px)' }}
+                  title={COPY.apps.cheatsheet.seekTitle(citation)}
+                  aria-label={COPY.apps.cheatsheet.seekTitle(citation)}
+                >
+                  {citation}
+                </button>
+                <span
+                  className="ml-auto hidden font-mono tabular-nums text-ink-muted/70 print:inline"
+                  style={{ fontSize: 'var(--cs-ts, 10.5px)' }}
+                >
+                  {citation}
+                </span>
+              </>
             ) : item.citation && citation ? (
               <span
                 className="ml-auto font-mono tabular-nums text-ink-muted/70"
@@ -222,26 +232,16 @@ function ItemRow({
               <X size={10} strokeWidth={2.4} />
             </button>
           </div>
-          <p
-            className="mt-0.5 text-ink-secondary"
-            style={{
-              fontSize: 'var(--cs-body, 12.25px)',
-              lineHeight: 1.55,
-            }}
-          >
-            {item.body}
-          </p>
+          <CheatsheetRichText content={item.body} />
           {item.latex ? (
             <div
-              className="mt-1.5 rounded-md bg-paper-warm px-2.5 py-1.5 text-center"
+              className="cheatsheet-formula mt-1.5 rounded-md bg-paper-warm px-2.5 py-1.5 text-center"
               style={{
                 borderLeft: `2px solid ${accent.borderColor}`,
                 borderRight: `2px solid ${accent.borderColor}`,
               }}
             >
-              <div style={{ fontSize: 'var(--cs-latex, 14px)', lineHeight: 1.2 }}>
-                <CompanionMarkdown content={`$$${item.latex}$$`} />
-              </div>
+              <CheatsheetRichText content={`$$${item.latex}$$`} formulaOnly />
             </div>
           ) : null}
           {actionsOpen ? (
@@ -310,7 +310,7 @@ function SectionCard({
   if (visibleItems.length === 0) {
     return (
       <section
-        className="relative break-inside-avoid rounded-xl bg-white/40 px-4 py-2 print:hidden"
+        className="relative break-inside-avoid border-t border-divider/60 bg-white/40 px-3 py-2 print:hidden"
         style={{ borderLeft: `3px solid ${accent.borderColor}` }}
       >
         <header className="flex items-center gap-2 text-ink-muted/70">
@@ -328,15 +328,14 @@ function SectionCard({
 
   return (
     <section
-      className="relative break-inside-avoid rounded-xl bg-white print:px-3 print:py-2"
+      className="cheatsheet-section relative break-inside-avoid border-t border-divider/60 bg-transparent"
       style={{
-        borderLeft: `3px solid ${accent.borderColor}`,
-        boxShadow: 'inset 0 0 0 0.5px rgba(0,0,0,0.04)',
-        paddingInline: '1rem',
-        paddingBlock: '0.875rem',
+        borderLeft: `2px solid ${accent.borderColor}`,
+        paddingInline: '0.625rem',
+        paddingBlock: '0.625rem',
       }}
     >
-      <header className="mb-2 flex items-center gap-2">
+      <header className="print-keep mb-2 flex items-center gap-2">
         <button
           type="button"
           onClick={onToggleCollapse}
@@ -518,6 +517,9 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
     () => paginateCheatsheetSections(visibleSections, settings),
     [settings, visibleSections],
   );
+  const handleAutoFit = useCallback(() => {
+    setSettings((current) => fitCheatsheetToTarget(visibleSections, current));
+  }, [visibleSections]);
   const stats = useMemo(() => {
     if (!editedPayload) return null;
     const visibleItems = visibleSections.reduce((sum, section) => sum + section.items.length, 0);
@@ -591,9 +593,12 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
               </div>
             ) : null}
             {isOverflow && stats ? (
-              <p className="mt-1 text-[11px] leading-relaxed text-vermilion/85">
-                {COPY.apps.cheatsheet.pageOverflow(stats.pageCount - stats.targetPages)}
-              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] leading-relaxed text-vermilion/85">
+                <span>{COPY.apps.cheatsheet.pageOverflow(stats.pageCount - stats.targetPages)}</span>
+                <button type="button" onClick={handleAutoFit} className="font-medium underline underline-offset-2 hover:text-vermilion">
+                  {COPY.apps.cheatsheet.autoFitToPages(stats.targetPages)}
+                </button>
+              </div>
             ) : null}
           </div>
           <div className="hidden w-full flex-shrink-0 items-center gap-2 sm:flex sm:w-auto">
@@ -629,7 +634,7 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
         </div>
 
         {settingsOpen ? (
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-[18px] border border-divider bg-white p-3.5 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-[18px] border border-divider bg-white p-3.5 sm:grid-cols-3 lg:grid-cols-7">
             <SettingChoice<CheatsheetPurpose>
               label={COPY.apps.cheatsheet.purpose}
               value={settings.purpose}
@@ -656,6 +661,12 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
                 { value: 'landscape', label: COPY.apps.cheatsheet.landscape },
               ]}
               onChange={(orientation) => setSettings((current) => ({ ...current, orientation }))}
+            />
+            <SettingChoice<'1' | '2' | '3' | '4'>
+              label={COPY.apps.cheatsheet.columns}
+              value={String(settings.columnCount) as '1' | '2' | '3' | '4'}
+              options={(['1', '2', '3', '4'] as const).map((value) => ({ value, label: COPY.apps.cheatsheet.columnCount(Number(value)) }))}
+              onChange={(value) => setSettings((current) => ({ ...current, columnCount: Number(value) as CheatsheetColumnCount }))}
             />
             <SettingChoice<'1' | '2' | '3'>
               label={COPY.apps.cheatsheet.sheets}
@@ -706,10 +717,13 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
       </div>
 
       {/* 真实分页预览：屏幕页界与打印页界共用同一份分配结果。 */}
-      <div className="flex-1 overflow-y-auto px-3 py-4 print:overflow-visible print:p-0 sm:px-6 sm:py-5">
+      <div className="flex-1 overflow-auto px-3 py-4 print:overflow-visible print:p-0 sm:px-6 sm:py-5">
         <div
-          className="mx-auto flex w-full flex-col gap-5 print:block"
-          style={{ maxWidth: settings.orientation === 'landscape' ? '1120px' : '820px' }}
+          className="cheatsheet-pages mx-auto flex w-full flex-col gap-5 print:block"
+          style={{
+            maxWidth: settings.orientation === 'landscape' ? '1120px' : '820px',
+            minWidth: settings.columnCount >= 4 ? '960px' : settings.columnCount === 3 ? '760px' : undefined,
+          }}
         >
           {pages.length === 0 ? (
             <div className="rounded-[20px] border border-dashed border-divider bg-white px-6 py-16 text-center text-[12.5px] text-ink-muted print:hidden">
@@ -729,18 +743,25 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
                 <h1 className="text-[15px] font-semibold text-ink">{payload.title}</h1>
                 <p className="mt-0.5 text-[9.5px] leading-4 text-ink-muted">{payload.overview}</p>
               </header>
-              <div className="cheatsheet-content-grid grid flex-1 content-start gap-3 print:gap-2">
-                {page.sections.map((section, sectionIndex) => (
-                  <SectionCard
-                    key={`${page.id}:${section.key}:${sectionIndex}`}
-                    section={section}
-                    hiddenItemIds={hiddenItemIds}
-                    onHideItem={handleHideItem}
-                    collapsed={false}
-                    onToggleCollapse={() => handleToggleCollapse(section.key)}
-                    onSeek={onSeek}
-                    onEditItem={handleEditItem}
-                  />
+              <div
+                className="cheatsheet-content-grid grid flex-1 content-start gap-3 print:gap-2"
+                style={{ gridTemplateColumns: `repeat(${settings.columnCount}, minmax(0, 1fr))` }}
+              >
+                {Array.from({ length: settings.columnCount }, (_, columnIndex) => (
+                  <div key={`${page.id}:column:${columnIndex}`} className="cheatsheet-column min-w-0 space-y-2.5 print:space-y-1.5">
+                    {(page.columns[columnIndex]?.sections || []).map((section, sectionIndex) => (
+                      <SectionCard
+                        key={`${page.id}:${columnIndex}:${section.key}:${sectionIndex}`}
+                        section={section}
+                        hiddenItemIds={hiddenItemIds}
+                        onHideItem={handleHideItem}
+                        collapsed={false}
+                        onToggleCollapse={() => handleToggleCollapse(section.key)}
+                        onSeek={onSeek}
+                        onEditItem={handleEditItem}
+                      />
+                    ))}
+                  </div>
                 ))}
               </div>
               <footer className="mt-3 flex items-center justify-between border-t border-divider/60 pt-2 text-[8.5px] text-ink-muted">
@@ -784,12 +805,35 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
       {/* 打印样式：纸张、方向与分页和屏幕预览保持同源。 */}
       <style jsx global>{`
         .cheatsheet-content-grid {
-          grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+          align-items: start;
         }
         .cheatsheet-monochrome {
           filter: grayscale(1);
         }
+        .cheatsheet-richtext .katex-display {
+          margin: 0.25rem 0;
+          overflow-x: auto;
+          overflow-y: hidden;
+        }
+        .cheatsheet-richtext .katex {
+          font-size: 0.96em;
+        }
+        .cheatsheet-table-wrap,
+        .cheatsheet-mermaid {
+          break-inside: avoid;
+        }
+        .cheatsheet-mermaid .chat-mermaid-svg {
+          padding: 0.5rem;
+        }
+        .cheatsheet-mermaid .chat-mermaid-svg svg {
+          max-height: 180px;
+          max-width: 100%;
+        }
         @media print {
+          .cheatsheet-pages {
+            min-width: 0 !important;
+            max-width: none !important;
+          }
           .cheatsheet-print-page {
             break-after: page;
             box-sizing: border-box;
@@ -802,7 +846,49 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
             break-after: auto;
           }
           .cheatsheet-content-grid {
-            grid-template-columns: repeat(${settings.orientation === 'landscape' ? 3 : 2}, minmax(0, 1fr));
+            grid-template-columns: repeat(${settings.columnCount}, minmax(0, 1fr)) !important;
+            gap: 2.5mm !important;
+          }
+          .cheatsheet-column {
+            min-width: 0;
+          }
+          .cheatsheet-section {
+            break-inside: avoid;
+            border-radius: 0 !important;
+            border-top-width: 0.5px !important;
+            box-shadow: none !important;
+            padding: 1.2mm 0 1.6mm 1.6mm !important;
+          }
+          .cheatsheet-section .group {
+            padding: 0.55mm 0 !important;
+          }
+          .cheatsheet-item-body {
+            line-height: 1.35 !important;
+          }
+          .cheatsheet-table-wrap {
+            overflow: visible !important;
+          }
+          .cheatsheet-mermaid {
+            margin: 1mm 0 !important;
+            border-color: #c9c9c9 !important;
+            background: #ffffff !important;
+          }
+          .cheatsheet-mermaid > div:first-child {
+            display: none !important;
+          }
+          .cheatsheet-mermaid .chat-mermaid-svg {
+            padding: 1mm !important;
+          }
+          .cheatsheet-mermaid .chat-mermaid-svg svg {
+            max-height: 36mm !important;
+          }
+          .cheatsheet-formula {
+            margin-top: 0.8mm !important;
+            border-right: 0 !important;
+            border-radius: 0 !important;
+            background: transparent !important;
+            padding: 0.6mm 1mm !important;
+            text-align: left !important;
           }
           @page {
             size: ${settings.paperSize === 'a4' ? 'A4' : 'Letter'} ${settings.orientation};

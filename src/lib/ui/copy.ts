@@ -861,14 +861,16 @@ export const COPY = {
         orientation: 'landscape' | 'portrait';
         sides: 'single' | 'duplex';
         sheetCount: number;
+        columnCount: number;
       }): string => {
         const paper = settings.paperSize === 'a4' ? 'A4' : 'Letter';
         const orientation = settings.orientation === 'landscape' ? '横向' : '纵向';
         const sheets = settings.sides === 'duplex' ? `${settings.sheetCount} 张双面` : `${settings.sheetCount} 页`;
-        return `${paper} · ${orientation} · ${sheets}`;
+        return `${paper} · ${orientation} · ${settings.columnCount} 栏 · ${sheets}`;
       },
       pageUsage: (current: number, target: number): string => `${current} / ${target} 页`,
       pageOverflow: (count: number): string => `多出 ${count} 页；调小字号、增加纸张或删去已经掌握的内容。`,
+      autoFitToPages: (count: number): string => `自动排进 ${count} 页`,
       purpose: '用途',
       reviewPurpose: '考前整理',
       openBookPurpose: '带进考场',
@@ -876,6 +878,8 @@ export const COPY = {
       paperA4: 'A4',
       paperLetter: 'Letter',
       orientation: '方向',
+      columns: '分栏',
+      columnCount: (count: number): string => `${count} 栏`,
       sheets: '纸张数',
       sheetCount: (count: number): string => `${count} 张`,
       sides: '打印面',
