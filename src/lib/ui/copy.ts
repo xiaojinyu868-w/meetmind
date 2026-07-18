@@ -277,6 +277,11 @@ export const COPY = {
   login: {
     subtitle: '真正懂你在学什么的 AI 同学',
     guestCta: '先试听一节课',
+    accountTab: '账号登录',
+    emailLabel: '邮箱地址',
+    emailPlaceholder: '请输入邮箱地址',
+    passwordIdentifierLabel: '邮箱或管理员用户名',
+    passwordIdentifierPlaceholder: '请输入邮箱或管理员用户名',
   },
 
   wechatQr: {

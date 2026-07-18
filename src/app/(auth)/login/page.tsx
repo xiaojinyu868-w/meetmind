@@ -2,7 +2,7 @@
 
 /**
  * 登录页面 - 视频背景 + 玻璃态设计
- * 支持：邮箱密码登录、邮箱验证码登录、手机验证码登录
+ * 支持：邮箱 / 管理员用户名密码登录、邮箱验证码登录、手机验证码登录
  * 验证码登录支持自动注册新用户
  * 
  * 性能优化：
@@ -375,7 +375,7 @@ function LoginForm() {
                   borderColor: loginType === 'email' ? '#1C1B19' : 'transparent',
                 }}
               >
-                邮箱登录
+                {COPY.login.accountTab}
               </button>
               <button
                 disabled
@@ -430,13 +430,14 @@ function LoginForm() {
               {/* 邮箱/手机号输入 */}
               <div>
                 <label className="block text-sm font-medium mb-2 text-ink-secondary">
-                  {loginType === 'email' ? '邮箱地址' : '手机号码'}
+                  {loginType === 'email' ? (loginMethod === 'password' ? COPY.login.passwordIdentifierLabel : COPY.login.emailLabel) : '手机号码'}
                 </label>
                 <input
-                  type={loginType === 'email' ? 'email' : 'tel'}
+                  type={loginType === 'phone' ? 'tel' : loginMethod === 'password' ? 'text' : 'email'}
+                  autoComplete={loginMethod === 'password' ? 'username' : loginType === 'email' ? 'email' : 'tel'}
                   value={currentTarget}
                   onChange={(e) => loginType === 'email' ? setEmail(e.target.value) : setPhone(e.target.value)}
-                  placeholder={loginType === 'email' ? '请输入邮箱地址' : '请输入手机号码'}
+                  placeholder={loginType === 'email' ? (loginMethod === 'password' ? COPY.login.passwordIdentifierPlaceholder : COPY.login.emailPlaceholder) : '请输入手机号码'}
                   required
                   className="w-full rounded-xl border border-divider bg-white px-4 py-3.5 text-ink placeholder:text-ink-muted transition focus:border-ink focus:outline-none"
                 />
