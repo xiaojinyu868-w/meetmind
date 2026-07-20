@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react';
 import { useSessionStore } from '@/stores/session-store';
+import { useUIStore } from '@/stores/ui-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import {
@@ -105,7 +106,11 @@ export function useTranscriptHandlers(
 
   // ── handleTranscriptUpdate ─────────────────────────────────────
 
-  const handleTranscriptUpdate = useCallback((newSegments: TranscriptSegment[], meta?: { recordingId?: string; sessionId?: string }) => {
+  const handleTranscriptUpdate = useCallback((newSegments: TranscriptSegment[], meta?: {
+    recordingId?: string;
+    sessionId?: string;
+    finalPassOnly?: boolean;
+  }) => {
     const pendingAudio = resolvePendingRecordedAudio(meta?.recordingId);
     let effectiveSegments = newSegments;
     let shouldUpdateActiveEditor = shouldApplyTranscriptToActiveSession(
@@ -114,6 +119,7 @@ export function useTranscriptHandlers(
     );
 
     if (pendingAudio) {
+      const completesFinalPass = Boolean(meta?.finalPassOnly && pendingAudio.replaceExistingTranscript);
       const { appendedSegments, mergedSegments, totalDurationMs } = appendLiveRecordingSegments({
         existingSegments: pendingAudio.baseSegments,
         incomingSegments: newSegments,
@@ -244,6 +250,18 @@ export function useTranscriptHandlers(
       }
       memoryService.save(nextTimeline);
       clearPendingRecordedAudio(meta?.recordingId);
+
+      // 只有完整原声定稿才把课堂从“整理中”推进到复习态。realtime 草稿
+      // 永远不触发课后应用，避免先用不完整文字生成一轮低质结果再覆盖。
+      if (
+        completesFinalPass
+        && shouldUpdateActiveEditor
+        && useUIStore.getState().viewMode === 'classroom'
+      ) {
+        const uiActions = useUIStore.getState().actions;
+        uiActions.setViewMode('review');
+        uiActions.setReviewTab('apps');
+      }
     }
 
     // 上一节课的完整原声定稿可能在下一节课开始后才回来。
@@ -267,8 +285,28 @@ export function useTranscriptHandlers(
     if (!pendingAudio) return;
 
     if (meta?.finalPassOnly) {
-      // 完整原声定稿是 realtime 之上的增强，不是唯一转录。
-      // 它失败时保留已有字幕和原声，不能把整节课降级成「转录失败」。
+      // realtime 只服务课中，不能在完整原声定稿失败后被悄悄升级成课后证据。
+      // 保留原声并诚实标记失败，避免课堂永久卡在 pending，也避免低质草稿
+      // 被标题、摘要和应用继续消费。
+      useCollectionStore.getState().actions.setSourceItems((prev: SourceIngestItem[]) =>
+        prev.map((item) =>
+          item.id === pendingAudio.itemId
+            ? {
+                ...item,
+                reviewable: false,
+                status: 'failed' as const,
+                statusText: resolvePendingAudioFailureStatus(message),
+              }
+            : item
+        )
+      );
+      void saveAudioSession(pendingAudio.blob, pendingAudio.sessionId, userId || ANONYMOUS_USER_ID, {
+        duration: pendingAudio.durationMs,
+        sourceType: 'recording',
+        mediaUrl: pendingAudio.mediaUrl,
+        transcriptionStatus: 'failed',
+        transcriptionError: message,
+      }).catch(() => undefined);
       clearPendingRecordedAudio(meta.recordingId);
       return;
     }

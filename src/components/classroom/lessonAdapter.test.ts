@@ -73,6 +73,19 @@ describe('audioSessionToLesson transcription state', () => {
     expect(lesson.statusText).toBe('网络不稳，原声已保留');
   });
 
+  it('keeps a pending final pass in processing even when realtime draft text exists', () => {
+    const result = audioSessionToLesson(
+      session({ transcriptionStatus: 'pending' }),
+      {
+        hasTranscript: true,
+        titleEvidence: { transcriptPreview: '前面几句话形成的临时标题不应发布' },
+      },
+    );
+
+    expect(result.status).toBe('processing');
+    expect(result.title).toBe('课堂录音');
+  });
+
   it('treats old completed recordings without transcript as failed fallback after the grace window', () => {
     const lesson = audioSessionToLesson(
       session({

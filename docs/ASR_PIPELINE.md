@@ -13,7 +13,7 @@
   ├→ AudioContext 连续相位重采样为 PCM 16kHz（兼容 44.1kHz 手机）
   └→ 有界 FIFO → WebSocket → server.js ASR proxy
        ├→ DashScope Qwen3-ASR-Flash realtime（默认 2026-02-10 最新快照）
-       ├→ server VAD（课堂抗噪默认 threshold=0.30 / silence=1000ms）
+       ├→ server VAD（远场优先默认 threshold=0.20 / silence=1000ms）
        ├→ 幻觉过滤（过短、不可能语速、低信息附和词）
        ├→ 去重 (shouldDedupSegment, LCS 相似度 + 时间 gap)
        └→ interim/stable/final 三段式课中渲染
@@ -22,7 +22,8 @@
   ├→ server_vad 会话发送 session.finish（不是 manual-only commit）
   ├→ 收到 session.finished 后交付完整 realtime 尾句 + 原声
   └→ qwen3-asr-flash / filetrans 完整原声定稿
-       ├→ 替换 realtime 临时转录，不追加重复段
+       ├→ 定稿前保持 processing，不把 realtime 草稿发布为标题、摘要或应用输入
+       ├→ 定稿结果一次性替换 realtime 临时转录，不追加重复段
        └→ 按 recordingId + sessionId 回填，不得覆盖下一节课 UI
 
 文件上传
@@ -107,6 +108,8 @@
 - 手机端只有在拿到音频流、MediaRecorder 真正启动并创建新 session 后才进入录课页；此时同步清空上节课的 segments / interim / anchors / timeline，不等待 ASR WebSocket。权限拒绝或设备失败留在原页并明确提示，不能出现假的 `00:00` 录课态。
 - 每次录课使用独立 sessionId + recordingId。
 - 停止后 Recorder 立即可开始下一节课；batch 定稿在后台 detached 运行，启动时就冻结 sessionId + recordingId。
+- realtime 字幕只属于课中反馈；`finalPassPending` 期间不落为可复习 transcript、不派生课堂标题，完整原声定稿返回后才把课堂推进到 ready / review。
+- 完整原声定稿失败时保留原声并明确落为 failed / 可重试，不把 realtime 草稿静默升级成课后证据，也不让课堂永久卡在 pending。
 - 上节课延迟到达的 batch 定稿只写回它自己的 session，不更新当前编辑器；漏传 sessionId 的结果也拒绝进入当前课堂。
 - 课后说话人整理严格排在完整原声 batch 定稿并落盘之后；不得与 final pass 并发，避免较晚返回的 realtime 衍生结果覆盖高精度定稿。
 - Qwen Realtime 当前工作在 `server_vad` 模式，结束时必须发送官方 `session.finish` 并等待 `session.finished`；`input_audio_buffer.commit` 只属于 manual mode。旧链路把 VAD 会话当 manual 提交，错误又被静默吞掉，实测会让 25 秒干净课堂只剩第一句话（CER 78.57%）。
@@ -190,7 +193,7 @@ fixture 与人工 reference 在 `tests/eval/asr/fixtures/`、`datasets/real-nois
 | `ASR_SEGMENT_OVERLAP_SEC` | 2 | 相邻段重叠 |
 | `ASR_MIN_DURATION_FOR_SPLIT_SEC` | 240 | 低于此时长不分片 |
 | `DASHSCOPE_ASR_WS_VAD_SILENCE_MS` | 1000 | realtime 句尾静音时长；比对话多保留 200ms 上下文，interim 首字延迟不受影响 |
-| `DASHSCOPE_ASR_WS_VAD_THRESHOLD` | 0.30 | server VAD 触发阈值；高噪声设备可 A/B，不可盲目调高 |
+| `DASHSCOPE_ASR_WS_VAD_THRESHOLD` | 0.20 | server VAD 触发阈值；优先接住手机与远场软声，高噪声环境需用真实录音 A/B 后再调高 |
 | `NEXT_PUBLIC_ASR_AUTO_GAIN_CONTROL` | `true` | 浏览器 AGC |
 | `NEXT_PUBLIC_ASR_ECHO_CANCELLATION` | `true` | 浏览器 AEC |
 | `NEXT_PUBLIC_ASR_NOISE_SUPPRESSION` | `true` | 浏览器 NS |

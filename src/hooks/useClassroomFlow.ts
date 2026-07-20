@@ -7,6 +7,7 @@ import type { ClassroomFlowState } from '@/types/classroom-flow';
 const MIN_ELAPSED_MS = 20_000;
 const MIN_TRANSCRIPT_CHARS = 60;
 const MIN_REQUEST_INTERVAL_MS = 30_000;
+const MAX_DELTA_CHARS = 6_500;
 
 const EMPTY_FLOW: ClassroomFlowState = {
   title: '',
@@ -41,6 +42,7 @@ export function useClassroomFlow({
   const [newItemIds, setNewItemIds] = useState<Set<string>>(new Set());
   const [isUnderstanding, setIsUnderstanding] = useState(false);
   const priorFlowRef = useRef<ClassroomFlowState>(EMPTY_FLOW);
+  const processedSegmentIdsRef = useRef<Set<string>>(new Set());
   const lastRequestAtRef = useRef(0);
   const requestRef = useRef<AbortController | null>(null);
 
@@ -49,6 +51,7 @@ export function useClassroomFlow({
     requestRef.current?.abort();
     requestRef.current = null;
     priorFlowRef.current = EMPTY_FLOW;
+    processedSegmentIdsRef.current = new Set();
     lastRequestAtRef.current = 0;
     setFlow(EMPTY_FLOW);
     setNewItemIds(new Set());
@@ -60,6 +63,7 @@ export function useClassroomFlow({
     requestRef.current?.abort();
     requestRef.current = null;
     priorFlowRef.current = EMPTY_FLOW;
+    processedSegmentIdsRef.current = new Set();
     lastRequestAtRef.current = 0;
     setFlow(EMPTY_FLOW);
     setNewItemIds(new Set());
@@ -68,7 +72,16 @@ export function useClassroomFlow({
 
   useEffect(() => {
     if (!enabled || !recordingStartAt || segments.length === 0) return;
-    const transcriptLength = segments.reduce((total, segment) => total + segment.text.trim().length, 0);
+    const pendingSegments = segments.filter((segment) => !processedSegmentIdsRef.current.has(segment.id));
+    const newSegments: TranscriptSegment[] = [];
+    let deltaChars = 0;
+    for (const segment of pendingSegments) {
+      const segmentChars = segment.text.trim().length;
+      if (newSegments.length > 0 && deltaChars + segmentChars > MAX_DELTA_CHARS) break;
+      newSegments.push(segment);
+      deltaChars += segmentChars;
+    }
+    const transcriptLength = newSegments.reduce((total, segment) => total + segment.text.trim().length, 0);
     if (transcriptLength < MIN_TRANSCRIPT_CHARS) return;
 
     const elapsedMs = Date.now() - recordingStartAt;
@@ -87,10 +100,10 @@ export function useClassroomFlow({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            segments: segments.slice(-180),
+            newSegments,
             elapsedMs,
             lessonTitle,
-            priorFlow: priorFlowRef.current.now ? priorFlowRef.current : undefined,
+            priorFlow: priorFlowRef.current,
             importedHints,
           }),
           signal: controller.signal,
@@ -102,6 +115,9 @@ export function useClassroomFlow({
         const previousIds = collectIds(priorFlowRef.current);
         const nextIds = collectIds(data.flow);
         const addedIds = new Set([...nextIds].filter((id) => !previousIds.has(id)));
+        for (const segment of newSegments) {
+          processedSegmentIdsRef.current.add(segment.id);
+        }
         priorFlowRef.current = data.flow;
         setFlow(data.flow);
         setNewItemIds(addedIds);

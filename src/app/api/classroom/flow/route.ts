@@ -7,7 +7,7 @@ import type { ClassroomFlowState } from '@/types/classroom-flow';
 const log = createLogger('api/classroom/flow');
 
 interface RequestBody {
-  segments?: TranscriptSegment[];
+  newSegments?: TranscriptSegment[];
   elapsedMs?: number;
   lessonTitle?: string;
   priorFlow?: ClassroomFlowState;
@@ -17,10 +17,10 @@ interface RequestBody {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as RequestBody;
-    const segments = Array.isArray(body.segments) ? body.segments : [];
+    const newSegments = Array.isArray(body.newSegments) ? body.newSegments : [];
     const elapsedMs = typeof body.elapsedMs === 'number' ? Math.max(0, body.elapsedMs) : 0;
     const flow = await generateClassroomFlow({
-      segments,
+      newSegments,
       elapsedMs,
       lessonTitle: body.lessonTitle,
       priorFlow: body.priorFlow,

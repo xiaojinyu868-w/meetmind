@@ -42,7 +42,7 @@ components/
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `Recorder.tsx` | 1694 | 录音主组件（采集/实时转录/暂停/恢复；实时 final 进入 `recorder-utils.mergeRealtimeTranscriptSegment` 去重/修时间戳），支持 `recorderRef` 普通 prop 供首页按需加载，子模块在 `recorder/` |
+| `Recorder.tsx` | 1694 | 录音主组件（采集/实时转录/暂停/恢复；实时 final 进入 `recorder-utils.mergeRealtimeTranscriptSegment` 去重/修时间戳）；首屏静态挂载以保留首次录音的用户手势与冷启动 ASR，子模块在 `recorder/` |
 | `TranscriptFlowView.tsx` | 778 | 转录内容流式视图 |
 | `LessonDigestCard.tsx` | ~220 | 课堂结构化笔记纯展示组件（飞书妙记式分段总结 + 图片内联 + 时间戳跳转 + 原文折叠 + 长按标记困惑；桌面移动共用）；标题不再叠加“课堂总结”等重复说明，降级路径不向用户暴露 LLM 等内部术语 |
 | `WaveformPlayer.tsx` | 638 | 波形音频播放器 |

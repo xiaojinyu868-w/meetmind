@@ -38,7 +38,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 | `DemoLessonLoader.ts` | ~50 | 试听课 loader：把 demo segments / anchors / timeline / audioUrl 写入课堂现场 |
 | `demo-classroom-flow.ts` | ~105 | 试听课课堂脉络：按真实音频秒数推进“正在讲 / 刚才经过 / 留到课后”，与实时转录同步生长 |
 | `guest-demo-entry.ts` | ~110 | 访客试听入口模型：显式 `entry=demo`、默认闪卡产物、静态首屏 flashcards result + 稳定识别器 |
-| `lessonAdapter.ts` | ~200 | `AudioSession + extras → Lesson` 纯函数适配器；课堂标题遵循“用户命名 → 重点 → 总结 → 转录 → 来源类型”的证据优先级，拒绝 URL / 时间 / 日期冒充标题 |
+| `lessonAdapter.ts` | ~200 | `AudioSession + extras → Lesson` 纯函数适配器；课堂标题遵循“用户命名 → 重点 → 总结 → 转录 → 来源类型”的证据优先级，拒绝 URL / 时间 / 日期冒充标题；`transcriptionStatus=pending` 时忽略 realtime 草稿证据并保持 processing |
 | `composeFirstHello.ts` | ~130 | 同桌第一句话的动态生成（6 个情境分支，纯函数可测） |
 | `index.ts` | — | Barrel export |
 
@@ -86,6 +86,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 - 录课中关键概念用客户端启发式（2-6 字中文词 + 停用词过滤），不调用后端，追求"感知在场"而非语义精准
 - 移动端（<lg）右侧同桌面板只在录课 / 示例课听课态提供底部"问同学"按钮触发全屏 sheet；空课堂不展示该入口
 - 课中目标是"跟上老师正在讲什么"；中间主画布是模型自主理解的课堂脉络，不是思维导图。思维导图 / 闪卡 / 测验 / 主动回忆训练放在课后复习与应用矩阵，不抢课堂主叙事
+- 真实课堂脉络按“未消费的新转录 → delta upsert/remove → 服务端合并”增长；成功后才推进 segment 游标，禁止每 30 秒重喂近 180 段并整体改写既有纪要
 - 课中请求固定 `returnTimestamps: false`，不得重新接入 citation chip 或跳转 handler；时间引用与原声回跳只在课后复习态成立
 - Demo 不能伪装成“完整课已经听完”的课中现场；如果进入 recording 视图，必须由真实 `/demo-audio.mp3` 播放驱动转录渐进露出，自动播放被浏览器拦截时必须提供“播放声音”按钮；用户主动点击“结束这节课”时，无论试听音频是否自然播完，都进入同一套课后复习页 / 应用矩阵，不能把课堂上下文丢回首页
 - 英文试听课默认开启 EN→中翻译，但这是会话默认，不应强行覆盖用户手动切换后的选择

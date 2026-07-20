@@ -285,6 +285,9 @@ export function useRecordingLifecycle(
 
     const hasLiveData = liveSegmentsRef.current.length > 0;
     const finalSegments = hasLiveData ? currentSegments : [];
+    // realtime 只服务课中反馈。完整原声定稿尚未回来时，不把草稿发布为
+    // 课后证据、课程标题或应用输入，避免用户先看到低质结果再被覆盖。
+    const publishableSegments = meta?.finalPassPending ? [] : finalSegments;
 
     editorAct.setSegments(currentSegments);
     sessionAct.setDataSource(blob || hasLiveData ? 'live' : 'demo');
@@ -353,10 +356,15 @@ export function useRecordingLifecycle(
         duration,
         sourceType: 'recording',
         mediaUrl: liveMediaUrl,
+        transcriptionStatus: meta?.finalPassPending
+          ? 'pending'
+          : publishableSegments.length > 0
+            ? 'completed'
+            : undefined,
       }).catch(err => console.error('Failed to save audio session to history:', err));
 
-      if (finalSegments.length > 0) {
-        addTranscripts(effectiveSessionId, currentUserId, finalSegments.map((seg) => ({
+      if (publishableSegments.length > 0) {
+        addTranscripts(effectiveSessionId, currentUserId, publishableSegments.map((seg) => ({
           text: seg.text,
           startMs: seg.startMs,
           endMs: seg.endMs,
@@ -379,28 +387,28 @@ export function useRecordingLifecycle(
           type: 'audio' as const,
           role: 'primary' as const,
           title: recordingTitle,
-          preview: buildSourcePreviewText(finalSegments, 180),
+          preview: buildSourcePreviewText(publishableSegments, 180),
           mediaUrl: liveMediaUrl,
-          segmentCount: finalSegments.length,
+          segmentCount: publishableSegments.length,
           addedAt: new Date().toISOString(),
           origin: 'user' as const,
-          status: (finalSegments.length > 0 ? 'ready' : 'transcribing') as SourceIngestItem['status'],
-          statusText: finalSegments.length > 0 ? '' : '转写稍后回来',
+          status: (publishableSegments.length > 0 ? 'ready' : 'transcribing') as SourceIngestItem['status'],
+          statusText: publishableSegments.length > 0 ? '' : '转写稍后回来',
           sessionId: effectiveSessionId,
           durationMs: duration,
-          reviewable: finalSegments.length > 0,
+          reviewable: publishableSegments.length > 0,
         },
       ]);
-      if (finalSegments.length > 0) {
+      if (publishableSegments.length > 0) {
         void persistCaptureToWorkspace({
           sourceType: 'live-audio',
           sourceKey: `live:${audioCaptureId}`,
           role: 'primary',
           contentType: 'audio',
           title: recordingTitle,
-          previewText: buildSourcePreviewText(finalSegments, 180),
-          normalizedText: buildSupportReferenceSnippet(finalSegments, 2800),
-          tutorContext: buildSupportReferenceSnippet(finalSegments, 2800),
+          previewText: buildSourcePreviewText(publishableSegments, 180),
+          normalizedText: buildSupportReferenceSnippet(publishableSegments, 2800),
+          tutorContext: buildSupportReferenceSnippet(publishableSegments, 2800),
           mediaUrl: liveMediaUrl,
           occurredAt: new Date().toISOString(),
           metadata: {
@@ -408,12 +416,12 @@ export function useRecordingLifecycle(
             sessionId: effectiveSessionId,
             duration,
             durationSec: Math.round(duration / 1000),
-            segmentCount: finalSegments.length,
+            segmentCount: publishableSegments.length,
             // 档位1（跨设备带走数据）：把完整转录段同步到服务端 capture metadata。
             // 之前只存 segmentCount，换设备登录拿不到转录文字——课堂 tab 看到卡片却点不出内容。
             // 现在塞 transcriptSegments（与视频导入/pending-audio 路径一致），登录回填即可重建。
             // 上限 800 段：新版按句切分后单段更大（一句一段），800 段 ≈ 2-3 小时课，足够覆盖。
-            transcriptSegments: finalSegments.slice(0, 800).map((s) => ({
+            transcriptSegments: publishableSegments.slice(0, 800).map((s) => ({
               id: s.id,
               text: s.text,
               startMs: s.startMs,
@@ -477,7 +485,7 @@ export function useRecordingLifecycle(
         ).catch(() => undefined);
       }
 
-      if (finalSegments.length === 0 || meta?.finalPassPending) {
+      if (publishableSegments.length === 0 || meta?.finalPassPending) {
         pendingRecordedAudiosRef.current.set(recordingId, {
           recordingId,
           itemId: audioCaptureId,
@@ -517,7 +525,7 @@ export function useRecordingLifecycle(
         transcriptionStatus: finalSegments.length > 0 ? 'completed' : 'failed',
         transcriptionError: finalSegments.length > 0 ? undefined : '录音结束时没有拿到可转写音频',
       }).catch((err) => console.error('[classroom-stop] fallback saveAudioSession failed:', err));
-      if (finalSegments.length > 0) {
+      if (publishableSegments.length > 0) {
         addTranscripts(effectiveSessionId, currentUserId, finalSegments.map((seg) => ({
           text: seg.text,
           startMs: seg.startMs,
@@ -545,7 +553,7 @@ export function useRecordingLifecycle(
     const uiState = useUIStore.getState();
     const currentViewMode = uiState.viewMode;
     if (currentViewMode === 'classroom') {
-      if (finalSegments.length > 0) {
+      if (publishableSegments.length > 0) {
         uiAct.setViewMode('review');
         uiAct.setReviewTab('apps');
         toast.success(COPY.recording.finished);

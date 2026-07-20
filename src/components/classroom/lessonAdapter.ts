@@ -146,6 +146,9 @@ function deriveStatus(
   session: AudioSession,
   hasTranscript: boolean,
 ): LessonStatus {
+  // realtime 草稿可能仍在内存或旧数据里，但 pending 明确表示完整原声
+  // 尚未定稿；此时不能提前开放复习和基于草稿生成标题。
+  if (session.transcriptionStatus === 'pending') return 'processing';
   if (hasTranscript || session.transcriptionStatus === 'completed') return 'ready';
   if (session.transcriptionStatus === 'failed') return 'failed';
   if (isStaleTranscription(session)) return 'failed';
@@ -196,7 +199,10 @@ export function audioSessionToLesson(
 
   return {
     id: session.sessionId,
-    title: deriveTitle(session, extras.titleEvidence),
+    title: deriveTitle(
+      session,
+      session.transcriptionStatus === 'pending' ? undefined : extras.titleEvidence,
+    ),
     date: formatDate(created),
     time: formatTime(created),
     durationMin: status === 'recording' ? undefined : durationMin,

@@ -577,7 +577,10 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         setElapsedMs(Date.now() - startTimeRef.current);
       }, 100);
 
-      if (effectiveTranscribeMode === 'streaming' && streamingAvailable && apiKey && audioContext && source) {
+      // 冷启动不能依赖 /api/asr-config 先返回。浏览器实际只连接自有 proxy，
+      // apiKey 状态只是可用性探测结果；若首点录音早于该请求完成，旧逻辑会让
+      // 整节录音永远不创建实时 ASR client，只能等停录后的 batch 定稿。
+      if (effectiveTranscribeMode === 'streaming' && streamingAvailable && audioContext && source) {
         const asrClient = new DashScopeASRClient(apiKey, createAsrCallbacks(), buildAsrOptions(speakerDiarization));
         asrClientRef.current = asrClient;
 
@@ -988,7 +991,10 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
           setTranscript(segments);
           transcriptRef.current = segments;
         }
-        onTranscriptUpdate?.(segments, callbackMeta);
+        onTranscriptUpdate?.(segments, {
+          ...callbackMeta,
+          finalPassOnly,
+        });
         
         if (segments.length > 0 && !skipEnhancement) {
           updateProgress('转录完成，正在优化文本...');
@@ -1238,7 +1244,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         detached: true,
         callbackMeta: recordingMeta,
       }).catch((err) => {
-        // realtime 结果和原声已保存，定稿失败不能破坏已交付的课堂。
+        // 原声已保存；外层会把定稿失败标为可重试失败，不发布 realtime 草稿。
         console.error('[Recorder] detached streaming final-pass error:', err);
       });
     } else {

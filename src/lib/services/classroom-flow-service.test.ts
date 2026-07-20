@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createEmptyClassroomFlow,
+  mergeClassroomFlowDelta,
   sanitizeClassroomFlow,
 } from './classroom-flow-service';
 
@@ -75,5 +76,42 @@ describe('classroom-flow-service', () => {
 
     expect(flow.now?.teachingMove).toBeUndefined();
     expect(flow.recent[0]?.teachingMove).toBe('结合语境解释表达');
+  });
+
+  it('applies only incremental upserts and preserves untouched classroom memory', () => {
+    const prior = sanitizeClassroomFlow({
+      title: '机会成本',
+      now: { id: 'definition', title: '定义机会成本', anchorMs: 5_000 },
+      recent: [{ id: 'opening', title: '提出选择问题', anchorMs: 1_000 }],
+      keep: [{ id: 'formula', kind: 'formula', text: '净收益计算式', anchorMs: 4_000 }],
+    }, 10_000);
+
+    const next = mergeClassroomFlowDelta(prior, {
+      now: { id: 'example', title: '用旅行选择举例', anchorMs: 15_000 },
+      recentUpserts: [{ id: 'definition', title: '完成机会成本定义', anchorMs: 5_000 }],
+      keepUpserts: [{ id: 'contrast', kind: 'contrast', text: '区分机会成本和沉没成本', anchorMs: 16_000 }],
+      updatedAtMs: 20_000,
+    }, 20_000);
+
+    expect(next.title).toBe('机会成本');
+    expect(next.now?.id).toBe('example');
+    expect(next.recent.map((item) => item.id)).toEqual(['opening', 'definition']);
+    expect(next.keep.map((item) => item.id)).toEqual(['formula', 'contrast']);
+  });
+
+  it('removes prior items only through explicit delta remove ids', () => {
+    const prior = sanitizeClassroomFlow({
+      keep: [
+        { id: 'open-question', kind: 'question', text: '这个结论何时不成立', anchorMs: 3_000 },
+        { id: 'definition', kind: 'definition', text: '核心定义', anchorMs: 4_000 },
+      ],
+    }, 5_000);
+
+    const next = mergeClassroomFlowDelta(prior, {
+      keepRemoveIds: ['open-question'],
+      updatedAtMs: 12_000,
+    }, 12_000);
+
+    expect(next.keep.map((item) => item.id)).toEqual(['definition']);
   });
 });

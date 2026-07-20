@@ -664,10 +664,10 @@ app.prepare().then(() => {
       1000
     );
     const turnVadThreshold = clampNumber(
-      parseFloat(process.env.DASHSCOPE_ASR_WS_VAD_THRESHOLD || '0.30'),
+      parseFloat(process.env.DASHSCOPE_ASR_WS_VAD_THRESHOLD || '0.20'),
       0.05,
       0.95,
-      0.30
+      0.20
     );
     const draftFlushMs = clampNumber(
       parseInt(process.env.ASR_DRAFT_FLUSH_MS || '800', 10),

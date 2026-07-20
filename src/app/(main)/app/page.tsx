@@ -80,12 +80,11 @@ import { useTopics, useSummary } from '@/hooks/data';
 import { useLessonDigest } from '@/hooks/useLessonDigest';
 
 import type { WaveformPlayerRef, WaveformAnchor } from '@/components/WaveformPlayer';
-import type { RecorderHandle } from '@/components/Recorder';
+import { Recorder, type RecorderHandle } from '@/components/Recorder';
 import { useClassCheck } from '@/hooks/useClassCheck';
 import type { ClassCheckHighlight } from '@/app/api/class-check/plan/route';
 import type { VideoInsightItem } from '@/components/VideoInsightTimeline';
 const WaveformPlayer = dynamic(() => import('@/components/WaveformPlayer').then(m => ({ default: m.WaveformPlayer })), { ssr: false });
-const Recorder = dynamic(() => import('@/components/Recorder').then(m => ({ default: m.Recorder })), { ssr: false });
 const EchoShareCard = dynamic(() => import('@/components/EchoShareCard').then(m => ({ default: m.EchoShareCard })), { ssr: false });
 const WorkspaceCaptureEditorModal = dynamic(() => import('@/components/WorkspaceCaptureEditorModal').then(m => ({ default: m.WorkspaceCaptureEditorModal })), { ssr: false });
 const CollectionMessageActionSheet = dynamic(() => import('@/components/CollectionMessageActionSheet').then(m => ({ default: m.CollectionMessageActionSheet })), { ssr: false });
