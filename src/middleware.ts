@@ -40,6 +40,15 @@ function verifyToken(token: string): { valid: boolean; payload?: TokenPayload } 
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const hostname = request.headers.get('host')?.split(':')[0].toLowerCase() ?? '';
+
+  // 技术站与产品站共享一套部署。DNS 指向同一服务后，tech.* / technology.*
+  // 会把根路径映射到专业技术介绍；产品主域和 landing.* 继续展示消费级首页。
+  if (pathname === '/' && /^(tech|technology)\./.test(hostname)) {
+    const technologyUrl = request.nextUrl.clone();
+    technologyUrl.pathname = '/technology';
+    return NextResponse.rewrite(technologyUrl);
+  }
 
   if (matchPath(pathname, STATIC_PATHS)) {
     return NextResponse.next();

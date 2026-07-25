@@ -36,6 +36,7 @@ public/temp-audio/
 *.tmp
 *.temp
 *.tsbuildinfo
+/tmp/
 
 # 测试和调试文件
 test_*.py

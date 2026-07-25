@@ -1,0 +1,1120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MeetMind Landing Concept V2 · No UI Screenshots</title>
+  <style>
+    :root {
+      --paper: #f4f1e9;
+      --paper-strong: #ebe5d9;
+      --ink: #1f2823;
+      --muted: #686e69;
+      --pine: #244c3d;
+      --pine-deep: #173329;
+      --verm: #c5624f;
+      --line: rgba(31, 40, 35, .16);
+      --radius: 28px;
+      --shadow: 0 24px 70px rgba(30, 39, 33, .12);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 88% 9%, rgba(255,255,255,.92), transparent 28%),
+        linear-gradient(120deg, rgba(255,255,255,.44), transparent 34%),
+        var(--paper);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      text-rendering: optimizeLegibility;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .25;
+      z-index: 20;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.08'/%3E%3C/svg%3E");
+      mix-blend-mode: multiply;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; }
+    img, video { display: block; width: 100%; }
+
+    .nav {
+      position: fixed;
+      z-index: 30;
+      top: 22px;
+      left: 28px;
+      right: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: none;
+    }
+
+    .brand,
+    .nav-links {
+      pointer-events: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 54px;
+      border: 1px solid rgba(31,40,35,.12);
+      background: rgba(248,246,240,.82);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 10px 35px rgba(31,40,35,.08);
+    }
+
+    .brand {
+      padding: 8px 18px 8px 9px;
+      border-radius: 18px;
+      font-weight: 700;
+      letter-spacing: -.03em;
+    }
+
+    .brand img {
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      object-fit: cover;
+    }
+
+    .nav-links {
+      border-radius: 17px;
+      padding: 6px;
+      gap: 2px;
+    }
+
+    .nav-links a {
+      padding: 12px 17px;
+      border-radius: 12px;
+      font-size: 14px;
+    }
+
+    .nav-links .nav-cta {
+      color: #fff;
+      background: var(--pine);
+    }
+
+    .hero {
+      min-height: 100svh;
+      padding: 118px 28px 28px;
+    }
+
+    .hero-stage {
+      position: relative;
+      min-height: calc(100svh - 146px);
+      overflow: hidden;
+      border-radius: 34px;
+      background: #18261f;
+      color: #fff;
+      box-shadow: var(--shadow);
+    }
+
+    .hero-media {
+      position: absolute;
+      inset: 0;
+      background: #1a241f;
+    }
+
+    .hero-media figure {
+      position: relative;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    .hero-media img {
+      height: 100%;
+      object-fit: cover;
+      filter: saturate(.76) contrast(.92) brightness(.66);
+      transform: scale(1.02);
+    }
+
+    .hero-media img { object-position: center 44%; }
+    .hero-stage::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(13,24,18,.78) 0%, rgba(13,24,18,.37) 47%, rgba(13,24,18,.2) 100%),
+        linear-gradient(0deg, rgba(13,24,18,.48), transparent 48%);
+    }
+
+    .hero-copy {
+      position: relative;
+      z-index: 2;
+      width: min(760px, 70%);
+      padding: clamp(44px, 6vw, 86px);
+      display: flex;
+      min-height: calc(100svh - 146px);
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .hero-trace {
+      position: absolute;
+      z-index: 3;
+      right: clamp(34px, 5vw, 78px);
+      top: 47%;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      color: rgba(255,255,255,.78);
+      transform: rotate(90deg) translateX(50%);
+      transform-origin: right center;
+    }
+
+    .hero-trace span {
+      display: grid;
+      place-items: center;
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.28);
+      background: rgba(247,244,236,.08);
+      backdrop-filter: blur(12px);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      transform: rotate(-90deg);
+    }
+
+    .hero-trace i {
+      width: 45px;
+      height: 1px;
+      background: linear-gradient(90deg, rgba(255,255,255,.1), rgba(255,255,255,.72), rgba(255,255,255,.1));
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-trace i::after {
+      content: "";
+      position: absolute;
+      top: -2px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #f0cfc2;
+      box-shadow: 0 0 15px rgba(255,255,255,.7);
+      animation: traceTravel 2.8s ease-in-out infinite;
+    }
+
+    .hero-trace i:nth-of-type(2)::after { animation-delay: 1.1s; }
+    @keyframes traceTravel { from { left: -5px; } to { left: 100%; } }
+
+    .hero-context-object {
+      position: absolute;
+      z-index: 2;
+      right: clamp(84px, 9vw, 150px);
+      top: 20%;
+      width: clamp(240px, 25vw, 390px);
+      aspect-ratio: 1;
+      perspective: 1000px;
+      filter: drop-shadow(0 32px 55px rgba(7,17,12,.28));
+    }
+
+    .context-disc,
+    .context-sheet,
+    .context-core {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform-style: preserve-3d;
+    }
+
+    .context-disc {
+      width: 88%;
+      aspect-ratio: 1;
+      translate: -50% -50%;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.28);
+      box-shadow: 0 0 0 34px rgba(255,255,255,.025), 0 0 0 72px rgba(255,255,255,.018);
+      rotate: x 68deg;
+      animation: objectOrbit 16s linear infinite;
+    }
+
+    .context-disc::after {
+      content: "";
+      position: absolute;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      top: 16%;
+      left: 17%;
+      background: #efc7b8;
+      box-shadow: 0 0 0 10px rgba(239,199,184,.1), 0 0 30px rgba(255,255,255,.6);
+    }
+
+    .context-sheet {
+      width: 42%;
+      height: 58%;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,.3);
+      background: linear-gradient(145deg, rgba(247,244,236,.25), rgba(247,244,236,.07));
+      backdrop-filter: blur(14px);
+      box-shadow: inset 0 1px rgba(255,255,255,.25);
+    }
+
+    .context-sheet::before {
+      content: attr(data-label);
+      position: absolute;
+      left: 15px;
+      bottom: 15px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      color: rgba(255,255,255,.72);
+    }
+
+    .sheet-a { translate: -91% -54%; transform: rotate(-12deg) translateZ(12px); }
+    .sheet-b { translate: -18% -62%; transform: rotate(11deg) translateZ(42px); }
+    .sheet-c { translate: -51% -35%; transform: rotate(1deg) translateZ(75px); background: rgba(35,74,59,.44); }
+
+    .context-core {
+      translate: -50% -50%;
+      width: 72px;
+      height: 72px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      color: var(--pine-deep);
+      background: rgba(247,244,236,.9);
+      font-family: Georgia, serif;
+      font-size: 23px;
+      letter-spacing: -.06em;
+      box-shadow: 0 0 0 12px rgba(255,255,255,.08), 0 18px 45px rgba(5,17,11,.25);
+      animation: breathe 3.4s ease-in-out infinite;
+    }
+
+    @keyframes objectOrbit { to { transform: rotateZ(360deg); } }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--verm);
+    }
+
+    .hero h1 {
+      max-width: 830px;
+      margin: 22px 0 0;
+      font-family: Georgia, "Songti SC", serif;
+      font-size: clamp(54px, 7vw, 108px);
+      line-height: .98;
+      letter-spacing: -.065em;
+      font-weight: 500;
+    }
+
+    .hero-bottom {
+      display: grid;
+      grid-template-columns: minmax(0, 520px) auto;
+      align-items: end;
+      gap: 40px;
+    }
+
+    .hero-bottom p {
+      margin: 0;
+      font-size: clamp(17px, 1.55vw, 23px);
+      line-height: 1.55;
+      color: rgba(255,255,255,.84);
+    }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 25px; }
+    .action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 52px;
+      padding: 0 22px;
+      border-radius: 15px;
+      border: 1px solid rgba(255,255,255,.28);
+      background: rgba(255,255,255,.1);
+      backdrop-filter: blur(10px);
+      font-weight: 650;
+      font-size: 14px;
+    }
+
+    .action.primary { background: #f7f4ec; color: var(--ink); border-color: #f7f4ec; }
+
+    .hero-proof {
+      width: 202px;
+      border: 1px solid rgba(255,255,255,.24);
+      border-radius: 22px;
+      padding: 14px;
+      background: rgba(247,244,236,.12);
+      backdrop-filter: blur(14px);
+    }
+
+    .hero-proof strong {
+      display: block;
+      font-family: Georgia, serif;
+      font-size: 62px;
+      line-height: 1;
+      font-weight: 500;
+      letter-spacing: -.06em;
+    }
+
+    .hero-proof span { display: block; margin-top: 13px; font-size: 12px; line-height: 1.5; color: rgba(255,255,255,.7); }
+
+    .manifesto {
+      min-height: 90svh;
+      padding: 15vh 8vw;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .manifesto p {
+      max-width: 1150px;
+      margin: 0;
+      font-family: Georgia, "Songti SC", serif;
+      font-size: clamp(42px, 6.4vw, 96px);
+      line-height: 1.09;
+      letter-spacing: -.055em;
+    }
+
+    .manifesto em { color: var(--pine); font-weight: 400; }
+
+    .section {
+      padding: 72px 28px 110px;
+    }
+
+    .section-heading {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8vw;
+      align-items: end;
+      margin: 0 auto 42px;
+      max-width: 1500px;
+    }
+
+    .section-heading h2 {
+      margin: 15px 0 0;
+      max-width: 870px;
+      font-family: Georgia, "Songti SC", serif;
+      font-size: clamp(48px, 6vw, 90px);
+      line-height: 1.02;
+      letter-spacing: -.055em;
+      font-weight: 500;
+    }
+
+    .section-heading .intro {
+      max-width: 540px;
+      justify-self: end;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.65;
+    }
+
+    .rail-wrap { position: relative; }
+
+    .rail-index {
+      max-width: 1500px;
+      margin: 0 auto 22px;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      border-top: 1px solid var(--line);
+    }
+
+    .rail-index button {
+      position: relative;
+      border: 0;
+      border-right: 1px solid var(--line);
+      padding: 16px 12px 13px 0;
+      background: transparent;
+      color: var(--muted);
+      text-align: left;
+      cursor: pointer;
+      transition: color .25s ease;
+    }
+
+    .rail-index button:last-child { border-right: 0; }
+    .rail-index button::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: -1px;
+      width: 0;
+      height: 2px;
+      background: var(--pine);
+      transition: width .35s ease;
+    }
+    .rail-index button[data-active="true"] { color: var(--ink); }
+    .rail-index button[data-active="true"]::before { width: calc(100% - 12px); }
+    .rail-index small { display: block; margin-bottom: 8px; font-size: 10px; letter-spacing: .13em; }
+    .rail-index strong { font-size: 14px; font-weight: 650; }
+    .rail {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(500px, 63vw);
+      gap: 16px;
+      overflow-x: auto;
+      padding: 0 max(28px, calc((100vw - 1500px)/2)) 24px;
+      scroll-snap-type: x mandatory;
+      scrollbar-width: none;
+    }
+    .rail::-webkit-scrollbar { display: none; }
+
+    .rail-card {
+      scroll-snap-align: center;
+      border-radius: var(--radius);
+      overflow: hidden;
+      min-height: 690px;
+      background: #d9d4c8;
+      position: relative;
+      box-shadow: 0 1px 0 rgba(255,255,255,.8) inset;
+    }
+
+    .rail-card img,
+    .rail-card video {
+      position: absolute;
+      inset: 0;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .rail-card video { background: #e7e4dc; }
+    .rail-card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(0deg, rgba(17,28,22,.82), transparent 58%);
+    }
+
+    .rail-copy {
+      position: absolute;
+      z-index: 2;
+      left: 30px;
+      right: 30px;
+      bottom: 28px;
+      color: #fff;
+      display: grid;
+      grid-template-columns: 70px 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .rail-copy .number { font-size: 13px; letter-spacing: .13em; padding-top: 7px; }
+    .rail-copy h3 { margin: 0; font-family: Georgia, "Songti SC", serif; font-size: clamp(31px, 3.4vw, 54px); font-weight: 500; letter-spacing: -.04em; }
+    .rail-copy p { max-width: 680px; margin: 9px 0 0; color: rgba(255,255,255,.8); font-size: 16px; line-height: 1.55; }
+
+    .tone-pine { background: #446858; }
+    .tone-sand { background: #b9a77d; }
+    .tone-rose { background: #a86b61; }
+    .tone-sky { background: #728a91; }
+    .tone-ink { background: #28342e; }
+
+    .concept-visual {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+    }
+
+    .motion-word {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      translate: -50% -58%;
+      color: rgba(255,255,255,.92);
+      font-family: Georgia, "Songti SC", serif;
+      font-size: clamp(210px, 32vw, 520px);
+      line-height: .8;
+      letter-spacing: -.12em;
+      font-weight: 500;
+    }
+
+    .thread {
+      position: absolute;
+      inset: 12% -7%;
+      border: 1px solid rgba(255,255,255,.38);
+      border-radius: 50%;
+      transform: rotate(-8deg);
+      box-shadow: 0 0 0 50px rgba(255,255,255,.025), 0 0 0 110px rgba(255,255,255,.018);
+      animation: pathOrbit 22s linear infinite;
+    }
+    .thread-b { transform: rotate(14deg) scale(.76); }
+    .thread-c { transform: rotate(-21deg) scale(.9); }
+    .thread-d { transform: rotate(31deg) scale(.68); }
+    .thread-e { transform: rotate(-4deg) scale(1.18); }
+
+    .pulse {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-radius: 999px;
+      top: 25%;
+      right: 18%;
+      background: #f3d8c1;
+      box-shadow: 0 0 0 12px rgba(255,255,255,.1), 0 0 55px rgba(255,255,255,.35);
+      animation: breathe 3.4s ease-in-out infinite;
+    }
+
+    @keyframes breathe { 50% { transform: scale(1.18); opacity: .65; } }
+    @keyframes pathOrbit { to { rotate: 1turn; } }
+
+    .rail-controls {
+      max-width: 1500px;
+      margin: 6px auto 0;
+      display: flex;
+      justify-content: flex-end;
+      gap: 9px;
+      padding: 0 4px;
+    }
+
+    .rail-controls button {
+      width: 48px;
+      height: 48px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.45);
+      cursor: pointer;
+    }
+
+    .collect-stage {
+      max-width: 1500px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      min-height: 760px;
+      border-radius: 32px;
+      overflow: hidden;
+      background: var(--pine-deep);
+      color: #fff;
+    }
+
+    .collect-media { position: relative; min-height: 600px; overflow: hidden; }
+
+    .collector {
+      background:
+        radial-gradient(circle at 50% 50%, rgba(255,255,255,.12), transparent 24%),
+        linear-gradient(145deg, #d7cba8 0%, #9ba98f 48%, #29483b 100%);
+    }
+
+    .collector::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 64%, var(--pine-deep)); }
+    .collector strong {
+      position: absolute;
+      z-index: 2;
+      left: 50%;
+      top: 50%;
+      translate: -50% -50%;
+      width: 230px;
+      height: 230px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: var(--pine-deep);
+      background: rgba(247,244,236,.85);
+      backdrop-filter: blur(16px);
+      font-family: Georgia, "Songti SC", serif;
+      font-size: 47px;
+      font-weight: 500;
+      box-shadow: 0 25px 70px rgba(23,51,41,.2);
+    }
+    .collector i { position: absolute; inset: 15%; border: 1px solid rgba(255,255,255,.55); border-radius: 50%; }
+    .collector i { animation: pathOrbit 24s linear infinite; }
+    .collect-orbit {
+      position: absolute;
+      z-index: 3;
+      padding: 11px 16px;
+      border-radius: 999px;
+      color: var(--pine-deep);
+      background: rgba(247,244,236,.88);
+      border: 1px solid rgba(255,255,255,.65);
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 12px 30px rgba(23,51,41,.14);
+    }
+    .orbit-one { top: 17%; left: 18%; }
+    .orbit-two { top: 25%; right: 13%; }
+    .orbit-three { bottom: 18%; left: 13%; }
+    .orbit-four { bottom: 21%; right: 18%; }
+
+    .collect-copy {
+      padding: clamp(44px, 6vw, 88px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .collect-copy h2 {
+      margin: 20px 0 18px;
+      font-family: Georgia, "Songti SC", serif;
+      font-size: clamp(48px, 5.7vw, 82px);
+      line-height: 1.03;
+      letter-spacing: -.055em;
+      font-weight: 500;
+    }
+
+    .collect-copy > p { margin: 0; color: rgba(255,255,255,.72); font-size: 18px; line-height: 1.7; }
+    .capture-types { display: grid; grid-template-columns: 1fr 1fr; margin-top: 40px; border-top: 1px solid rgba(255,255,255,.18); }
+    .capture-types span { padding: 18px 4px; border-bottom: 1px solid rgba(255,255,255,.18); font-size: 15px; }
+    .capture-types span:nth-child(odd) { border-right: 1px solid rgba(255,255,255,.18); }
+
+    .bridge {
+      padding: 18vh 8vw;
+      text-align: center;
+    }
+
+    .bridge .formula {
+      margin: 0 auto;
+      max-width: 1320px;
+      font-family: Georgia, "Songti SC", serif;
+      font-size: clamp(48px, 7.5vw, 112px);
+      line-height: 1.03;
+      letter-spacing: -.06em;
+    }
+
+    .bridge .formula span { display: inline-block; }
+    .bridge .plus { color: var(--verm); padding: 0 .08em; }
+    .bridge p { max-width: 700px; margin: 36px auto 0; color: var(--muted); font-size: 18px; line-height: 1.7; }
+
+    .outcomes {
+      max-width: 1500px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    .outcome {
+      min-height: 600px;
+      border-radius: 26px;
+      overflow: hidden;
+      position: relative;
+      background: #dad5c9;
+    }
+
+    .outcome-a { background: #6d8a7c; }
+    .outcome-b { background: #a57b67; }
+    .outcome-c { background: #3f5a4e; }
+
+    .outcome-visual {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+    .outcome-visual span {
+      position: relative;
+      z-index: 2;
+      color: rgba(255,255,255,.9);
+      font-family: Georgia, "Songti SC", serif;
+      font-size: clamp(52px, 5vw, 82px);
+      line-height: 1;
+      writing-mode: vertical-rl;
+      letter-spacing: .04em;
+    }
+    .outcome-visual i {
+      position: absolute;
+      width: 78%;
+      aspect-ratio: 1;
+      border: 1px solid rgba(255,255,255,.27);
+      border-radius: 50%;
+      box-shadow: 0 0 0 42px rgba(255,255,255,.035), 0 0 0 92px rgba(255,255,255,.025);
+      animation: pathOrbit 26s linear infinite;
+    }
+    .outcome::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(14,24,18,.86), transparent 60%); }
+    .outcome-copy { position: absolute; z-index: 2; left: 25px; right: 25px; bottom: 25px; color: #fff; }
+    .outcome-copy small { opacity: .72; letter-spacing: .12em; }
+    .outcome-copy h3 { margin: 10px 0 7px; font-family: Georgia, "Songti SC", serif; font-weight: 500; font-size: 34px; letter-spacing: -.035em; }
+    .outcome-copy p { margin: 0; color: rgba(255,255,255,.72); line-height: 1.55; }
+
+    .control-section {
+      max-width: 1500px;
+      margin: 110px auto 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      background: #fffdf8;
+      border-radius: 32px;
+      overflow: hidden;
+      border: 1px solid rgba(31,40,35,.08);
+    }
+
+    .context-visual {
+      position: relative;
+      min-height: 620px;
+      padding: clamp(38px, 5vw, 76px);
+      color: #fff;
+      background:
+        radial-gradient(circle at 22% 76%, rgba(197,98,79,.7), transparent 4%),
+        radial-gradient(circle at 66% 35%, rgba(255,255,255,.24), transparent 2%),
+        linear-gradient(145deg, #263f34, #5a7769);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+    }
+    .context-visual::after {
+      content: "";
+      position: absolute;
+      width: 560px;
+      height: 560px;
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 50%;
+      right: -190px;
+      top: -80px;
+      box-shadow: 0 0 0 65px rgba(255,255,255,.035), 0 0 0 140px rgba(255,255,255,.02);
+    }
+    .context-kicker { font-size: 11px; letter-spacing: .18em; }
+    .context-visual strong { position: relative; z-index: 2; font-family: Georgia, "Songti SC", serif; font-size: clamp(50px, 6vw, 88px); line-height: 1.04; letter-spacing: -.055em; font-weight: 500; }
+    .context-visual small { position: relative; z-index: 2; font-size: 13px; letter-spacing: .12em; color: rgba(255,255,255,.7); }
+    .context-line { position: absolute; left: 11%; right: 10%; top: 52%; height: 1px; background: rgba(255,255,255,.28); transform: rotate(-12deg); }
+    .control-copy { padding: clamp(44px, 6vw, 86px); display: flex; flex-direction: column; justify-content: center; }
+    .control-copy h2 { margin: 19px 0; font-family: Georgia, "Songti SC", serif; font-size: clamp(45px, 5vw, 76px); font-weight: 500; line-height: 1.03; letter-spacing: -.055em; }
+    .control-copy p { color: var(--muted); font-size: 17px; line-height: 1.7; }
+    .control-list { margin-top: 27px; border-top: 1px solid var(--line); }
+    .control-list span { display: flex; justify-content: space-between; padding: 17px 0; border-bottom: 1px solid var(--line); font-weight: 650; }
+    .control-list small { color: var(--muted); font-weight: 500; }
+
+    .final {
+      margin: 28px;
+      min-height: 82svh;
+      border-radius: 34px;
+      background: var(--pine-deep);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 60px 28px;
+    }
+
+    .final img { width: 82px; height: 72px; object-fit: cover; border-radius: 24px; margin-bottom: 24px; }
+    .final h2 { max-width: 1100px; margin: 20px 0; font-family: Georgia, "Songti SC", serif; font-size: clamp(56px, 7vw, 105px); line-height: 1; font-weight: 500; letter-spacing: -.06em; }
+    .final p { margin: 0; color: rgba(255,255,255,.7); font-size: 18px; }
+
+    .demo-note {
+      position: fixed;
+      z-index: 40;
+      right: 18px;
+      bottom: 18px;
+      padding: 11px 14px;
+      border-radius: 13px;
+      background: rgba(247,244,236,.9);
+      border: 1px solid rgba(31,40,35,.14);
+      color: var(--muted);
+      backdrop-filter: blur(14px);
+      font-size: 11px;
+      letter-spacing: .05em;
+    }
+
+    @media (max-width: 900px) {
+      .nav { left: 14px; right: 14px; top: 14px; }
+      .nav-links a:not(.nav-cta) { display: none; }
+      .hero { padding: 90px 12px 12px; }
+      .hero-stage, .final { border-radius: 24px; }
+      .hero-copy { width: 100%; padding: 31px 24px; }
+      .hero h1 { font-size: clamp(48px, 14vw, 72px); }
+      .hero-bottom { grid-template-columns: 1fr; }
+      .hero-proof { display: none; }
+      .hero-context-object { display: none; }
+      .hero-trace {
+        display: flex;
+        left: 25px;
+        right: 25px;
+        top: 48%;
+        width: auto;
+        justify-content: center;
+        transform: none;
+      }
+      .hero-trace span { width: 48px; height: 48px; transform: none; }
+      .hero-trace i { width: min(12vw, 55px); }
+      .manifesto { min-height: 80svh; padding: 12vh 24px; }
+      .section { padding: 60px 14px 88px; }
+      .section-heading { grid-template-columns: 1fr; gap: 23px; }
+      .section-heading .intro { justify-self: start; }
+      .rail-index {
+        display: flex;
+        overflow-x: auto;
+        margin-left: 0;
+        margin-right: 0;
+        scrollbar-width: none;
+      }
+      .rail-index::-webkit-scrollbar { display: none; }
+      .rail-index button { flex: 0 0 115px; }
+      .rail { grid-auto-columns: 88vw; padding-left: 14px; padding-right: 14px; }
+      .rail-card { min-height: 570px; }
+      .rail-copy { grid-template-columns: 1fr; gap: 8px; left: 21px; right: 21px; bottom: 21px; }
+      .rail-copy h3 { font-size: 34px; }
+      .collect-stage, .control-section { grid-template-columns: 1fr; }
+      .collect-media { min-height: 440px; }
+      .collect-media::after { background: linear-gradient(0deg, var(--pine-deep), transparent 45%); }
+      .collect-copy { padding: 42px 25px 50px; }
+      .outcomes { grid-template-columns: 1fr; }
+      .outcome { min-height: 530px; }
+      .control-section { margin-top: 70px; }
+      .context-visual { min-height: 500px; }
+      .final { margin: 14px; }
+      .demo-note { display: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { scroll-behavior: auto !important; }
+      video { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav" aria-label="概念导航">
+    <a class="brand" href="#top">
+      <img src="/images/octo-buddy/idle.png" alt="" />
+      <span>MeetMind</span>
+    </a>
+    <div class="nav-links">
+      <a href="#classroom">课堂</a>
+      <a href="#collect">收集</a>
+      <a href="#outcomes">学习成果</a>
+      <a class="nav-cta" href="/app?guest=1&entry=demo">试听一节课</a>
+    </div>
+  </nav>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-stage">
+        <div class="hero-media" aria-hidden="true">
+          <figure><img src="/images/landing/classroom-hero.webp" alt="" /></figure>
+        </div>
+        <div class="hero-copy">
+          <div>
+            <span class="eyebrow">真正听过课、了解你正在学什么的 AI 同学</span>
+            <h1>把每一次学习，接成一条不会断的线。</h1>
+          </div>
+          <div class="hero-bottom">
+            <div>
+              <p>录下课堂，放进资料，随时提问。MeetMind 记得老师怎么讲，也逐渐知道你在哪里卡住、正在靠近什么目标。</p>
+              <div class="actions">
+                <a class="action primary" href="/app?guest=1&entry=demo">先试听一节课</a>
+                <a class="action" href="#classroom">看看它怎么工作</a>
+              </div>
+            </div>
+            <div class="hero-proof">
+              <strong>55″</strong>
+              <span>成熟产品电影预留位<br />真实操作将在拍摄完成后进入</span>
+            </div>
+          </div>
+        </div>
+        <div class="hero-trace" aria-hidden="true">
+          <span>课堂</span><i></i><span>收集</span><i></i><span>理解</span>
+        </div>
+        <div class="hero-context-object" aria-hidden="true">
+          <i class="context-disc"></i>
+          <span class="context-sheet sheet-a" data-label="课堂现场"></span>
+          <span class="context-sheet sheet-b" data-label="收下的材料"></span>
+          <span class="context-sheet sheet-c" data-label="你的学习线"></span>
+          <strong class="context-core">MM</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="manifesto">
+      <p>MeetMind 不是笔记工具，也不只是课堂转录。<br /><em>它真的听过课，也知道你正在学什么。</em></p>
+    </section>
+
+    <section class="section" id="classroom">
+      <header class="section-heading">
+        <div>
+          <span class="eyebrow">主线一 · 以课堂为中心的学习</span>
+          <h2>从一节真实的课，一直陪到考试。</h2>
+        </div>
+        <p class="intro">课堂不是一段被存下来的音频，而是学习发生的现场。MeetMind 先跟上老师，再基于原话解释、练习和验证；多节课继续形成单元与考试范围。</p>
+      </header>
+
+      <div class="rail-wrap">
+        <nav class="rail-index" aria-label="课堂学习路径">
+          <button type="button" data-rail-index="0" data-active="true"><small>01</small><strong>录课</strong></button>
+          <button type="button" data-rail-index="1" data-active="false"><small>02</small><strong>课中同桌</strong></button>
+          <button type="button" data-rail-index="2" data-active="false"><small>03</small><strong>有根复习</strong></button>
+          <button type="button" data-rail-index="3" data-active="false"><small>04</small><strong>理解验证</strong></button>
+          <button type="button" data-rail-index="4" data-active="false"><small>05</small><strong>跨课备考</strong></button>
+        </nav>
+        <div class="rail" id="classroomRail">
+          <article class="rail-card tone-pine">
+            <div class="concept-visual"><span class="motion-word">听</span><i class="thread thread-a"></i><i class="pulse"></i></div>
+            <div class="rail-copy"><span class="number">01 / 05</span><div><h3>录下一节课</h3><p>麦克风、电脑声音或两路一起录。实时文字与课堂脉络跟着老师同步生长。</p></div></div>
+          </article>
+          <article class="rail-card tone-sand">
+            <div class="concept-visual"><span class="motion-word">问</span><i class="thread thread-b"></i><i class="pulse"></i></div>
+            <div class="rail-copy"><span class="number">02 / 05</span><div><h3>课中有人跟上现场</h3><p>中间只保留现在讲什么、刚才如何推进、哪里值得课后回来；同学只在真实课堂里出现。</p></div></div>
+          </article>
+          <article class="rail-card tone-rose">
+            <div class="concept-visual"><span class="motion-word">练</span><i class="thread thread-c"></i><i class="pulse"></i></div>
+            <div class="rail-copy"><span class="number">03 / 05</span><div><h3>课后从证据开始</h3><p>左边保留原声与转录，中间正式学习，右边的 AI 同学知道你此刻正在练什么。</p></div></div>
+          </article>
+          <article class="rail-card tone-sky">
+            <div class="concept-visual"><span class="motion-word">证</span><i class="thread thread-d"></i><i class="pulse"></i></div>
+            <div class="rail-copy"><span class="number">04 / 05</span><div><h3>解释、练习，再跳回原话</h3><p>测验不是漂亮的结果页；选择、提交、反馈与课堂时间点组成一次真实的理解验证。</p></div></div>
+          </article>
+          <article class="rail-card tone-ink">
+            <div class="concept-visual"><span class="motion-word">考</span><i class="thread thread-e"></i><i class="pulse"></i></div>
+            <div class="rail-copy"><span class="number">05 / 05</span><div><h3>多节课形成考试范围</h3><p>跨课程、跨课堂、多源资料自由选择，整理成可编辑、可打印、真正能用的考试速查表。</p></div></div>
+          </article>
+        </div>
+        <div class="rail-controls">
+          <button type="button" data-rail="classroomRail" data-direction="-1" aria-label="上一幕">←</button>
+          <button type="button" data-rail="classroomRail" data-direction="1" aria-label="下一幕">→</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="collect">
+      <div class="collect-stage">
+        <div class="collect-media collector" aria-hidden="true">
+          <span class="collect-orbit orbit-one">网页</span>
+          <span class="collect-orbit orbit-two">语音</span>
+          <span class="collect-orbit orbit-three">图片</span>
+          <span class="collect-orbit orbit-four">文件</span>
+          <strong>先收下</strong>
+          <i></i>
+        </div>
+        <div class="collect-copy">
+          <span class="eyebrow">主线二 · 收集是一个场景</span>
+          <h2>像发消息一样，先把它收下。</h2>
+          <p>不要求用户先建文件夹、打标签或填写画像。文字、语音、图片、网页、文件和突然冒出的想法都可以直接进来；模型在后台判断它属于哪门课、哪个目标和哪个问题。</p>
+          <div class="capture-types" aria-label="收集类型">
+            <span>文字与想法</span><span>语音与录音</span>
+            <span>图片与板书</span><span>网页与文章</span>
+            <span>PDF 与课件</span><span>收藏与分享</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="bridge">
+      <span class="eyebrow">两条线不会成为数据孤岛</span>
+      <h2 class="formula"><span>个人上下文</span><span class="plus">＋</span><span>场景上下文</span><span class="plus">＋</span><span>模型智能</span></h2>
+      <p>收下的资料会回到课堂，课堂里的困惑与练习结果也会回到长期理解。用户正常上课、提问、收藏和练习，MeetMind 在后台完成整理。</p>
+    </section>
+
+    <section class="section" id="outcomes">
+      <header class="section-heading">
+        <div>
+          <span class="eyebrow">不是展示能力，而是交付学习结果</span>
+          <h2>每一次回来，都比发出去的更好。</h2>
+        </div>
+        <p class="intro">推荐只突出“现在最适合”的一个，但闪卡、测验、思维导图、信息图、课堂播客和速查表始终都看得见、都能生成。</p>
+      </header>
+
+      <div class="outcomes">
+        <article class="outcome outcome-a">
+          <div class="outcome-visual"><span>一节课</span><i></i></div>
+          <div class="outcome-copy"><small>一节课后</small><h3>知道自己哪里没懂</h3><p>原话证据、即时解释、闪卡和测验，在同一个学习现场里完成。</p></div>
+        </article>
+        <article class="outcome outcome-b">
+          <div class="outcome-visual"><span>一个单元</span><i></i></div>
+          <div class="outcome-copy"><small>几节课后</small><h3>零散知识连成单元</h3><p>跨课看见反复出现的难点，选择真实范围，形成备考材料。</p></div>
+        </article>
+        <article class="outcome outcome-c">
+          <div class="outcome-visual"><span>一条长线</span><i></i></div>
+          <div class="outcome-copy"><small>长期使用后</small><h3>帮助从上次停下的地方继续</h3><p>最近现场保持客观，长期理解只保留有证据、可由用户掌控的内容。</p></div>
+        </article>
+      </div>
+
+      <div class="control-section">
+        <div class="context-visual" aria-hidden="true">
+          <span class="context-kicker">MEETMIND REMEMBERS</span>
+          <strong>最近的现场，<br />慢慢成为理解。</strong>
+          <i class="context-line"></i>
+          <small>课堂 · 提问 · 收藏 · 练习</small>
+        </div>
+        <div class="control-copy">
+          <span class="eyebrow">后台理解，用户掌控</span>
+          <h2>不让你管理数据库。</h2>
+          <p>个人上下文不是第三条产品主线，更不是面向消费者的后台。它静默工作，只在你需要时让你看见并保有最终决定权。</p>
+          <div class="control-list">
+            <span>查看 <small>知道依据来自哪里</small></span>
+            <span>纠正 <small>不让错误理解继续累积</small></span>
+            <span>暂停 <small>暂时不用于后续帮助</small></span>
+            <span>忘记 <small>由用户决定彻底移除</small></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="final">
+      <img src="/images/octo-buddy/happy.png" alt="" />
+      <span class="eyebrow">MeetMind</span>
+      <h2>真正听过课、了解你正在学什么的 AI 同学。</h2>
+      <p>先从一节真的能听、能问、能复习的课开始。</p>
+      <div class="actions"><a class="action primary" href="/app?guest=1&entry=demo">试听一节课</a></div>
+    </section>
+  </main>
+
+  <div class="demo-note">CONTENT + VISUAL CONCEPT · V2 · NO UI SCREENSHOTS</div>
+
+  <script>
+    const classroomRail = document.getElementById('classroomRail');
+    const classroomCards = Array.from(classroomRail?.querySelectorAll('.rail-card') || []);
+    const classroomIndexButtons = Array.from(document.querySelectorAll('[data-rail-index]'));
+    let activeClassroomIndex = 0;
+    let railFrame = 0;
+
+    const setActiveClassroomIndex = (index) => {
+      activeClassroomIndex = Math.max(0, Math.min(classroomCards.length - 1, index));
+      classroomIndexButtons.forEach((button, buttonIndex) => {
+        button.dataset.active = String(buttonIndex === activeClassroomIndex);
+      });
+    };
+
+    const scrollToClassroomIndex = (index) => {
+      const card = classroomCards[index];
+      if (!classroomRail || !card) return;
+      classroomRail.scrollTo({
+        left: card.offsetLeft - (classroomRail.clientWidth - card.clientWidth) / 2,
+        behavior: 'smooth',
+      });
+      setActiveClassroomIndex(index);
+    };
+
+    const updateClassroomIndexFromScroll = () => {
+      if (!classroomRail) return;
+      const center = classroomRail.scrollLeft + classroomRail.clientWidth / 2;
+      let closestIndex = 0;
+      let closestDistance = Number.POSITIVE_INFINITY;
+      classroomCards.forEach((card, index) => {
+        const distance = Math.abs(card.offsetLeft + card.clientWidth / 2 - center);
+        if (distance < closestDistance) {
+          closestIndex = index;
+          closestDistance = distance;
+        }
+      });
+      setActiveClassroomIndex(closestIndex);
+    };
+
+    classroomRail?.addEventListener('scroll', () => {
+      cancelAnimationFrame(railFrame);
+      railFrame = requestAnimationFrame(updateClassroomIndexFromScroll);
+    }, { passive: true });
+
+    classroomIndexButtons.forEach((button) => {
+      button.addEventListener('click', () => scrollToClassroomIndex(Number(button.dataset.railIndex)));
+    });
+
+    document.querySelectorAll('[data-rail]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const direction = Number(button.dataset.direction || 1);
+        scrollToClassroomIndex(activeClassroomIndex + direction);
+      });
+    });
+  </script>
+</body>
+</html>
