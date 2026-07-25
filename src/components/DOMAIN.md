@@ -42,7 +42,7 @@ components/
 
 | 文件 | 职责 |
 |------|------|
-| `LandingPage.tsx` / `LandingPage.module.css` | 消费级产品首页；首屏采用“结果主张 → 桌面产品短片”的层级，长片下方追加横向动态场景带，以可拖动、触控滚动和滚动吸附的真实短循环录像依次展示课堂、结束课堂、有根复习、测验提交、证据回跳、六种学习方式和完整导图；只播放进入视口的短片，降低页面负担，低动态偏好下保持静止。当前 `meetmind-product-film-recorded.mp4` 是阶段性桌面成片，手机端复用同一横版资源；新 v12 桌面主片须按 `docs/LANDING_PRODUCT_FILM.md` 重新录制收集线与课堂线，并在 ChatCut 完成可编辑精剪后才能替换。不得使用截图轮播、`zoompan`、伪 UI、抖动或无意义缩放制造镜头。影片静音自动播放，显式“听产品介绍”按钮开启声音。实时体验区以同源 iframe 加载 `/app?guest=1&entry=demo`，让当前产品自然随版本更新；文案只面向学习者解释价值，不暴露版本、实现或素材策略。品牌入口使用产品实际采用的 `octo-buddy/idle.png`，色彩、边界、纸感和圆角严格复用 v7.1 设计 token |
+| `LandingPage.tsx` / `LandingPage.module.css` | 保留的真实产品影像版首页组件，当前不作为消费级主域默认交付。主域 `/` 暂时由 middleware 内部交付 `public/landing-concept-v1.html` 的无产品截图品牌叙事版本；待收集线与课堂线素材重新录制、成熟宣传片在 ChatCut 完成并验收后，再评估把真实影像版接回。不得使用截图轮播、`zoompan`、伪 UI、抖动或无意义缩放制造镜头 |
 | `TechnologyPage.tsx` / `TechnologyPage.module.css` | 面向投资人、研究者和合作伙伴的独立技术介绍，承载上下文架构、ASR、评测与技术问答，并保留回到消费端产品的路径 |
 
 ### 录音 / 转录

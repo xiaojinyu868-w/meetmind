@@ -79,7 +79,7 @@ src/app/
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `page.tsx` | — | 产品主域根页面：渲染消费级 Landing Page；当前使用阶段性桌面产品片与真实短循环操作画面，片后横向场景带分解课堂、结束课堂、有根复习、测验、证据回跳、学习方式和完整导图；新 v12 桌面主片在 `docs/LANDING_PRODUCT_FILM.md` 验收通过后再替换。同源 `/app?guest=1&entry=demo` iframe 提供随版本更新的实时预览；保留试听课、登录、产品与技术入口 |
+| `page.tsx` | — | 产品主域根页面的 Next.js fallback 与分享元数据；当前消费级主域 `/` 由 middleware 保持根路径 URL，并内部交付 `public/landing-concept-v1.html` 的无产品截图品牌叙事版本。真实产品影像待成熟宣传片完成后再接回；`/app?guest=1&entry=demo` 继续作为真实试听入口 |
 | `technology/page.tsx` | — | 独立专业技术介绍；既可由 `/technology` 访问，也可把 `tech.*` / `technology.*` 子域名指向同一部署后从根路径进入 |
 | `feedback/page.tsx` | 215 | 用户反馈表单 |
 | `help/page.tsx` | 317 | 帮助文档页面 |

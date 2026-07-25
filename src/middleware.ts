@@ -50,6 +50,13 @@ export function middleware(request: NextRequest) {
     return NextResponse.rewrite(technologyUrl);
   }
 
+  // 消费级主域保留根路径 URL，内部直接交付无产品截图的品牌叙事版本。
+  if (pathname === '/') {
+    const landingUrl = request.nextUrl.clone();
+    landingUrl.pathname = '/landing-concept-v1.html';
+    return NextResponse.rewrite(landingUrl);
+  }
+
   if (matchPath(pathname, STATIC_PATHS)) {
     return NextResponse.next();
   }
