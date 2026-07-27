@@ -1,0 +1,103 @@
+/**
+ * lesson-title-client — 课堂标题的客户端触发层
+ *
+ * 三个动作：
+ *   - maybeRetitleLesson：课后静默生成「主题 · 课程 · M-D」（stop 后调用；
+ *     本地 topicLocked 或服务端 titleSource='user' 都会跳过）
+ *   - lockLessonTitleByUser：用户手动改名 → 本地加锁 + 服务端加锁
+ *   - silentBackfillLessonTitles：进入应用后每次静默回填最多 10 条历史零信息标题
+ */
+
+import { db } from '@/lib/db';
+import { updateSessionTopic } from '@/lib/db/sessions';
+import type { TranscriptSegment } from '@/types';
+
+interface RetitleParams {
+  sessionId: string;
+  captureId?: string;
+  segments: TranscriptSegment[];
+  courseTitle?: string;
+  occurredAtMs: number;
+  accessToken: string;
+}
+
+/** 取前 ~3000 字作为标题样本（标题只看大方向，不需要全文） */
+function buildTranscriptSample(segments: TranscriptSegment[]): string {
+  let sample = '';
+  for (const segment of segments) {
+    if (sample.length >= 3000) break;
+    sample += `${segment.text}\n`;
+  }
+  return sample.trim();
+}
+
+export async function maybeRetitleLesson(params: RetitleParams): Promise<void> {
+  const { sessionId, captureId, segments, courseTitle, occurredAtMs, accessToken } = params;
+  if (!sessionId || !accessToken || segments.length === 0) return;
+
+  try {
+    // 本地锁：用户手动改过标题，自动系统不再碰
+    const session = await db.audioSessions.where('sessionId').equals(sessionId).first();
+    if (session?.topicLocked) return;
+
+    const transcriptSample = buildTranscriptSample(segments);
+    if (transcriptSample.length < 80) return;
+
+    const response = await fetch('/api/titles/lesson', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        captureId,
+        transcriptSample,
+        courseTitle,
+        occurredAt: new Date(occurredAtMs).toISOString(),
+      }),
+    });
+    const data = (await response.json().catch(() => null)) as {
+      success?: boolean;
+      skipped?: boolean;
+      title?: string;
+    } | null;
+    if (!response.ok || !data?.success || data.skipped || !data.title) return;
+
+    // 本地课堂列表标题（不加锁：这是自动行为，用户之后仍可手动改）
+    await updateSessionTopic(sessionId, data.title);
+  } catch {
+    // 标题失败永远静默：旧标题还在，不打扰学习现场
+  }
+}
+
+/** 用户手动改名：本地加锁 + 通知服务端加锁（自动系统从此不再覆盖） */
+export async function lockLessonTitleByUser(params: {
+  sessionId: string;
+  title: string;
+  accessToken?: string | null;
+}): Promise<void> {
+  const { sessionId, title, accessToken } = params;
+  await updateSessionTopic(sessionId, title, { lock: true });
+  if (!accessToken) return;
+  try {
+    await fetch('/api/titles/lock', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ sessionId, title }),
+    });
+  } catch {
+    // 服务端锁失败不阻塞本地：本地锁已生效，下次回填/重命名仍会被服务端跳过大部分情况
+  }
+}
+
+/** 静默回填历史零信息标题（每次进入应用最多 10 条） */
+export function silentBackfillLessonTitles(accessToken: string | null | undefined): void {
+  if (!accessToken) return;
+  void fetch('/api/titles/backfill', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  }).catch(() => undefined);
+}

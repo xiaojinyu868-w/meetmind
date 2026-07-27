@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { hasActiveScreenTrack, captureCurrentFrame } from '@/lib/services/keyframe/screen-frame-grabber';
+import { lockLessonTitleByUser } from '@/lib/services/lesson-title-client';
 import { useUIActions, useUIStore, type MobileSubPage } from '@/stores/ui-store';
 import { usePlayerStore } from '@/stores/player-store';
 import { useSessionStore } from '@/stores/session-store';
@@ -23,7 +24,7 @@ import { memoryService, type ClassTimeline } from '@/lib/services/memory-service
 import { useAuth } from '@/lib/hooks/useAuth';
 import { runMemoryMigration } from '@/lib/services/memory-migration';
 import { fetchAndBackfillWorkspaceEvidence } from '@/lib/services/workspace-evidence-client';
-import { ANONYMOUS_USER_ID, saveAudioSession, updateSessionStatus, updateSessionTopic, getPreference } from '@/lib/db';
+import { ANONYMOUS_USER_ID, saveAudioSession, updateSessionStatus, getPreference } from '@/lib/db';
 
 import { buildSelectedCollectionContextText, getCollectionContextTypeLabel } from '@/lib/capture/collection-context';
 
@@ -2215,7 +2216,9 @@ function StudentAppContent({
                 }
               }}
               onRenameLesson={(id, title) => {
-                void updateSessionTopic(id, title).catch((err) => {
+                // 用户手动改名 = 最高优先级的标题意图：本地加锁 + 服务端加锁，
+                // 自动标题系统从此不再覆盖这节课
+                void lockLessonTitleByUser({ sessionId: id, title, accessToken }).catch((err) => {
                   console.warn('[classroom] rename lesson failed:', err);
                 });
               }}

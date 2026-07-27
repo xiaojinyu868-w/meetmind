@@ -201,15 +201,20 @@ export async function updateSessionStatus(
     .modify({ status, updatedAt: new Date() });
 }
 
-/** 更新会话标题/主题 */
+/** 更新会话标题/主题；lock=true 表示用户手动改名（自动标题系统不再覆盖） */
 export async function updateSessionTopic(
   sessionId: string,
-  topic: string
+  topic: string,
+  opts?: { lock?: boolean }
 ): Promise<void> {
   await db.audioSessions
     .where('sessionId')
     .equals(sessionId)
-    .modify({ topic, updatedAt: new Date() });
+    .modify({
+      topic,
+      ...(opts?.lock ? { topicLocked: true } : {}),
+      updatedAt: new Date(),
+    });
 }
 
 /** 获取今日会话（按用户） */

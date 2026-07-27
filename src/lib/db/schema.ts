@@ -9,6 +9,8 @@ export interface AudioSession {
   duration: number;
   subject?: string;
   topic?: string;
+  /** 用户手动改过标题后为 true：自动标题系统（lesson-title）永远不再覆盖 */
+  topicLocked?: boolean;
   sourceType?: 'recording' | 'upload' | 'video-link' | 'video-file';
   mediaUrl?: string;
   videoUrl?: string;

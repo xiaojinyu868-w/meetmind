@@ -26,6 +26,7 @@ import {
   readJsonApiResponse,
 } from '@/lib/utils/page-utils';
 import { backfillCapturesToIndexedDB } from '@/lib/services/backfill-captures-to-indexeddb';
+import { silentBackfillLessonTitles } from '@/lib/services/lesson-title-client';
 import type { WorkspaceCaptureMessage, WorkspaceEchoMessage, SupportReferenceItem } from '@/types/page-types';
 
 // ── Deps interface ──
@@ -70,6 +71,9 @@ export function useWorkspaceContextLoader(
 
     const requestKey = `${user.id}:${wechatCaptureToken || ''}`;
     if (workspaceContextRequestKeyRef.current === requestKey) return;
+
+    // 静默回填历史零信息标题（每次工作区加载最多 10 条，宁缺毋滥）
+    silentBackfillLessonTitles(accessToken);
 
     let cancelled = false;
 
