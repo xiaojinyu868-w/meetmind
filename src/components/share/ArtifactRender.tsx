@@ -25,6 +25,7 @@ import type {
   CheatsheetItem,
 } from '@/lib/ai-native/plugins/cheatsheet.plugin';
 import type { ShareArtifactKind } from '@/lib/services/share-agent-service';
+import { ShareMindmapGraph } from '@/components/share/ShareMindmapGraph';
 
 // ── 共用：从 snapshot.artifact 解 payload ─────────────────
 
@@ -60,12 +61,12 @@ function extractSummary(artifact: unknown): string {
 // ── 6 区 cheatsheet 色板（与 CheatsheetWindow 一致） ──
 
 const SECTION_ACCENT: Record<string, { bar: string; tint: string; label: string }> = {
-  definition: { bar: '#1C1B19', tint: '#F2EDE3', label: '#1C1B19' },
-  formula:    { bar: '#B8842B', tint: '#FBF2EF', label: '#2D4F3E' },
-  process:    { bar: '#2D4F3E', tint: '#F2F6F3', label: '#2D4F3E' },
-  contrast:   { bar: '#2D4F3E', tint: '#F2F6F3', label: '#2D4F3E' },
-  pitfall:    { bar: '#B5483C', tint: '#FCEFEF', label: '#B5483C' },
-  exemplar:   { bar: '#2D4F3E', tint: '#F2F6F3', label: '#2D4F3E' },
+  definition: { bar: '#20312A', tint: '#EDF2EE', label: '#20312A' },
+  formula:    { bar: '#B8842B', tint: '#FBF2EF', label: '#2F6B55' },
+  process:    { bar: '#2F6B55', tint: '#F0F7F3', label: '#2F6B55' },
+  contrast:   { bar: '#2F6B55', tint: '#F0F7F3', label: '#2F6B55' },
+  pitfall:    { bar: '#C45E4C', tint: '#FCF3F0', label: '#C45E4C' },
+  exemplar:   { bar: '#2F6B55', tint: '#F0F7F3', label: '#2F6B55' },
 };
 
 function pickCheatsheetItem(section: CheatsheetSection): CheatsheetItem | null {
@@ -155,57 +156,9 @@ interface MindmapPayload {
   markdown?: string;
 }
 
-function nodeLabel(node: MindmapNodeLike): string {
-  return (node.title ?? node.label ?? '').trim();
-}
-
-function MindmapPreview({ payload }: { payload: MindmapPayload }) {
-  // plugin 用 children:[{title}]，旧版可能 branches:[{label}]——两者都兼容
-  const rawNodes = (payload.children ?? payload.branches ?? []).slice(0, 8);
-  const nodes = rawNodes.map((b) => ({
-    label: nodeLabel(b),
-    children: (b.children ?? []).map(nodeLabel).filter(Boolean).slice(0, 3),
-  }));
-  const hasNodes = nodes.some((n) => n.label);
-
-  return (
-    <div className="flex flex-col gap-2">
-      <h3 className="text-[16px] font-semibold tracking-tight text-ink">
-        {payload.root?.trim() || '思维导图'}
-      </h3>
-      {hasNodes ? (
-        <ul className="mt-1 flex flex-col gap-2.5">
-          {nodes.map((b, i) => {
-            if (!b.label) return null;
-            return (
-              <li key={i} className="flex items-start gap-2.5">
-                <span
-                  aria-hidden
-                  className="mt-2 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#2D4F3E]"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[14px] font-medium text-ink">{b.label}</p>
-                  {b.children.length > 0 ? (
-                    <p className="mt-0.5 text-[12.5px] leading-6 text-ink-secondary">
-                      └ {b.children.join(' · ')}
-                    </p>
-                  ) : null}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      ) : payload.markdown?.trim() ? (
-        <pre className="mt-1 whitespace-pre-wrap font-sans text-[12.5px] leading-6 text-ink-secondary">
-          {payload.markdown.trim()}
-        </pre>
-      ) : (
-        <p className="text-[12.5px] leading-6 text-ink-secondary">
-          导图正在准备中。
-        </p>
-      )}
-    </div>
-  );
+function hasMindmapContent(payload: MindmapPayload): boolean {
+  const nodes = payload.children ?? payload.branches ?? [];
+  return nodes.length > 0 || Boolean(payload.markdown?.trim());
 }
 
 // ── Quiz（不显示答案——必须对话 / 领取才看分数） ──────
@@ -325,8 +278,9 @@ export function ArtifactRender({ artifactKind, artifact }: ArtifactRenderProps) 
 
   if (artifactKind === 'mindmap' && payload) {
     const mm = payload as MindmapPayload;
-    if (typeof mm.root === 'string' || Array.isArray(mm.branches)) {
-      return <MindmapPreview payload={mm} />;
+    if (hasMindmapContent(mm)) {
+      // 标题不重复：图里的根节点胶囊已经说了主题，外面不再加标题
+      return <ShareMindmapGraph payload={mm} />;
     }
   }
 

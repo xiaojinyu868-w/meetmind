@@ -42,12 +42,13 @@ interface SharedAgentLandingProps {
 }
 
 /**
- * artifact 预览 —— v3.0 修正版：
- *   v0 只显示 summary 一行字，对方看不到产物本身——这是反裂变设计。
- *   现在用 ArtifactRender 真把 cheatsheet 6 区 / mindmap 树 / quiz 题面渲染出来，
- *   让对方第一眼就看到价值，再决定是否对话 / 领取。
+ * artifact 展品卡 —— 分享页的主角。
+ *
+ * 陌生人从班级群点开链接，第一眼必须看到产物本身（整张导图 / 整组速查表 /
+ * 一道题），不是一堆文字。产物装进"展品框"：大面积留白 + 底部展签，
+ * 像美术馆里挂在那里的一件作品。
  */
-function ArtifactPreview({
+function ArtifactExhibit({
   artifactKind,
   artifact,
 }: {
@@ -56,14 +57,17 @@ function ArtifactPreview({
 }) {
   const title = COPY.share.landing.artifactTitle(artifactKind);
   return (
-    <section className="rounded-2xl border border-divider bg-card shadow-soft overflow-hidden">
-      <div className="px-6 py-4 border-b border-divider/60 bg-paper">
-        <p className="font-mono text-[11px] font-semibold uppercase tracking-caps text-pine">
+    <section className="relative overflow-hidden rounded-[28px] border border-divider/70 bg-card shadow-float">
+      <div className="px-5 py-7 sm:px-8 sm:py-9">
+        <ArtifactRender artifactKind={artifactKind} artifact={artifact} />
+      </div>
+      <div className="flex items-center justify-between border-t border-divider/60 bg-paper px-5 py-3 sm:px-8">
+        <p className="font-mono text-[10px] font-semibold uppercase tracking-caps text-pine">
           {title}
         </p>
-      </div>
-      <div className="px-6 py-6">
-        <ArtifactRender artifactKind={artifactKind} artifact={artifact} />
+        <p className="font-mono text-[10px] uppercase tracking-caps text-ink-muted">
+          MeetMind
+        </p>
       </div>
     </section>
   );
@@ -302,20 +306,17 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
         }}
       />
 
-      <main className="relative z-10 mx-auto flex min-h-screen max-w-2xl flex-col gap-5 px-4 py-8 sm:py-12">
+      <main className="relative z-10 mx-auto flex min-h-screen max-w-2xl flex-col gap-6 px-4 py-8 sm:py-12">
 
-        {/* ===== Hero：分享者 + 课名 + Octo 主图 ===== */}
-        <header className="flex flex-col items-center gap-5 text-center sm:gap-6 sm:py-4">
-          {/* Octo 主图：大尺寸 + 呼吸光环 + 漂浮动画
-               v7 Octo mood：默认按 ctx 是 happy，凌晨切 sleeping，
-               claim 成功瞬间切 love（短暂 2.4s 然后回到 happy）。 */}
+        {/* ===== Hero：小而克制，把舞台让给产物 ===== */}
+        <header className="flex flex-col items-center gap-4 text-center">
           <div className="relative">
             <div
               aria-hidden
-              className="absolute inset-0 -m-8 rounded-full"
+              className="absolute inset-0 -m-6 rounded-full"
               style={{
                 background:
-                  'radial-gradient(circle, rgba(45,79,62,0.18) 0%, rgba(181,72,60,0.08) 50%, transparent 75%)',
+                  'radial-gradient(circle, rgba(45,79,62,0.16) 0%, rgba(181,72,60,0.07) 50%, transparent 75%)',
                 animation: 'octo-breath-v7 4s ease-in-out infinite',
               }}
             />
@@ -327,70 +328,71 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
                 'original'
               }.png`}
               alt={`${sharerNickname} 的学习同桌`}
-              width={160}
-              height={160}
-              className="relative z-10 size-32 sm:size-40 object-contain animate-hero-float"
-              style={{ filter: 'drop-shadow(0 16px 40px rgba(45,79,62,0.18))' }}
+              width={112}
+              height={112}
+              className="relative z-10 size-24 sm:size-28 object-contain animate-hero-float"
+              style={{ filter: 'drop-shadow(0 12px 28px rgba(45,79,62,0.16))' }}
               priority
               unoptimized
             />
           </div>
 
-          {/* eyebrow + 标题 */}
-          <div className="space-y-2 max-w-xl">
+          <div className="space-y-2.5 max-w-xl">
             <p className="inline-flex items-center gap-2 rounded-full bg-pine-mist px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-caps text-pine">
               <span className="size-1.5 rounded-full bg-pine animate-rec-pulse" />
               <span>
                 {share.sharerNickname
                   ? COPY.share.landing.sharedBy(sharerNickname)
                   : COPY.share.landing.sharedByAnon}
+                {' · '}
+                {COPY.share.landing.artifactTitle(share.artifactKind)}
               </span>
             </p>
-            <h1 className="text-2xl font-semibold tracking-display text-ink sm:text-3xl leading-tight">
+            <h1 className="font-serif-italic text-3xl leading-tight tracking-tight text-ink sm:text-4xl">
               {share.title}
             </h1>
-            {share.subject ? (
-              <p className="text-sm text-ink-secondary">{share.subject}</p>
-            ) : null}
+            <p className="font-mono text-[11px] uppercase tracking-caps text-ink-muted">
+              {[share.subject, COPY.share.landing.viewCount(share.viewCount)].filter(Boolean).join(' · ')}
+            </p>
           </div>
         </header>
 
-        {/* ===== 转录摘要（轻量陈列）=====
-            不显示时间戳：访客没有原录音可跳，
-            [00:01] 这种数字对她毫无意义，反而看起来像"半成品"。 */}
-        {share.snapshot.transcriptDigest.segments.length > 0 ? (
-          <section className="rounded-2xl border border-divider bg-card/80 backdrop-blur-sm px-5 py-5 shadow-soft">
-            <p className="font-mono text-[11px] font-semibold uppercase tracking-caps text-ink-muted">
-              {COPY.share.landing.digestTitle}
-            </p>
-            <ul className="mt-3 flex flex-col gap-2 text-sm leading-loose text-ink">
-              {share.snapshot.transcriptDigest.segments.slice(0, 6).map((seg, i) => (
-                <li key={i} className="flex items-start gap-2.5">
-                  <span
-                    aria-hidden
-                    className="mt-2.5 inline-block h-1 w-1 flex-shrink-0 rounded-full bg-pine-light"
-                  />
-                  <span className="min-w-0 flex-1">
-                    {seg.speaker?.trim() ? (
-                      <span className="text-ink-secondary font-medium">
-                        {seg.speaker.trim()}：
-                      </span>
-                    ) : null}
-                    {seg.text}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            {share.snapshot.transcriptDigest.segments.length > 6 ? (
-              <p className="mt-3 text-xs text-ink-muted italic">
-                另 {share.snapshot.transcriptDigest.segments.length - 6} 段在同学的记忆里。
-              </p>
-            ) : null}
-          </section>
-        ) : null}
+        {/* ===== 产物展品：整页的主角 ===== */}
+        <ArtifactExhibit artifactKind={share.artifactKind} artifact={share.snapshot.artifact} />
 
-        {/* ===== 产物预览 ===== */}
-        <ArtifactPreview artifactKind={share.artifactKind} artifact={share.snapshot.artifact} />
+        {/* ===== 领取 CTA（展品正下方，最顺手的位置） ===== */}
+        <div className="flex flex-col items-center gap-2.5">
+          <button
+            type="button"
+            onClick={handleClaim}
+            disabled={claiming}
+            className={`relative overflow-hidden rounded-full bg-pine px-8 py-3.5 text-[15px] font-semibold text-white shadow-card transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-pine-deep hover:shadow-float active:scale-[0.98] disabled:cursor-wait disabled:opacity-50 ${
+              claimed ? 'ring-2 ring-vermilion/40' : ''
+            }`}
+          >
+            {claiming ? (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent)',
+                  backgroundSize: '200% 100%',
+                  animation: 'shimmer-fast 1.4s linear infinite',
+                }}
+              />
+            ) : null}
+            <span className="relative">
+              {claimed
+                ? COPY.share.landing.claimDone
+                : claiming
+                  ? COPY.share.landing.claiming
+                  : isAuthenticated
+                    ? COPY.share.landing.claimAction
+                    : COPY.share.landing.claimGo}
+            </span>
+          </button>
+          <p className="text-[12px] text-ink-muted">{COPY.share.landing.claimSub}</p>
+        </div>
 
         {/* ===== 对话面板 ===== */}
         {share.conversationEnabled ? (
@@ -403,9 +405,7 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
           />
         ) : null}
 
-        {/* ===== 底部动作栏 · 玻璃态 sticky =====
-             v7 仪式感：主 CTA 在未点击前用 pine ring 微光环吸引注意，
-             点击后 ring 收紧 + scale；claim 成功瞬间 ring 变 vermilion 朱批闪光（"被领取"信号）。 */}
+        {/* ===== 底部动作栏 · 玻璃态 sticky（滚动后随手可及） ===== */}
         <footer className="sticky bottom-3 mt-2 flex items-center gap-2 rounded-full border border-divider bg-card/95 backdrop-blur-md px-3 py-2 shadow-card">
           <button
             type="button"
@@ -419,7 +419,6 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
                   : 'ring-1 ring-pine/0 hover:ring-pine/30 hover:shadow-[0_0_0_4px_rgba(45,79,62,0.08)]'
             }`}
           >
-            {/* 极淡光带（claim 中流动） */}
             {claiming ? (
               <span
                 aria-hidden
@@ -449,10 +448,6 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
             {COPY.share.landing.reshareAction}
           </button>
         </footer>
-
-        <p className="text-center font-mono text-[11px] text-ink-muted">
-          {COPY.share.landing.viewCount(share.viewCount)}
-        </p>
       </main>
     </div>
   );
