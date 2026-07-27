@@ -225,7 +225,7 @@ export interface WorkshopAppCatalogItem {
 
 ### 4.1 矩阵边界（狭义）
 
-**应用矩阵 = `WORKSHOP_APP_CATALOG` 中的 6 个应用**。
+**应用矩阵 = `WORKSHOP_APP_CATALOG` 中的 7 个应用**。
 
 `catalog` 外的 plugin（`class-check` / `confusion-drill` / `knowledge-cards` / `review-plan`）是**非用户主动触发**的内嵌能力，归视频复习等场景管，**不归本期 PRD 管**。
 
@@ -239,6 +239,7 @@ export interface WorkshopAppCatalogItem {
 | 课堂播客 `audio-overview` | ✅ | ❌ | ❌ | 课堂 | 移出"批量生成"默认入口 |
 | 信息图 `infographic` | ✅ | ✅ | ❌ | 课堂 | 一张图带走课堂 / 单元主线 |
 | 考试速查表 `cheatsheet` | ❌ | ✅ | ✅ | 考试 | 跨课多源、可编辑、真实分页与打印 |
+| 讲给同桌听 `teach-back` | ✅ | ❌ | ❌ | 课堂 | 费曼检验：讲述目标 → 语音/打字讲述 → 自信×有据四象限核对（见 §5.8） |
 
 ### 4.3 catalog 外能力（仅说明，不归本期管）
 
@@ -395,6 +396,26 @@ export interface WorkshopAppCatalogItem {
 - 课件 / 教材 / 学生笔记并入范围，外部资料必须显式标注；
 - 真实浏览器 / 打印机矩阵校准分页容量，不把估算容量冒充绝对物理测量；
 - 若用户真实出现大量重排需求，再评估桌面双栏编辑器，当前不为“像专业工具”增加工作台负担。
+
+### 5.8 讲给同桌听 `teach-back`（费曼检验）
+
+**心智**：**讲出来的，才是真的懂**。学生把这节课讲给同桌听，系统对照课堂真实转录核对他讲的——测验是 AI 出题学生答，这是学生输出、系统核对，方向上互补。
+
+**链路**：
+
+1. **选点**（`teach-back.plugin.ts`，走 `/api/apps/execute`）：从课堂证据选 3-5 个「应该能亲口讲出来」的目标点（核心概念 / 因果机制 / 易混点，不是碎事实），每个目标的 `anchorText` 经 `resolveGroundedEvidence` 重新锚回真实片段，锚不住 `evidence=null`，绝不伪造时间戳。
+2. **讲述**（`TeachBackWindow`）：语音优先——复用 `/api/tutor-call` 实时链路（`TutorRealtimeCallScreen`），AI 扮演安静学生（`buildTeachBackStudentInstructions`）：大部分时候只听，只在跟不上或目标没被讲到时开口；不讲课、不纠正、不夸。语音不可用时打字降级，同一 persona、同一评估口径。
+3. **核对**（`/api/apps/teach-back/evaluate` → `teach-back-eval-service.ts`）：LLM 只判断两个维度——coverage（explained / partial / missed，正确性以课堂转录为唯一依据）和 confidence（confident / uncertain，只看讲述措辞的迟疑信号）。**quadrant 由服务端映射推导，不信 LLM 自报**：
+
+   | | 讲对了 (explained) | 讲错了 (partial) |
+   |---|---|---|
+   | **自信** | 掌握 mastery | **盲区 blind-spot** |
+   | **不确定** | 有效挣扎 productive-struggle | 已知缺口 aware-gap |
+
+   missed（没讲到）无法评估，quadrant=null。盲区——以为讲对了其实和课堂内容对不上——是这个应用存在的理由，结果卡用朱批色强调并排最前，每条带 `[MM:SS]` 跳回课堂原声。
+4. **回流**：完成时写一条课后学习黑板便签（`formatTeachBackCompleteActivity`，事实陈述，不含「建议」类措辞），同步进 `recentLearningActivities` 客观事件流。
+
+**明确不做**（v1）：不用「对照组 AI 学生考分差」当理解度量——那是对 LLM 表演的测量，不是对学生的测量；我们的核对直接对着课堂真实证据。讲述记录暂不写入 global-chat 会话；「后续课不重复考已讲透的点」暂由客观事件流间接体现，未做显式记忆消费。
 
 ---
 

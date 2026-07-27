@@ -10,6 +10,7 @@ import React from 'react';
 import { Mic, FileText, Camera, Link as LinkIcon, Video, ChevronRight, Check } from 'lucide-react';
 import type { SourceIngestItem } from '@/types/page-types';
 import { COPY } from '@/lib/ui/copy';
+import { badgeVariants } from '@/components/ui/badge';
 import { getProvenanceSourceLabel } from '@/lib/capture/source-provenance';
 
 interface MobileCollectionCardProps {
@@ -58,11 +59,11 @@ function getTypeIcon(type: SourceIngestItem['type']) {
   }
 }
 
-function getStatusBadge(item: SourceIngestItem): { text: string; className: string; pulse?: boolean; check?: boolean } | null {
-  if (item.status === 'transcribing') return { text: '转写中', className: 'bg-paper-warm text-ink-muted', pulse: true };
-  if (item.status === 'parsing') return { text: '识别中', className: 'bg-paper-warm text-ink-muted', pulse: true };
-  if (item.status === 'ready' && (item.type === 'audio' || item.type === 'video')) return { text: '已理解', className: 'bg-pine-mist text-pine', check: true };
-  if (item.status === 'failed') return { text: '失败', className: 'bg-vermilion-mist text-vermilion' };
+function getStatusBadge(item: SourceIngestItem): { text: string; variant: 'mute' | 'pine' | 'vermilion'; pulse?: boolean; check?: boolean } | null {
+  if (item.status === 'transcribing') return { text: COPY.collection.statusOrganizing, variant: 'mute', pulse: true };
+  if (item.status === 'parsing') return { text: COPY.collection.statusOrganizing, variant: 'mute', pulse: true };
+  if (item.status === 'ready' && (item.type === 'audio' || item.type === 'video')) return { text: COPY.collection.statusUnderstood, variant: 'pine', check: true };
+  if (item.status === 'failed') return { text: COPY.collection.statusFailed, variant: 'vermilion' };
   return null;
 }
 
@@ -131,7 +132,7 @@ export function MobileCollectionCard({ item, onClick }: MobileCollectionCardProp
     <button
       type="button"
       onClick={onClick}
-      className={`w-full rounded-[16px] bg-white border p-3 text-left active:scale-[0.99] transition ${item.type === 'text' ? 'border-vermilion/20' : 'border-divider'}`}
+      className={`w-full rounded-[16px] bg-card border p-3 text-left transition hover:ring-1 hover:ring-pine/25 active:scale-[0.99] ${item.type === 'text' ? 'border-vermilion/20' : 'border-divider'}`}
     >
       <div className="flex items-start gap-2.5">
         <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full ${bg}`}>
@@ -146,7 +147,7 @@ export function MobileCollectionCard({ item, onClick }: MobileCollectionCardProp
           </p>
           <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
             {status && (
-              <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-medium ${status.className}`}>
+              <span className={`${badgeVariants({ variant: status.variant })} gap-0.5 px-1.5 py-0.5 text-[9px]`}>
                 {status.pulse && <span className="h-1.5 w-1.5 rounded-full bg-pine m-rec-dot" />}
                 {status.check && <Check size={8} strokeWidth={3} />}
                 {status.text}

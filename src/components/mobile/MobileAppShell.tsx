@@ -199,7 +199,7 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
   }, [p.collectionFeedItems, flashPhoto]);
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-[#FAF7F2]">
+    <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-paper">
       {cameraInput}
       {/* 顶栏 */}
       <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5">
@@ -965,7 +965,7 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
   }, []);
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[#FAF7F2] relative m-page-in">
+    <div className="flex-1 min-h-0 flex flex-col bg-paper relative m-page-in">
       {/* 顶栏 */}
       <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60 z-20">
         <div className="flex items-center gap-3">
@@ -1176,6 +1176,7 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
     mindmap: <Layers size={18} strokeWidth={2} />,
     'audio-overview': <Headphones size={18} strokeWidth={2} />,
     infographic: <ImageIcon size={18} strokeWidth={2} />,
+    'teach-back': <Mic size={18} strokeWidth={2} />,
   };
   const recommendation = recommendWorkshopApp({
     activeAnchorCount: 0,
@@ -1190,10 +1191,10 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
       : reviewContext?.contentType || _p.selectedReviewItem?.type || 'review',
     activeAnchorCount: 0,
   });
-  const allowed = new Set(assessment?.allowedAppKeys ?? WORKSHOP_APP_CATALOG.map((app) => app.key));
   const recommendedKey = resolveMobileWorkshopRecommendation(assessment, recommendation.key);
+  // 不再替用户决定「能不能用」：所有应用始终可见可用，材料撑不住由插件执行后诚实空态。
   const apps = sortMobileWorkshopApps(
-    WORKSHOP_APP_CATALOG.filter((app) => app.supportedTiers.includes('class') && allowed.has(app.key)),
+    WORKSHOP_APP_CATALOG.filter((app) => app.supportedTiers.includes('class')),
     recommendedKey,
   );
   const courseCheatsheetHref = `/app?workspace=context&intent=cheatsheet${searchParams.get('guest') === '1' ? '&guest=1' : ''}`;
@@ -1351,7 +1352,7 @@ function ClassmateScreen({ p }: { p: MobileAppShellProps }) {
 function EchoScreen({ p }: { p: MobileAppShellProps }) {
   const { pop } = useMobileNav();
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[#FAF7F2] m-page-in">
+    <div className="flex-1 min-h-0 flex flex-col bg-paper m-page-in">
       <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60">
         <div className="flex items-center gap-3">
           <button aria-label={COPY.navigation.back} onClick={() => pop()} className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1">
@@ -1446,6 +1447,7 @@ function ScreenRouter({ p }: { p: MobileAppShellProps }) {
     case 'mindmap': return <CatalogAppScreen p={p} appKey="mindmap" />;
     case 'audio-overview': return <CatalogAppScreen p={p} appKey="audio-overview" />;
     case 'infographic': return <CatalogAppScreen p={p} appKey="infographic" />;
+    case 'teach-back': return <CatalogAppScreen p={p} appKey="teach-back" />;
     case 'apps': return <AppsScreen p={p} />;
     case 'classmate': return <ClassmateScreen p={p} />;
     case 'echo': return <EchoScreen p={p} />;

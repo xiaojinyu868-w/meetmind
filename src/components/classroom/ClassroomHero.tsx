@@ -234,7 +234,7 @@ export function ClassroomHero({
               <p className="mt-2 text-[14px] leading-7 text-ink-secondary">
                 {COPY.hero.proofAnswer}
               </p>
-              <span className="mt-3 inline-flex rounded-md bg-white px-2 py-1 font-mono text-[10px] text-pine ring-1 ring-divider">
+              <span className="cite-ts mt-3">
                 [{COPY.hero.proofTime}]
               </span>
             </div>

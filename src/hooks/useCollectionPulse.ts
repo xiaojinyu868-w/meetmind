@@ -4,6 +4,7 @@ import { useEffect, useMemo, type RefObject } from 'react';
 import { useCollectionStore } from '@/stores/collection-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useUIStore } from '@/stores/ui-store';
+import { COPY } from '@/lib/ui/copy';
 import type { SourceIngestItem, CollectionPulseState } from '@/types/page-types';
 
 // ─── Types ───────────────────────────────────────────────────────────────
@@ -54,16 +55,16 @@ export function useCollectionPulse(
     const videoCount = collectionFeedItems.filter((item) => item.type === 'video').length;
 
     const chips: string[] = [];
-    if (audioCount > 0) chips.push(`${audioCount} 段课堂录音`);
-    if (documentCount > 0) chips.push(`${documentCount} 份材料`);
-    if (imageCount > 0) chips.push(`${imageCount} 张图片材料`);
-    if (textCount > 0) chips.push(`${textCount} 条你的想法`);
-    if (videoCount > 0) chips.push(`${videoCount} 个视频来源`);
+    if (audioCount > 0) chips.push(COPY.collection.pulse.chipAudio(audioCount));
+    if (documentCount > 0) chips.push(COPY.collection.pulse.chipDocument(documentCount));
+    if (imageCount > 0) chips.push(COPY.collection.pulse.chipImage(imageCount));
+    if (textCount > 0) chips.push(COPY.collection.pulse.chipText(textCount));
+    if (videoCount > 0) chips.push(COPY.collection.pulse.chipVideo(videoCount));
 
     if (showMobileRecorder || isRecording) {
       return {
-        title: '正在整理',
-        body: '这段语音正在和前面的内容接到同一条学习线索里，你不用先整理它。',
+        title: COPY.collection.pulse.recording.title,
+        body: COPY.collection.pulse.recording.body,
         chips: chips.slice(0, 3),
         actions: [],
       };
@@ -71,72 +72,54 @@ export function useCollectionPulse(
 
     if (primaryCount > 0 && supportCount > 0) {
       return {
-        title: '新的整理提示',
-        body: '你已经把课堂录音和补充材料放进了同一条线索。后面不需要总结，继续轻轻往里加就行。',
+        title: COPY.collection.pulse.primaryAndSupport.title,
+        body: COPY.collection.pulse.primaryAndSupport.body,
         chips: chips.slice(0, 3),
-        actions: [
-          { key: 'continue-voice', label: '再录一段' },
-          { key: 'capture-confusion', label: '补一句困惑' },
-        ],
+        actions: [...COPY.collection.pulse.primaryAndSupport.actions],
       };
     }
 
     if (audioCount >= 2) {
       return {
-        title: '新的整理提示',
-        body: '你已经连续留下了几段课堂录音，这节课的主线开始显出来了。',
+        title: COPY.collection.pulse.audioMany.title,
+        body: COPY.collection.pulse.audioMany.body,
         chips: chips.slice(0, 3),
-        actions: [
-          { key: 'capture-confusion', label: '记下没懂的点' },
-          { key: 'add-material', label: '贴一份讲义' },
-        ],
+        actions: [...COPY.collection.pulse.audioMany.actions],
       };
     }
 
     if (audioCount > 0 && textCount > 0) {
       return {
-        title: '新的整理提示',
-        body: '你不只是在收课堂内容，也已经留下了自己的理解或困惑，这会让后面的同桌更有抓手。',
+        title: COPY.collection.pulse.audioAndText.title,
+        body: COPY.collection.pulse.audioAndText.body,
         chips: chips.slice(0, 3),
-        actions: [
-          { key: 'continue-voice', label: '继续录音' },
-          { key: 'add-material', label: '补充材料' },
-        ],
+        actions: [...COPY.collection.pulse.audioAndText.actions],
       };
     }
 
     if (latestItem.type === 'document' || latestItem.type === 'image' || latestItem.type === 'video') {
       return {
-        title: '新的整理提示',
-        body: '这份材料已经接进来了。后面再补一句当时没懂的地方，同桌会更容易看出联系。',
+        title: COPY.collection.pulse.materialAdded.title,
+        body: COPY.collection.pulse.materialAdded.body,
         chips: chips.slice(0, 3),
-        actions: [
-          { key: 'capture-confusion', label: '记下没懂的点' },
-          { key: 'continue-voice', label: '录一段语音' },
-        ],
+        actions: [...COPY.collection.pulse.materialAdded.actions],
       };
     }
 
     if (latestItem.type === 'audio') {
       return {
-        title: '新的整理提示',
-        body: '这段录音已经留下来了。先别急着整理，继续往里丢材料或困惑，会更有价值。',
+        title: COPY.collection.pulse.audioAdded.title,
+        body: COPY.collection.pulse.audioAdded.body,
         chips: chips.slice(0, 3),
-        actions: [
-          { key: 'capture-confusion', label: '补一句困惑' },
-          { key: 'add-material', label: '贴一份材料' },
-        ],
+        actions: [...COPY.collection.pulse.audioAdded.actions],
       };
     }
 
     return {
-      title: '新的整理提示',
-      body: '这条收集流已经开始有自己的形状了。继续轻轻追加，不用一次说完整。',
+      title: COPY.collection.pulse.fallback.title,
+      body: COPY.collection.pulse.fallback.body,
       chips: chips.slice(0, 3),
-      actions: [
-        { key: 'continue-voice', label: '继续录音' },
-        { key: 'capture-confusion', label: '写一句想法' },
-      ],
+      actions: [...COPY.collection.pulse.fallback.actions],
     };
   }, [captureDrivenPulse, collectionFeedItems, isRecording, showMobileRecorder]);
 
@@ -193,13 +176,7 @@ export function useCollectionPulse(
       return acc;
     }, {});
 
-    const typeLabelMap: Record<string, string> = {
-      audio: '录音',
-      video: '视频',
-      image: '图片',
-      document: '材料',
-      text: '想法',
-    };
+    const typeLabelMap: Record<string, string> = COPY.collection.activityKind;
 
     const topKinds = Object.entries(kindCounts)
       .sort((a, b) => b[1] - a[1])

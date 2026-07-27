@@ -48,7 +48,7 @@ function EmptyFlow({ elapsedMs, isUnderstanding }: { elapsedMs: number; isUnders
           {COPY.classroomFlow.listeningTitle}
           </h2>
           {isUnderstanding ? (
-            <p className="mt-3 text-[13px] text-ink-muted">{COPY.classroomFlow.understanding}</p>
+            <span className="thinking-strip mt-3">{COPY.classroomFlow.understanding}</span>
           ) : null}
         </div>
       </div>
@@ -75,7 +75,7 @@ export function ClassroomFlowCanvas({
             {COPY.classroomFlow.eyebrow}
           </p>
           {isUnderstanding ? (
-            <span className="text-[11.5px] text-ink-muted">{COPY.classroomFlow.refreshing}</span>
+            <span className="thinking-strip">{COPY.classroomFlow.refreshing}</span>
           ) : null}
         </div>
         <span className="font-mono text-[11px] tabular-nums text-ink-muted">{formatTime(elapsedMs)}</span>
@@ -83,7 +83,7 @@ export function ClassroomFlowCanvas({
 
       <section
         className={`mt-5 rounded-[22px] border border-pine/20 bg-pine-mist/55 px-5 py-5 ${
-          newItemIds.has(flow.now.id) ? 'animate-[fadeIn_420ms_ease-out]' : ''
+          newItemIds.has(flow.now.id) ? 'animate-[flow-grow_560ms_cubic-bezier(0.22,1,0.36,1)_both]' : ''
         }`}
       >
         <div className="flex items-center justify-between gap-3">
@@ -109,12 +109,15 @@ export function ClassroomFlowCanvas({
             <span className="text-[11.5px] text-ink-muted">{COPY.classroomFlow.recentHint}</span>
           </div>
           <div className="relative mt-3 space-y-1 pl-5 before:absolute before:bottom-3 before:left-[5px] before:top-3 before:w-px before:bg-divider">
-            {flow.recent.map((item) => (
+            {flow.recent.map((item, index) => {
+              const isNew = newItemIds.has(item.id);
+              return (
               <article
                 key={item.id}
                 className={`relative rounded-[16px] px-3 py-3 transition-colors hover:bg-paper-warm/60 ${
-                  newItemIds.has(item.id) ? 'animate-[fadeIn_420ms_ease-out]' : ''
+                  isNew ? 'animate-[flow-grow_520ms_cubic-bezier(0.22,1,0.36,1)_both]' : ''
                 }`}
+                style={isNew ? { animationDelay: `${Math.min(index * 70, 280)}ms` } : undefined}
               >
                 <span className="absolute left-[-18px] top-[18px] h-2 w-2 rounded-full border-2 border-white bg-ink-muted" />
                 <div className="flex items-start justify-between gap-4">
@@ -124,12 +127,13 @@ export function ClassroomFlowCanvas({
                       <p className="mt-1 text-[12.5px] leading-[1.65] text-ink-muted">{item.summary}</p>
                     ) : null}
                   </div>
-                  <span className="flex-shrink-0 font-mono text-[10.5px] tabular-nums text-ink-muted">
+                  <span className="cite-ts flex-shrink-0 cursor-default">
                     {formatTime(item.anchorMs)}
                   </span>
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         </section>
       ) : null}
@@ -145,12 +149,12 @@ export function ClassroomFlowCanvas({
               <article
                 key={item.id}
                 className={`rounded-[16px] border border-divider bg-white px-3.5 py-3.5 ${
-                  newItemIds.has(item.id) ? 'animate-[fadeIn_420ms_ease-out]' : ''
+                  newItemIds.has(item.id) ? 'animate-[flow-grow_520ms_cubic-bezier(0.22,1,0.36,1)_both]' : ''
                 }`}
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[10.5px] font-medium text-vermilion">{KIND_LABELS[item.kind]}</span>
-                  <span className="font-mono text-[10.5px] tabular-nums text-ink-muted">{formatTime(item.anchorMs)}</span>
+                  <span className="cite-ts cursor-default">{formatTime(item.anchorMs)}</span>
                 </div>
                 <p className="mt-2 text-[13px] font-medium leading-[1.6] text-ink">{item.text}</p>
                 {item.reason ? (

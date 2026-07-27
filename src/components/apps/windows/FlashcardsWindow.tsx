@@ -163,7 +163,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity }: Flashca
   }
   if (fallbackMessage) {
     return (
-      <div className="flex h-full min-h-[420px] items-center justify-center bg-[#FAF7F2] px-6">
+      <div className="flex h-full min-h-[420px] items-center justify-center bg-paper px-6">
         <p className="max-w-[24rem] text-center text-[15px] leading-7 text-ink-secondary">
           {fallbackMessage}
         </p>
@@ -190,7 +190,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity }: Flashca
   if (allDone) {
     const recallRate = activeCards.length > 0 ? Math.round((gotCount / activeCards.length) * 100) : 0;
     return (
-      <div className="flex h-full min-h-[420px] flex-col items-center justify-center overflow-hidden bg-[#FAF7F2] p-6">
+      <div className="flex h-full min-h-[420px] flex-col items-center justify-center overflow-hidden bg-paper p-6">
         <div className="text-center">
           <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-pine" aria-hidden />
           <h2 className="mb-1 text-2xl font-bold text-ink">{COPY.apps.flashcards.completeTitle}</h2>
@@ -199,7 +199,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity }: Flashca
           {/* Score ring */}
           <div className="relative inline-flex items-center justify-center w-32 h-32 mb-8">
             <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="42" fill="none" stroke="#E5E0D8" strokeWidth="6" />
+              <circle cx="50" cy="50" r="42" fill="none" stroke="#DCE5DF" strokeWidth="6" />
               <circle cx="50" cy="50" r="42" fill="none" stroke="#2F6B55"
                 strokeWidth="6" strokeLinecap="round"
                 strokeDasharray={`${recallRate * 2.64} 264`}
@@ -270,7 +270,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity }: Flashca
 
   return (
     <div
-      className="relative flex h-full min-h-[420px] flex-col select-none overflow-hidden bg-[#FAF7F2]"
+      className="relative flex h-full min-h-[420px] flex-col select-none overflow-hidden bg-paper"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       data-testid="flashcards-window"
@@ -372,7 +372,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity }: Flashca
 
               {/* Back face */}
               <div
-                className="absolute inset-0 rounded-[20px] border border-pine/25 bg-[#F2F6F3] p-7 shadow-card md:p-8"
+                className="absolute inset-0 rounded-[20px] border border-pine/25 bg-pine-fog p-7 shadow-card md:p-8"
                 aria-hidden={!flipped}
                 style={{
                   backfaceVisibility: 'hidden',

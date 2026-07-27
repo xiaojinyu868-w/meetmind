@@ -207,7 +207,7 @@ function Header({
   );
 }
 
-/** 消息气泡——AI 消息无气泡背景，直接展示，像便签 */
+/** 消息气泡——AI 消息无气泡背景，直接展示，像便签；左侧 2px pine rail 作为克制的"AI 在场"信号 */
 function CompanionBubble({
   message,
   isStreaming = false,
@@ -235,6 +235,8 @@ function CompanionBubble({
 
   return (
     <div className="px-6 pt-2 pb-5">
+      {/* AI 在场信号（克制版）：2px pine 左侧 rail，不发光、不加底色 */}
+      <div className="border-l-2 border-pine/20 pl-3.5">
       {message.content ? (
         <ChatRenderer
           content={normalizeCompanionMarkdown(message.content)}
@@ -259,14 +261,14 @@ function CompanionBubble({
         </p>
       ) : null}
       {message.card ? <AttachedCard card={message.card} /> : null}
+      </div>
     </div>
   );
 }
 
 /**
  * InlineActionStrip — 气泡下方的内联动作 chip。
- * 视觉是实心按钮，但仍然非常克制——黑白两级。
- * 用户点主 action（第一个）= 黑底白字；次 action = 白底黑字。
+ * v7 按钮语义：主 action（第一个）= pine 主按钮；次 action = ghost 白边。
  */
 function InlineActionStrip({
   actions,
@@ -284,8 +286,8 @@ function InlineActionStrip({
           onClick={() => onInvoke?.(a)}
           className={
             i === 0
-              ? 'inline-flex items-center rounded-full bg-ink px-3.5 py-1.5 text-[13px] font-medium text-white transition hover:opacity-85 active:scale-[0.98]'
-              : 'inline-flex items-center rounded-full border border-divider bg-white px-3.5 py-1.5 text-[13px] text-ink transition hover:border-ink-muted active:scale-[0.98]'
+              ? 'inline-flex items-center rounded-full bg-pine px-3.5 py-1.5 text-[13px] font-medium text-white shadow-soft transition hover:bg-pine-deep active:scale-[0.98]'
+              : 'inline-flex items-center rounded-full border border-divider bg-white px-3.5 py-1.5 text-[13px] text-ink-secondary transition hover:border-ink-muted hover:bg-paper-warm hover:text-ink active:scale-[0.98]'
           }
         >
           {a.label}
@@ -384,7 +386,7 @@ function ListeningStarterCard({
 
   return (
     <div className="px-6 pb-5">
-      <div className="rounded-[22px] border border-divider bg-[#F2EDE3] px-4 py-4">
+      <div className="rounded-[22px] border border-pine/15 bg-pine-fog px-4 py-4">
         <div className="flex items-start gap-3">
           <OctoBuddySprite mood="happy" size="md" className="-ml-1 -mt-1 flex-shrink-0" />
           <div className="min-w-0 flex-1">
@@ -405,7 +407,7 @@ function ListeningStarterCard({
                   }}
                   className={`rounded-full border px-3 py-1.5 text-[12px] transition active:scale-[0.98] ${
                     afterClass && index === 0
-                      ? 'border-ink bg-ink text-white hover:bg-[#1a1a19]'
+                      ? 'border-pine bg-pine text-white shadow-soft hover:bg-pine-deep'
                       : 'border-divider bg-white text-ink-secondary hover:border-ink-muted hover:text-ink'
                   }`}
                 >
@@ -841,7 +843,7 @@ function ClassroomCompanionComposerAdapter({
                 aria-label="发送"
                 className={`flex h-8 w-8 items-center justify-center rounded-xl transition-all ${
                   canSend && isOnline
-                    ? 'bg-ink text-white hover:opacity-80 active:scale-95'
+                    ? 'bg-pine text-white hover:bg-pine-deep active:scale-95'
                     : 'cursor-not-allowed bg-divider-light text-ink-muted/50'
                 }`}
               >

@@ -373,10 +373,9 @@ function CustomMindmapRenderer({
                     fontSize={fontSize}
                     fontWeight={700}
                     fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif"
-                    fill="#ffffff"
                     dominantBaseline="central"
                     textAnchor="middle"
-                    style={{ userSelect: 'none' }}
+                    style={{ fill: 'var(--mm-card)', userSelect: 'none' }}
                   >
                     {node.title}
                   </text>
@@ -437,10 +436,9 @@ function CustomMindmapRenderer({
                         y={underlineY(node)}
                         fontSize={9}
                         fontWeight={700}
-                        fill="#ffffff"
                         dominantBaseline="central"
                         textAnchor="middle"
-                        style={{ userSelect: 'none' }}
+                        style={{ fill: 'var(--mm-card)', userSelect: 'none' }}
                       >
                         +
                       </text>
@@ -678,7 +676,7 @@ export function MindmapWindow({ result, transcript, onSeek, defaultViewMode = 'm
                   setViewMode(mode);
                 }}
                 className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-200"
-                style={{ background: isActive ? PALETTE.accent : 'transparent', color: isActive ? '#fff' : PALETTE.textSecondary }}
+                style={{ background: isActive ? PALETTE.accent : 'transparent', color: isActive ? 'var(--mm-ink-inverse)' : PALETTE.textSecondary }}
               >
                 {icon}{label}
               </button>

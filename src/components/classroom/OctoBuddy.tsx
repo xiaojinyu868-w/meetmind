@@ -479,7 +479,7 @@ export function OctoBuddyFloatingButton({
           border-radius: 14px;
           background: rgba(255, 255, 255, 0.96);
           box-shadow: 0 4px 14px rgba(28,27,25,0.06);
-          color: #1C1B19;
+          color: #20312A;
           font-size: 11px;
           font-weight: 600;
           line-height: 1.25;
@@ -510,11 +510,11 @@ export function OctoBuddyFloatingButton({
           opacity: 0;
         }
         /* v7 burst 粒子：双签名色家族 + 米白调 */
-        .octo-buddy-burst span { background: #2D4F3E; }
+        .octo-buddy-burst span { background: var(--mm-pine); }
         .octo-buddy-burst span:nth-child(1) { left: 30px; top: 30px; }
-        .octo-buddy-burst span:nth-child(2) { right: 28px; top: 28px; background: #B5483C; }
-        .octo-buddy-burst span:nth-child(3) { left: 26px; bottom: 42px; background: #6B9080; }
-        .octo-buddy-burst span:nth-child(4) { right: 30px; bottom: 38px; height: 6px; width: 6px; background: #D17969; }
+        .octo-buddy-burst span:nth-child(2) { right: 28px; top: 28px; background: var(--mm-vermilion); }
+        .octo-buddy-burst span:nth-child(3) { left: 26px; bottom: 42px; background: var(--mm-pine-light); }
+        .octo-buddy-burst span:nth-child(4) { right: 30px; bottom: 38px; height: 6px; width: 6px; background: var(--mm-vermilion-light); }
         .octo-buddy-sleep-dust span {
           right: 22px;
           top: 26px;

@@ -15,7 +15,7 @@ interface CheatsheetRichTextProps {
 }
 
 const components: Components = {
-  p: ({ children }) => <p className="my-0.5 leading-[1.38] text-ink-secondary">{children}</p>,
+  p: ({ children }) => <p>{children}</p>,
   h1: ({ children }) => <h4 className="mb-1 mt-1.5 border-b border-divider/70 pb-0.5 text-[1.08em] font-semibold text-ink">{children}</h4>,
   h2: ({ children }) => <h4 className="mb-1 mt-1.5 border-b border-divider/60 pb-0.5 text-[1.04em] font-semibold text-ink">{children}</h4>,
   h3: ({ children }) => <h5 className="mb-0.5 mt-1 font-semibold text-ink">{children}</h5>,
@@ -61,8 +61,7 @@ const components: Components = {
 export function CheatsheetRichText({ content, formulaOnly = false }: CheatsheetRichTextProps) {
   return (
     <div
-      className={formulaOnly ? 'cheatsheet-richtext cheatsheet-richtext-formula text-ink' : 'cheatsheet-richtext cheatsheet-item-body text-ink-secondary'}
-      style={{ fontSize: formulaOnly ? 'var(--cs-latex, 14px)' : 'var(--cs-body, 12.25px)' }}
+      className={formulaOnly ? 'cheatsheet-richtext cheatsheet-richtext-formula' : 'cheatsheet-richtext cheatsheet-item-body'}
     >
       <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={components}>
         {content}

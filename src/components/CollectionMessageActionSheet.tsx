@@ -139,7 +139,7 @@ export function CollectionMessageActionSheet({
         type="button"
         aria-label="关闭消息操作菜单"
         onClick={onClose}
-        className={`${effectiveBackdropClass} z-[60] bg-[#1C1B19]/18`}
+        className={`${effectiveBackdropClass} z-[60] bg-ink/18`}
       />
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
       <div
@@ -154,69 +154,69 @@ export function CollectionMessageActionSheet({
         <div
           className={
             isMobile
-              ? 'mx-auto w-full max-w-sm rounded-2xl border border-[#E8E2D5] bg-white p-4'
-              : 'w-full max-w-md rounded-2xl border border-[#E8E2D5] bg-white p-5'
+              ? 'mx-auto w-full max-w-sm rounded-2xl border border-divider bg-card p-4'
+              : 'w-full max-w-md rounded-2xl border border-divider bg-card p-5'
           }
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-[#D1F4E0]/30 px-2.5 py-1 text-[11px] font-semibold text-[#1C1B19]">
+                <span className="rounded-full bg-pine-mist px-2.5 py-1 text-[11px] font-semibold text-pine">
                   {menuTypeLabel}
                 </span>
                 {selectedCollectionContextIds.includes(item.id) ? (
-                  <span className="rounded-full bg-[#E8E2D5] px-2.5 py-1 text-[11px] font-medium text-[#5C5A55]">已加入多选</span>
+                  <span className="rounded-full bg-paper-warm px-2.5 py-1 text-[11px] font-medium text-ink-secondary">{COPY.collection.multiSelected}</span>
                 ) : null}
               </div>
-              <p className="mt-3 text-[15px] font-semibold leading-6 text-[#1C1B19]">{menuTitle}</p>
+              <p className="mt-3 text-[15px] font-semibold leading-6 text-ink">{menuTitle}</p>
               {menuPreview && menuPreview !== menuTitle ? (
-                <p className="mt-1 text-[13px] leading-6 text-[#5C5A55]">{menuPreview}</p>
+                <p className="mt-1 text-[13px] leading-6 text-ink-secondary">{menuPreview}</p>
               ) : null}
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#E8E2D5] bg-white text-[#5C5A55] transition hover:bg-[#FAFAF9] hover:text-[#1C1B19]"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-divider bg-card text-ink-secondary transition hover:bg-paper hover:text-ink"
             >
               <X size={15} />
             </button>
           </div>
 
-          <div className="mt-4 divide-y divide-[#E8E2D5]">
+          <div className="mt-4 divide-y divide-divider">
             {isReviewable ? (
               <button
                 type="button"
                 onClick={() => { onClose(); void onOpenReview(item); }}
-                className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#1C1B19] transition active:bg-[#FAF7F2]"
+                className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-ink transition active:bg-paper"
               >
-                <BookOpen size={18} strokeWidth={1.6} className="text-[#5C5A55]" />
-                <span>去复习</span>
+                <BookOpen size={18} strokeWidth={1.6} className="text-ink-secondary" />
+                <span>{COPY.collection.actionGoReview}</span>
               </button>
             ) : null}
             <button
               type="button"
               onClick={() => { onClose(); onQuote(item); }}
-              className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#1C1B19] transition active:bg-[#FAF7F2]"
+              className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-ink transition active:bg-paper"
             >
-              <Quote size={18} strokeWidth={1.6} className="text-[#5C5A55]" />
-              <span>引用</span>
+              <Quote size={18} strokeWidth={1.6} className="text-ink-secondary" />
+              <span>{COPY.collection.actionQuote}</span>
             </button>
             <button
               type="button"
               onClick={() => { onClose(); onAskTutor(item); }}
-              className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#1C1B19] transition active:bg-[#FAF7F2]"
+              className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-ink transition active:bg-paper"
             >
-              <MessageCircle size={18} strokeWidth={1.6} className="text-[#5C5A55]" />
+              <MessageCircle size={18} strokeWidth={1.6} className="text-ink-secondary" />
               <span>{COPY.collection.askClassmate}</span>
             </button>
             <button
               type="button"
               onClick={() => { onClose(); onToggleSelect(item); }}
-              className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#1C1B19] transition active:bg-[#FAF7F2]"
+              className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-ink transition active:bg-paper"
             >
-              <CheckSquare2 size={18} strokeWidth={1.6} className="text-[#5C5A55]" />
-              <span>{selectedCollectionContextIds.includes(item.id) ? '取消选择' : '选择'}</span>
+              <CheckSquare2 size={18} strokeWidth={1.6} className="text-ink-secondary" />
+              <span>{selectedCollectionContextIds.includes(item.id) ? COPY.collection.actionDeselect : COPY.collection.actionSelect}</span>
             </button>
             {workspaceCapture ? (
               <button
@@ -229,25 +229,25 @@ export function CollectionMessageActionSheet({
                     : 'meta';
                   onEditCapture(cap, mode);
                 }}
-                className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#1C1B19] transition active:bg-[#FAF7F2]"
+                className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-ink transition active:bg-paper"
               >
-                <PencilLine size={18} strokeWidth={1.6} className="text-[#5C5A55]" />
-                <span>编辑</span>
+                <PencilLine size={18} strokeWidth={1.6} className="text-ink-secondary" />
+                <span>{COPY.collection.actionEdit}</span>
               </button>
             ) : null}
             {hasOriginal ? (
               <button
                 type="button"
                 onClick={() => { onClose(); onOpenOriginal(item); }}
-                className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#1C1B19] transition active:bg-[#FAF7F2]"
+                className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-ink transition active:bg-paper"
               >
-                <Link2 size={18} strokeWidth={1.6} className="text-[#5C5A55]" />
-                <span>打开原件</span>
+                <Link2 size={18} strokeWidth={1.6} className="text-ink-secondary" />
+                <span>{COPY.collection.actionOpenOriginal}</span>
               </button>
             ) : null}
           </div>
 
-          <div className="mt-4 border-t border-[#E8E2D5] pt-3">
+          <div className="mt-4 border-t border-divider pt-3">
             {effectiveCanPersist ? (
               <div className="flex items-center justify-between gap-3">
                 <button
@@ -261,19 +261,19 @@ export function CollectionMessageActionSheet({
                       onClose();
                     });
                   }}
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-[#5C5A55] transition hover:text-[#1C1B19]"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-secondary transition hover:text-ink"
                 >
                   <History size={15} />
-                  <span>先收起</span>
+                  <span>{COPY.collection.actionArchive}</span>
                 </button>
                 {isConfirmingDelete ? (
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => onSetConfirmDelete(null)}
-                      className="rounded-full bg-[#E8E2D5] px-3 py-2 text-[12px] font-medium text-[#5C5A55] transition hover:bg-[#DDDDD9] hover:text-[#1C1B19]"
+                      className="rounded-full bg-paper-warm px-3 py-2 text-[12px] font-medium text-ink-secondary transition hover:bg-paper-deep hover:text-ink"
                     >
-                      取消
+                      {COPY.collection.actionCancel}
                     </button>
                     <button
                       type="button"
@@ -288,16 +288,16 @@ export function CollectionMessageActionSheet({
                       }}
                       className="rounded-full bg-vermilion px-3 py-2 text-[12px] font-semibold text-white transition hover:bg-vermilion-deep"
                     >
-                      确认删除
+                      {COPY.collection.actionConfirmDelete}
                     </button>
                   </div>
                 ) : (
                   <button
                     type="button"
                     onClick={() => onSetConfirmDelete(item.id)}
-                    className="text-sm font-medium text-[#8E8B82] transition hover:text-vermilion-deep"
+                    className="text-sm font-medium text-ink-muted transition hover:text-vermilion-deep"
                   >
-                    删除
+                    {COPY.collection.actionDelete}
                   </button>
                 )}
               </div>
@@ -313,7 +313,7 @@ export function CollectionMessageActionSheet({
                 }}
                 className="text-sm font-medium text-vermilion transition hover:text-vermilion-deep"
               >
-                删除这条
+                {COPY.collection.actionRemoveFromFlow}
               </button>
             )}
             {isConfirmingDelete ? (

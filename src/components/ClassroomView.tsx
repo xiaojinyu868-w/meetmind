@@ -536,6 +536,14 @@ export function ClassroomView({
     }
   }, [demoSessionActive, isRecording, paneState, handleOpenDemoReview, onStopRecording]);
 
+  // 返回课程列表（录课入口页）：试听课先暂停音频；真实录音在后台继续，
+  // 由列表顶部的活动条承接，随时可以回到录课态。
+  const handleBackToList = useCallback(() => {
+    demoAudioRef.current?.pause();
+    setDemoAudioPlaying(false);
+    setLocalPaneState('list');
+  }, []);
+
   const handleSend = useCallback((text: string) => {
     void sendToTutor(text);
   }, [sendToTutor]);
@@ -558,6 +566,7 @@ export function ClassroomView({
         classroomFlowNewIds={classroomFlowNewIds}
         isUnderstandingClassroomFlow={isUnderstandingClassroomFlow}
         onFocusRecording={() => setLocalPaneState('recording')}
+        onBackToList={handleBackToList}
         isDemoPlayback={isDemoRecordingPane}
         demoAudioPlaying={demoAudioPlaying}
         demoAudioNeedsGesture={demoAudioNeedsGesture}
@@ -575,7 +584,7 @@ export function ClassroomView({
         onSearch={onSearch}
       />
     ),
-    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, classroomFlow, classroomFlowNewIds, isUnderstandingClassroomFlow, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, onOpenApp, onRenameLesson, onQuickPhoto, onAddMaterial, onSearch],
+    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, handleBackToList, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, classroomFlow, classroomFlowNewIds, isUnderstandingClassroomFlow, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, onOpenApp, onRenameLesson, onQuickPhoto, onAddMaterial, onSearch],
   );
 
   const demoSuggestedPrompts = useMemo(

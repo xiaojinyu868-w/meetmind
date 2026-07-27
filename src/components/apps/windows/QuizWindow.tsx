@@ -25,7 +25,7 @@ interface QuizWindowProps {
 }
 
 /* 测验保持安静平涂：用排版和状态区分，不用题目环境光。 */
-const QUIZ_SUCCESS = '#2D6A4F';
+const QUIZ_SUCCESS = 'var(--mm-pine)';
 
 export function QuizWindow({ result, onSeek, onLearningActivity }: QuizWindowProps) {
   const questions = useMemo(() => normalizeQuizQuestions(result), [result]);

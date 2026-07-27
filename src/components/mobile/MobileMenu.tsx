@@ -127,7 +127,7 @@ export function MobileMenu({
                 )}
               >
                 {/* 图标 */}
-                <div className="w-10 h-10 rounded-xl bg-[#FDF3C0]/20 flex items-center justify-center text-[#5C5A55]">
+                <div className="w-10 h-10 rounded-xl bg-[var(--mm-sand)]/20 flex items-center justify-center text-[var(--mm-ink-secondary)]">
                   {item.icon}
                 </div>
 
@@ -136,7 +136,7 @@ export function MobileMenu({
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-white">{item.label}</span>
                     {badge && badge > 0 && (
-                      <span className="px-1.5 py-0.5 text-xs rounded-full bg-[#1C1B19]/20 text-[#FDF3C0]">
+                      <span className="px-1.5 py-0.5 text-xs rounded-full bg-ink/20 text-sand">
                         {badge}
                       </span>
                     )}

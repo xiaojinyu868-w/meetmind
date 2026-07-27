@@ -41,7 +41,7 @@ class WindowErrorBoundary extends React.Component<WindowErrorBoundaryProps, Wind
     if (this.state.hasError) {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-          <div className="rounded-full bg-[#FBFAF5] p-3">
+          <div className="rounded-full bg-paper-warm p-3">
             <svg className="h-6 w-6 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
             </svg>
@@ -87,6 +87,7 @@ const DEFAULT_DISPLAY_MODES: Partial<Record<WorkshopAppKey, 'panel' | 'fullscree
   flashcards: 'fullscreen',
   quiz: 'fullscreen',
   cheatsheet: 'fullscreen',
+  'teach-back': 'fullscreen',
 };
 
 /** 需要沉浸式全屏体验的应用（深色背景、精简header） */
@@ -163,16 +164,16 @@ function taskLabel(taskState: AppTaskState): string {
 }
 
 function taskTone(taskState: AppTaskState): string {
-  if (taskState.status === 'running') return 'border-divider bg-[#FDF3C0]/50 text-ink';
+  if (taskState.status === 'running') return 'border-pine/20 bg-pine-fog text-pine';
   if (taskState.status === 'success') return 'border-divider bg-white text-ink';
-  if (taskState.status === 'error') return 'border-divider bg-[#FBFAF5] text-ink-secondary';
+  if (taskState.status === 'error') return 'border-vermilion/20 bg-vermilion-fog text-vermilion';
   return 'border-divider bg-white text-ink-secondary';
 }
 
 function taskDockBadge(taskState: AppTaskState): string {
-  if (taskState.status === 'running') return 'bg-[#FADEC9]';
+  if (taskState.status === 'running') return 'bg-pine';
   if (taskState.status === 'success') return 'bg-ink';
-  if (taskState.status === 'error') return 'bg-[#B5483C]';
+  if (taskState.status === 'error') return 'bg-vermilion';
   return 'bg-ink-muted';
 }
 
@@ -299,7 +300,7 @@ function WindowCard(props: WindowCardProps) {
           </div>
           <div className="flex items-center gap-1.5">
             {execution.taskState.status === 'running' && (
-              <span className="text-xs text-[#5C5A55]/80">生成中…</span>
+              <span className="text-xs text-white/60">生成中…</span>
             )}
           </div>
         </header>

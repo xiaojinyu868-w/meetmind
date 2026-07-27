@@ -294,7 +294,7 @@ async function generateCheatsheetWithLLM(
       },
     ],
     model,
-    { temperature: 0.25, maxTokens: 4200, responseFormat: 'json_object' },
+    { temperature: 0.25, maxTokens: 6500, responseFormat: 'json_object' },
   );
   return parseJsonResponse<CheatsheetLLMOutput>(response.content);
 }

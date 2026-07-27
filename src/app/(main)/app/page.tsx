@@ -1502,13 +1502,13 @@ function StudentAppContent({
     const composerHasText = collectionComposerText.trim().length > 0;
     const composerRows = composerHasText ? 2 : 1;
     const topBarStatus = isRecording
-      ? '正在收一段语音'
+      ? COPY.collection.topBarRecordingVoice
       : activeSourceImportCount > 0
-        ? `正在收进 ${activeSourceImportCount} 个文件`
+        ? COPY.collection.topBarReceivingFiles(activeSourceImportCount)
         : '';
 
     return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[#FAF7F2]">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-paper">
       {isMobile ? (
         <MobileRecordTopBar
           viewMode={viewMode}
@@ -1542,15 +1542,35 @@ function StudentAppContent({
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-2.5">
           {collectionFeedItems.length > 0 ? (
             <div className="flex items-center justify-between gap-3 px-2 py-1">
-              <div className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#8E8B82]">
-                <span className="inline-flex h-1 w-1 rounded-full bg-[#8E8B82]" />
-                <span>今天</span>
+              <div className="inline-flex items-center gap-1.5 text-[11px] font-medium text-ink-muted">
+                <span className="inline-flex h-1 w-1 rounded-full bg-ink-muted" />
+                <span>{COPY.collection.today}</span>
               </div>
               {isCollectionContextSelectionMode ? (
-                <div className="text-[11px] font-medium text-[#1C1B19]">
-                  选择中
+                <div className="text-[11px] font-medium text-ink">
+                  {COPY.collection.selecting}
                 </div>
               ) : null}
+            </div>
+          ) : null}
+
+          {/* ── 整理提示条：thinking-strip 气息 + 一句文案 + 最多 2 个动作 ── */}
+          {showCollectionPulsePreview && collectionPulse ? (
+            <div className="flex items-center gap-2.5 rounded-2xl border border-pine/15 bg-pine-fog/60 px-4 py-2.5">
+              <span className="thinking-strip shrink-0">{collectionPulse.title}</span>
+              <p className="min-w-0 flex-1 truncate text-[12.5px] text-ink-secondary">
+                {collectionPulse.body}
+              </p>
+              {(collectionPulse.actions || []).slice(0, 2).map((action) => (
+                <button
+                  key={action.key}
+                  type="button"
+                  onClick={() => handleCollectionPulseAction(action.key)}
+                  className="shrink-0 rounded-full border border-divider bg-card px-2.5 py-1 text-[11px] font-medium text-pine transition hover:border-pine/40 hover:bg-pine-fog"
+                >
+                  {action.label}
+                </button>
+              ))}
             </div>
           ) : null}
 
@@ -1559,14 +1579,14 @@ function StudentAppContent({
           ) : (
             <div className="flex flex-col gap-2.5">
               {showMobileRecorder ? (
-                <div className="rounded-2xl border border-divider bg-white">
+                <div className="rounded-2xl border border-divider bg-card">
                   <div className="px-5 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="inline-flex items-center gap-3 rounded-[14px] bg-[#FAF7F2] px-3.5 py-2.5">
-                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#1C1B19] text-white">
+                      <div className="inline-flex items-center gap-3 rounded-[14px] bg-paper px-3.5 py-2.5">
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-pine text-white">
                           <Mic size={14} />
                         </span>
-                        <span className="flex items-end gap-[3px] text-[#5C5A55]">
+                        <span className="flex items-end gap-[3px] text-ink-secondary">
                           {[8, 12, 16, 11, 15, 9, 13].map((height, index) => (
                             <span
                               key={`live-wave-${height}-${index}`}
@@ -1575,19 +1595,19 @@ function StudentAppContent({
                             />
                           ))}
                         </span>
-                        <span className="text-[12px] font-medium text-[#5C5A55]">语音录制中</span>
+                        <span className="text-[12px] font-medium text-ink-secondary">{COPY.collection.voiceRecording}</span>
                       </div>
                     </div>
                     {currentLivePreview ? (
-                      <p className="mt-2.5 text-[14.5px] leading-[1.8] text-[#1C1B19]">
+                      <p className="mt-2.5 text-[14.5px] leading-[1.8] text-ink">
                         {currentLivePreview}
                       </p>
                     ) : (
-                      <p className="mt-2.5 text-[14px] leading-[1.8] text-[#8E8B82]">
-                        继续说下去，停下后这段语音会直接留在这里。
+                      <p className="mt-2.5 text-[14px] leading-[1.8] text-ink-muted">
+                        {COPY.collection.voiceIdleHint}
                       </p>
                     )}
-                    <div className="mt-2 text-[11px] text-[#8E8B82] tabular-nums">
+                    <div className="mt-2 text-[11px] text-ink-muted tabular-nums">
                       {formatRelativeCollectionTime(new Date().toISOString())}
                     </div>
                   </div>
@@ -1621,13 +1641,13 @@ function StudentAppContent({
                 <button
                   type="button"
                   onClick={() => setMobileCollectionSheet('echo')}
-                  className="flex w-full items-center gap-2.5 rounded-2xl border border-divider bg-white px-5 py-3.5 transition-colors hover:border-ink-muted hover:bg-[#FAFAF9]"
+                  className="flex w-full items-center gap-2.5 rounded-2xl border border-divider bg-card px-5 py-3.5 transition-colors hover:border-pine/30 hover:bg-paper"
                 >
-                  <span className="text-[12px] text-[#D3E4F4]">✦</span>
-                  <span className="min-w-0 flex-1 truncate text-left text-[13px] leading-5 text-[#5C5A55]">
-                    今日情报已根据你的收藏更新
+                  <span className="text-[12px] text-pine">✦</span>
+                  <span className="min-w-0 flex-1 truncate text-left text-[13px] leading-5 text-ink-secondary">
+                    {COPY.collection.echoUpdatedHint}
                   </span>
-                  <ChevronRight size={14} className="flex-shrink-0 text-[#8E8B82]" />
+                  <ChevronRight size={14} className="flex-shrink-0 text-ink-muted" />
                 </button>
               )}
             </div>
@@ -1640,11 +1660,11 @@ function StudentAppContent({
         <button
           type="button"
           onClick={() => scrollCollectionToBottom(true)}
-          className={`${collectionChromeContained ? 'absolute' : 'fixed'} bottom-28 left-1/2 z-20 -translate-x-1/2 flex items-center gap-1.5 rounded-full bg-[#1C1B19] px-4 py-2.5 text-[13px] font-medium text-white/90 transition-all hover:bg-[#111111] active:scale-95`}
-          aria-label="跳转到最新消息"
+          className={`${collectionChromeContained ? 'absolute' : 'fixed'} bottom-28 left-1/2 z-20 -translate-x-1/2 flex items-center gap-1.5 rounded-full bg-pine px-4 py-2.5 text-[13px] font-medium text-white/90 shadow-float transition-all hover:bg-pine-deep active:scale-95`}
+          aria-label={COPY.collection.scrollToLatest}
         >
           <ChevronsDown size={16} className="shrink-0" />
-          <span>跳转到最新消息</span>
+          <span>{COPY.collection.scrollToLatest}</span>
         </button>
       )}
 

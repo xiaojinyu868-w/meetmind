@@ -195,19 +195,19 @@ export function DedaoMenu({
                 'w-full px-4 py-3 flex items-center gap-3',
                 'text-left hover:bg-[var(--dedao-bg-warm)]',
                 'transition-colors duration-150',
-                'highlight' in item && item.highlight && 'bg-[#FDF3C0]/50'
+                'highlight' in item && item.highlight && 'bg-sand/50'
               )}
             >
               <span className={cn(
                 'highlight' in item && item.highlight 
-                  ? 'text-[#5C5A55]' 
+                  ? 'text-[var(--mm-ink-secondary)]' 
                   : 'text-[var(--dedao-gold)]'
               )}>{item.icon}</span>
               <div className="flex-1 min-w-0">
                 <span className={cn(
                   'block text-sm font-medium',
                   'highlight' in item && item.highlight 
-                    ? 'text-[#1C1B19]' 
+                    ? 'text-ink' 
                     : 'text-[var(--dedao-text)]'
                 )}>
                   {item.label}
@@ -265,12 +265,12 @@ export function DedaoMenu({
           {isAuthenticated && user && (
             <button
               onClick={handleLogout}
-              className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-[#FADEC9]/30 transition-colors"
+              className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-rose/30 transition-colors"
             >
-              <svg className="w-5 h-5 text-[#5C5A55]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <svg className="w-5 h-5 text-[var(--mm-ink-secondary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
               </svg>
-              <span className="text-sm text-[#5C5A55]">退出登录</span>
+              <span className="text-sm text-[var(--mm-ink-secondary)]">退出登录</span>
             </button>
           )}
         </div>

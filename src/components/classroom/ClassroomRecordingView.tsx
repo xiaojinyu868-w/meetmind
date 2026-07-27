@@ -12,7 +12,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Square, Languages, Play, Pause, Camera } from 'lucide-react';
+import { Square, Languages, Play, Pause, Camera, ChevronLeft } from 'lucide-react';
 import { ClassroomFlowCanvas } from './ClassroomFlowCanvas';
 import { OctoBuddySprite } from './OctoBuddy';
 import type { ClassroomFlowState } from '@/types/classroom-flow';
@@ -38,6 +38,8 @@ export interface ClassroomRecordingViewProps {
   /** 保留用于向后兼容（不再直接展示） */
   concepts?: LiveConcept[];
   onStop: () => void;
+  /** 返回课程列表（录课入口页）；录音中的课由列表顶部的活动条承接，可以随时回来 */
+  onBack?: () => void;
   /** 真实转录文本（整段拼接） */
   transcriptText?: string;
   /** 真实转录 segments（用于自然句流与移动端原话视图） */
@@ -83,10 +85,12 @@ function LiveTranscriptPanel({
   seconds,
   onCycleTranslationMode,
   onStop,
+  onBack,
   isDemoPlayback,
   demoAudioPlaying,
   demoAudioNeedsGesture,
   onToggleDemoAudio,
+  listening = true,
 }: {
   segments?: TranscriptSegment[];
   recentLines: Array<{ id: string; text: string; startMs: number }>;
@@ -95,10 +99,13 @@ function LiveTranscriptPanel({
   seconds: number;
   onCycleTranslationMode: () => void;
   onStop: () => void;
+  onBack?: () => void;
   isDemoPlayback?: boolean;
   demoAudioPlaying?: boolean;
   demoAudioNeedsGesture?: boolean;
   onToggleDemoAudio?: () => void;
+  /** 仍在听课 → 头部呼吸球仪式；停止 / 试听结束即消散 */
+  listening?: boolean;
 }) {
   const rows = useMemo(
     () => buildLiveTranslationRows({ segments, recentLines, interimText, maxFinalRows: 9999 }),
@@ -198,14 +205,48 @@ function LiveTranscriptPanel({
 
   return (
     <aside className="relative flex h-full w-full min-w-0 flex-col overflow-hidden rounded-[22px] border border-divider bg-card shadow-soft">
+      <style jsx>{`
+        /* 仪式时刻白名单 #1：录音中的呼吸球（转录卡头部 32px 微型版，参考 ui/RecordingHero）
+           —— 听课中存在，停止即消散（listening=false 不渲染 halo） */
+        .rec-orb-halo-outer {
+          background: radial-gradient(circle, rgba(196, 94, 76, 0.22) 0%, transparent 62%);
+          animation: rec-orb-breath 2.6s ease-in-out infinite;
+        }
+        .rec-orb-halo-inner {
+          background: radial-gradient(circle, rgba(47, 107, 85, 0.2) 0%, transparent 66%);
+          animation: rec-orb-breath 3.4s ease-in-out infinite reverse;
+        }
+        @keyframes rec-orb-breath {
+          0%, 100% { opacity: 0.55; transform: scale(0.94); }
+          50%      { opacity: 1;    transform: scale(1.08); }
+        }
+      `}</style>
       <div className="flex-shrink-0 border-b border-divider bg-paper-warm px-3.5 py-3">
         <div className="rounded-[18px] border border-pine/15 bg-card px-3.5 py-3 shadow-soft">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2.5">
-              <span className="relative flex h-2 w-2 flex-shrink-0">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-pine opacity-45" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-pine" />
-              </span>
+              {onBack ? (
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="-ml-1.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-paper-warm hover:text-ink active:scale-95"
+                  title={COPY.recording.backToLessons}
+                  aria-label={COPY.recording.backToLessons}
+                >
+                  <ChevronLeft size={16} strokeWidth={2} />
+                </button>
+              ) : null}
+              {listening ? (
+                <span className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center" aria-hidden>
+                  <span className="rec-orb-halo-outer absolute inset-0 rounded-full" />
+                  <span className="rec-orb-halo-inner absolute inset-1.5 rounded-full" />
+                  <span className="relative h-2 w-2 rounded-full bg-pine" />
+                </span>
+              ) : (
+                <span className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center" aria-hidden>
+                  <span className="h-2 w-2 rounded-full bg-ink-muted/45" />
+                </span>
+              )}
               <div className="min-w-0">
                 <div className="flex items-baseline gap-2">
                   <p className="truncate text-[13px] font-semibold tracking-[-0.01em] text-ink">课堂文字</p>
@@ -332,7 +373,7 @@ function LiveTranscriptPanel({
                   }`}
                 >
                   <span
-                    className="mr-1.5 inline-block align-baseline font-mono text-[11.5px] tabular-nums text-ink-muted/55"
+                    className="cite-ts mr-1.5 cursor-default"
                     style={{ verticalAlign: '0.05em' }}
                   >
                     {formatTime(Math.floor(sentence.startMs / 1000))}
@@ -374,11 +415,31 @@ function DemoAfterClassPanel({
 }) {
   return (
     <div className="flex h-full flex-col overflow-y-auto px-5 py-5 lg:px-6">
-      <div className="rounded-[24px] border border-divider bg-[#F2EDE3] px-5 py-5">
-        <div className="flex items-start gap-4">
+      <style jsx>{`
+        /* 仪式时刻白名单 #3：生成完成的柔光扫过（一次，<1.6s，不循环） */
+        .afterclass-sweep {
+          background: linear-gradient(
+            110deg,
+            transparent 20%,
+            rgba(47, 107, 85, 0.1) 45%,
+            rgba(196, 94, 76, 0.08) 55%,
+            transparent 80%
+          );
+          background-size: 220% 100%;
+          animation: afterclass-sweep 1.5s ease-out 1 both;
+        }
+        @keyframes afterclass-sweep {
+          from { background-position: 200% 0; opacity: 1; }
+          to   { background-position: -100% 0; opacity: 0; }
+        }
+      `}</style>
+      {/* 收尾卡：纸感 + pine ring——像合上一本笔记 */}
+      <div className="relative overflow-hidden rounded-[24px] border border-pine/15 bg-card px-5 py-5 shadow-card">
+        <span aria-hidden className="afterclass-sweep pointer-events-none absolute inset-0" />
+        <div className="relative flex items-start gap-4">
           <OctoBuddySprite mood="happy" size="lg" className="-ml-2 -mt-3 flex-shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-muted">课后</p>
+            <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-pine">课后</p>
             <h2 className="mt-2 text-[26px] font-semibold leading-tight tracking-[-0.04em] text-ink">
               这节试听课听完了。
             </h2>
@@ -393,7 +454,7 @@ function DemoAfterClassPanel({
         <button
           type="button"
           onClick={onFinish}
-          className="rounded-[20px] border border-ink bg-ink px-5 py-4 text-left text-white transition hover:bg-[#1a1a19] active:scale-[0.99]"
+          className="rounded-[20px] border border-pine bg-pine px-5 py-4 text-left text-white shadow-soft transition hover:bg-pine-deep active:scale-[0.99]"
         >
           <p className="text-[15px] font-semibold tracking-[-0.02em]">结束这节课</p>
           <p className="mt-2 text-[12px] leading-relaxed text-white/70">进入课后复习和应用矩阵</p>
@@ -401,7 +462,7 @@ function DemoAfterClassPanel({
         <button
           type="button"
           onClick={onReplay}
-          className="rounded-[20px] border border-divider bg-canvas px-4 py-4 text-left text-[13px] font-medium text-ink-secondary transition hover:text-ink"
+          className="rounded-[20px] border border-divider bg-card px-4 py-4 text-left text-[13px] font-medium text-ink-secondary transition hover:border-ink-muted hover:text-ink"
         >
           再听一遍
         </button>
@@ -452,7 +513,7 @@ function StopBar({ onStop }: { onStop: () => void }) {
         <button
           type="button"
           onClick={onStop}
-          className="group flex w-full items-center justify-center gap-2.5 rounded-full bg-ink py-3.5 text-[13.5px] font-medium text-white transition hover:bg-[#1a1a19] active:scale-[0.995]"
+          className="group flex w-full items-center justify-center gap-2.5 rounded-full bg-ink py-3.5 text-[13.5px] font-medium text-white transition hover:bg-pine-deep active:scale-[0.995]"
         >
           <Square size={11} strokeWidth={2} fill="currentColor" />
           结束这节课
@@ -471,6 +532,7 @@ const EMPTY_NEW_IDS: Set<string> = new Set();
 export function ClassroomRecordingView({
   seconds,
   onStop,
+  onBack,
   segments,
   interimText,
   recentLines = [],
@@ -528,10 +590,12 @@ export function ClassroomRecordingView({
               seconds={seconds}
               onCycleTranslationMode={cycleTranslationModeHandler}
               onStop={onStop}
+              onBack={onBack}
               isDemoPlayback={isDemoPlayback}
               demoAudioPlaying={demoAudioPlaying}
               demoAudioNeedsGesture={demoAudioNeedsGesture}
               onToggleDemoAudio={onToggleDemoAudio}
+              listening={!isDemoComplete}
             />
           </div>
           <div className={`${mobilePane === 'flow' ? 'block' : 'hidden'} min-w-0 overflow-hidden rounded-[24px] border border-divider bg-white xl:block`}>

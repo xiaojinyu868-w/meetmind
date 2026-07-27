@@ -33,12 +33,47 @@
    └──────────────────────────────────────────────┘
    ============================================================ */
 
+/* === 自托管字体（public/fonts，latin 子集；中文回落系统字体） === */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/inter-var-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+2000-206F, U+20A0-20BF;
+}
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/instrument-serif-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+2000-206F;
+}
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/instrument-serif-400-italic.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+2000-206F;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono-var-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+2000-206F;
+}
+
 /* === v7 设计令牌 === */
 :root {
-  /* 字体不依赖构建时外网；优先使用系统中有性格且可靠的字体。 */
-  --font-inter: 'Avenir Next', 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --font-instrument-serif: 'Iowan Old Style', 'Baskerville', 'Songti SC', 'STSong', serif;
-  --font-jetbrains-mono: 'SFMono-Regular', 'Cascadia Code', 'Roboto Mono', Menlo, Consolas, monospace;
+  /* 自托管 webfont 优先，中文与缺失字形回落系统字体。 */
+  --font-inter: 'Inter', 'Avenir Next', 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-instrument-serif: 'Instrument Serif', 'Iowan Old Style', 'Baskerville', 'Songti SC', 'STSong', serif;
+  --font-serif: 'Instrument Serif', 'Songti SC', 'STSong', serif;
+  --font-jetbrains-mono: 'JetBrains Mono', 'SFMono-Regular', 'Cascadia Code', 'Roboto Mono', Menlo, Consolas, monospace;
 
   /* ===== 空间骨架（v7） ===== */
   --mm-paper: #F6F8F6;            /* v7.1 主底色 · 晨雾白 */
@@ -79,6 +114,11 @@
   /* ===== 按钮与强调 ===== */
   --mm-button: #2F6B55;
   --mm-highlight: #F4E8BE;
+
+  /* ===== 沉浸深色表面 ===== */
+  /* 闪卡沉浸 / inline quiz & flashcards / 暗色应用壳的统一底色。
+     与暗色模式 --mm-paper 同值同温（深棕墨黑，不用纯黑），三处表面只引用、不复制数值。 */
+  --mm-immersive: #14110D;
 
   /* ===== 功能语义色（v7 · 都从签名色派生） ===== */
   --mm-success: #2F6B55;
@@ -921,6 +961,12 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+/* 课堂脉络生长：新增脉络项的进入（translate + opacity，配合逐条 stagger） */
+@keyframes flow-grow {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .splash-exit {

@@ -38,23 +38,25 @@ function verifyToken(token: string): { valid: boolean; payload?: TokenPayload } 
   }
 }
 
+// 自定义 server 内部始终是明文 http。反向代理注入 X-Forwarded-Proto: https 时
+// nextUrl 会带上 https 协议，rewrite 目标与内部 origin 不一致会被当成外部地址
+// 二次代理（https 打到 http 端口直接 EPROTO → 500）。强制回 http 保证内部交付。
+function forceInternalProtocol(url: URL): void {
+  url.protocol = 'http:';
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hostname = request.headers.get('host')?.split(':')[0].toLowerCase() ?? '';
 
   // 技术站与产品站共享一套部署。DNS 指向同一服务后，tech.* / technology.*
-  // 会把根路径映射到专业技术介绍；产品主域和 landing.* 继续展示消费级首页。
+  // 会把根路径映射到专业技术介绍；产品主域根路径由 src/app/page.tsx 的
+  // React 落地页直接交付（保留 metadata / OG）。
   if (pathname === '/' && /^(tech|technology)\./.test(hostname)) {
     const technologyUrl = request.nextUrl.clone();
     technologyUrl.pathname = '/technology';
+    forceInternalProtocol(technologyUrl);
     return NextResponse.rewrite(technologyUrl);
-  }
-
-  // 消费级主域保留根路径 URL，内部直接交付无产品截图的品牌叙事版本。
-  if (pathname === '/') {
-    const landingUrl = request.nextUrl.clone();
-    landingUrl.pathname = '/landing-concept-v1.html';
-    return NextResponse.rewrite(landingUrl);
   }
 
   if (matchPath(pathname, STATIC_PATHS)) {

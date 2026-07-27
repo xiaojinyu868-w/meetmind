@@ -14,6 +14,7 @@
 import type { ClipboardEvent, MutableRefObject } from 'react';
 import { ArrowUp, Mic, Plus } from 'lucide-react';
 import { compactText } from '@/lib/utils/page-utils';
+import { COPY } from '@/lib/ui/copy';
 import { CollectionComposerContextPreview } from '@/components/CollectionComposerContextPreview';
 
 interface CollectionComposerBarProps {
@@ -72,7 +73,7 @@ export function CollectionComposerBar({
   const composerHasText = value.trim().length > 0;
 
   return (
-    <div className="relative z-20 flex-shrink-0 bg-[#FAF7F2] px-3 pb-3 pt-2 lg:px-5 lg:pb-4 lg:pt-2.5">
+    <div className="relative z-20 flex-shrink-0 bg-paper px-3 pb-3 pt-2 lg:px-5 lg:pb-4 lg:pt-2.5">
       <div className="mx-auto w-full max-w-3xl">
         <CollectionComposerContextPreview
           quotedCount={quotedCount}
@@ -85,7 +86,7 @@ export function CollectionComposerBar({
 
         {/* 输入卡片——ChatGPT 风格：上文本区 + 下按钮行 */}
         <div
-          className="rounded-2xl border border-divider bg-white"
+          className="rounded-2xl border border-divider bg-card"
           onClick={() => composerRef.current?.focus()}
         >
           {/* 上：文本输入区，撑满卡片宽度 */}
@@ -121,13 +122,11 @@ export function CollectionComposerBar({
               }}
               placeholder={placeholder}
               rows={rows}
-              className="max-h-36 min-h-[32px] w-full resize-none bg-transparent text-[15px] leading-[26px] text-[#1C1B19] caret-[#1C1B19] placeholder:text-[#8E8B82]"
+              className="max-h-36 min-h-[32px] w-full resize-none bg-transparent text-[15px] leading-[26px] text-ink caret-ink placeholder:text-ink-muted"
             />
             {sourceImporting ? (
-              <p className="mt-1 text-[11px] text-[#8E8B82]">
-                {activeSourceImportCount > 1
-                  ? `${activeSourceImportCount} 个文件已收下`
-                  : '文件已收下'}
+              <p className="mt-1 text-[11px] text-ink-muted">
+                {COPY.collection.filesReceived(activeSourceImportCount)}
               </p>
             ) : null}
             {!sourceImporting && sourceImportError ? (
@@ -145,10 +144,10 @@ export function CollectionComposerBar({
                 onClick={(e) => { e.stopPropagation(); onUploadAll(); }}
                 className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${
                   sourceImporting
-                    ? 'text-[#1C1B19] bg-[#D3E4F4]/60'
-                    : 'text-[#8E8B82] hover:text-[#5C5A55] hover:bg-[#FAF7F2]'
+                    ? 'text-pine bg-pine-mist'
+                    : 'text-ink-muted hover:text-ink-secondary hover:bg-paper-warm'
                 }`}
-                aria-label="上传文件"
+                aria-label={COPY.collection.uploadFiles}
               >
                 <Plus size={20} strokeWidth={1.5} />
               </button>
@@ -156,9 +155,9 @@ export function CollectionComposerBar({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onOpenLiveRecorder(); }}
                 disabled={disableLiveRecorder}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-[#8E8B82] transition hover:text-[#2D4F3E] hover:bg-[#FDF3C0]/50 disabled:opacity-40"
-                aria-label="说一段"
-                title="说一段（备忘录式短录音——完整录一节课请到课堂 Tab）"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted transition hover:text-pine hover:bg-pine-fog disabled:opacity-40"
+                aria-label={COPY.collection.dictationLabel}
+                title={COPY.collection.dictationTitle}
               >
                 <Mic size={18} strokeWidth={1.5} />
               </button>
@@ -175,7 +174,7 @@ export function CollectionComposerBar({
                   ? 'bg-pine text-white hover:bg-pine-deep'
                   : 'cursor-default bg-divider text-ink-muted'
               }`}
-              aria-label="发送到收集流"
+              aria-label={COPY.collection.sendToCollection}
             >
               <ArrowUp size={16} strokeWidth={2.5} />
             </button>

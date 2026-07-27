@@ -21,17 +21,17 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `ClassroomLayout.tsx` | ~270 | 左右分栏容器；同桌只在真实录课 / 示例课听课态可见，无课堂上下文时隐藏右栏、Octo Buddy 和移动端问同学入口；录课态右栏默认 340px，把宽度优先留给课堂脉络并保留拖拽放大 |
+| `ClassroomLayout.tsx` | ~270 | 左右分栏容器；同桌只在真实录课 / 示例课听课态可见，无课堂上下文时隐藏右栏、Octo Buddy 和移动端问同学入口；录课态右栏默认 340px，把宽度优先留给课堂脉络并保留拖拽放大；移动端「问同学」悬浮钮走 pine 主签名 |
 | `ClassroomLeftPanel.tsx` | ~690 | 视图管理器（list ↔ recording 淡入切换）+ 首页能力旅程（听懂现场 / 连起资料 / 练成结果）+ **ActiveLessonPill 置顶活动条** + StickyStartBar 底部主 CTA；零存量态把录音来源选择传给 Hero；试听课完成态透传课后引导动作 |
 | `ClassroomHomeCommandCenter.tsx` | ~105 | 有历史课堂时的桌面首页续学控制台：只保留日期、续学主叙事、真实恢复现场、问课堂与放材料入口；不再重复解释能力，让最近课堂进入首屏 |
-| `ClassroomCompanionPanel.tsx` | ~590 | 右侧同桌面板（header/气泡/流式气泡/thinking/输入栏）；课中不写入自动寒暄消息，header + 轻量 Octo 在场信号承接第一次互动，问题快通道只在输入区保留一套，避免上下两组重复入口；管理员透镜读取与真实课中请求相同的转录、recentFocus、学习理解与最近问题；课后 starter 同样不做重功能卡 |
-| `InlineAppCard.tsx` | ~160 | 对话内应用承载卡（真实应用 UI 复用 `apps/windows/AppRenderSurface`，不再手写一套窄版） |
+| `ClassroomCompanionPanel.tsx` | ~590 | 右侧同桌面板（header/气泡/流式气泡/thinking/输入栏）；课中不写入自动寒暄消息，header + 轻量 Octo 在场信号承接第一次互动，问题快通道只在输入区保留一套，避免上下两组重复入口；管理员透镜读取与真实课中请求相同的转录、recentFocus、学习理解与最近问题；课后 starter 同样不做重功能卡；v7 按钮语义：InlineActionStrip 主 action / 发送钮 / 课后首 chip 走 pine，次 action 走 ghost 白边；AI 消息带 2px pine 左 rail 作为克制的“AI 在场”信号 |
+| `InlineAppCard.tsx` | ~160 | 对话内应用承载卡（真实应用 UI 复用 `apps/windows/AppRenderSurface`，不再手写一套窄版）；inline quiz / flashcards 沉浸底统一 `var(--mm-immersive)` |
 | `OctoBuddy.tsx` | ~660 | Octo Buddy 像素 IP（Sprite + 悬浮球）；Sprite 自带呼吸 / 听课 / 开心动画，右侧同桌内嵌也必须动起来 |
-| `ClassroomHero.tsx` | ~280 | 课堂零存量首屏；左侧定位与录音入口，右侧展示真实示例；存在未完成学习线索时，主叙事上方显示 `ContextRecoveryCard`，可直接接回全局 Ask |
+| `ClassroomHero.tsx` | ~280 | 课堂零存量首屏；左侧定位与录音入口，右侧展示真实示例；存在未完成学习线索时，主叙事上方显示 `ContextRecoveryCard`，可直接接回全局 Ask；proof 卡时间戳统一 `.cite-ts`（朱批 mono 胶囊） |
 | `ClassroomLaunchpad.tsx` | ~100 | 课堂首页能力入口：让开始课堂、放入材料、搜索并继续问第一眼可见；只呈现三条学习路径，不做完整功能黄页 |
 | `ClassroomLessonCard.tsx` | ~160 | 一张课的卡片（四种时态视觉差异：upcoming/recording/processing/ready）；时间只显示为元信息，不再伪装成课堂标题 |
-| `ClassroomRecordingView.tsx` | ~640 | 录课中视图（宽桌面左侧实时文字 + 中间课堂脉络；移动端和中等宽度桌面在“脉络 / 原话”之间切换，避免三栏硬挤；含翻译与试听课音频控制）。试听课默认 EN→中，音频结束后只引导点击“结束这节课”，由上层切到课后复习页 / 应用矩阵 |
-| `ClassroomFlowCanvas.tsx` | ~220 | 课中中间主画布：空态只显示真实听课状态，不用解释文案教育用户；内容出现后突出“正在讲”，以低权重时间线呈现近期推进，并将真正值得回来的定义/公式/问题留到课后；不画课中思维导图 |
+| `ClassroomRecordingView.tsx` | ~640 | 录课中视图（宽桌面左侧实时文字 + 中间课堂脉络；移动端和中等宽度桌面在“脉络 / 原话”之间切换，避免三栏硬挤；含翻译与试听课音频控制）。试听课默认 EN→中，音频结束后只引导点击“结束这节课”，由上层切到课后复习页 / 应用矩阵；转录卡头部有呼吸球仪式（listening 时存在、试听完成即消散）和返回课程列表的退出入口（试听课先暂停音频，真实录音由活动条承接可回来），句首时间戳统一 `.cite-ts`；DemoAfterClassPanel 为 v7 收尾卡（纸感 + pine CTA + Octo happy + 一次柔光扫过） |
+| `ClassroomFlowCanvas.tsx` | ~220 | 课中中间主画布：空态只显示真实听课状态，不用解释文案教育用户；内容出现后突出“正在讲”，以低权重时间线呈现近期推进，并将真正值得回来的定义/公式/问题留到课后；不画课中思维导图；新增脉络项用 `flow-grow` 生长进入（translate+opacity，近期推进逐条 stagger），「正在理解」用 `.thinking-strip`，时间锚点统一 `.cite-ts` |
 | `ClassroomRecordingView.model.ts` | ~16 | 录课视图纯模型：翻译模式循环 + 会话级默认翻译模式解析 |
 | `types.ts` | ~55 | Lesson / LessonStatus / ClassroomPaneState / CompanionMessage / CompanionCard |
 | `demoData.ts` | ~90 | Demo 数据（暂未使用，保留供 storybook/演示） |

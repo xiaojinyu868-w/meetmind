@@ -29,6 +29,7 @@ import type {
   SourceProvenance,
 } from '@/types/page-types';
 import { buildSourceProvenance } from '@/lib/capture/source-provenance';
+import { COPY } from '@/lib/ui/copy';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 import type { RecorderHandle } from '@/components/Recorder';
 
@@ -214,12 +215,14 @@ export function useCollectionComposer(
 
   const collectionComposerPlaceholder = useMemo(() => {
     if (quotedCollectionContextItems.length > 1) {
-      return '继续顺着这几条内容写...';
+      return COPY.collection.composerPlaceholderQuotedMulti;
     }
     if (quotedCollectionPrimaryItem) {
-      return `继续顺着这条${getCollectionContextTypeLabel(quotedCollectionPrimaryItem.type)}写...`;
+      return COPY.collection.composerPlaceholderQuotedSingle(
+        getCollectionContextTypeLabel(quotedCollectionPrimaryItem.type),
+      );
     }
-    return '发一句想法，贴个链接，或者先把这节课丢进来';
+    return COPY.collection.composerPlaceholder;
   }, [quotedCollectionContextItems.length, quotedCollectionPrimaryItem]);
 
   // ── Active message menu item ───────────────────────────────────────
@@ -726,7 +729,7 @@ export function useCollectionComposer(
         openLiveRecorder();
         return;
       case 'capture-confusion':
-        nudgeComposer('我现在没懂的是：');
+        nudgeComposer(COPY.collection.confusionNudge);
         return;
       case 'add-material':
         handleSourceFileButtonClick('all');

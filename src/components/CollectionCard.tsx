@@ -1,22 +1,14 @@
 'use client';
 
 /**
- * CollectionCard — 收集流卡片组件 v3（R9-2 顶级 UX 重做）
+ * CollectionCard — 收集流卡片组件（桌面）
  *
- * 用户反馈整改：
- *   - 巨型缩略图喧宾夺主（aspect-video max-h-220 占满卡片宽度，一屏看 2-3 张）
- *     → 视频改横向布局：左 144×81 缩略图 + 右主体（标题/meta/状态），一屏看 6-8 张
- *   - 信息层级倒置（缩略图视觉权重 > 标题）
- *     → 标题升至 16px font-semibold，时间/状态徽章作为次要 meta
- *   - 大量 v6 hex 直写（#1C1B19/#FAF7F2/#D1F4E0/#B8842B/#FADEC9/#D3E4F4 等）
- *     → 全清，统一 v7 token（pine 主签名色家族 + ink/paper 灰阶）
- *   - 状态徽章用绿色 #D1F4E0 + 土黄 #B8842B（与 v7 双签名色冲突）
- *     → 已解析 = pine 主签名 / 解析中 = vermilion 朱批 + 呼吸动画
- *
- * 视觉决策（顶级产品参考 Linear / Pocket / Readwise / 即刻）：
- *   - 列表项 = 横向布局，密度优先
- *   - 缩略图是辅助识别，不是主角
- *   - hover 召唤 pine 主签名（"AI 在场"信号扩散到 capture 列表）
+ * 视觉决策（参考 Linear / Pocket / Readwise / 即刻）：
+ *   - 列表项 = 横向布局，密度优先；视频为左 144×81 缩略图 + 右主体，一屏看 6-8 张
+ *   - 缩略图是辅助识别，标题（16px font-semibold）才是视觉中心
+ *   - 类型徽章统一 v7 双签名色：媒体类（音频/视频）= pine，图片 = vermilion，其他中性
+ *   - 状态语义统一「正在整理 → 已理解」，文案走 COPY.collection
+ *   - hover 召唤 pine ring 微光（"AI 在场"信号扩散到 capture 列表）
  */
 
 import React from 'react';
@@ -63,26 +55,31 @@ export interface CollectionCardProps {
 
 // ==================== 辅助：类型标签（v7 双签名色家族） ====================
 //
-// 之前 5 个 type 各有独立配色（黄/绿/蓝/橙/灰），违背 v7 "双签名色 = 架构" 原则。
-// 现在统一：媒体类（视频/音频）= pine 系，文字类（笔记）= ink-muted 中性，
-// 资料类（图片/文档）= paper-warm + ink-secondary 克制。
+// 与 MobileCollectionCard 同一映射：媒体类（音频/视频）= pine（AI 沉淀），
+// 图片 = vermilion（此刻捕获），文档/文字 = 中性 mute。
 
 import { COPY } from '@/lib/ui/copy';
+import { badgeVariants } from '@/components/ui/badge';
 import { getProvenanceSourceLabel } from '@/lib/capture/source-provenance';
 
 function TypeBadge({ type }: { type: string }) {
-  const config: Record<string, { label: string; bg: string; text: string; dot: string }> = {
-    audio:    { label: COPY.sourceType.audio,    bg: 'bg-pine/[0.08]',     text: 'text-pine',           dot: 'bg-pine' },
-    video:    { label: COPY.sourceType.video,    bg: 'bg-pine/[0.08]',     text: 'text-pine',           dot: 'bg-pine' },
-    image:    { label: COPY.sourceType.image,    bg: 'bg-paper-warm',      text: 'text-ink-secondary',  dot: 'bg-ink-muted' },
-    document: { label: COPY.sourceType.document, bg: 'bg-paper-warm',      text: 'text-ink-secondary',  dot: 'bg-ink-muted' },
-    text:     { label: COPY.sourceType.text,     bg: 'bg-paper-warm',      text: 'text-ink-secondary',  dot: 'bg-ink-muted' },
+  const variantMap: Record<string, 'pine' | 'vermilion' | 'mute'> = {
+    audio: 'pine',
+    video: 'pine',
+    image: 'vermilion',
+    document: 'mute',
+    text: 'mute',
   };
-  const c = config[type] || config.text;
+  const labelMap: Record<string, string> = {
+    audio: COPY.sourceType.audio,
+    video: COPY.sourceType.video,
+    image: COPY.sourceType.image,
+    document: COPY.sourceType.document,
+    text: COPY.sourceType.text,
+  };
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-[2px] font-mono text-[10px] font-medium tracking-[0.02em] ${c.bg} ${c.text}`}>
-      <span className={`h-[4px] w-[4px] rounded-full ${c.dot}`} />
-      {c.label}
+    <span className={`${badgeVariants({ variant: variantMap[type] || 'mute', dot: true })} px-2 py-[2px] text-[10px] tracking-[0.02em]`}>
+      {labelMap[type] || labelMap.text}
     </span>
   );
 }
@@ -264,7 +261,7 @@ export function CollectionCard({
                         : 'bg-paper-warm text-ink-secondary hover:bg-pine/10 hover:text-pine'
                     }`}
                   >
-                    {isSelectedForContext ? '已选' : '选择'}
+                    {isSelectedForContext ? COPY.collection.selectedLabel : COPY.collection.actionSelect}
                   </button>
                 ) : (
                   <button
@@ -293,8 +290,7 @@ export function CollectionCard({
             {/* 底行：状态徽章 — 已解析 / 解析中 / 失败 */}
             <div className="mt-2 flex items-center gap-2 text-[11px]">
               {showVideoStatusText ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-vermilion/[0.08] px-2 py-[2px] font-medium text-vermilion">
-                  <span className="h-1.5 w-1.5 rounded-full bg-vermilion" />
+                <span className={`${badgeVariants({ variant: 'vermilion', dot: true })} px-2 py-[2px] text-[11px]`}>
                   {item.statusText}
                 </span>
               ) : hasVideoTranscript ? (
@@ -304,18 +300,18 @@ export function CollectionCard({
                   className="inline-flex items-center gap-1.5 rounded-full bg-pine/[0.08] px-2 py-[2px] font-medium text-pine transition-all hover:bg-pine/[0.14]"
                 >
                   <BookOpen size={11} strokeWidth={2} />
-                  <span>已解析 · {item.serverTranscriptSegments!.length}句</span>
+                  <span>{COPY.collection.videoParsed(item.serverTranscriptSegments!.length)}</span>
                   <ChevronRight size={11} strokeWidth={2} className="ml-0.5" />
                 </button>
               ) : isStaleParsing ? (
                 <span className="inline-flex items-center gap-1.5 text-ink-muted">
                   <span className="h-1.5 w-1.5 rounded-full bg-vermilion/70" />
-                  <span>解析未完成，换个浏览器再试</span>
+                  <span>{COPY.collection.videoParseStale}</span>
                 </span>
               ) : showVideoParsing ? (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-paper-warm px-2 py-[2px] font-medium text-ink-secondary">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-pine" />
-                  <span>{item.statusText || '正在整理这节课…'}</span>
+                  <span>{item.statusText || COPY.collection.statusOrganizingLesson}</span>
                 </span>
               ) : null}
             </div>
@@ -355,7 +351,7 @@ export function CollectionCard({
                       : 'bg-paper-warm text-ink-secondary hover:bg-pine/10 hover:text-pine'
                   }`}
                 >
-                  {isSelectedForContext ? '已选' : '选择'}
+                  {isSelectedForContext ? COPY.collection.selectedLabel : COPY.collection.actionSelect}
                 </button>
               ) : (
                 <button
@@ -384,7 +380,7 @@ export function CollectionCard({
                 type="button"
                 onClick={() => void onToggleAudioPlayback(item)}
                 disabled={!item.mediaUrl}
-                aria-label={isAudioPlaying ? '暂停音频' : '播放音频'}
+                aria-label={isAudioPlaying ? COPY.collection.pauseAudio : COPY.collection.playAudio}
                 aria-disabled={!item.mediaUrl}
                 className="inline-flex items-center gap-3 rounded-2xl bg-paper-warm px-3 py-2.5 transition hover:bg-paper-deep disabled:opacity-50"
               >
@@ -405,7 +401,7 @@ export function CollectionCard({
                         className="w-[2px] rounded-full transition-opacity duration-200"
                         style={{
                           height: `${h}px`,
-                          backgroundColor: i / 10 < audioProgress ? 'var(--pine, #2D4F3E)' : 'var(--ink-muted, #5C5A55)',
+                          backgroundColor: i / 10 < audioProgress ? 'var(--mm-pine)' : 'var(--mm-ink-muted)',
                           opacity: i / 10 < audioProgress ? 0.85 : 0.3,
                         }}
                       />
@@ -433,7 +429,7 @@ export function CollectionCard({
                     }
                     className="rounded-full px-2 py-[2px] text-ink-secondary transition-all hover:bg-paper-warm hover:text-pine"
                   >
-                    {isAudioTranscriptOpen ? '收起文字' : '查看文字'}
+                    {isAudioTranscriptOpen ? COPY.collection.transcriptHide : COPY.collection.transcriptShow}
                   </button>
                 ) : null}
               </div>
@@ -520,8 +516,7 @@ export function CollectionCard({
           {/* 底部状态（失败提示） */}
           {showInlineStatus ? (
             <div className="mt-2.5">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-vermilion/[0.08] px-2 py-[2px] text-[11px] font-medium text-vermilion">
-                <span className="h-1.5 w-1.5 rounded-full bg-vermilion" />
+              <span className={`${badgeVariants({ variant: 'vermilion', dot: true })} px-2 py-[2px] text-[11px]`}>
                 {item.statusText}
               </span>
             </div>

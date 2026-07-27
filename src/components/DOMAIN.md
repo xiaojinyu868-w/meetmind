@@ -42,7 +42,7 @@ components/
 
 | 文件 | 职责 |
 |------|------|
-| `LandingPage.tsx` / `LandingPage.module.css` | 保留的真实产品影像版首页组件，当前不作为消费级主域默认交付。主域 `/` 暂时由 middleware 内部交付 `public/landing-concept-v1.html` 的无产品截图品牌叙事版本；待收集线与课堂线素材重新录制、成熟宣传片在 ChatCut 完成并验收后，再评估把真实影像版接回。不得使用截图轮播、`zoompan`、伪 UI、抖动或无意义缩放制造镜头 |
+| `LandingPage.tsx` / `LandingPage.module.css` | 消费级主域 `/` 默认交付的落地页（React + COPY 驱动，metadata/OG 生效）。视觉语言继承原概念版：暖纸颗粒底、悬浮玻璃导航、深色电影感 Hero（`classroom-hero.webp`）、衬线巨字纯色阶段卡（录/问/练/证/考）、深绿收集线舞台、上下文公式带、成果纯色卡、可交互试听 iframe、深绿收尾 CTA。按迭代原则不使用真实产品截图/录屏，真实影像只保留给未来验收后的产品宣传片；设计参考存档在 `public/landing-concept-v1.html` |
 | `TechnologyPage.tsx` / `TechnologyPage.module.css` | 面向投资人、研究者和合作伙伴的独立技术介绍，承载上下文架构、ASR、评测与技术问答，并保留回到消费端产品的路径 |
 
 ### 录音 / 转录
@@ -50,9 +50,9 @@ components/
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `Recorder.tsx` | 1694 | 录音主组件（采集/实时转录/暂停/恢复；实时 final 进入 `recorder-utils.mergeRealtimeTranscriptSegment` 去重/修时间戳）；首屏静态挂载以保留首次录音的用户手势与冷启动 ASR，子模块在 `recorder/` |
-| `TranscriptFlowView.tsx` | 778 | 转录内容流式视图 |
+| `TranscriptFlowView.tsx` | 778 | 转录内容流式视图；v7 引用资产化：段落章标与悬停时刻统一 `.cite-ts`，搜索命中高亮用 `.mark-vermilion`，全部 v7 token（无 v6 直写 hex） |
 | `LessonDigestCard.tsx` | ~220 | 课堂结构化笔记纯展示组件（飞书妙记式分段总结 + 图片内联 + 时间戳跳转 + 原文折叠 + 长按标记困惑；桌面移动共用）；标题不再叠加“课堂总结”等重复说明，降级路径不向用户暴露 LLM 等内部术语 |
-| `WaveformPlayer.tsx` | 638 | 波形音频播放器 |
+| `WaveformPlayer.tsx` | ~740 | 波形音频播放器；波形 / 进度 / 光标色走 v7 token 字面值（pine-light / pine / vermilion；wavesurfer 走 canvas 不能用 CSS var）；加载三级加速：云端 `/api/workspace/audio-peaks` 预生成 peaks → IndexedDB `waveformPeaks` 缓存（首次解码后 `exportPeaks` 写入，`peaksCacheKey`=sessionId）→ 整段解码兜底，命中 peaks 即跳过解码不再「卡在 100%」 |
 | `VoiceMicButton.tsx` | ~200 | 语音麦克风按钮 |
 
 ### AI 交互
@@ -86,9 +86,9 @@ components/
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `WorkspaceCaptureList.tsx` | ~900 | 工作空间 capture 列表 |
-| `DesktopVideoReviewLayout.tsx` | ~647 | 桌面端课后复习三栏布局：左=视频/音频证据 + 时间轴，中=转录/困惑点/学习工作区，右=同桌；接入可拖拽三栏并持有课后学习黑板。音频态默认让中间学习区最宽，视频态仍以可观看的原件为第一权重；矩阵和具体应用自带标题，不再叠加重复的“学习工作区”栏头 |
-| `ReviewThreePaneLayout.tsx` | ~156 | 课后复习可拖拽三栏容器：两条边界都可拖拽；音频默认比例 27/49/24，视频默认 46/34/20；学习区 / 同桌被挤到阈值后折叠成窄 rail，左证据栏不自动折叠 |
-| `ReviewLearningWorkspace.tsx` | ~165 | 课后中间学习工作区：用 `AppRenderSurface` 承载完整应用；应用生成结果与闪卡/测验交互同时写入课后黑板和“最近学习现场”，但不自动升级为长期记忆 |
+| `DesktopVideoReviewLayout.tsx` | ~647 | 桌面端课后复习三栏布局：左=视频/音频证据 + 时间轴，中=转录/困惑点/学习工作区，右=同桌；接入可拖拽三栏并持有课后学习黑板。音频态默认让中间学习区最宽，视频态仍以可观看的原件为第一权重；矩阵和具体应用自带标题，不再叠加重复的“学习工作区”栏头；未解决困惑点用 vermilion-fog 语义底，波形条色走 pine token |
+| `ReviewThreePaneLayout.tsx` | ~156 | 课后复习可拖拽三栏容器：两条边界都可拖拽；音频默认比例 27/49/24，视频默认 46/34/20；学习区 / 同桌被挤到阈值后折叠成窄 rail，左证据栏不自动折叠；左证据栏用 paper-warm 底与中/右分层，拖拽缝 hover 用 pine |
+| `ReviewLearningWorkspace.tsx` | ~165 | 课后中间学习工作区：用 `AppRenderSurface` 承载完整应用；应用生成结果与闪卡/测验交互同时写入课后黑板和“最近学习现场”，但不自动升级为长期记忆；闪卡沉浸底统一 `var(--mm-immersive)` |
 | `review-learning-blackboard.ts` | ~131 | 课后学习黑板：轻结构自然语言便签；只记录当前中间应用和最近学习现场事实，不写“应该/提醒/建议”等模型指令，中间应用和右侧同桌通过它解耦 |
 | `WorkspaceCaptureEditorModal.tsx` | ~105 | 工作空间 capture 编辑弹窗，从 page.tsx 提取 |
 | `VideoReviewPlayer.tsx` | 823 | 视频复习播放器（pauseNonce/playNonce/seekNonce 命令式控制，点击画面暂停/播放+指示器动画，visibilitychange 倍速恢复，空格/箭头键盘快捷键，B站 Dash 双轨同步，B站封面代理） |
@@ -104,8 +104,7 @@ components/
 | `mobile/MobileCollectionSheet.tsx` | ~400 | 收集菜单 / 历史收集 / 今日情报面板；移动端底部或侧边 sheet，桌面端以具备 dialog 语义的右侧上下文抽屉呈现；情报空态可返回收集补充上下文 |
 | `CrossCourseFeedPanel.tsx` | ~180 | 个人上下文与目标驱动的情报面板：合并“看见自己”与真实外部信息，对用户零配置；保留上次结果并在后台刷新，失败不清空旧内容 |
 | `FeedStream.tsx` / `feed-stream-model.ts` | ~420 | 今日情报列表渲染器与纯排序模型：外部发现和个人线索从首屏起交替出现，不再用两组标题把信息流切成两个报告；外部卡展示作者、出版时间、来源、个人推荐理由与不同视角；支持反馈及外链打开 |
-| `CollectionFeedMessageBubble.tsx` | ~340 | 收集 Feed 单条消息气泡（audio/video/image/document/text 五种类型），从 page.tsx 提取 |
-| `CollectionEmptyState.tsx` | ~30 | 收集为空时的安静心智提示；所有真实动作统一留在底部输入栏，不重复列举来源能力 |
+| `CollectionEmptyState.tsx` | ~50 | 收集为空时的空态（ui/EmptyState：心智一句 + 六种可收类型 chip + 微信次入口文案）；所有真实动作统一留在底部输入栏 |
 | `ImageUpload.tsx` | ~220 | 图片上传 |
 | `Citations.tsx` | ~140 | 引用标签 |
 | `CitationReferenceSheet.tsx` | ~260 | 引用参考弹窗 |

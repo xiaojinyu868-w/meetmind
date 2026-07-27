@@ -1,4 +1,4 @@
-export type MobileScreen = 'home' | 'recording' | 'processing' | 'review' | 'flashcards' | 'quiz' | 'cheatsheet' | 'mindmap' | 'audio-overview' | 'infographic' | 'apps' | 'classmate' | 'echo' | 'empty';
+export type MobileScreen = 'home' | 'recording' | 'processing' | 'review' | 'flashcards' | 'quiz' | 'cheatsheet' | 'mindmap' | 'audio-overview' | 'infographic' | 'teach-back' | 'apps' | 'classmate' | 'echo' | 'empty';
 
 export type ReviewContentType = 'audio' | 'video' | 'article';
 

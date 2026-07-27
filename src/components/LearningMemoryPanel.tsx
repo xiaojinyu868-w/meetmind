@@ -219,12 +219,18 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
   const visibleActivities = showAllRecent ? recentActivities : recentActivities.slice(0, 3);
 
   if (cheatsheetScope) {
+    // AppWindowShell 根是 min-h-screen 的页面级外壳；本面板挂在 fixed inset-0 里，
+    // 不包滚动容器的话超出视口的内容永远无法到达（页面级 bug：速查表无法滚动）。
     return (
-      <CourseCheatsheetWorkspace
-        courses={cheatsheetScope.courses}
-        initialCourseKeys={cheatsheetScope.initialCourseKeys}
-        onBack={() => setCheatsheetScope(null)}
-      />
+      <div className="flex h-full min-h-0 flex-col bg-canvas">
+        <div className="min-h-0 flex-1 overflow-auto">
+          <CourseCheatsheetWorkspace
+            courses={cheatsheetScope.courses}
+            initialCourseKeys={cheatsheetScope.initialCourseKeys}
+            onBack={() => setCheatsheetScope(null)}
+          />
+        </div>
+      </div>
     );
   }
 

@@ -105,9 +105,9 @@ export function MobileAIChatPanel({
     onNewConversation();
   };
 
-  const tutorPanelClassName = 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E8E2D5] bg-white px-3 pb-3';
-  const realtimePanelClassName = 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E8E2D5] bg-[#FAF7F2]';
-  const historyPanelClassName = 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E8E2D5] bg-white px-3 pb-3';
+  const tutorPanelClassName = 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-divider bg-white px-3 pb-3';
+  const realtimePanelClassName = 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-divider bg-paper-warm';
+  const historyPanelClassName = 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-divider bg-white px-3 pb-3';
 
   // 是否显示历史覆盖层（非通话模式 + showConversationHistory）
   const showHistoryOverlay = !realtimeTeacherEnabled && showConversationHistory;
@@ -158,8 +158,8 @@ export function MobileAIChatPanel({
         <div className={historyPanelClassName}>
           {selectedHistoryConversation ? (
             <div className="h-full flex flex-col">
-              <div className="flex items-center justify-between border-b border-[#E8E2D5] px-3 py-3">
-                <span className="mr-2 flex-1 truncate text-[14px] text-[#1C1B19]">{selectedHistoryConversation.title}</span>
+              <div className="flex items-center justify-between border-b border-divider px-3 py-3">
+                <span className="mr-2 flex-1 truncate text-[14px] text-ink">{selectedHistoryConversation.title}</span>
                 <div className="flex items-center gap-1">
                   <button
                     onClick={onBackToHistoryList}

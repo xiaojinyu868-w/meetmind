@@ -199,8 +199,8 @@ export function ClassroomLayout({
               <span
                 className={`block h-full w-px transition-colors ${
                   dragging
-                    ? 'bg-[#1C1B19]/30'
-                    : 'bg-[#E8E2D5] group-hover:bg-[#1C1B19]/20'
+                    ? 'bg-ink/30'
+                    : 'bg-divider group-hover:bg-pine/40'
                 }`}
               />
             </div>
@@ -208,7 +208,7 @@ export function ClassroomLayout({
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="absolute right-2 top-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full bg-canvas/90 text-ink-muted transition hover:bg-[#F2EDE3] active:scale-95"
+              className="absolute right-2 top-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full bg-canvas/90 text-ink-muted transition hover:bg-paper-warm active:scale-95"
               aria-label="收起同学"
               title="收起"
             >
@@ -235,7 +235,7 @@ export function ClassroomLayout({
         <button
           type="button"
           onClick={openMobileCompanion}
-          className="fixed bottom-[5.5rem] right-4 z-30 flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-2 text-[12.5px] font-medium text-white transition active:scale-95 lg:hidden"
+          className="fixed bottom-[5.5rem] right-4 z-30 flex items-center gap-1.5 rounded-full bg-pine px-3.5 py-2 text-[12.5px] font-medium text-white shadow-soft transition hover:bg-pine-deep active:scale-95 lg:hidden"
           aria-label="问同学"
         >
           <MessageCircle size={14} strokeWidth={2} />
@@ -246,11 +246,11 @@ export function ClassroomLayout({
       {/* ── 移动端：全屏 Sheet ── */}
       {companionAvailable && mobileCompanionOpen && (
         <div className="lg:hidden fixed inset-0 z-40 flex flex-col bg-canvas animate-[fadeIn_200ms_ease-out]">
-          <div className="flex-shrink-0 flex items-center justify-end border-b border-[#E8E2D5] bg-canvas px-2 py-2">
+          <div className="flex-shrink-0 flex items-center justify-end border-b border-divider bg-canvas px-2 py-2">
             <button
               type="button"
               onClick={closeMobileCompanion}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-ink-muted hover:bg-[#F2EDE3] active:scale-95 transition"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-ink-muted hover:bg-paper-warm active:scale-95 transition"
               aria-label="关闭"
             >
               <X size={18} strokeWidth={1.8} />

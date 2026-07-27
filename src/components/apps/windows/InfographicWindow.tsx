@@ -367,7 +367,7 @@ export function InfographicWindow({
             </button>
           </div>
 
-          <article className="overflow-hidden rounded-[28px] border border-pine/20 bg-[#F8F5ED] shadow-soft">
+          <article className="overflow-hidden rounded-[28px] border border-pine/20 bg-paper shadow-soft">
             <div className="border-b border-pine/15 bg-pine px-5 py-5 text-white">
               <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-white/65">MeetMind · {COPY.apps.infographic.appName}</p>
               <h2 className="mt-3 font-serif text-[26px] leading-[1.16] tracking-[-0.02em]">

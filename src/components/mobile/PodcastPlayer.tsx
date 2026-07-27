@@ -54,7 +54,7 @@ function ConfusionMarkerDot({
         "w-3 h-3 rounded-full",
         "focus:outline-none focus:ring-2 focus:ring-offset-1",
         marker.resolved
-          ? "bg-[#D1F4E0] focus:ring-[#D1F4E0]/50"
+          ? "bg-[var(--mm-mint)] focus:ring-[var(--mm-mint)]/50"
           : "bg-vermilion-fog focus:ring-vermilion/50",
         isSelected && "scale-150 ring-2 ring-white/50",
         !marker.resolved && "animate-pulse"
@@ -148,10 +148,10 @@ export function PodcastPlayer({
           onClick={onPlayPause}
           className={cn(
             "w-14 h-14 rounded-full flex items-center justify-center",
-            "bg-[#FDF3C0]",
+            "bg-sand",
             "text-white ",
             "active:scale-95 transition-transform",
-            "focus:outline-none focus:ring-2 focus:ring-[#1C1B19] focus:ring-offset-2 focus:ring-offset-slate-900"
+            "focus:outline-none focus:ring-2 focus:ring-ink focus:ring-offset-2 focus:ring-offset-slate-900"
           )}
           aria-label={isPlaying ? '暂停' : '播放'}
         >
@@ -194,7 +194,7 @@ export function PodcastPlayer({
         >
           {/* 已播放进度 */}
           <div
-            className="absolute inset-y-0 left-0 rounded-full bg-[#FDF3C0]"
+            className="absolute inset-y-0 left-0 rounded-full bg-sand"
             style={{ width: `${progress}%` }}
           />
           
@@ -203,7 +203,7 @@ export function PodcastPlayer({
             className={cn(
               "absolute top-1/2 -translate-y-1/2 -translate-x-1/2",
               "w-4 h-4 rounded-full bg-white",
-              "border-2 border-[#1C1B19]",
+              "border-2 border-ink",
               isDragging && "scale-125"
             )}
             style={{ left: `${progress}%` }}
@@ -227,7 +227,7 @@ export function PodcastPlayer({
             </span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#D1F4E0]" />
+            <span className="w-2 h-2 rounded-full bg-[var(--mm-mint)]" />
             <span className="text-ink-muted">
               {markers.filter(m => m.resolved).length} 已解决
             </span>

@@ -11,7 +11,7 @@
  *   2. 字号成倍数跳跃：32px 标题 / 16px 卡主标 / 12px Meta / 11px 标签
  *   3. 减色：松石绿表达智能与连接，朱砂只表达正在发生
  *   4. 分组标签用 uppercase tracking 英式小标，不用圆点装饰
- *   5. 活动条改为 白底 + 左侧暖黄细柱 + 黑色主标——克制但焦点明确
+ *   5. 活动条改为 白底 + 左侧朱砂细柱 + 黑色主标——克制但焦点明确
  *   6. 主 CTA 使用松石绿，不用纯黑伪造科技感
  *
  * 设计系统：v7 设计宪法：95% 克制 + 5% 仪式时刻情绪化（shadow-soft / shadow-card / shadow-ai-glow）
@@ -90,6 +90,8 @@ export interface ClassroomLeftPanelProps {
   isUnderstandingClassroomFlow?: boolean;
   /** 点击活动条 → 进入录课态全屏视图 */
   onFocusRecording?: () => void;
+  /** 录课 / 试听态返回课程列表（录课入口页） */
+  onBackToList?: () => void;
   /** 试听课音频播放控制 */
   isDemoPlayback?: boolean;
   demoAudioPlaying?: boolean;
@@ -169,7 +171,7 @@ function audioSourceLabel(source?: RecorderAudioSource): string {
 
 /**
  * ActiveLessonPill — 正在录音的置顶活动条（v4 · 克制版）。
- * 不再用暖黄整片大色块。改成：白底 + 左侧 3px 暖黄细柱 + 黑色主标。
+ * 不再用暖黄整片大色块。改成：白底 + 左侧 3px 朱砂细柱 + 黑色主标。
  * 让"正在发生"这件事有焦点，但不吵闹。
  */
 function ActiveLessonPill({
@@ -187,16 +189,16 @@ function ActiveLessonPill({
 }) {
   return (
     <div className="mb-8">
-      <div className="relative overflow-hidden rounded-2xl bg-white px-6 py-5 ring-[0.5px] ring-[#1C1B19]/[0.08]">
-        {/* 左侧强调细柱——只有 3px，但因为足够长，视觉上立刻抓住眼睛 */}
-        <span className="absolute left-0 top-5 bottom-5 w-[3px] rounded-r-full bg-[#B5483C]" />
+      <div className="relative overflow-hidden rounded-2xl bg-white px-6 py-5 ring-[0.5px] ring-ink/[0.08]">
+        {/* 左侧强调细柱——朱砂标记"正在发生"（只有 3px，但因为足够长，视觉上立刻抓住眼睛） */}
+        <span className="absolute left-0 top-5 bottom-5 w-[3px] rounded-r-full bg-vermilion" />
 
         <div className="flex items-center gap-5 pl-2">
           {/* 红点脉动 + 计时器——用排版代替装饰 */}
           <div className="flex flex-shrink-0 items-center gap-2.5">
             <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#B5483C] opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#B5483C]" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-vermilion opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-vermilion" />
             </span>
             <span className="font-mono text-[17px] font-medium tabular-nums tracking-tight text-ink">
               {formatSeconds(seconds)}
@@ -595,6 +597,7 @@ export function ClassroomLeftPanel({
   classroomFlowNewIds,
   isUnderstandingClassroomFlow,
   onFocusRecording,
+  onBackToList,
   isDemoPlayback,
   demoAudioPlaying,
   demoAudioNeedsGesture,
@@ -679,6 +682,7 @@ export function ClassroomLeftPanel({
             seconds={recordingSeconds}
             concepts={liveConcepts}
             onStop={onStopRecording}
+            onBack={onBackToList}
             transcriptText={transcriptText}
             segments={segments}
             interimText={interimText}
