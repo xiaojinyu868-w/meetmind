@@ -8,7 +8,8 @@ export type WorkshopAppKey =
   | 'quiz'
   | 'mindmap'
   | 'infographic'
-  | 'cheatsheet';
+  | 'cheatsheet'
+  | 'teach-back';
 
 export type WorkshopContentKind =
   | 'lecture'
@@ -281,4 +282,57 @@ export interface ContextPack {
     pastPapers?: Array<{ title: string; content: string }>;
     syllabus?: string;
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Teach-back（讲给同桌听）
+//
+// 费曼检验：学生把这节课讲给同桌听，系统把讲述内容对照课堂真实转录核对，
+// 产出「自信 × 有据」四象限。插件负责选目标点，/api/apps/teach-back/evaluate
+// 负责评估；两端共享这里的契约。
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface TeachBackEvidence {
+  startMs: number;
+  endMs: number;
+  snippet: string;
+}
+
+/** 插件选出的「应该能讲出来」的目标点，evidence 已锚回真实片段。 */
+export interface TeachBackTarget {
+  id: string;
+  /** 一句话目标，例如「讲清楚 TCP 为什么要三次握手」 */
+  point: string;
+  /** 为什么这个点值得讲（可选） */
+  why?: string;
+  evidence: TeachBackEvidence | null;
+}
+
+/** 讲课会话的一轮发言（语音转写或打字），role=user 是学生本人在讲。 */
+export interface TeachBackTurn {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+export type TeachBackCoverage = 'explained' | 'partial' | 'missed';
+export type TeachBackConfidence = 'confident' | 'uncertain';
+/** 自信 × 有据四象限；coverage=missed 时 quadrant 为 null（还没讲到，无法评估）。 */
+export type TeachBackQuadrant = 'mastery' | 'productive-struggle' | 'aware-gap' | 'blind-spot';
+
+export interface TeachBackEvaluationItem {
+  targetId: string;
+  point: string;
+  coverage: TeachBackCoverage;
+  confidence: TeachBackConfidence;
+  quadrant: TeachBackQuadrant | null;
+  /** 一句基于证据的核对结论（事实陈述，不给学习建议） */
+  note: string;
+  /** 服务端重新锚定的课堂证据 */
+  evidence: TeachBackEvidence | null;
+}
+
+export interface TeachBackEvaluation {
+  /** 一句话总结（事实陈述，不给学习建议） */
+  headline: string;
+  items: TeachBackEvaluationItem[];
 }

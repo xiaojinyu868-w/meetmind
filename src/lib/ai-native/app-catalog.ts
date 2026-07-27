@@ -154,6 +154,25 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     supportedTiers: ['class', 'unit'],
     primaryTier: 'class',
   },
+  {
+    key: 'teach-back',
+    name: '讲给同桌听',
+    category: '理解检验',
+    headline: '讲一遍，才知道真懂没有',
+    description: '挑几个这节课应该能讲出来的点，讲给同桌听；同桌对照课堂原声核对你讲的，标出讲透的和盲区。',
+    tags: ['费曼检验', '讲授', '盲区', '理解检验'],
+    coverImage: '/images/apps/quiz-cover.svg',
+    pluginId: 'teach-back-lab',
+    intent: '从这节课真实内容中选出 3-5 个学生应该能亲口讲出来的目标点，并把每个目标锚定到课堂证据。',
+    outputType: '讲述评估卡',
+    learningAction: COPY.apps.matrix.catalogMeta['teach-back'].action,
+    bestFor: COPY.apps.matrix.catalogMeta['teach-back'].bestFor,
+    timeLabel: COPY.apps.matrix.catalogMeta['teach-back'].time,
+    renderMode: 'custom',
+    status: 'ready',
+    supportedTiers: ['class'],
+    primaryTier: 'class',
+  },
 ];
 
 export function isWorkshopAppKey(value: string): value is WorkshopAppKey {

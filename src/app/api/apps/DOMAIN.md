@@ -13,7 +13,9 @@ apps route.ts → lib/services/ai-control-service.ts（仅服务端注入已发�
 
 | 路由 | 方法 | 职责 |
 |------|------|------|
-| `/api/apps/execute` | POST | 执行 AI-Native 应用插件；服务端为应用矩阵六类应用注入 `runtimeControl`，插件不能反向依赖 Prisma；材料不足、插件拒绝低价值成品时统一返回 `422 CONTENT_NOT_READY` |
+| `/api/apps/execute` | POST | 执行 AI-Native 应用插件；服务端为应用矩阵七类应用注入 `runtimeControl`，插件不能反向依赖 Prisma；材料不足、插件拒绝低价值成品时统一返回 `422 CONTENT_NOT_READY` |
+| `/api/apps/teach-back/evaluate` | POST | 讲给同桌听的四象限核对：请求体携带讲述目标 + 讲述记录 + 课堂转录（证据由客户端携带，与 execute 同契约），委托 `teach-back-eval-service.ts` 对照课堂转录判 coverage × confidence，quadrant 由服务端映射推导 |
+| `/api/apps/teach-back/cover-check` | POST | 讲课过程中的轻量覆盖检测：黑板粉笔目标「讲到哪划掉哪」的数据源；门槛刻意低于正式核对（讲到了≠讲对了），委托 `teach-back-cover-service.ts` |
 | `/api/apps/plugins` | GET | 获取已注册插件列表 |
 | `/api/apps/catalog` | GET | 获取应用目录（分类/标签） |
 | `/api/apps/infographic/generate-image` | POST | Gemini 生成信息图 |

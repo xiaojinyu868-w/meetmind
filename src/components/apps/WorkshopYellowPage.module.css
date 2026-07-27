@@ -5,8 +5,8 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 22px 22px 92px;
-  background: #F6F8F6;
-  color: #20312A;
+  background: var(--mm-paper);
+  color: var(--mm-ink);
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
 }
@@ -32,7 +32,7 @@
 
 .eyebrow {
   margin: 0;
-  color: #819087;
+  color: var(--mm-ink-muted);
   font-family: 'JetBrains Mono', 'Roboto Mono', ui-monospace, monospace;
   font-size: 10px;
   font-weight: 650;
@@ -42,7 +42,7 @@
 
 .title {
   margin: 4px 0 0;
-  color: #20312A;
+  color: var(--mm-ink);
   font-size: 27px;
   font-weight: 700;
   line-height: 1.16;
@@ -52,7 +52,7 @@
 .subTitle {
   max-width: 620px;
   margin: 6px 0 0;
-  color: #53645C;
+  color: var(--mm-ink-secondary);
   font-size: 13px;
   line-height: 1.58;
 }
@@ -60,7 +60,7 @@
 .contextBasis,
 .subStatus {
   margin: 0;
-  color: #819087;
+  color: var(--mm-ink-muted);
   font-size: 11px;
   font-weight: 550;
   white-space: nowrap;
@@ -68,16 +68,21 @@
 
 .subStatus {
   margin-top: 7px;
-  color: #53645C;
+  color: var(--mm-ink-secondary);
   white-space: normal;
 }
 
+/* readiness 判断中：一条安静的 thinking-strip 气息，而不是弹层 */
 .readinessPending {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-top: 18px;
-  color: #53645C;
+  border: 1px solid var(--mm-divider);
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: var(--mm-paper-warm);
+  color: var(--mm-ink-secondary);
   font-size: 12px;
 }
 
@@ -85,7 +90,7 @@
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: #2F6B55;
+  background: var(--mm-pine);
   animation: readiness-breathe 1.4s ease-in-out infinite;
 }
 
@@ -99,7 +104,7 @@
 
 .sectionTitle {
   margin: 0;
-  color: #20312A;
+  color: var(--mm-ink);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: -0.012em;
@@ -125,19 +130,22 @@
   grid-template-columns: 42px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  border: 1px solid #BFD5C9;
+  border: 1px solid color-mix(in srgb, var(--mm-pine) 28%, var(--mm-card));
   border-radius: 16px;
   padding: 14px;
-  background: #FFFFFF;
-  color: #20312A;
+  background: var(--mm-card);
+  color: var(--mm-ink);
   text-align: left;
   cursor: pointer;
-  transition: border-color 150ms ease, background-color 150ms ease;
+  box-shadow: 0 4px 16px rgba(32, 49, 42, 0.04);
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
 
 .contextAppCard:hover {
-  border-color: #2F6B55;
-  background: #F9FBF9;
+  border-color: var(--mm-pine);
+  background: color-mix(in srgb, var(--mm-pine) 3%, var(--mm-card));
+  box-shadow: 0 16px 48px rgba(32, 49, 42, 0.08);
+  transform: translateY(-2px);
 }
 
 .contextAppIcon {
@@ -147,8 +155,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 13px;
-  background: #EEF3EF;
-  color: #2F6B55;
+  background: var(--mm-paper-warm);
+  color: var(--mm-pine);
 }
 
 .contextAppBody {
@@ -164,7 +172,7 @@
 }
 
 .contextAppBody span {
-  color: #53645C;
+  color: var(--mm-ink-secondary);
   font-size: 11.5px;
   line-height: 1.5;
 }
@@ -177,8 +185,8 @@
   gap: 4px;
   border-radius: 999px;
   padding: 8px 12px;
-  background: #2F6B55;
-  color: #FFFFFF;
+  background: var(--mm-pine);
+  color: var(--mm-ink-inverse);
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
@@ -186,27 +194,38 @@
 
 .card {
   min-width: 0;
-  border: 1px solid #DCE5DF;
+  border: 1px solid var(--mm-divider);
   border-radius: 16px;
-  background: #FFFFFF;
-  transition: border-color 150ms ease, background-color 150ms ease;
+  background: var(--mm-card);
+  box-shadow: 0 4px 16px rgba(32, 49, 42, 0.04);
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
 
 .card:hover {
-  border-color: #A9BDB2;
+  border-color: color-mix(in srgb, var(--mm-pine) 42%, var(--mm-card));
+  box-shadow: 0 16px 48px rgba(32, 49, 42, 0.08);
+  transform: translateY(-2px);
 }
 
+/* 推荐卡「现在最适合」：pine ring + 柔光（surface-ai 语义），与普通卡拉开层级 */
 .cardRecommended {
-  border-color: #2F6B55;
+  border-color: var(--mm-pine);
+  background: linear-gradient(180deg, var(--mm-pine-fog) 0%, var(--mm-card) 46%);
+  box-shadow: 0 0 0 1px var(--mm-pine), 0 12px 36px -10px rgba(47, 107, 85, 0.22);
+}
+
+.cardRecommended:hover {
+  border-color: var(--mm-pine);
+  box-shadow: 0 0 0 1px var(--mm-pine), 0 18px 52px -10px rgba(47, 107, 85, 0.26);
 }
 
 .cardGenerated {
-  border-color: #BFD5C9;
+  border-color: color-mix(in srgb, var(--mm-pine) 28%, var(--mm-card));
 }
 
 .cardRunning,
 .cardFailed {
-  border-color: #DDBBB4;
+  border-color: color-mix(in srgb, var(--mm-vermilion) 35%, var(--mm-card));
 }
 
 .cardFeatured {
@@ -234,8 +253,34 @@
   width: 42px;
   height: 42px;
   border-radius: 13px;
-  background: #EEF3EF;
-  color: #2F6B55;
+  background: var(--mm-paper-warm);
+  color: var(--mm-pine);
+}
+
+/* 每类应用的 icon cover 有克制的签名色倾向（对照 design-demo 04），仍在 token 系统内 */
+.card[data-app='cheatsheet'] .coverWrap {
+  background: var(--mm-sand);
+  color: var(--mm-warning);
+}
+
+.card[data-app='quiz'] .coverWrap {
+  background: var(--mm-vermilion-mist);
+  color: var(--mm-vermilion);
+}
+
+.card[data-app='mindmap'] .coverWrap {
+  background: var(--mm-pine-fog);
+  color: var(--mm-pine-deep);
+}
+
+.card[data-app='audio-overview'] .coverWrap {
+  background: color-mix(in srgb, var(--mm-vermilion) 16%, var(--mm-card));
+  color: var(--mm-vermilion-deep);
+}
+
+.card[data-app='infographic'] .coverWrap {
+  background: var(--mm-pine-mist);
+  color: var(--mm-pine);
 }
 
 .cardCompact .coverWrap {
@@ -267,20 +312,32 @@
 }
 
 .learningAction {
-  color: #2F6B55;
+  color: var(--mm-pine);
+  font-family: 'JetBrains Mono', 'Roboto Mono', ui-monospace, monospace;
   font-size: 10px;
-  font-weight: 750;
+  font-weight: 700;
+  letter-spacing: 0.05em;
   line-height: 1.2;
 }
 
 .recommendedBadge {
-  display: none;
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: var(--mm-pine);
+  color: var(--mm-ink-inverse);
+  font-family: 'JetBrains Mono', 'Roboto Mono', ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.4;
+  text-transform: uppercase;
 }
 
 .appName {
   margin: 2px 0 0;
   overflow: hidden;
-  color: #20312A;
+  color: var(--mm-ink);
   font-size: 15px;
   font-weight: 700;
   line-height: 1.25;
@@ -297,7 +354,7 @@
   display: -webkit-box;
   margin: 5px 0 0;
   overflow: hidden;
-  color: #53645C;
+  color: var(--mm-ink-secondary);
   font-size: 11.5px;
   line-height: 1.45;
   -webkit-box-orient: vertical;
@@ -306,7 +363,7 @@
 
 .cardMeta {
   margin: 4px 0 0;
-  color: #819087;
+  color: var(--mm-ink-muted);
   font-size: 10px;
   line-height: 1.3;
 }
@@ -317,9 +374,9 @@
 
 .recommendationReason {
   margin: 7px 0 0;
-  border-left: 2px solid #B5483C;
+  border-left: 2px solid var(--mm-vermilion);
   padding-left: 8px;
-  color: #53645C;
+  color: var(--mm-ink-secondary);
   font-size: 11px;
   line-height: 1.45;
 }
@@ -333,7 +390,7 @@
   flex-shrink: 0;
   align-items: center;
   gap: 5px;
-  color: #819087;
+  color: var(--mm-ink-muted);
   font-size: 9.5px;
   line-height: 1.2;
 }
@@ -343,20 +400,20 @@
   height: 5px;
   flex-shrink: 0;
   border-radius: 999px;
-  background: #819087;
+  background: var(--mm-ink-muted);
 }
 
 .statusrunning .statusDotCore {
-  background: #B5483C;
+  background: var(--mm-vermilion);
   animation: pulse-dot 1.2s ease-in-out infinite;
 }
 
 .statussuccess .statusDotCore {
-  background: #2F6B55;
+  background: var(--mm-pine);
 }
 
 .statuserror .statusDotCore {
-  background: #B5483C;
+  background: var(--mm-vermilion);
 }
 
 .statusDotLabel,
@@ -392,18 +449,18 @@
 
 .primaryAction {
   min-height: 34px;
-  border: 1px solid #2F6B55;
+  border: 1px solid var(--mm-pine);
   padding: 7px 10px;
-  background: #2F6B55;
-  color: #FFFFFF;
+  background: var(--mm-pine);
+  color: var(--mm-ink-inverse);
 }
 
 .secondaryAction {
   min-height: 32px;
-  border: 1px solid #DCE5DF;
+  border: 1px solid var(--mm-divider);
   padding: 7px 10px;
-  background: #FFFFFF;
-  color: #53645C;
+  background: var(--mm-card);
+  color: var(--mm-ink-secondary);
 }
 
 .primaryAction:hover,
@@ -415,9 +472,9 @@
 
 .primaryAction:disabled,
 .secondaryAction:disabled {
-  border-color: #DCE5DF;
-  background: #F6F8F6;
-  color: #819087;
+  border-color: var(--mm-divider);
+  background: var(--mm-paper);
+  color: var(--mm-ink-muted);
   opacity: 1;
   cursor: not-allowed;
 }
@@ -445,7 +502,7 @@
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: #B5483C;
+  background: var(--mm-vermilion);
   animation: pulse-dot 1.2s ease-in-out infinite;
 }
 
@@ -457,6 +514,7 @@
   user-select: none;
 }
 
+/* 任务 dock：v7 token + 毛玻璃，浮在矩阵内容上方 */
 .dockToggle {
   display: flex;
   width: 100%;
@@ -464,14 +522,17 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  border: 1px solid #BFD5C9;
+  border: 1px solid color-mix(in srgb, var(--mm-pine) 28%, var(--mm-card));
   border-radius: 14px;
   padding: 9px 11px;
-  background: #FFFFFF;
-  color: #20312A;
+  background: color-mix(in srgb, var(--mm-card) 88%, transparent);
+  color: var(--mm-ink);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 12px 36px rgba(32, 49, 42, 0.10);
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
 }
 
 .dockStat {
@@ -480,25 +541,28 @@
   gap: 4px;
   border-radius: 999px;
   padding: 4px 7px;
-  background: #F6F8F6;
-  color: #53645C;
+  background: var(--mm-paper);
+  color: var(--mm-ink-secondary);
   font-size: 10px;
 }
 
 .dockStatRunning {
-  color: #B5483C;
+  color: var(--mm-vermilion);
 }
 
 .dockStatFailed {
-  color: #9C493F;
+  color: var(--mm-vermilion-deep);
 }
 
 .dockPanel {
   margin-top: 8px;
-  border: 1px solid #DCE5DF;
+  border: 1px solid var(--mm-divider);
   border-radius: 14px;
   padding: 11px;
-  background: #FFFFFF;
+  background: color-mix(in srgb, var(--mm-card) 92%, transparent);
+  box-shadow: 0 16px 48px rgba(32, 49, 42, 0.12);
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
 }
 
 .dockPanelHeader,
@@ -527,7 +591,7 @@
 }
 
 .dockPanelTitle {
-  color: #20312A;
+  color: var(--mm-ink);
   font-size: 13px;
   font-weight: 700;
 }
@@ -541,13 +605,13 @@
   border: 0;
   padding: 4px;
   background: transparent;
-  color: #53645C;
+  color: var(--mm-ink-secondary);
   font-size: 11px;
   cursor: pointer;
 }
 
 .dockEmpty {
-  color: #819087;
+  color: var(--mm-ink-muted);
   font-size: 12px;
 }
 
@@ -559,39 +623,39 @@
 }
 
 .dockTaskItem {
-  border: 1px solid #DCE5DF;
+  border: 1px solid var(--mm-divider);
   border-radius: 12px;
   padding: 9px;
-  background: #F6F8F6;
+  background: var(--mm-paper);
 }
 
 .dockTaskName {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #20312A;
+  color: var(--mm-ink);
   font-size: 12px;
   font-weight: 700;
 }
 
 .dockTaskStatus {
-  color: #819087;
+  color: var(--mm-ink-muted);
   font-size: 10px;
 }
 
 .dockStatusrunning,
 .dockStatuserror,
 .dockStatuscancelled {
-  color: #B5483C;
+  color: var(--mm-vermilion);
 }
 
 .dockStatussuccess {
-  color: #2F6B55;
+  color: var(--mm-pine);
 }
 
 .dockTaskMessage {
   margin-top: 5px;
-  color: #53645C;
+  color: var(--mm-ink-secondary);
   font-size: 11px;
   line-height: 1.45;
 }
@@ -608,17 +672,18 @@
 }
 
 .dockActionPrimary {
-  border: 1px solid #2F6B55;
-  background: #2F6B55;
-  color: #FFFFFF;
+  border: 1px solid var(--mm-pine);
+  background: var(--mm-pine);
+  color: var(--mm-ink-inverse);
 }
 
 .dockActionSecondary {
-  border: 1px solid #DCE5DF;
-  background: #FFFFFF;
-  color: #53645C;
+  border: 1px solid var(--mm-divider);
+  background: var(--mm-card);
+  color: var(--mm-ink-secondary);
 }
 
+/* 信息图预览浮层是主题无关的深色 scrim，保留字面值 */
 .previewOverlay {
   position: fixed;
   inset: 0;
@@ -829,5 +894,10 @@
   .pulseIndicator,
   .statusrunning .statusDotCore {
     animation: none;
+  }
+
+  .card:hover,
+  .contextAppCard:hover {
+    transform: none;
   }
 }

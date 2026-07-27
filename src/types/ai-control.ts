@@ -7,7 +7,7 @@ export type TutorAiControlMode =
   | 'global';
 
 export type UnderstandingAiControlMode = 'intent' | 'memory';
-export type AppAiControlMode = 'flashcards' | 'quiz' | 'mindmap' | 'cheatsheet' | 'infographic' | 'audio-overview';
+export type AppAiControlMode = 'flashcards' | 'quiz' | 'mindmap' | 'cheatsheet' | 'infographic' | 'audio-overview' | 'teach-back';
 
 export type AiControlKey =
   | `tutor:${TutorAiControlMode}`

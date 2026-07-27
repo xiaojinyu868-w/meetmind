@@ -9,6 +9,7 @@ export const APP_PROMPT_VERSIONS = {
   cheatsheet: 'app-cheatsheet-v1',
   infographic: 'app-infographic-v1',
   audioOverview: 'app-audio-overview-v1',
+  teachBack: 'app-teach-back-v1',
 } as const;
 
 export interface StructuredAppPromptContext {
@@ -146,7 +147,7 @@ ${context.sourceSummary}
 ${context.examScope ? `\n考试范围证据：\n${context.examScope}\n` : ''}
 应用场景：学生会打印或导出 PDF；可能在开卷考试中带入考场，也可能用于考前最后压缩。内容必须便于纸面扫读和快速定位。
 
-请生成考试速查表内容草案，分成 3-6 个语义区块，每区块 2-8 条目。页数、纸张和排版由前端根据用户约束处理。
+请生成考试速查表内容草案，分成 4-8 个语义区块，每区块 3-10 条目。页数、纸张和排版由前端根据用户约束处理。
 区块 key 从下列枚举中选（label 会在前端被映射成中文，但 key 必须是英文小写）：
   - definition   核心定义（术语 → 一句话释义）
   - formula      关键公式（含推导/条件，如有 LaTeX 写到 latex 字段）
@@ -179,6 +180,7 @@ ${context.examScope ? `\n考试范围证据：\n${context.examScope}\n` : ''}
 
 质量要求：
 - 默认每条 item 的 body 必须极简——通常一句话、约 60 字内，没空写废话
+- body 用电报式短句：省略主语和“是 / 的 / 了”等虚词，可以用 →、⇒、vs、∴、≠ 等符号代替文字连接；单行能说完就不要换行，只有列表或小表格明显更快扫读时才用多行
 - body 支持 GFM Markdown：粗体、列表、引用、代码和表格；只有对比关系用 2-5 行小表格会明显更快时才使用表格
 - 流程 / 因果 / 层级或小规模数据对比只有在文字更难扫读时，才可在 body 中放一个 mermaid 代码块；仅限 flowchart / pie / xychart-beta，流程图最多 6 个节点，图中数值必须直接来自证据，禁止装饰性图表
 - 公式优先写入 latex 字段；body 只补变量含义、成立条件或易错边界，不重复抄公式

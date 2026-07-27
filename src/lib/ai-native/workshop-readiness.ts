@@ -14,6 +14,7 @@ export const ALL_WORKSHOP_APP_KEYS: WorkshopAppKey[] = [
   'mindmap',
   'infographic',
   'audio-overview',
+  'teach-back',
 ];
 
 const CONTENT_KINDS = new Set<WorkshopContentKind>([
@@ -76,7 +77,10 @@ export function fallbackWorkshopReadiness(
     };
   }
 
-  if (evidence.segmentCount < 2 || evidence.characterCount < 80 || evidence.durationMs < 20_000) {
+  if (evidence.characterCount < 80 || (evidence.segmentCount < 2 && evidence.characterCount < 1_500)) {
+    // 空内容 / 极短碎片 → 真的没材料。
+    // 注意：单段但文字足够（早期课堂只有 normalizedText 快照、没有时间轴）不算没材料，
+    // 应用可以基于文字正常工作，只是没有可回跳的时间锚点。
     return {
       status: 'not_ready',
       contentKind: 'fragment',
@@ -89,29 +93,19 @@ export function fallbackWorkshopReadiness(
   }
 
   if (evidence.characterCount < 220 || evidence.durationMs < 60_000) {
-    const limitedKeys: WorkshopAppKey[] = [];
-    if ((input.activeAnchorCount ?? 0) > 0 && tierAppKeys.includes('quiz')) limitedKeys.push('quiz');
-    if ((input.keyDifficulties?.length ?? 0) > 0 && tierAppKeys.includes('flashcards')) limitedKeys.push('flashcards');
-
-    // “limited” 必须真的有一项可靠动作可做。旧逻辑会返回 limited + 空列表，
-    // 前端看起来像有能力，执行层却全部拒绝，用户只会得到一次无意义失败。
-    if (limitedKeys.length === 0) {
-      return {
-        status: 'not_ready',
-        contentKind: 'fragment',
-        recommendedAppKey: null,
-        allowedAppKeys: [],
-        reason: 'insufficient_content',
-        confidence: 'high',
-        evidence,
-      };
-    }
+    // 短材料：能力不裁剪（是否生成是用户的决定，生成不了由插件诚实说明），
+    // 只把学习信号转成推荐——有标记先检验，有难点先回忆。
+    const candidate = (input.activeAnchorCount ?? 0) > 0 && tierAppKeys.includes('quiz')
+      ? 'quiz'
+      : (input.keyDifficulties?.length ?? 0) > 0 && tierAppKeys.includes('flashcards')
+        ? 'flashcards'
+        : null;
 
     return {
       status: 'limited',
       contentKind: 'fragment',
-      recommendedAppKey: limitedKeys[0],
-      allowedAppKeys: limitedKeys.slice(0, 2),
+      recommendedAppKey: candidate,
+      allowedAppKeys: tierAppKeys,
       reason: 'partial_learning',
       confidence: 'medium',
       evidence,
@@ -194,12 +188,13 @@ export function sanitizeWorkshopReadinessAssessment(
     };
   }
 
-  const allowedAppKeys = sanitizeAppKeys(value.allowedAppKeys).filter((key) => tierAppKeys.includes(key));
-  // “推荐什么”与“产品能做什么”是两件事。材料已经完整时，模型只负责挑出
-  // 此刻最合适的一项，不再通过 allowedAppKeys 裁掉其余稳定能力。
-  const resolvedAllowed = status === 'ready'
-    ? tierAppKeys
-    : allowedAppKeys.slice(0, 2);
+  // “推荐什么”与“产品能做什么”是两件事。只要客观证据越过了空内容下限，
+  // 模型就只负责挑出此刻最合适的一项；ready / limited 都不再裁剪 allowedAppKeys，
+  // 生成不了的能力由插件在执行时诚实说明（CONTENT_NOT_READY），而不是在门口禁用。
+  // 客观下限都没过时，服务端不放行（execute 统一返回 CONTENT_NOT_READY）。
+  const resolvedAllowed = fallback.status === 'not_ready'
+    ? []
+    : tierAppKeys;
   const rawRecommendation = typeof value.recommendedAppKey === 'string' && isWorkshopAppKey(value.recommendedAppKey)
     ? value.recommendedAppKey
     : null;

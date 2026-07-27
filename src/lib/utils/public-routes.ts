@@ -47,6 +47,8 @@ const PUBLIC_ROUTES = [
   '/api/apps/catalog',
   '/api/apps/readiness',
   '/api/apps/execute',
+  '/api/apps/teach-back/evaluate',
+  '/api/apps/teach-back/cover-check',
   '/api/class-check/plan',
   '/api/class-check/question',
   '/api/apps/infographic/generate-image',
@@ -64,6 +66,10 @@ const PUBLIC_ROUTES = [
   // 档位2：录音音频流式服务 —— <audio> 标签无法带 Bearer，靠不可猜路径
   // （cuid userId + sessionId 文件名）控制访问，与 wechat-media 同级别。
   '/api/workspace/audio/*',
+  '/api/workspace/audio-peaks/*',
+  // 全端采集层：截图/关键帧图片服务 —— <img> 标签无法带 Bearer，靠不可猜路径
+  // （cuid userId + imageKey 文件名）控制访问，与 audio 同级别。
+  '/api/workspace/images/*',
   // 信息图图片 —— <img> 标签无法带 Bearer，分享页匿名访问；靠不可猜文件名（requestId+时间戳）控制访问。
   '/api/infographic/image/*',
   // v3.0 SharedAgent —— 落地页和 4 个 share API 都允许匿名打开。

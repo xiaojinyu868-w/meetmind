@@ -5,8 +5,8 @@ describe('AppWindowShell tone', () => {
   it('uses a low-luminance immersive shell for flashcards so the practice page is not a white glare field', () => {
     const tone = getAppWindowShellTone('flashcards');
 
-    expect(tone.root).toContain('bg-[#11110F]');
-    expect(tone.header).toContain('bg-[#151411]');
+    expect(tone.root).toContain('bg-[var(--mm-immersive)]');
+    expect(tone.header).toContain('bg-[color-mix(in_srgb,var(--mm-immersive),white_4%)]');
     expect(tone.main).toContain('min-h-[calc(100vh-64px)]');
   });
 

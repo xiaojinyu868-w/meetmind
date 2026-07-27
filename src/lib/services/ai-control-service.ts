@@ -48,6 +48,10 @@ import {
   buildQuizSystemPrompt,
   buildQuizUserPrompt,
 } from '@/lib/ai-native/app-prompts';
+import {
+  buildTeachBackTargetsSystemPrompt,
+  buildTeachBackTargetsUserPrompt,
+} from '@/lib/ai-native/teach-back-prompts';
 
 const MAX_INSTRUCTIONS = 12_000;
 const MAX_NOTE = 500;
@@ -346,6 +350,29 @@ export const AI_CONTROL_DEFINITIONS: AiControlDefinition[] = [
       terminologyHint: '机会成本；沉没成本',
     },
   },
+  {
+    key: 'app:teach-back', group: '应用', mode: 'teach-back', label: '讲给同桌听',
+    description: '从课堂证据选出学生应该能亲口讲出来的目标点，支撑讲述后的四象限核对。',
+    entryPoints: ['应用矩阵 · 讲给同桌听'],
+    contextInputs: [
+      { key: 'goalIntent', label: '本次学习目标', description: '决定选点更偏概念、因果还是易混点。' },
+      { key: 'transcriptContext', label: '课堂原文窗口', description: '选点的唯一证据来源。', limit: '最多约 8000 字' },
+      { key: 'anchorContext', label: '课堂困惑点', description: '优先覆盖学生曾经卡住的位置。', sensitive: true },
+      { key: 'terminologyHint', label: '术语提示', description: '保护课程专有名词，不能扩写为新知识。' },
+    ],
+    lockedContracts: [
+      ...COMMON_LOCKS,
+      '目标点必须全部来自课堂原文，是能口头展开 1-2 分钟的点，不得是碎事实或原文没有的内容。',
+      '每个目标的证据必须重新落回真实片段；锚不住的目标不得携带伪造时间戳。',
+      '只能返回约定 JSON；目标数量与字段上限不得被追加指令突破。',
+    ],
+    sampleContext: {
+      goalIntent: '能讲清楚机会成本和沉没成本的区别。',
+      transcriptContext: '[03:18-03:46] 沉没成本已经发生，不应该继续影响当前决策。\n[05:02-05:31] 机会成本是做出选择时放弃的最佳替代方案。',
+      anchorContext: '[03:35] 仍容易把已经花掉的钱当成继续投入的理由。',
+      terminologyHint: '机会成本；沉没成本',
+    },
+  },
 ];
 
 const runtimeCache = new Map<AiControlKey, { value: AiPromptOverride; expiresAt: number }>();
@@ -365,6 +392,7 @@ function promptVersionFor(controlKey: AiControlKey): string {
   if (controlKey === 'app:cheatsheet') return APP_PROMPT_VERSIONS.cheatsheet;
   if (controlKey === 'app:infographic') return APP_PROMPT_VERSIONS.infographic;
   if (controlKey === 'app:audio-overview') return APP_PROMPT_VERSIONS.audioOverview;
+  if (controlKey === 'app:teach-back') return APP_PROMPT_VERSIONS.teachBack;
   return PROMPT_VERSIONS.tutorSystem;
 }
 
@@ -384,6 +412,7 @@ function buildBaseControlPrompt(
   if (definition.key === 'app:cheatsheet') return buildCheatsheetSystemPrompt();
   if (definition.key === 'app:infographic') return buildInfographicSystemPrompt();
   if (definition.key === 'app:audio-overview') return buildAudioOverviewSystemPrompt();
+  if (definition.key === 'app:teach-back') return buildTeachBackTargetsSystemPrompt();
   return buildTutorSystemPrompt(definition.mode as TutorMode, contextValue as TutorSystemContext, optionsValue as TutorSystemOptions);
 }
 
@@ -429,6 +458,7 @@ function buildTrialUserPrompt(
   if (definition.key === 'app:quiz') return buildQuizUserPrompt(appPromptContext);
   if (definition.key === 'app:mindmap') return buildMindmapUserPrompt(appPromptContext);
   if (definition.key === 'app:infographic') return buildInfographicUserPrompt(appPromptContext);
+  if (definition.key === 'app:teach-back') return buildTeachBackTargetsUserPrompt(appPromptContext);
   if (definition.key === 'app:audio-overview') {
     return buildAudioOverviewUserPrompt({
       goalIntent: appPromptContext.goalIntent,
@@ -615,7 +645,7 @@ export async function buildControlledLearningMemoryPrompt(): Promise<{ systemPro
 }
 
 export async function buildControlledAppPrompt(
-  appKey: 'flashcards' | 'quiz' | 'mindmap' | 'cheatsheet' | 'infographic' | 'audio-overview',
+  appKey: 'flashcards' | 'quiz' | 'mindmap' | 'cheatsheet' | 'infographic' | 'audio-overview' | 'teach-back',
 ): Promise<{ systemPrompt: string; modelId?: string }> {
   const controlKey = `app:${appKey}` as AiControlKey;
   const definition = definitionFor(controlKey);
@@ -630,7 +660,9 @@ export async function buildControlledAppPrompt(
           ? buildCheatsheetSystemPrompt()
           : appKey === 'infographic'
             ? buildInfographicSystemPrompt()
-            : buildAudioOverviewSystemPrompt();
+            : appKey === 'teach-back'
+              ? buildTeachBackTargetsSystemPrompt()
+              : buildAudioOverviewSystemPrompt();
   return {
     systemPrompt: applyAiControlPromptOverride(basePrompt, override, definition.lockedContracts),
     ...(override.enabled && override.modelId ? { modelId: override.modelId } : {}),

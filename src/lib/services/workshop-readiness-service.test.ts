@@ -44,11 +44,11 @@ describe('workshop readiness', () => {
 
     expect(assessment.status).toBe('ready');
     expect(assessment.recommendedAppKey).toBeNull();
-    expect(assessment.allowedAppKeys).toHaveLength(5);
+    expect(assessment.allowedAppKeys).toHaveLength(6);
     expect(assessment.allowedAppKeys).not.toContain('cheatsheet');
   });
 
-  it('does not expose a contradictory limited state when a short lesson has no grounded learning signal', () => {
+  it('keeps short lessons fully actionable and only marks them as limited', () => {
     const assessment = fallbackWorkshopReadiness({
       transcript: [
         segment('这一段开始解释机会成本的基本含义，并提到选择一项活动意味着放弃另一项活动，但课程还没有进入完整例子和推导。', 0, 22_000),
@@ -56,14 +56,16 @@ describe('workshop readiness', () => {
       ],
     });
 
+    // 短材料不再禁用任何能力：生成不了由插件诚实说明，而不是在门口替用户决定
     expect(assessment).toMatchObject({
-      status: 'not_ready',
+      status: 'limited',
       recommendedAppKey: null,
-      allowedAppKeys: [],
+      reason: 'partial_learning',
     });
+    expect(assessment.allowedAppKeys).toHaveLength(6);
   });
 
-  it('allows only the learning action grounded by a learner mark for partial content', () => {
+  it('turns learner marks into a recommendation without restricting capabilities', () => {
     const assessment = fallbackWorkshopReadiness({
       transcript: [
         segment('这一段开始解释机会成本，并用社团活动和周末兼职做了一个可以检验理解的例子，但完整定义还没有收束。', 0, 24_000),
@@ -75,8 +77,8 @@ describe('workshop readiness', () => {
     expect(assessment).toMatchObject({
       status: 'limited',
       recommendedAppKey: 'quiz',
-      allowedAppKeys: ['quiz'],
     });
+    expect(assessment.allowedAppKeys).toHaveLength(6);
   });
 
   it('keeps every single-lesson capability visible for the curated guest demo', () => {
@@ -93,7 +95,7 @@ describe('workshop readiness', () => {
       recommendedAppKey: 'flashcards',
       confidence: 'high',
     });
-    expect(assessment.allowedAppKeys).toHaveLength(5);
+    expect(assessment.allowedAppKeys).toHaveLength(6);
     expect(assessment.allowedAppKeys).not.toContain('cheatsheet');
   });
 
@@ -164,11 +166,11 @@ describe('workshop readiness', () => {
     }, { transcript });
 
     expect(assessment.evidence.durationMs).toBe(783_000);
-    expect(assessment.allowedAppKeys).toHaveLength(5);
+    expect(assessment.allowedAppKeys).toHaveLength(6);
     expect(assessment.status).toBe('ready');
   });
 
-  it('keeps at most two model-approved apps for partial learning content', () => {
+  it('never lets a model limited verdict restrict capabilities, only the recommendation', () => {
     const transcript = Array.from({ length: 8 }, (_, index) => segment(
       `这里正在解释机会成本的含义和一个校园生活例子，内容仍然没有讲完。`,
       index * 10_000,
@@ -183,7 +185,7 @@ describe('workshop readiness', () => {
     }, { transcript });
 
     expect(assessment.status).toBe('limited');
-    expect(assessment.allowedAppKeys).toEqual(['flashcards', 'quiz']);
+    expect(assessment.allowedAppKeys).toHaveLength(6);
     expect(assessment.recommendedAppKey).toBe('flashcards');
     expect(assessment.reason).toBe('partial_learning');
   });
@@ -203,7 +205,7 @@ describe('workshop readiness', () => {
     }, { transcript });
 
     expect(assessment.status).toBe('ready');
-    expect(assessment.allowedAppKeys).toHaveLength(5);
+    expect(assessment.allowedAppKeys).toHaveLength(6);
     expect(assessment.allowedAppKeys).not.toContain('cheatsheet');
   });
 
@@ -221,7 +223,7 @@ describe('workshop readiness', () => {
       confidence: 'high',
     }, { transcript });
 
-    expect(assessment.allowedAppKeys).toHaveLength(5);
+    expect(assessment.allowedAppKeys).toHaveLength(6);
     expect(assessment.allowedAppKeys).toEqual(expect.arrayContaining([
       'flashcards',
       'quiz',

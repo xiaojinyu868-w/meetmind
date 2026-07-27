@@ -44,10 +44,10 @@ function StatusIndicator({
   //  - error → vermilion（朱批提醒，不是红色尖叫）
   //  - idle → ink-muted
   const config: Record<AppTaskState['status'], { dot: string; label: string; pulse: boolean }> = {
-    running: { dot: '#2D4F3E', label: COPY.apps.matrix.running, pulse: true },
-    success: { dot: '#2D4F3E', label: COPY.apps.matrix.ready, pulse: false },
-    error: { dot: '#B5483C', label: COPY.apps.matrix.failed, pulse: false },
-    idle: { dot: '#8E8B82', label: COPY.apps.matrix.waiting, pulse: false },
+    running: { dot: 'var(--mm-pine)', label: COPY.apps.matrix.running, pulse: true },
+    success: { dot: 'var(--mm-pine)', label: COPY.apps.matrix.ready, pulse: false },
+    error: { dot: 'var(--mm-vermilion)', label: COPY.apps.matrix.failed, pulse: false },
+    idle: { dot: 'var(--mm-ink-muted)', label: COPY.apps.matrix.waiting, pulse: false },
   };
   const { dot, label, pulse } = config[status];
   const textColor = immersive ? 'text-white/55' : 'text-ink-muted';
@@ -146,7 +146,7 @@ export function AppWindowShell(props: AppWindowShellProps) {
           html, body {
             margin: 0 !important;
             padding: 0 !important;
-            background: #FFFFFF !important;
+            background: #FFFFFF !important; /* 打印必须强制白纸，与主题无关，保留字面值 */
           }
           [data-app-sidebar],
           [data-app-nav],

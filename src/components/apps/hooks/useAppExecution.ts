@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import type { Anchor, TranscriptSegment } from '@/types';
 import type { AppExecutionResult, ContextPack, DataSourceType } from '@/lib/ai-native/types';
 import type { WorkshopAppCatalogItem } from '@/lib/ai-native/app-catalog';
@@ -405,11 +406,17 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
           if (response.status === 429) {
             throw new Error(data?.error || '生成请求过于频繁，请稍等片刻再点重试');
           }
-          if (data?.error === 'CONTENT_NOT_READY') {
-            throw new Error(COPY.apps.matrix.executeNotReady);
-          }
-          if (data?.error === 'APP_NOT_SUITABLE') {
-            throw new Error(COPY.apps.matrix.executeNotSuitable);
+          if (data?.error === 'CONTENT_NOT_READY' || data?.error === 'APP_NOT_SUITABLE') {
+            // 材料不足是预期内的诚实空态：不抛错、不进红色失败态，窗口回空态 + 一句安静说明
+            const idleState = nowTaskState('idle');
+            setTaskState(idleState);
+            writeCachedTaskState(sessionId, app.key, idleState);
+            toast.message(
+              data.error === 'CONTENT_NOT_READY'
+                ? COPY.apps.matrix.executeNotReady
+                : COPY.apps.matrix.executeNotSuitable,
+            );
+            return null;
           }
           if (data?.error === 'MULTI_LESSON_CONTEXT_REQUIRED') {
             throw new Error(COPY.apps.matrix.executeNeedsMultipleLessons);

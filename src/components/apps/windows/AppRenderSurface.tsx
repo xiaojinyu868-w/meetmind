@@ -10,6 +10,7 @@ import { QuizWindow } from './QuizWindow';
 import { MindmapWindow } from './MindmapWindow';
 import { InfographicWindow } from './InfographicWindow';
 import { CheatsheetWindow } from './CheatsheetWindow';
+import { TeachBackWindow } from './TeachBackWindow';
 
 export interface AppRenderSurfaceProps {
   appKey: WorkshopAppKey;
@@ -73,6 +74,18 @@ export function AppRenderSurface({
 
   if (appKey === 'cheatsheet') {
     return <CheatsheetWindow result={result} onSeek={onSeek} />;
+  }
+
+  if (appKey === 'teach-back') {
+    return (
+      <TeachBackWindow
+        result={result}
+        transcript={transcript}
+        contentContext={contentContext}
+        onSeek={onSeek}
+        onLearningActivity={onLearningActivity}
+      />
+    );
   }
 
   return null;

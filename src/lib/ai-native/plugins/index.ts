@@ -5,6 +5,7 @@ import { quizPlugin } from './quiz.plugin';
 import { mindmapPlugin } from './mindmap.plugin';
 import { classCheckPlugin } from './class-check.plugin';
 import { cheatsheetPlugin } from './cheatsheet.plugin';
+import { teachBackPlugin } from './teach-back.plugin';
 import { fallbackPlugin } from './fallback.plugin';
 
 export const defaultPlugins: AppPlugin[] = [
@@ -14,6 +15,7 @@ export const defaultPlugins: AppPlugin[] = [
   mindmapPlugin,
   classCheckPlugin,
   cheatsheetPlugin,
+  teachBackPlugin,
   fallbackPlugin,
 ];
 
@@ -24,5 +26,6 @@ export {
   mindmapPlugin,
   classCheckPlugin,
   cheatsheetPlugin,
+  teachBackPlugin,
   fallbackPlugin,
 };

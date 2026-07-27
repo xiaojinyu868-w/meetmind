@@ -13,8 +13,8 @@ describe('SKILL_PROMPTS catalog', () => {
   //   4. 核心 4 个 skill 必须走 appKey（结构化插件路径），不能退回 prompt-only
   //      这是 M7-fix10 的架构承诺：结构化技能 = 真实 plugin，不是 /api/tutor 下的纯 markdown
   // 以后要添加新的 skill 只要更新这个测试的预期数量即可。
-  it('has the expected five core skills', () => {
-    expect(SKILL_PROMPTS).toHaveLength(5);
+  it('has the expected six core skills', () => {
+    expect(SKILL_PROMPTS).toHaveLength(6);
   });
 
   it('每个 skill 都有 label / prompt / utterance，且不使用 emoji icon', () => {
@@ -37,12 +37,13 @@ describe('SKILL_PROMPTS catalog', () => {
     expect(unique.size).toBe(labels.length);
   });
 
-  it('核心 4 个结构化 skill 在目录里（防重构时手滑漏掉）', () => {
+  it('核心 5 个结构化 skill 在目录里（防重构时手滑漏掉）', () => {
     const labels = SKILL_PROMPTS.map((s) => s.label);
     expect(labels).toContain('考试速查表');
     expect(labels).toContain('做闪卡');
     expect(labels).toContain('出测验');
     expect(labels).toContain('画思维导图');
+    expect(labels).toContain('讲给同桌听');
   });
 
   it('结构化 skill 都挂 appKey（走 /api/apps/execute 真实 plugin，不走 /api/tutor markdown）', () => {
@@ -51,6 +52,7 @@ describe('SKILL_PROMPTS catalog', () => {
       '做闪卡': 'flashcards',
       '出测验': 'quiz',
       '画思维导图': 'mindmap',
+      '讲给同桌听': 'teach-back',
     };
     for (const [label, appKey] of Object.entries(expectedApp)) {
       const skill = SKILL_PROMPTS.find((s) => s.label === label);

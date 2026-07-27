@@ -12,7 +12,7 @@ describe('ai-control-service contracts', () => {
     expect(AI_CONTROL_DEFINITIONS.map((item) => item.key)).toEqual([
       'tutor:in-class', 'tutor:review', 'tutor:shared', 'tutor:goal', 'tutor:word', 'tutor:global',
       'understanding:intent', 'understanding:memory',
-      'app:flashcards', 'app:quiz', 'app:mindmap', 'app:cheatsheet', 'app:infographic', 'app:audio-overview',
+      'app:flashcards', 'app:quiz', 'app:mindmap', 'app:cheatsheet', 'app:infographic', 'app:audio-overview', 'app:teach-back',
     ]);
     expect(new Set(AI_CONTROL_DEFINITIONS.map((item) => item.key)).size).toBe(AI_CONTROL_DEFINITIONS.length);
   });

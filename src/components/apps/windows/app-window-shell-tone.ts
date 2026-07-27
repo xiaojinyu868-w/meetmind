@@ -14,8 +14,9 @@ export interface AppWindowShellTone {
 export function getAppWindowShellTone(appKey: WorkshopAppKey): AppWindowShellTone {
   if (appKey === 'flashcards') {
     return {
-      root: 'min-h-screen bg-[#11110F] text-white',
-      header: 'sticky top-0 z-20 border-b border-white/[0.08] bg-[#151411] backdrop-blur',
+      root: 'min-h-screen bg-[var(--mm-immersive)] text-white',
+      // header 比底色略亮一档：immersive 混入 4% 白（原 v6 的 #151411）
+      header: 'sticky top-0 z-20 border-b border-white/[0.08] bg-[color-mix(in_srgb,var(--mm-immersive),white_4%)] backdrop-blur',
       headerInner: 'mx-auto flex min-h-14 max-w-7xl items-center gap-2 px-3 py-2 sm:gap-3 sm:px-6 sm:py-3',
       backLink: 'inline-flex h-10 min-w-10 items-center justify-center gap-1 rounded-full border border-white/[0.10] bg-white/[0.04] px-2.5 text-sm text-white/62 hover:border-white/[0.18] hover:text-white sm:px-3',
       title: 'truncate text-lg font-semibold text-white/92',

@@ -341,9 +341,8 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     contextTier: tier,
   });
 
-  const availableAppKeys = useMemo(() => new Set(
-    assessment?.allowedAppKeys ?? (transcript.length > 0 ? visibleApps.map((app) => app.key) : []),
-  ), [assessment?.allowedAppKeys, transcript.length, visibleApps]);
+  // 不再替用户决定「能不能用」：所有应用始终可用，材料撑不住时由插件执行后诚实空态。
+  // readiness 只负责「现在最适合」的推荐和材料不足的提示横幅。
 
   const fallbackRecommendation = useMemo(() => recommendWorkshopApp({
     activeAnchorCount,
@@ -360,7 +359,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     ? fallbackRecommendation.reason
     : '';
   const recommendedApp = recommendationKey
-    ? visibleApps.find((app) => app.key === recommendationKey && availableAppKeys.has(app.key))
+    ? visibleApps.find((app) => app.key === recommendationKey)
     : undefined;
   const otherApps = visibleApps.filter((app) => app.key !== recommendedApp?.key);
   const blockedCopy = assessment?.status === 'not_ready'
@@ -648,18 +647,28 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
 
         if (!response.ok || !data.ok || !data.result) {
           const backendError = data.error?.trim();
-          const safeError = backendError === 'CONTENT_NOT_READY'
-            ? COPY.apps.matrix.executeNotReady
-            : backendError === 'APP_NOT_SUITABLE'
-              ? COPY.apps.matrix.executeNotSuitable
-              : COPY.apps.matrix.generateFailed;
+          // 材料不足是预期内的诚实空态，不是失败：不记错误、不进红色失败态，
+          // 卡片回到可开始状态，用户看到一句安静的说明。
+          if (backendError === 'CONTENT_NOT_READY' || backendError === 'APP_NOT_SUITABLE') {
+            log.info('app.execute.not_ready', { appKey: app.key, status: response.status, backendError });
+            const idleState: AppTaskState = { status: 'idle', updatedAt: Date.now() };
+            writeCachedTaskState(sessionId, app.key, idleState);
+            setTaskMap((prev) => ({ ...prev, [app.key]: idleState }));
+            upsertDockTask(app, { status: 'cancelled', updatedAt: Date.now(), message: undefined });
+            toast.message(
+              backendError === 'CONTENT_NOT_READY'
+                ? COPY.apps.matrix.executeNotReady
+                : COPY.apps.matrix.executeNotSuitable,
+            );
+            return;
+          }
           log.error('app.execute.failed', {
             appKey: app.key,
             status: response.status,
             backendError,
             responsePreview: rawBody.slice(0, 240).replace(/\s+/g, ' ').trim(),
           });
-          throw new Error(safeError);
+          throw new Error(COPY.apps.matrix.generateFailed);
         }
 
         writeCachedAppResult(sessionId, app.key, data.result);
@@ -850,7 +859,6 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         key={app.key}
         app={app}
         status={status}
-        available={availableAppKeys.has(app.key)}
         recommended={isRecommended}
         recommendationReason={isRecommended ? recommendationReason : undefined}
         progressLabel={dockTask ? <ElapsedTimer startMs={dockTask.startedAt} /> : undefined}

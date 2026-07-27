@@ -76,6 +76,13 @@ export const SKILL_PROMPTS: SkillPrompt[] = [
     prompt: '把这节课的主干和分支整理成思维导图结构。',
   },
   {
+    label: '讲给同桌听',
+    hint: '讲出来才算懂',
+    appKey: 'teach-back',
+    utterance: '我想把这节课讲给同桌听，看看你听得懂吗。',
+    prompt: '我想把这节课的重点讲出来，请你当听众。',
+  },
+  {
     // "再讲一遍"天然对话式——agent 不会调 tool，直接流式回答即可。
     label: '再讲一遍',
     hint: '换个说法听',

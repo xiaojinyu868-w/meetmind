@@ -14,7 +14,7 @@ import {
 import { assessWorkshopReadiness } from '@/lib/services/workshop-readiness-service';
 import { buildControlledAppPrompt } from '@/lib/services/ai-control-service';
 
-const GOVERNED_APP_KEYS = ['flashcards', 'quiz', 'mindmap', 'cheatsheet', 'infographic', 'audio-overview'] as const;
+const GOVERNED_APP_KEYS = ['flashcards', 'quiz', 'mindmap', 'cheatsheet', 'infographic', 'audio-overview', 'teach-back'] as const;
 type GovernedAppKey = typeof GOVERNED_APP_KEYS[number];
 
 function isGovernedAppKey(value: string): value is GovernedAppKey {
@@ -171,11 +171,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (readiness.status === 'not_ready' || readiness.allowedAppKeys.length === 0) {
+      // 材料不足是预期内的诚实空态，不是协议错误：200 + ok:false，
+      // 前端按安静提示处理（422 会在用户控制台刷出红色网络错误）。
       return NextResponse.json({
         ok: false,
         error: 'CONTENT_NOT_READY',
         readiness,
-      }, { status: 422 });
+      });
     }
 
     if (appKey && !readiness.allowedAppKeys.includes(appKey as typeof readiness.allowedAppKeys[number])) {
@@ -183,7 +185,7 @@ export async function POST(request: NextRequest) {
         ok: false,
         error: 'APP_NOT_SUITABLE',
         readiness,
-      }, { status: 422 });
+      });
     }
 
     const result = await withTimeout(
@@ -208,10 +210,8 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     if (message === 'CONTENT_NOT_READY') {
-      return NextResponse.json(
-        { ok: false, error: 'CONTENT_NOT_READY' },
-        { status: 422 },
-      );
+      // 插件判定材料撑不出可靠成品：同为预期内空态，200 + ok:false
+      return NextResponse.json({ ok: false, error: 'CONTENT_NOT_READY' });
     }
     return NextResponse.json(
       { ok: false, error: message },

@@ -8,6 +8,7 @@ import {
   Image as ImageIcon,
   Layers,
   ListTodo,
+  Mic,
   Network,
   Play,
   RotateCcw,
@@ -23,7 +24,6 @@ export type WorkshopCardStatus = 'idle' | 'running' | 'success' | 'error';
 interface WorkshopAppCardProps {
   app: WorkshopAppCatalogItem;
   status: WorkshopCardStatus;
-  available?: boolean;
   recommended?: boolean;
   recommendationReason?: string;
   progressLabel?: ReactNode;
@@ -44,20 +44,19 @@ const APP_ICONS: Record<WorkshopAppKey, typeof Layers> = {
   mindmap: Network,
   infographic: ImageIcon,
   'audio-overview': Headphones,
+  'teach-back': Mic,
 };
 
-function statusLabel(status: WorkshopCardStatus, available: boolean): string {
+function statusLabel(status: WorkshopCardStatus): string {
   if (status === 'running') return COPY.apps.matrix.running;
   if (status === 'success') return COPY.apps.matrix.ready;
   if (status === 'error') return COPY.apps.matrix.failed;
-  if (!available) return COPY.apps.matrix.notAvailable;
   return COPY.apps.matrix.waiting;
 }
 
 export function WorkshopAppCard({
   app,
   status,
-  available = true,
   recommended = false,
   recommendationReason,
   progressLabel,
@@ -81,7 +80,7 @@ export function WorkshopAppCard({
   ].filter(Boolean).join(' ');
 
   return (
-    <article className={cardClassName} data-testid={`workshop-card-${app.key}`}>
+    <article className={cardClassName} data-app={app.key} data-testid={`workshop-card-${app.key}`}>
       <div className={styles.coverWrap} aria-hidden>
         <Icon size={24} strokeWidth={1.55} />
       </div>
@@ -97,7 +96,7 @@ export function WorkshopAppCard({
           <span className={`${styles.statusDot} ${styles[`status${status}`]}`}>
             <span className={styles.statusDotCore} aria-hidden />
             <span className={styles.statusDotLabel}>
-              {status === 'running' && progressLabel ? progressLabel : statusLabel(status, available)}
+              {status === 'running' && progressLabel ? progressLabel : statusLabel(status)}
             </span>
           </span>
         </div>
@@ -127,7 +126,6 @@ export function WorkshopAppCard({
             type="button"
             className={styles.primaryAction}
             onClick={onRetry}
-            disabled={!available}
             aria-label={`${app.name}，${COPY.apps.matrix.retry}`}
             title={COPY.apps.matrix.retry}
             data-testid={`workshop-inline-retry-${app.key}`}
@@ -152,7 +150,7 @@ export function WorkshopAppCard({
             </button>
             {shareAction}
             {!compact ? (
-              <button type="button" className={styles.secondaryAction} onClick={onRemake} disabled={!available} data-testid={`workshop-bg-generate-${app.key}`}>
+              <button type="button" className={styles.secondaryAction} onClick={onRemake} data-testid={`workshop-bg-generate-${app.key}`}>
                 <RotateCw size={13} strokeWidth={1.75} />
                 {COPY.apps.matrix.remake}
               </button>
@@ -163,14 +161,13 @@ export function WorkshopAppCard({
             type="button"
             className={styles.primaryAction}
             onClick={onStart}
-            disabled={!available}
-            aria-label={`${app.name}，${available ? COPY.apps.matrix.start : COPY.apps.matrix.notAvailable}`}
-            title={available ? COPY.apps.matrix.start : COPY.apps.matrix.notAvailable}
+            aria-label={`${app.name}，${COPY.apps.matrix.start}`}
+            title={COPY.apps.matrix.start}
             data-testid={`workshop-bg-generate-${app.key}`}
           >
             <Play size={13} strokeWidth={1.75} />
             <span className={compact ? styles.compactActionText : undefined}>
-              {available ? COPY.apps.matrix.start : COPY.apps.matrix.notAvailable}
+              {COPY.apps.matrix.start}
             </span>
           </button>
         )}
