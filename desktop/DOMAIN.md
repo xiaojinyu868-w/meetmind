@@ -59,6 +59,14 @@ tag 触发时自动建 GitHub Release。未配置签名证书：mac 首次「右
 win SmartScreen「更多信息→仍要运行」；买到证书后在仓库 Secrets 注入
 `CSC_LINK` / `CSC_KEY_PASSWORD` 即自动签名。
 
+> ⚠️ 已知风险（2026-07 确认）：仓库主账号因 GitHub 贸易管制无法添加支付方式，
+> 账户被 billing lock，GitHub-hosted runner 的 job 会被零步骤拒绝
+> （"account is locked due to a billing issue"）。CI 不可用时的备选：
+> **任意一台 Mac 可同时出 mac + win 两个包**（electron-builder 自带 wine）：
+> `npm run desktop:dist:mac && npm run desktop:dist:win`，
+> 产物手动传到 GitHub Release（文件名必须与 electron-builder.yml 的
+> artifactName 一致，landing 下载链接按稳定文件名配置）。
+
 本机打包若卡在下 binaries（GitHub 直连超时），用 npmmirror 镜像：
 
 ```bash
