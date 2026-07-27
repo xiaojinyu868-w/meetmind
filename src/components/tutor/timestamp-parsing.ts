@@ -79,6 +79,23 @@ export function findTimestamps(text: string): TimestampMatch[] {
 }
 
 /**
+ * 一键复制场景：把 [MM:SS] / [t=MM:SS] / [MM:SS-MM:SS] 标记从文本里抹掉。
+ * 只抹能通过 parseTimestamp 校验的标记，[99:99] 这类误匹配原样保留。
+ * 顺带清理标记走后留下的空位（标点前的空格、连续空格、行尾空格）。
+ */
+export function stripTimestamps(text: string): string {
+  TIMESTAMP_RE.lastIndex = 0;
+  return text
+    .replace(TIMESTAMP_RE, (raw, display: string) => (parseTimestamp(display) === null ? raw : ''))
+    .replace(/[ \t]+([，。、；：？！,.!?;:])/g, '$1')
+    .replace(/([，。、；：？！])[ \t]+/g, '$1')
+    .replace(/([（(「『【])[ \t]+/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .trim();
+}
+
+/**
  * 把文本切成 [text, ts, text, ts, ...] 段，方便 React map 渲染。
  * 返回 TextPart（纯文本）和 TimestampPart（可点击）两种节点。
  */

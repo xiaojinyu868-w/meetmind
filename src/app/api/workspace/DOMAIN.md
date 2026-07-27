@@ -19,8 +19,9 @@ workspace route.ts ❌ 不能调用 api/ 下其他 routes
 | `/api/workspace/captures/[captureId]/evidence` | GET | 按课堂懒加载正规化转录、锚点、摘要、精选片段与笔记；仅工作区成员可读 |
 | `/api/workspace/captures/stats` | GET | 获取 captures 统计（总数/时长/类型分布） |
 | `/api/workspace/search` | POST | AI 语义检索（SSE 流式返回） |
-| `/api/workspace/upload-audio` | POST | 登录态持久化录音原声，并按 sessionId 自动绑定对应 capture |
+| `/api/workspace/upload-audio` | POST | 登录态持久化录音原声，并按 sessionId 自动绑定对应 capture；落盘后异步预生成波形峰值（ffmpeg → 800 点 `.peaks.json`） |
 | `/api/workspace/audio/[userId]/[fileName]` | GET | 鉴权读取运行期上传的课堂原声 |
+| `/api/workspace/audio-peaks/[user]/[file]` | GET | 返回预生成波形峰值（800 点 + 时长），前端 wavesurfer 拿到后跳过整段解码；未生成时 404 并后台补生成 |
 | `/api/workspace/echoes/daily-refresh` | POST | 触发每日回响新鲜度刷新 |
 
 ## 文件清单

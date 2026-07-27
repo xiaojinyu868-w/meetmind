@@ -25,6 +25,9 @@ export interface AudioSession {
   transcriptionStatus?: 'pending' | 'completed' | 'failed';
   transcriptionError?: string;
   transcriptionUpdatedAt?: Date;
+  /** 波形峰值缓存（800 点）：wavesurfer 首次解码后写入，下次进复习页跳过整段解码 */
+  waveformPeaks?: number[];
+  waveformPeaksDurationSec?: number;
   status: 'recording' | 'completed' | 'archived';
   createdAt: Date;
   updatedAt: Date;

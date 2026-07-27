@@ -20,6 +20,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { authService } from '@/lib/services/auth-service';
 import { attachUploadedAudioToWorkspaceCapture } from '@/lib/services/workspace-audio-sync-service';
+import { ensureAudioPeaks } from '@/lib/services/audio-peaks-service';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('workspace/upload-audio');
@@ -75,6 +76,9 @@ export async function POST(request: NextRequest) {
 
     const buffer = Buffer.from(await audioFile.arrayBuffer());
     fs.writeFileSync(filePath, buffer);
+
+    // 异步预生成波形峰值（前端拿到 peaks 跳过整段解码），不阻塞上传响应
+    ensureAudioPeaks(filePath);
 
     // 注意：必须走 API 流式路由，不能用 /uploads/... 静态 URL——
     // Next.js `next start` 只服务进程启动时已存在的 public 文件，

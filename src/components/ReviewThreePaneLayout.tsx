@@ -57,7 +57,7 @@ function PaneRail({ label, onRestore }: { label: string; onRestore: () => void }
     <button
       type="button"
       onClick={onRestore}
-      className="flex h-full w-full items-center justify-center border-l border-divider bg-canvas text-[12px] font-medium tracking-[0.08em] text-ink-muted transition hover:bg-white hover:text-ink"
+      className="flex h-full w-full items-center justify-center border-l border-divider bg-canvas text-[12px] font-medium tracking-[0.08em] text-ink-muted transition hover:bg-paper-warm hover:text-pine"
       title={`展开${label}`}
       aria-label={`展开${label}`}
     >
@@ -118,7 +118,8 @@ export function ReviewThreePaneLayout({
       style={{ gridTemplateColumns }}
       data-review-pane-mode={mode}
     >
-      <section className="min-w-0 min-h-0 overflow-hidden bg-white" aria-label={sourceLabel}>
+      {/* 左证据栏：paper-warm 底，与中（白）/ 右（白）分层——"左边有根"在视觉上可辨 */}
+      <section className="min-w-0 min-h-0 overflow-hidden bg-paper-warm" aria-label={sourceLabel}>
         {source}
       </section>
 
@@ -131,7 +132,7 @@ export function ReviewThreePaneLayout({
         onPointerCancel={endDrag}
         aria-label="拖拽调整证据和学习区宽度"
       >
-        <span className="my-3 w-px rounded-full bg-divider transition group-hover:bg-ink-muted" />
+        <span className="my-3 w-px rounded-full bg-divider transition group-hover:bg-pine" />
       </button>
 
       <section className={cn('min-w-0 min-h-0 overflow-hidden bg-white', layout.workspaceCollapsed && 'w-full')} aria-label={workspaceLabel}>
@@ -149,7 +150,7 @@ export function ReviewThreePaneLayout({
         onPointerCancel={endDrag}
         aria-label="拖拽调整学习区和同桌宽度"
       >
-        <span className="my-3 w-px rounded-full bg-divider transition group-hover:bg-ink-muted" />
+        <span className="my-3 w-px rounded-full bg-divider transition group-hover:bg-pine" />
       </button>
 
       <aside className="min-w-0 min-h-0 overflow-hidden bg-white" aria-label={tutorLabel}>

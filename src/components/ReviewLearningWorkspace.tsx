@@ -85,7 +85,7 @@ export function ReviewLearningWorkspace({
   });
 
   return (
-    <section className={`flex h-full min-h-0 flex-col ${isImmersiveApp ? 'bg-[#11110F]' : 'bg-canvas'}`} data-testid="review-learning-workspace">
+    <section className={`flex h-full min-h-0 flex-col ${isImmersiveApp ? 'bg-[var(--mm-immersive)]' : 'bg-canvas'}`} data-testid="review-learning-workspace">
       <header className={`flex shrink-0 items-center gap-3 border-b px-4 py-3 ${isImmersiveApp ? 'border-white/[0.08] bg-ink-secondary text-white' : 'border-divider bg-white'}`}>
         <button
           type="button"
@@ -112,7 +112,7 @@ export function ReviewLearningWorkspace({
           {COPY.apps.matrix.remake}
         </button>
       </header>
-      <div className={`min-h-0 flex-1 overflow-auto ${isImmersiveApp ? 'bg-[#11110F] p-0' : 'p-3'}`}>
+      <div className={`min-h-0 flex-1 overflow-auto ${isImmersiveApp ? 'bg-[var(--mm-immersive)] p-0' : 'p-3'}`}>
         <AppRenderSurface
           appKey={app.key}
           result={execution.result}

@@ -632,6 +632,7 @@ export function TutorAgentPanel({
                   onClick={async () => {
                     const ok = await copyMessageSmart(collectMessageText(m), {
                       messageId: m.id,
+                      stripTimestamps: true,
                     });
                     if (ok) toast.success('已复制（含格式）', { duration: 1500 });
                   }}

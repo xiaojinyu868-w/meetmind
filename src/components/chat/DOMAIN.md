@@ -28,7 +28,7 @@ chat/
 │   └── useAutoFollowScroll.ts      # 用户上滑停止跟随 + 回到最新按钮
 └── markers/
     ├── collectMessageText.ts       # AI SDK v6 UIMessage → 文本
-    ├── copyMessageSmart.ts         # 智能复制（markdown / 纯文本双格式）
+    ├── copyMessageSmart.ts         # 智能复制（markdown / 纯文本双格式；stripTimestamps 时富文本走 DOM 克隆剔除时间戳按钮）
     ├── extractIntentSummary.ts     # ---我想要的---...---结束--- 解析
     ├── extractIntentBio.ts         # M11.4 bio（headline + detail）解析
     └── extractLearningProgress.ts  # 旧 ---学习进展--- marker 解析；GlobalAsk 已改用后台 distillation，新 adapter 勿依赖

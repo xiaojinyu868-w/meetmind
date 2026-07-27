@@ -431,7 +431,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                               className={`w-full text-left p-3 rounded-lg border transition-all group ${
                                 anchor.resolved
                                   ? 'border-divider bg-paper-warm/50'
-                                  : 'border-divider bg-[#FDF3C0]/10 hover:bg-[#FDF3C0]/20'
+                                  : 'border-vermilion/15 bg-vermilion-fog hover:bg-vermilion-mist/60'
                               }`}
                             >
                               <div className="flex items-center gap-2">
@@ -506,10 +506,11 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
             source={(
               <section className="min-w-0 min-h-0 flex h-full flex-col bg-white">
               {(audioBlob || audioUrl) ? (
-                <div className="shrink-0 border-b border-divider bg-[#FCFBF8] px-3 py-2">
+                <div className="shrink-0 border-b border-divider bg-paper-warm px-3 py-2">
                   <WaveformPlayer
                     playerRef={waveformRef as RefObject<WaveformPlayerRef>}
                     src={audioBlob || audioUrl || undefined}
+                    peaksCacheKey={sessionId ?? undefined}
                     anchors={anchors.map((anchor) => ({
                       id: anchor.id,
                       timestamp: anchor.timestamp,
@@ -527,8 +528,8 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                     selectedAnchorId={selectedAnchor?.id}
                     compact={true}
                     height={24}
-                    waveColor="#6B9080"
-                    progressColor="#2D4F3E"
+                    waveColor="#6D9C89"
+                    progressColor="#2F6B55"
                   />
                 </div>
               ) : null}

@@ -3,6 +3,7 @@ import {
   parseTimestamp,
   findTimestamps,
   splitByTimestamp,
+  stripTimestamps,
 } from './timestamp-parsing';
 
 describe('parseTimestamp', () => {
@@ -95,5 +96,27 @@ describe('splitByTimestamp', () => {
   it('handles consecutive timestamps', () => {
     const r = splitByTimestamp('[01:00][02:00]');
     expect(r.filter((p) => p.kind === 'timestamp')).toHaveLength(2);
+  });
+});
+
+describe('stripTimestamps', () => {
+  it('抹掉各种形态的时间戳标记', () => {
+    expect(stripTimestamps('老师在 [02:15] 提到反向传播，[03:45-04:00] 又讲了一遍')).toBe(
+      '老师在 提到反向传播，又讲了一遍',
+    );
+    expect(stripTimestamps('看 [t=01:30:00] 这段')).toBe('看 这段');
+  });
+
+  it('保留误匹配的非时间戳括号', () => {
+    expect(stripTimestamps('价格是 [99:99] 不是时间戳')).toBe('价格是 [99:99] 不是时间戳');
+  });
+
+  it('清理标记走后留下的空位', () => {
+    expect(stripTimestamps('这一段 [20:01] ，讲得很细。')).toBe('这一段，讲得很细。');
+    expect(stripTimestamps('开头 [01:00]  有两个空格')).toBe('开头 有两个空格');
+  });
+
+  it('没有时间戳的文本原样返回', () => {
+    expect(stripTimestamps('普通的一句话。')).toBe('普通的一句话。');
   });
 });

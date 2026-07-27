@@ -119,7 +119,7 @@ function highlightText(text: string, query?: string): ReactNode {
   return (
     <>
       {text.slice(0, idx)}
-      <mark className="bg-[#FDF3C0] text-[#1C1B19] px-0.5 rounded">
+      <mark className="mark-vermilion rounded-sm">
         {text.slice(idx, idx + lowerQuery.length)}
       </mark>
       {text.slice(idx + lowerQuery.length)}
@@ -272,7 +272,7 @@ function SegmentSpan({
               onCancelEdit?.();
             }
           }}
-          className="w-full min-h-[60px] rounded-lg border border-[#E8E2D5] bg-white px-2.5 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#E8E2D5]"
+          className="w-full min-h-[60px] rounded-lg border border-divider bg-card px-2.5 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-pine/20"
           autoFocus
         />
       </span>
@@ -300,7 +300,7 @@ function SegmentSpan({
         // 可点击
         isClickable ? 'cursor-pointer' : '',
         // 可编辑
-        editable ? 'hover:bg-[#F2EDE3]/50' : '',
+        editable ? 'hover:bg-paper-warm/70' : '',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -318,7 +318,7 @@ function SegmentSpan({
     >
       {/* hover 时显示精确时间 */}
       {showHoverTime && hovered && !isActive && (
-        <span className="absolute -top-5 left-0 text-[10px] font-mono text-[#5C5A55] bg-white/95 border border-[#E8E2D5] rounded px-1 py-0.5 shadow-sm whitespace-nowrap z-10 pointer-events-none">
+        <span className="cite-ts absolute -top-6 left-0 z-10 whitespace-nowrap shadow-soft pointer-events-none">
           {formatCompactTime(segment.startMs)}
         </span>
       )}
@@ -332,11 +332,11 @@ function SegmentSpan({
       */}
       {wasCorrected && revealOriginal && (
         <span
-          className="absolute -top-5 left-0 z-10 flex items-center gap-1 whitespace-nowrap rounded-full border border-[#E8E2D5] bg-white/95 px-2 py-0.5 text-[10px] text-[#8E8B82] shadow-sm pointer-events-none"
+          className="absolute -top-5 left-0 z-10 flex items-center gap-1 whitespace-nowrap rounded-full border border-divider bg-card/95 px-2 py-0.5 text-[10px] text-ink-muted shadow-sm pointer-events-none"
           role="note"
         >
-          <span className="text-[#8E8B82]/80">机器修过：</span>
-          <span className="font-mono text-[#5C5A55] line-through">
+          <span className="text-ink-muted/80">机器修过：</span>
+          <span className="font-mono text-ink-secondary line-through">
             {segment.originalText}
           </span>
         </span>
@@ -431,20 +431,16 @@ function ParagraphBlock({
       data-paragraph={dataParagraph || true}
       data-paragraph-start-ms={paragraph.startMs}
     >
-      {/* 段落时间标签 — R9 改成块级，让"段落"像独立章节而不是文字流里的小数字 */}
+      {/* 段落时间标签 — R9 改成块级，让"段落"像独立章节而不是文字流里的小数字
+          v7：统一走 .cite-ts 引用资产（朱批 mono 胶囊），状态只改色不改形 */}
       <span
         className={[
-          'inline-flex items-center mb-1.5 font-mono text-[11.5px] tabular-nums tracking-[0.02em] transition-all duration-200',
+          'cite-ts mb-1.5 transition-all duration-200',
           // 当前活跃段落 — pine 主签名 + bg 微色块（章节正在读）
-          isParaActive ? 'rounded bg-pine/10 px-1.5 py-0.5 text-pine font-semibold' : '',
-          // 已播放过的段落 — ink-faint 弱化
-          !isParaActive && isParaPast ? 'text-ink-faint' : '',
-          // 正常状态 — pine 65% 引用感
-          !isParaActive && !isParaPast && isTimestampClickable
-            ? 'text-pine/65 hover:text-pine cursor-pointer'
-            : '',
-          !isParaActive && !isParaPast && !isTimestampClickable ? 'text-ink-muted' : '',
-          isTimestampClickable ? 'cursor-pointer' : '',
+          isParaActive ? '!bg-pine/10 !text-pine font-semibold' : '',
+          // 已播放过的段落 — 弱化
+          !isParaActive && isParaPast ? 'opacity-55' : '',
+          isTimestampClickable ? 'cursor-pointer' : 'cursor-default',
         ]
           .filter(Boolean)
           .join(' ')}
@@ -566,7 +562,7 @@ function ParagraphTranslationWrapper({
         {resolvedPairs.map((p) => (
           <span key={p.term} className="inline-flex items-baseline gap-1">
             <span className="font-mono text-ink-muted">{p.term}</span>
-            <span aria-hidden="true" className="text-ink-faint">→</span>
+            <span aria-hidden="true" className="text-ink-muted/60">→</span>
             <span>{p.translated}</span>
           </span>
         ))}
@@ -749,8 +745,8 @@ export function TranscriptFlowView({
     if (variant === 'live') {
       return (
         <div className={`flex flex-col items-center justify-center py-12 text-center ${className}`}>
-          <div className="w-16 h-16 bg-[#FDF3C0] rounded-full flex items-center justify-center mb-4">
-            <svg className="w-8 h-8 text-[#5C5A55]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-16 h-16 bg-pine-mist rounded-full flex items-center justify-center mb-4">
+            <svg className="w-8 h-8 text-pine" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
           </div>
@@ -787,7 +783,7 @@ export function TranscriptFlowView({
             </span>
             <span className="text-xs text-ink-muted">{segments.length} 句</span>
             {searchQuery && (
-              <span className="text-xs text-[#5C5A55]">
+              <span className="text-xs text-ink-secondary">
                 · {filteredSegments.length} 匹配
               </span>
             )}
@@ -798,7 +794,7 @@ export function TranscriptFlowView({
               onClick={() => setShowSearch((p) => !p)}
               className={`p-1 rounded-md transition-colors ${
                 showSearch
-                  ? 'bg-[#FDF3C0] text-[#5C5A55]'
+                  ? 'bg-pine-mist text-pine'
                   : 'text-ink-muted hover:text-ink-secondary hover:bg-paper-deep'
               }`}
               title="搜索"
@@ -814,7 +810,7 @@ export function TranscriptFlowView({
                 onClick={cycleTranslationMode}
                 className={`px-1.5 py-0.5 text-[11px] rounded-md transition-colors ${
                   translationActive
-                    ? 'bg-[#E6EDE8] text-[#2D4F3E]'
+                    ? 'bg-pine-mist text-pine-deep'
                     : 'text-ink-muted hover:text-ink-secondary hover:bg-paper-deep'
                 }`}
                 title="切换翻译模式：关闭 / EN→中 / 中→EN"
@@ -828,7 +824,7 @@ export function TranscriptFlowView({
             {variant !== 'live' && variant !== 'context' && paragraphs.length > collapsedParagraphs && (
               <button
                 onClick={() => setIsExpanded((p) => !p)}
-                className="text-xs text-[#5C5A55] hover:text-[#1C1B19] flex items-center gap-0.5 transition-colors"
+                className="text-xs text-ink-secondary hover:text-ink flex items-center gap-0.5 transition-colors"
               >
                 {isExpanded ? '收起' : '展开'}
                 <svg
@@ -854,7 +850,7 @@ export function TranscriptFlowView({
               value={internalSearchQuery}
               onChange={(e) => setInternalSearchQuery(e.target.value)}
               placeholder="搜索转录内容..."
-              className="w-full pl-8 pr-7 py-1.5 text-sm border border-divider rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8E2D5] focus:border-[#E8E2D5] bg-white"
+              className="w-full pl-8 pr-7 py-1.5 text-sm border border-divider rounded-lg focus:outline-none focus:ring-2 focus:ring-pine/20 focus:border-pine/40 bg-card"
               autoFocus
             />
             <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -884,7 +880,7 @@ export function TranscriptFlowView({
         {hasMore && (
           <button
             onClick={() => setIsExpanded(true)}
-            className="w-full text-xs text-ink-muted hover:text-[#1C1B19] py-1.5 text-center transition-colors"
+            className="w-full text-xs text-ink-muted hover:text-ink py-1.5 text-center transition-colors"
           >
             还有 {hiddenParagraphs} 个段落，点击展开
           </button>
@@ -934,7 +930,7 @@ export function TranscriptFlowView({
               setAutoScrollEnabled(true);
               scrollToBottom();
             }}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-white bg-[#1C1B19] hover:bg-[#FDECC8] rounded-full transition-all animate-bounce"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-white bg-ink hover:bg-pine-deep rounded-full transition-all animate-bounce"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />

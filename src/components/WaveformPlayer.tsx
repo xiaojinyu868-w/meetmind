@@ -10,6 +10,8 @@ import WaveSurfer from 'wavesurfer.js';
 import RegionsPlugin from 'wavesurfer.js/plugins/regions';
 import { formatTimestampMs } from '@/lib/longcut';
 import { cn } from '@/lib/utils';
+import { db } from '@/lib/db';
+import { COPY } from '@/lib/ui/copy';
 
 // 简化的 Anchor 类型，兼容不同来源
 export interface WaveformAnchor {
@@ -62,6 +64,8 @@ export interface WaveformPlayerProps {
   compact?: boolean;
   /** dynamic() 外壳不能接 React ref；用普通 prop 穿过 LoadableComponent。 */
   playerRef?: Ref<WaveformPlayerRef>;
+  /** 波形峰值缓存键（sessionId）：命中缓存或云端 peaks 时跳过整段解码 */
+  peaksCacheKey?: string;
 }
 
 export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>(({
@@ -72,14 +76,15 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
   onPlayStateChange,
   onReady,
   onAnchorAdd,
-  waveColor = '#6B9080',      // v7 pine-light 浅松绿（声波 = AI 沉淀的轨迹）
-  progressColor = '#2D4F3E',  // v7 pine 主签名（已播放部分 = 已沉淀）
+  waveColor = '#6D9C89',      // v7 --mm-pine-light（声波 = AI 沉淀的轨迹）
+  progressColor = '#2F6B55',  // v7 --mm-pine 主签名（已播放部分 = 已沉淀）
   height: heightProp,
   showControls = true,
   allowAddAnchor = false,
   selectedAnchorId,
   compact = false,
   playerRef,
+  peaksCacheKey,
 }, forwardedRef) => {
   // 紧凑模式下高度减半
   const height = heightProp ?? (compact ? 40 : 80);
@@ -99,6 +104,10 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
   const [isMuted, setIsMuted] = useState(false);
   const [showAddHint, setShowAddHint] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0); // 新增：加载进度
+  const peaksCacheKeyRef = useRef<string | undefined>(peaksCacheKey);
+  peaksCacheKeyRef.current = peaksCacheKey;
+  /** 本次加载是否用了预生成 peaks（用了就不需要在 ready 后再解码导出） */
+  const usedProvidedPeaksRef = useRef(false);
 
   // 暴露方法给父组件
   useImperativeHandle(playerRef ?? forwardedRef, () => ({
@@ -141,7 +150,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
       container: containerRef.current,
       waveColor,
       progressColor,
-      cursorColor: '#B5483C',  // v7 vermilion 朱批红（光标 = 此刻）
+      cursorColor: '#C45E4C',  // v7 --mm-vermilion 朱批红（光标 = 此刻）
       height,
       barWidth: 3,
       barGap: 2,
@@ -161,6 +170,22 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
         loadingTimeoutRef.current = null;
+      }
+      // 首次解码完成后导出波形峰值写入缓存——下次进复习页直接跳过整段解码
+      const cacheKey = peaksCacheKeyRef.current;
+      if (cacheKey && !usedProvidedPeaksRef.current) {
+        try {
+          const exported = ws.exportPeaks({ channels: 1, maxLength: 800, precision: 1000 });
+          const peaks = exported[0];
+          if (peaks?.length) {
+            void db.audioSessions.where('sessionId').equals(cacheKey).modify({
+              waveformPeaks: peaks,
+              waveformPeaksDurationSec: ws.getDuration(),
+            });
+          }
+        } catch {
+          // best effort：缓存写不进去不影响播放
+        }
       }
       onReady?.(dur);
     });
@@ -307,12 +332,62 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
     }
 
     let cancelled = false;
-    void wavesurferRef.current.load(url).catch((error: unknown) => {
-      if (cancelled || (error instanceof DOMException && error.name === 'AbortError')) return;
-      setIsReady(false);
-      setLoadProgress(0);
-      setLoadError(true);
-    });
+    usedProvidedPeaksRef.current = false;
+    const wsInstance = wavesurferRef.current;
+
+    void (async () => {
+      // 1) 云端音频：先拿服务端预生成的 peaks，命中即跳过整段解码
+      if (typeof src === 'string' && src.startsWith('/api/workspace/audio/')) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 4_000);
+          const resp = await fetch(
+            src.replace('/api/workspace/audio/', '/api/workspace/audio-peaks/'),
+            { signal: controller.signal },
+          );
+          clearTimeout(timer);
+          if (cancelled) return;
+          if (resp.ok) {
+            const data = await resp.json() as { peaks?: number[]; durationSec?: number };
+            if (Array.isArray(data.peaks) && data.peaks.length > 0) {
+              usedProvidedPeaksRef.current = true;
+              await wsInstance.load(url, [data.peaks], data.durationSec);
+              return;
+            }
+          }
+        } catch {
+          // peaks 拿不到就走缓存/解码路径
+        }
+        if (cancelled) return;
+      }
+
+      // 2) IndexedDB 缓存的 peaks（首次解码后写入）
+      const cacheKey = peaksCacheKeyRef.current;
+      if (cacheKey) {
+        try {
+          const cached = await db.audioSessions.where('sessionId').equals(cacheKey).first();
+          if (cancelled) return;
+          if (cached?.waveformPeaks?.length) {
+            usedProvidedPeaksRef.current = true;
+            await wsInstance.load(url, [cached.waveformPeaks], cached.waveformPeaksDurationSec);
+            return;
+          }
+        } catch {
+          // 缓存读不到就走解码路径
+        }
+        if (cancelled) return;
+      }
+
+      // 3) 常规加载（整段解码；ready 后会把 peaks 写进缓存）
+      try {
+        await wsInstance.load(url);
+      } catch (error: unknown) {
+        if (cancelled || (error instanceof DOMException && error.name === 'AbortError')) return;
+        setIsReady(false);
+        setLoadProgress(0);
+        setLoadError(true);
+      }
+    })();
 
     // 超时兜底：wavesurfer 的 MediaElement backend 加载失败不一定触发 'error' 事件
     // （audio onerror 可能不冒泡），导致 isReady 永远 false 卡在"加载音频..."大片灰。
@@ -658,8 +733,8 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
       {loadError && src ? (
         <div className="absolute inset-0 flex items-center justify-center bg-white/90 rounded-2xl">
           <div className="flex flex-col items-center gap-2 text-center px-4">
-            <p className="text-sm font-medium text-vermilion">音频加载失败</p>
-            <p className="text-xs text-ink-muted">这段原声暂时无法播放，刷新页面或重新进入试试</p>
+            <p className="text-sm font-medium text-vermilion">{COPY.player.loadFailed}</p>
+            <p className="text-xs text-ink-muted">{COPY.player.loadFailedHint}</p>
           </div>
         </div>
       ) : null}
@@ -680,7 +755,9 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
               />
             </div>
             <span className="text-sm text-ink-secondary font-medium">
-              加载音频 {loadProgress > 0 ? `${loadProgress}%` : '...'}
+              {loadProgress >= 100
+                ? COPY.player.preparingWaveform
+                : `${COPY.player.loadingAudio} ${loadProgress > 0 ? `${loadProgress}%` : '...'}`}
             </span>
             {/* 进度条 */}
             {loadProgress > 0 && (

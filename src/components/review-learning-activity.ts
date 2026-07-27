@@ -33,3 +33,23 @@ export function formatFlashcardCompleteActivity(input: { got: number; total: num
   const missed = Math.max(0, input.total - input.got);
   return `闪卡训练完成：${input.total} 张里记住 ${input.got} 张，待加强 ${missed} 张。`;
 }
+
+export function formatTeachBackCompleteActivity(input: {
+  total: number;
+  mastery: number;
+  struggle: number;
+  gap: number;
+  blindSpot: number;
+  uncovered: number;
+  blindSpotPoints: string[];
+}): string {
+  const parts: string[] = [];
+  if (input.mastery > 0) parts.push(`讲透 ${input.mastery} 点`);
+  if (input.struggle > 0) parts.push(`挣扎着讲通 ${input.struggle} 点`);
+  if (input.gap > 0) parts.push(`自己知道卡住 ${input.gap} 点`);
+  if (input.blindSpot > 0) {
+    parts.push(`盲区 ${input.blindSpot} 点「${input.blindSpotPoints.map((point) => compact(point, 30)).join('、')}」`);
+  }
+  if (input.uncovered > 0) parts.push(`没讲到 ${input.uncovered} 点`);
+  return `讲给同桌听完成：${parts.length > 0 ? parts.join('，') : `共 ${input.total} 点`}。`;
+}
