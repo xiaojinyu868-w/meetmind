@@ -196,6 +196,9 @@ function buildPrompt(params: GeminiImageParams): string {
   return parts.join('\n');
 }
 
+/** 信息图完整生图提示词的唯一真相源（Gemini / DashScope 两个 provider 共用） */
+export const buildImagePrompt = buildPrompt;
+
 async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

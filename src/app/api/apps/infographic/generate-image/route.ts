@@ -6,6 +6,10 @@ import {
   generateGeminiImage,
   isGeminiImageEnabled,
 } from '@/lib/services/gemini-image-service';
+import {
+  generateDashscopeImage,
+  isDashscopeImageEnabled,
+} from '@/lib/services/dashscope-image-service';
 
 interface InfographicImageRequest {
   sessionId?: string;
@@ -21,7 +25,8 @@ interface InfographicImageRequest {
 export async function GET() {
   return NextResponse.json({
     ok: true,
-    enabled: isGeminiImageEnabled(),
+    enabled: isDashscopeImageEnabled() || isGeminiImageEnabled(),
+    provider: isDashscopeImageEnabled() ? 'dashscope' : isGeminiImageEnabled() ? 'gemini' : null,
   });
 }
 
@@ -52,7 +57,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Missing draftPrompt' }, { status: 400 });
     }
 
-    if (!isGeminiImageEnabled()) {
+    if (!isDashscopeImageEnabled() && !isGeminiImageEnabled()) {
       return NextResponse.json(
         {
           ok: false,
@@ -62,7 +67,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await generateGeminiImage({
+    // 图像 provider 可切换：IMAGE_PROVIDER=gemini 时退回 Gemini 代理（长文渲染更稳），
+    // 默认 DashScope（阿里云百炼 · qwen-image-plus，摆脱第三方代理）。
+    const useGemini = process.env.IMAGE_PROVIDER?.trim() === 'gemini' && isGeminiImageEnabled();
+    const generate = !useGemini && isDashscopeImageEnabled() ? generateDashscopeImage : generateGeminiImage;
+    const result = await generate({
       prompt: draftPrompt,
       stylePreset,
       orientation,
