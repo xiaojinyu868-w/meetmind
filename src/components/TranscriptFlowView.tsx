@@ -21,6 +21,7 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  Fragment,
   type ReactNode,
   type UIEvent,
   type KeyboardEvent,
@@ -97,6 +98,8 @@ export interface TranscriptFlowViewProps {
   paragraphGapMs?: number;
   /** 英→中行内翻译气泡（M7.9）。默认 false；由父组件决定 */
   enableEnToZhTranslation?: boolean;
+  /** 课中「截取这一页」关键帧：按时间轴插入转录流的缩略图（review/video 模式） */
+  keyframes?: Array<{ timestampMs: number; src: string }>;
 }
 
 // ─── 工具函数 ───
@@ -396,6 +399,47 @@ interface ParagraphBlockProps {
   'data-paragraph'?: boolean;
 }
 
+/**
+ * 课中「截取这一页」缩略图条：插在转录段落之间，
+ * 时间戳可点击跳回播放位置（与 [MM:SS] 同一套「有根」语言）。
+ */
+function KeyframeStrip({
+  frames,
+  onTimestampClick,
+}: {
+  frames: Array<{ timestampMs: number; src: string }>;
+  onTimestampClick?: (timeMs: number) => void;
+}) {
+  return (
+    <div className="mb-5 flex flex-wrap items-center gap-2">
+      {frames.map((frame) => {
+        const totalSec = Math.floor(frame.timestampMs / 1000);
+        const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
+        const ss = String(totalSec % 60).padStart(2, '0');
+        return (
+          <button
+            key={frame.timestampMs}
+            type="button"
+            onClick={() => onTimestampClick?.(frame.timestampMs)}
+            className="group relative overflow-hidden rounded-lg border border-divider bg-card shadow-soft transition hover:border-pine"
+            title={`[${mm}:${ss}]`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={frame.src}
+              alt={`[${mm}:${ss}]`}
+              className="h-16 w-auto object-cover opacity-90 transition group-hover:opacity-100"
+            />
+            <span className="absolute bottom-1 right-1 rounded bg-ink/70 px-1 py-px font-mono text-[10px] text-white">
+              {mm}:{ss}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function ParagraphBlock({
   paragraph,
   variant,
@@ -594,6 +638,7 @@ export function TranscriptFlowView({
   headerTitle,
   paragraphGapMs = 30000,
   enableEnToZhTranslation = false,
+  keyframes,
 }: TranscriptFlowViewProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded || variant === 'live' || variant === 'context');
   const [internalSearchQuery, setInternalSearchQuery] = useState('');
@@ -649,6 +694,27 @@ export function TranscriptFlowView({
 
   const hiddenParagraphs = paragraphs.length - collapsedParagraphs;
   const hasMore = !isExpanded && hiddenParagraphs > 0;
+
+  // 课中「截取这一页」关键帧 → 按时间轴映射到「应插在第几段之前」，
+  // 尾段之后的帧追加到末尾。只在 review/video（有时间轴的模式）启用。
+  const showKeyframes = (variant === 'review' || variant === 'video') && keyframes && keyframes.length > 0;
+  const keyframesBeforeParagraph = useMemo(() => {
+    if (!showKeyframes) return { before: new Map<number, Array<{ timestampMs: number; src: string }>>(), trailing: [] as Array<{ timestampMs: number; src: string }> };
+    const sorted = [...keyframes].sort((a, b) => a.timestampMs - b.timestampMs);
+    const before = new Map<number, Array<{ timestampMs: number; src: string }>>();
+    const trailing: Array<{ timestampMs: number; src: string }> = [];
+    for (const frame of sorted) {
+      const nextParaIdx = displayParagraphs.findIndex((p) => p.startMs > frame.timestampMs);
+      if (nextParaIdx === -1) {
+        trailing.push(frame);
+        continue;
+      }
+      const bucket = before.get(nextParaIdx) || [];
+      bucket.push(frame);
+      before.set(nextParaIdx, bucket);
+    }
+    return { before, trailing };
+  }, [showKeyframes, keyframes, displayParagraphs]);
 
   // 编辑逻辑
   const startEditing = useCallback(
@@ -887,8 +953,14 @@ export function TranscriptFlowView({
         )}
 
         {displayParagraphs.map((para, pi) => (
+          <Fragment key={`p-${para.startMs}`}>
+            {showKeyframes && keyframesBeforeParagraph.before.has(pi) && (
+              <KeyframeStrip
+                frames={keyframesBeforeParagraph.before.get(pi)!}
+                onTimestampClick={onTimestampClick}
+              />
+            )}
           <ParagraphTranslationWrapper
-            key={`p-${para.startMs}`}
             paragraph={para}
             enableTranslation={translationActive}
             translationMode={translationMode}
@@ -914,7 +986,16 @@ export function TranscriptFlowView({
               isLastParagraph={pi === displayParagraphs.length - 1}
             />
           </ParagraphTranslationWrapper>
+          </Fragment>
         ))}
+
+        {/* 尾段之后截取的关键帧 */}
+        {showKeyframes && keyframesBeforeParagraph.trailing.length > 0 && (
+          <KeyframeStrip
+            frames={keyframesBeforeParagraph.trailing}
+            onTimestampClick={onTimestampClick}
+          />
+        )}
 
         {/* 临时转录文本（live 模式） */}
         {interimVisible && (

@@ -1103,6 +1103,10 @@ export const COPY = {
     downgradeFromMixed: '电脑声音没录到，只用麦克风在录',
     startFailedFallback: '没有接上录音设备，请检查麦克风权限后再试。',
     recorderNotReady: '录音组件还没准备好，请再点一次。',
+    /** 课中「截取这一页」：从屏幕流抓当前帧挂到课堂时间轴 */
+    captureFrame: '截取这一页',
+    captureFrameSaved: '这一页收下了',
+    captureFrameFailed: '没截到，再试一次。',
     startFailed: (reason: string): string => `还没有开始录音。${reason}`,
     finished: '这节课收好了',
     finalizingTranscript: (count: number, enhancedCount = 0): string =>

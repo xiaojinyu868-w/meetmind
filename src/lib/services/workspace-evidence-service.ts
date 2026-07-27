@@ -50,6 +50,8 @@ export interface WorkspaceCaptureEvidencePayload {
   classSummary?: Record<string, unknown>;
   highlightTopics: unknown[];
   notes: unknown[];
+  /** 课中「截取这一页」主动截图（payload: { mediaUrl, timestampSec }） */
+  keyframes: unknown[];
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -305,5 +307,6 @@ export async function getWorkspaceCaptureEvidenceForUser(
     classSummary: summaryFromTable || asRecord(metadata.classSummary) || undefined,
     highlightTopics: artifactsByKind.get('highlight') || (Array.isArray(metadata.highlightTopics) ? metadata.highlightTopics : []),
     notes: artifactsByKind.get('note') || (Array.isArray(metadata.notes) ? metadata.notes : []),
+    keyframes: artifactsByKind.get('keyframe') || [],
   };
 }

@@ -67,6 +67,8 @@ export interface ClassroomRecordingViewProps {
   onFinishDemo?: () => void;
   /** 课中拍照：传入当前录音秒数，由父组件透传到 handleImportFiles */
   onQuickPhoto?: (capturedAtMs: number) => void;
+  /** 课中「截取这一页」：屏幕流帧源存在时由父组件传入；按下 = 主动把当前页挂上时间轴 */
+  onCaptureFrame?: (capturedAtMs: number) => void;
 }
 
 // ── 时间工具 ──────────────────────────────────────────────────────────
@@ -473,8 +475,23 @@ function DemoAfterClassPanel({
 
 // ── 移动端：拍一下悬浮键 ────────────────────────────────────────────
 
-function QuickPhotoButton({ onPhoto }: { onPhoto: () => void }) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
+/** 桌面端「截取这一页」悬浮键：屏幕流帧源存在时才出现（网课场景） */
+function CaptureFrameButton({ onCapture }: { onCapture: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onCapture}
+      className="fixed bottom-[5.5rem] left-4 z-30 hidden h-12 items-center gap-2 rounded-full bg-pine px-4 text-white shadow-card transition hover:opacity-90 active:scale-95 lg:flex"
+      aria-label={COPY.recording.captureFrame}
+      title={COPY.recording.captureFrame}
+    >
+      <Camera size={17} strokeWidth={2} />
+      <span className="text-sm">{COPY.recording.captureFrame}</span>
+    </button>
+  );
+}
+
+function QuickPhotoButton({ onPhoto }: { onPhoto: () => void }) {  const inputRef = useRef<HTMLInputElement | null>(null);
   return (
     <>
       <button
@@ -548,6 +565,7 @@ export function ClassroomRecordingView({
   onReplayDemo,
   onFinishDemo,
   onQuickPhoto,
+  onCaptureFrame,
 }: ClassroomRecordingViewProps) {
   const [mobilePane, setMobilePane] = useState<'flow' | 'transcript'>('flow');
 
@@ -616,6 +634,11 @@ export function ClassroomRecordingView({
       {/* 移动端：拍一下悬浮键 */}
       {onQuickPhoto && (
         <QuickPhotoButton onPhoto={() => onQuickPhoto(seconds * 1000)} />
+      )}
+
+      {/* 桌面端：截取这一页（屏幕流帧源存在时才露出——主动意图锚点） */}
+      {onCaptureFrame && (
+        <CaptureFrameButton onCapture={() => onCaptureFrame(seconds * 1000)} />
       )}
 
       <StopBar onStop={onStop} />

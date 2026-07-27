@@ -25,6 +25,12 @@ export interface AcquiredAudioStream {
   stream: MediaStream;
   /** 实际生效的来源（可能因用户行为从 system/mixed 降级到 mic） */
   effectiveSource: RecorderAudioSource;
+  /**
+   * system / mixed 模式下保留下来的屏幕视频轨（getDisplayMedia 必须请求 video）。
+   * 不 stop 它的原因：课中「截取这一页」要从这条轨抓当前帧，
+   * 与录音共用同一根时间轴；cleanup 时会一并释放。
+   */
+  screenTrack?: MediaStreamTrack;
   /** 释放所有底层资源——必须在录音结束或出错时调用 */
   cleanup: () => void;
 }
@@ -49,16 +55,21 @@ async function acquireMicStream(constraints: MediaTrackConstraints): Promise<Med
 /**
  * 拿一条"电脑发出的声音"stream。
  *
- * 必须同时请求 video（Chrome 限制），拿到后立刻 stop 掉 video track，
- * 只保留 audio。如果用户没勾"分享音频"，audio track 数为 0，抛错。
+ * 必须同时请求 video（Chrome 限制）。视频轨**保留并随返回值带出**——
+ * 课中「截取这一页」要从它抓当前屏幕帧（用户主动意图锚点，见
+ * roadmap/v4.0-everywhere-capture.md）。如果用户没勾"分享音频"，
+ * audio track 数为 0，抛错。
  */
-async function acquireSystemAudioStream(): Promise<MediaStream> {
+async function acquireSystemAudioStream(): Promise<{
+  stream: MediaStream;
+  screenTrack?: MediaStreamTrack;
+}> {
   if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getDisplayMedia) {
     throw new Error('当前浏览器不支持采集电脑声音。请升级到最新版 Chrome / Edge。');
   }
 
   const displayStream = await navigator.mediaDevices.getDisplayMedia({
-    video: true, // 必须要，否则 Chrome 不会给 audio track
+    video: true, // 必须要，否则 Chrome 不会给 audio track；保留用于课中抓帧
     audio: {
       // 系统声源应保持原声：不做回声消除、不做降噪、不自动增益——
       // 否则讲课的连续语音会被当成"本机说话者的回声"抵消掉
@@ -68,12 +79,6 @@ async function acquireSystemAudioStream(): Promise<MediaStream> {
     } as MediaTrackConstraints,
   });
 
-  // 立刻扔掉视频轨道
-  for (const track of displayStream.getVideoTracks()) {
-    track.stop();
-    displayStream.removeTrack(track);
-  }
-
   if (displayStream.getAudioTracks().length === 0) {
     // 用户没勾选"分享音频"
     throw new Error(
@@ -81,7 +86,7 @@ async function acquireSystemAudioStream(): Promise<MediaStream> {
     );
   }
 
-  return displayStream;
+  return { stream: displayStream, screenTrack: displayStream.getVideoTracks()[0] };
 }
 
 /**
@@ -139,10 +144,11 @@ export async function acquireAudioStream(opts: AcquireOptions): Promise<Acquired
 
   if (source === 'system') {
     // 只要电脑声——失败就往上抛
-    const stream = await acquireSystemAudioStream();
+    const { stream, screenTrack } = await acquireSystemAudioStream();
     return {
       stream,
       effectiveSource: 'system',
+      screenTrack,
       cleanup: () => {
         stream.getTracks().forEach((t) => t.stop());
       },
@@ -152,8 +158,11 @@ export async function acquireAudioStream(opts: AcquireOptions): Promise<Acquired
   // 'mixed'
   const micStream = await acquireMicStream(micConstraints);
   let systemStream: MediaStream | null = null;
+  let screenTrack: MediaStreamTrack | undefined;
   try {
-    systemStream = await acquireSystemAudioStream();
+    const acquired = await acquireSystemAudioStream();
+    systemStream = acquired.stream;
+    screenTrack = acquired.screenTrack;
   } catch (err) {
     // 系统声采集失败 → 默默降级到纯 mic。不影响录音主流程，打个 warn 让开发看到。
     console.warn('[Recorder] mixed mode: system audio acquisition failed, falling back to mic only:', err);
@@ -174,6 +183,7 @@ export async function acquireAudioStream(opts: AcquireOptions): Promise<Acquired
   return {
     stream: mixed,
     effectiveSource: 'mixed',
+    screenTrack,
     cleanup: () => {
       micStream.getTracks().forEach((t) => t.stop());
       systemStream!.getTracks().forEach((t) => t.stop());

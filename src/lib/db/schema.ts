@@ -45,6 +45,25 @@ export interface Anchor {
   resolvedAt?: Date;
 }
 
+/**
+ * 课中主动截图的关键帧（「截取这一页」）。
+ * 用户按下截图那一刻 = 他认定"这页值得留下"——主动意图锚点，
+ * 与转录段共用录音时间轴（timestampMs）。blob 课后上传服务端
+ * WorkspaceCaptureArtifact(kind='keyframe')，成功后写回 mediaUrl/uploaded。
+ */
+export interface KeyframeRecord {
+  id?: number;
+  sessionId: string;
+  /** 录音时间轴毫秒（与 TranscriptSegment.startMs 同根） */
+  timestampMs: number;
+  /** 本地 JPEG 原图（上传后保留供本机复习页离线用） */
+  blob: Blob;
+  uploaded?: boolean;
+  /** 上传成功后的服务端图片地址（/api/workspace/images/...） */
+  mediaUrl?: string;
+  createdAt: Date;
+}
+
 export interface TranscriptSegment {
   id?: number;
   sessionId: string;
@@ -199,6 +218,7 @@ export interface ConversationMessageRecord {
 export class MeetMindDB extends Dexie {
   audioSessions!: Table<AudioSession>;
   anchors!: Table<Anchor>;
+  keyframes!: Table<KeyframeRecord>;
   transcripts!: Table<TranscriptSegment>;
   transcriptLexicon!: Table<TranscriptLexiconEntry>;
   transcriptEditDiffs!: Table<TranscriptEditDiff>;
@@ -296,6 +316,22 @@ export class MeetMindDB extends Dexie {
     this.version(7).stores({
       audioSessions: '++id, sessionId, userId, status, createdAt, [userId+createdAt]',
       anchors: '++id, sessionId, timestamp, status, type',
+      transcripts: '++id, sessionId, userId, startMs, isFinal',
+      transcriptLexicon: '++id, term, canonical, scope, status, hitCount, updatedAt, [scope+status], [scope+term]',
+      transcriptEditDiffs: '++id, originalText, correctedText, scope, hitCount, promoted, updatedAt, [scope+promoted], [scope+originalText+correctedText]',
+      preferences: 'key',
+      highlightTopics: '++id, topicId, sessionId, importance, createdAt',
+      classSummaries: '++id, summaryId, sessionId, createdAt',
+      notes: '++id, noteId, sessionId, studentId, source, createdAt',
+      tutorResponseCache: '++id, anchorId, sessionId, timestamp, createdAt',
+      conversationHistory: '++id, conversationId, userId, type, sessionId, anchorId, [userId+type], updatedAt',
+      conversationMessages: '++id, messageId, conversationId, createdAt',
+    });
+
+    this.version(8).stores({
+      audioSessions: '++id, sessionId, userId, status, createdAt, [userId+createdAt]',
+      anchors: '++id, sessionId, timestamp, status, type',
+      keyframes: '++id, sessionId, timestampMs',
       transcripts: '++id, sessionId, userId, startMs, isFinal',
       transcriptLexicon: '++id, term, canonical, scope, status, hitCount, updatedAt, [scope+status], [scope+term]',
       transcriptEditDiffs: '++id, originalText, correctedText, scope, hitCount, promoted, updatedAt, [scope+promoted], [scope+originalText+correctedText]',

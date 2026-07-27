@@ -27,6 +27,7 @@ import {
   float32ToInt16,
 } from './recorder/recorder-utils';
 import { acquireAudioStream } from './recorder/recorder-audio-source';
+import { registerScreenTrack, armDesktopCaptureHook, releaseScreenTrack } from '@/lib/services/keyframe/screen-frame-grabber';
 import { buildAudioConstraints } from '@/lib/services/asr/audio-constraints';
 import { toast } from 'sonner';
 import { COPY } from '@/lib/ui/copy';
@@ -442,6 +443,10 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       stream = acquired.stream;
       audioCleanupRef.current = acquired.cleanup;
 
+      // 课中「截取这一页」：system/mixed 模式下保留的屏幕视频轨注册为帧源，
+      // 课中按钮与桌面全局热键都从这条流抓当前帧（与录音同一根时间轴）
+      registerScreenTrack(acquired.screenTrack);
+
       // mixed 降级提示：用户选了"两路都录"但系统音频采集失败，静默降级为纯麦克风。
       // 不告诉用户 = 不可逆损失（课后才发现老师声音没录到）。
       if (audioSource === 'mixed' && acquired.effectiveSource === 'mic') {
@@ -552,6 +557,13 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       recordingIdRef.current = `recording-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       processedSentenceIdsRef.current = new Set(); // 新录音清空去重集合
 
+      // 桌面全局热键的录制感知钩子：壳里按 Cmd/Ctrl+Shift+M 时，
+      // 主进程会先调这个钩子把当前帧挂到课堂时间轴（而不是收进收集线）
+      armDesktopCaptureHook({
+        getSessionId: () => sessionIdRef.current || '',
+        getElapsedMs: () => Math.max(0, Date.now() - startTimeRef.current),
+      });
+
       // 原声是最终真相：拿到 stream 后立即开始录，不等 ASR WebSocket ready。
       // 旧顺序会在弱网 / 冷启动时丢掉开头数秒，而且这些话连课后 batch
       // 都无法找回。新顺序是：MediaRecorder 立即收原声，PCM 在 ASR 连接前
@@ -630,6 +642,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       } else if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
+      releaseScreenTrack();
       if (pcmProcessorRef.current) {
         pcmProcessorRef.current.disconnect();
         pcmProcessorRef.current.onaudioprocess = null;
@@ -1151,6 +1164,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       try { audioCleanupRef.current(); } catch { /* ignore */ }
       audioCleanupRef.current = null;
     }
+    releaseScreenTrack();
     sourceNodeRef.current = null;
     analyserRef.current = null;
     setLevel(0);
@@ -1308,6 +1322,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       try { audioCleanupRef.current(); } catch { /* ignore */ }
       audioCleanupRef.current = null;
     }
+    releaseScreenTrack();
     sourceNodeRef.current = null;
     analyserRef.current = null;
     if (enhanceManagerRef.current) {
@@ -1384,6 +1399,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         try { audioCleanupRef.current(); } catch { /* ignore */ }
         audioCleanupRef.current = null;
       }
+      releaseScreenTrack();
     };
   }, []);
 

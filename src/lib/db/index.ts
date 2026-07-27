@@ -4,6 +4,7 @@ export {
   generateSessionId,
   type AudioSession,
   type Anchor,
+  type KeyframeRecord,
   type TranscriptSegment,
   type TranscriptLexiconEntry,
   type TranscriptEditDiff,
@@ -34,6 +35,13 @@ export {
   resolveAnchor,
   getSessionAnchors,
 } from './anchors';
+export {
+  addKeyframe,
+  getSessionKeyframes,
+  getPendingKeyframes,
+  markKeyframeUploaded,
+  deleteSessionKeyframes,
+} from './keyframes';
 export {
   addTranscript,
   addTranscripts,

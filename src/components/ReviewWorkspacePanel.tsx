@@ -34,6 +34,8 @@ interface ReviewWorkspacePanelProps {
   sourceFullText?: string;
   /** 非音视频类型的正文图片 URL 列表 */
   sourceImageUrls?: string[];
+  /** 课中「截取这一页」关键帧（按时间轴插入转录流） */
+  keyframes?: Array<{ timestampMs: number; src: string }>;
 }
 
 export function ReviewWorkspacePanel({
@@ -58,6 +60,7 @@ export function ReviewWorkspacePanel({
   hideTabBar = false,
   sourceFullText,
   sourceImageUrls,
+  keyframes,
 }: ReviewWorkspacePanelProps) {
   // v7 Octo IP：复习态空态。ctx='review-empty'（默认 idle，凌晨切 sleeping）
   const { mood: octoMoodEmpty } = useOctoMood({ ctx: 'review-empty' });
@@ -106,6 +109,7 @@ export function ReviewWorkspacePanel({
             }}
             onSegmentTextUpdate={onSegmentTextUpdate}
             enableWordExplainer={true}
+            keyframes={keyframes}
             fullContextText={segments.map((segment) => `[${formatTime(segment.startMs)}] ${segment.text}`).join('\n')}
           />
         )}

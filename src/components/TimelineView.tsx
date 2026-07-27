@@ -13,6 +13,8 @@ interface TimelineViewProps {
   enableWordExplainer?: boolean;
   /** Full transcript context for word explanation. */
   fullContextText?: string;
+  /** 课中「截取这一页」关键帧（按时间轴插入转录流） */
+  keyframes?: Array<{ timestampMs: number; src: string }>;
 }
 
 export function TimelineView({
@@ -23,6 +25,7 @@ export function TimelineView({
   onSegmentTextUpdate,
   enableWordExplainer = false,
   fullContextText,
+  keyframes,
 }: TimelineViewProps) {
   const unresolvedCount = timeline.breakpoints.filter((bp) => !bp.resolved).length;
 
@@ -44,6 +47,7 @@ export function TimelineView({
           enableWordExplainer={enableWordExplainer}
           fullContextText={fullContextText}
           confusionTimestamps={confusionTimestamps}
+          keyframes={keyframes}
           defaultExpanded={true}
           showHeader={false}
           headerTitle="课堂转录"

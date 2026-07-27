@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'rea
 import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
+import { hasActiveScreenTrack, captureCurrentFrame } from '@/lib/services/keyframe/screen-frame-grabber';
 import { useUIActions, useUIStore, type MobileSubPage } from '@/stores/ui-store';
 import { usePlayerStore } from '@/stores/player-store';
 import { useSessionStore } from '@/stores/session-store';
@@ -2226,6 +2227,14 @@ function StudentAppContent({
                   sourceFileInputRef.current.click();
                 }
               }}
+              {...(hasActiveScreenTrack() ? {
+                onCaptureFrame: (capturedAtMs: number) => {
+                  // 课中「截取这一页」：从屏幕流抓当前帧挂到课堂时间轴（主动意图锚点）
+                  void captureCurrentFrame(sessionId || '', capturedAtMs).then((ok) => {
+                    toast(ok ? COPY.recording.captureFrameSaved : COPY.recording.captureFrameFailed, { duration: 2500 });
+                  });
+                },
+              } : {})}
             />
           </div>
           {/* ── 课堂 tab 下的 Recorder 挂载点：视觉隐藏，只作为录音引擎 ── */}

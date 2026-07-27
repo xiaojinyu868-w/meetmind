@@ -76,7 +76,7 @@ export interface SourceImportDeps {
     tutorContext?: string;
     occurredAt?: string;
     metadata?: Record<string, unknown>;
-  }) => Promise<void>;
+  }) => Promise<string | undefined>;
 
   /** Append a new source item to the collection feed. */
   appendSourceItem: (params: {

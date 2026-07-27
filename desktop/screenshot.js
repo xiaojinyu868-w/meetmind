@@ -138,10 +138,35 @@ function stashPending(pngBuffer, ts) {
   }
 }
 
+// 录制感知分流：壳内正在录屏类课时，网页会挂 window.__meetmindCaptureFrame
+// （src/lib/services/keyframe/screen-frame-grabber.ts）。热键先问这个钩子：
+// 在录 → 当前帧挂到课堂时间轴；返回假值/不在录 → 走原来的收集线截图。
+async function tryCaptureClassFrame(getShellWindow) {
+  try {
+    const win = getShellWindow?.();
+    if (!win || win.isDestroyed()) return false;
+    const result = await win.webContents.executeJavaScript(
+      `typeof window.__meetmindCaptureFrame === 'function'
+        ? window.__meetmindCaptureFrame()
+        : Promise.resolve(false)`,
+      true,
+    );
+    return result === true;
+  } catch {
+    return false;
+  }
+}
+
 async function handleHotkey(deps) {
   if (capturing) return;
   capturing = true;
   try {
+    // 录制感知：正在录屏类课 → 这一帧挂到课堂时间轴（主动意图锚点）
+    if (await tryCaptureClassFrame(deps.getShellWindow)) {
+      notify({ title: 'MeetMind', body: '这一页收下了', onClick: deps.showShellWindow });
+      return;
+    }
+
     const pngBuffer = await captureCursorScreen();
     const origin = new URL(deps.meetmindUrl).origin;
     const token = await readAccessToken(deps.getShellWindow);

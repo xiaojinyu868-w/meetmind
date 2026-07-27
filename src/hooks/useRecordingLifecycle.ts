@@ -17,6 +17,7 @@ import { classroomDataService } from '@/lib/services/classroom-data-service';
 import { memoryService } from '@/lib/services/memory-service';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
 import { uploadRecordingAudio } from '@/lib/services/upload-recording-audio';
+import { uploadRecordingKeyframes } from '@/lib/services/upload-recording-keyframes';
 import {
   runDiarizationForSession,
   shouldRunPostBatchDiarization,
@@ -174,9 +175,13 @@ export function useRecordingLifecycle(
       if (payload.echoQueued || payload.echoAlreadyGeneratedToday) {
         void refreshDailyEcho();
       }
+
+      // 返回 captureId：课后关键帧上传等后续动作需要把 artifacts 挂到这条 capture 上
+      return payload.capture?.id;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error('[workspace.capture]', message);
+      return undefined;
     }
   }, [accessToken, isAuthenticated, refreshDailyEcho, user?.id]);
 
@@ -431,6 +436,15 @@ export function useRecordingLifecycle(
               isFinal: s.isFinal,
             })),
           },
+        }).then((captureId) => {
+          // 课中「截取这一页」的关键帧：capture 就位后静默上传（失败本地仍在，retry 兜底）
+          if (captureId && isAuthenticated && accessToken) {
+            void uploadRecordingKeyframes({
+              sessionId: effectiveSessionId,
+              captureId,
+              authToken: accessToken,
+            }).catch(() => undefined);
+          }
         });
       }
 
@@ -457,6 +471,15 @@ export function useRecordingLifecycle(
                 duration,
                 audioUploaded: true,
               },
+            }).then((captureId) => {
+              // 关键帧上传的天然重试点：音频上传成功后 capture 必然已就位
+              if (captureId) {
+                void uploadRecordingKeyframes({
+                  sessionId: effectiveSessionId,
+                  captureId,
+                  authToken: accessToken,
+                }).catch(() => undefined);
+              }
             });
           },
         }).catch(() => undefined);

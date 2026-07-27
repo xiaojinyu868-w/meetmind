@@ -75,6 +75,7 @@ hooks → stores + types + lib/db + lib/utils
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `useSession.ts` | 140 | 会话 CRUD（IndexedDB） |
+| `useSessionKeyframes.ts` | ~55 | 复习页按 sessionId 懒加载课中「截取这一页」关键帧（blob→objectURL / mediaUrl），喂 TranscriptFlowView keyframes prop |
 | `useSummary.ts` | 155 | 课堂摘要生成（调用 API）— classSummary 仍被 AITutor / WorkshopYellowPage 消费 |
 | `useTopics.ts` | 129 | 精选片段生成（调用 API）— ⚠️ UI 入口已移除，仅后台数据能力保留 |
 | `useTranscript.ts` | 121 | 转录数据请求（调用 API） |

@@ -10,6 +10,7 @@ import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useMobileAIStore } from '@/stores/mobile-ai-store';
 import { ReviewThreePaneLayout } from '@/components/ReviewThreePaneLayout';
 import { formatTime } from '@/lib/utils/page-utils';
+import { useSessionKeyframes } from '@/hooks/useSessionKeyframes';
 import { toReviewCurrentTimeSec } from './desktop-video-review-layout-model';
 import {
   appendReviewLearningActivity,
@@ -175,6 +176,8 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
   const actionItems = useCaptureEditorStore((s) => s.actionItems);
   const audioBlob = useCaptureEditorStore((s) => s.audioBlob);
   const audioUrl = useCaptureEditorStore((s) => s.audioUrl);
+  // 课中「截取这一页」关键帧：按 sessionId 从 IndexedDB 懒加载
+  const keyframeStrips = useSessionKeyframes(sessionId);
 
   const mobileAIQuestion = useMobileAIStore((s) => s.mobileAIQuestion);
   const mobileAIDisplayQuestion = useMobileAIStore((s) => s.mobileAIDisplayQuestion);
@@ -328,6 +331,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                       handleAnchorMark(timeMs);
                     }}
                     confusionTimestamps={anchors.map(a => ({ timestamp: a.timestamp, resolved: a.resolved }))}
+                    keyframes={keyframeStrips}
                     defaultExpanded={true}
                     showHeader={false}
                   />
@@ -562,6 +566,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                 sharedWorkspaceContent={null}
                 sourceFullText={sourceFullText}
                 sourceImageUrls={sourceImageUrls}
+                keyframes={keyframeStrips}
               />
               </section>
             )}
