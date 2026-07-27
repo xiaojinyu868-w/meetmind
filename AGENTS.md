@@ -28,7 +28,7 @@
 | **改 API 接口** | `src/app/api/DOMAIN.md` → 对应子目录 DOMAIN.md → route.ts |
 | **改 Tutor 后端** | `src/app/api/tutor/DOMAIN.md`（`/api/tutor/agent` 按 `mode: 'in-class' \| 'review' \| 'shared' \| 'goal' \| 'word' \| 'global'` 6 分支；深度学习意图确认走 `/api/tutor/intent`，回答后的学习理解整理走 `/api/tutor/memory`） |
 | **改 prompt** | `src/lib/prompts/tutor-prompts.ts`（mode-driven `buildTutorSystemPrompt`） + `项目开发文档/提示词设计哲学.md` |
-| **改管理员 AI 控制中心 / 运行时 prompt 调优** | `src/components/admin/DOMAIN.md` → `src/lib/services/ai-control-service.ts` → `src/app/api/admin/ai-control/route.ts` → 对应真实链路（Tutor / learning intent / learning memory / app plugins）→ `docs/TUTOR_AGENT.md`。当前控制中心覆盖 Tutor 六模式、深度学习意图确认、长期学习理解整理，以及应用矩阵全部六类应用；代码内 prompt 是可评测基线，管理员只能追加指令与选择注册模型，隐私 / 引用 / mode / 用户证据 / 学习层级 / 应用证据边界合同不可覆盖。管理员默认体验普通用户界面，主动打开会话级“管理视图”后产品现场透镜才出现并带入该次真实上下文；复杂发布与回滚仍留在独立控制中心。插件不得静态依赖 Prisma-backed 控制服务，运行时结果由 `/api/apps/execute` 注入。 |
+| **改管理员 AI 控制中心 / 运行时 prompt 调优** | `src/components/admin/DOMAIN.md` → `src/lib/services/ai-control-service.ts` → `src/app/api/admin/ai-control/route.ts` → 对应真实链路（Tutor / learning intent / learning memory / app plugins）→ `docs/TUTOR_AGENT.md`。当前控制中心覆盖 Tutor 六模式、深度学习意图确认、长期学习理解整理，以及应用矩阵全部七类应用；代码内 prompt 是可评测基线，管理员只能追加指令与选择注册模型，隐私 / 引用 / mode / 用户证据 / 学习层级 / 应用证据边界合同不可覆盖。管理员默认体验普通用户界面，主动打开会话级“管理视图”后产品现场透镜才出现并带入该次真实上下文；复杂发布与回滚仍留在独立控制中心。插件不得静态依赖 Prisma-backed 控制服务，运行时结果由 `/api/apps/execute` 注入。 |
 | **改「聊聊你想要的」/ 目标共建 / 教练对话** | `src/components/intent/DOMAIN.md` → `IntentDialogContainer` 是入口包装，主对话在 `IntentDialog`，提炼卡片在 `IntentSummaryCard`（bio）/ `IntentBioCard`。入口仅在设置页（M14.6 移除首登强制拦截）。后端 `/api/tutor/agent` mode='goal'，prompt 在 `tutor-prompts.ts` 的 `buildGoalSegment`（GOAL_HEADER + GOAL_PATH_A 首次会面 / GOAL_PATH_B 回访 + GOAL_COMMON）。文件解析 helper `src/lib/services/file-parse-service.ts`。|
 | **改实时语音通话 UI / 抗噪抗打断** | `src/components/realtime/DOMAIN.md` → `RealtimeOrb`（v7 呼吸光晕，复用于复习态 + intent 通话）+ `IntentVoiceCallScreen` / `TutorRealtimeCallScreen`。后端 WebSocket 在 `server.js` 的 `/api/tutor-call`，VAD/降噪参数走环境变量（见 `.env.example` 实时语音同桌段）。|
 | **改业务逻辑（service）** | `src/lib/services/DOMAIN.md` → 找到对应 service 文件 |
@@ -37,8 +37,9 @@
 | **改 AI-Native 插件** | `src/lib/ai-native/plugins/DOMAIN.md` → 对应 plugin |
 | **改 SharedAgent / 分享 Agent / 裂变** | `roadmap/v3.0-virality-agent.md`（北极星）→ `src/app/api/share/DOMAIN.md` → `src/app/share/DOMAIN.md` → `src/app/me/shares/`（A 管理面）→ `src/components/share/DOMAIN.md` → `src/lib/services/share-agent-service.ts`。**v3.0 闭环 5 个支点**：(1) 已完成成果旁的 `ShareArtifactAction` 创建分享 (2) 落地页 `SharedAgentLanding` + `ArtifactRender` 真渲染产物 (3) 分享态对话 `mode='shared'` (4) 领取 `claimSharedAgent` → `WorkspaceCapture(sourceType='shared-agent')` 在 B 工作台点击跳回 `/share/[token]` (5) 管理 `MyShareList` + `DELETE /api/share/[token]`（撤销不影响已领取副本）|
 | **改文章 / 网页原文接入** | `src/app/api/article/`（无 DOMAIN.md）→ `src/lib/services/web-article-extract-service.ts` + `jina-reader-service.ts`；`.env.example` 配 `FIRECRAWL_API_KEY`（首选），`OPENCLAW_GATEWAY_URL` 已 **deprecated**（见 `openclaw/README.md`，与 MeetMind 解耦的 AI Agent Gateway，现仅 fallback） |
-| **改微信登录 / 绑定 / 公众号捕获** | 桌面自然登录走 `src/app/api/auth/wechat/qr/route.ts` + `wechat-qr-auth-{service,repository,runtime}.ts` + `WechatQrAuthDialog` / `useWechatQrAuth`；公众号 `subscribe/SCAN` 回调由 `/api/wechat/mp` 截获，不进入收集流。微信内登录仍走 `wechat-auth-service.ts` OAuth，所有入口统一委托 `wechat-identity-service.ts` + `wechat-identity-claim-service.ts` 原子确定 openId 归属。Capture 邮箱/密码兼容入口保留 `src/app/api/wechat/bind*` + `WechatBindForm.tsx`，但身份绑定也必须走统一 service。`.env.example` 配 `NEXT_PUBLIC_ENABLE_WECHAT_LOGIN` + `WECHAT_APP_ID/SECRET` + `WECHAT_MP_TOKEN`。 |
+| **改微信登录 / 绑定 / 公众号捕获** | 桌面自然登录走 `src/app/api/auth/wechat/qr/route.ts` + `wechat-qr-auth-{service,repository,runtime}.ts` + `WechatQrAuthDialog` / `useWechatQrAuth`；公众号 `subscribe/SCAN` 回调由 `/api/wechat/mp` 截获，不进入收集流。绑定用户发来的纯文字消息分流给微信 Agent（`wechat-agent-service.ts`）：注入画像/近期收集/对话历史后经 LLM 生成回复，异步走客服消息推送（不占 5 秒回执，每日 30 轮护栏），会话落 `WechatAgentMessage` 表；链接/语音/图片仍走收集线。微信内登录仍走 `wechat-auth-service.ts` OAuth，所有入口统一委托 `wechat-identity-service.ts` + `wechat-identity-claim-service.ts` 原子确定 openId 归属。Capture 邮箱/密码兼容入口保留 `src/app/api/wechat/bind*` + `WechatBindForm.tsx`，但身份绑定也必须走统一 service。`.env.example` 配 `NEXT_PUBLIC_ENABLE_WECHAT_LOGIN` + `WECHAT_APP_ID/SECRET` + `WECHAT_MP_TOKEN`。 |
 | **改跨设备同步** | `roadmap/v2.1-cross-browser-sync-gap.md` → `src/lib/services/workspace-evidence-service.ts`（服务端正规化）+ `workspace-evidence-client.ts`（按课堂懒拉）+ `backfill-captures-to-indexeddb.ts`（IndexedDB 回填）+ `upload-recording-audio.ts`（原声上云） |
+| **改桌面壳 / 全端采集层** | `roadmap/v4.0-everywhere-capture.md`（三层北极星：采集 / 学习线索 / 规则 Hook）→ `desktop/DOMAIN.md`（Electron 壳：内嵌网页 + loopback 系统音频 + 全局热键截图）→ `src/lib/services/keyframe/DOMAIN.md`（翻页关键帧 pHash 检测） |
 | **改用户面文案** | `src/lib/ui/copy.ts`（**唯一真相源**——不要把字符串散落到组件里） |
 | **改状态管理** | `src/stores/DOMAIN.md` → 了解哪些状态已迁移到 store |
 | **改类型定义** | `src/types/DOMAIN.md` → `src/types/index.ts` |
@@ -248,12 +249,12 @@ MeetMind 是以学习者长期上下文为中心的 AI 学习产品。
 
 ### 3.4 AI-Native 插件系统
 
-`src/lib/ai-native/plugins/` 是 Workshop 应用的运行时（7 个 plugin，`studio-workshop` 含 3 个子模块 podcast/renderers/types）。每个插件实现统一的 `AppPlugin` 契约：
+`src/lib/ai-native/plugins/` 是 Workshop 应用的运行时（8 个 plugin，`studio-workshop` 含 3 个子模块 podcast/renderers/types）。每个插件实现统一的 `AppPlugin` 契约：
 
 - `manifest.id` + `canHandle(context)` + `run(context, tools)`
 - 输出 `AppExecutionResult { cards, trace, render }`，前端统一交给 `AppRenderSurface` 渲染；WorkshopWindow、独立应用页、InlineAppCard 不得各写一套 UI
-- 主要 plugin：cheatsheet / flashcards / quiz / mindmap / class-check（视频内随堂检验，不在 catalog）/ studio-workshop（播客 + 信息图）/ fallback
-- catalog：`src/lib/ai-native/app-catalog.ts` 是 UI 端的应用矩阵（6 类 ready 应用：flashcards / quiz / mindmap / cheatsheet / infographic / audio-overview）
+- 主要 plugin：cheatsheet / flashcards / quiz / mindmap / teach-back（费曼检验选点；评估走 `/api/apps/teach-back/evaluate`）/ class-check（视频内随堂检验，不在 catalog）/ studio-workshop（播客 + 信息图）/ fallback
+- catalog：`src/lib/ai-native/app-catalog.ts` 是 UI 端的应用矩阵（7 类 ready 应用：flashcards / quiz / mindmap / cheatsheet / infographic / audio-overview / teach-back）
 
 ### 3.5 课堂同桌 → 应用矩阵的链路（M14.6 重做）
 
@@ -267,7 +268,7 @@ M14.6 起，结构化产物**不再走** LLM 输出 `<open_app:KEY/>` marker 的
 ```
 
 - LLM 对话保持**纯文字**：`agent/route.ts` 的 `tools = {}`，不挂 native tools，不注入 marker 合约。
-- 应用矩阵 6 类应用（`WORKSHOP_APP_CATALOG` in `app-catalog.ts`）：`flashcards / quiz / mindmap / cheatsheet / audio-overview / infographic`。进入矩阵先经 `/api/apps/readiness` 判断材料是否真的支持学习产物；过短、闲聊、行政内容或不可靠转录必须允许“不生成”，推荐也可以为空。`/api/apps/execute` 服务端再次校验以防绕过。M16 起目录按学习动作组织，只突出一个有原文依据的“现在最适合”；首次生成留在矩阵后台完成，结果页不暴露模型选择，分享入口在至少完成一个产物后出现。
+- 应用矩阵 7 类应用（`WORKSHOP_APP_CATALOG` in `app-catalog.ts`）：`flashcards / quiz / mindmap / cheatsheet / audio-overview / infographic / teach-back`。teach-back「讲给同桌听」是费曼检验：插件选 3-5 个讲述目标，学生用语音（安静学生 persona，复用 `/api/tutor-call` 链路）或打字讲完后，`/api/apps/teach-back/evaluate` 对照课堂转录判 coverage × confidence，四象限（掌握/有效挣扎/已知缺口/盲区）由服务端映射推导。进入矩阵先经 `/api/apps/readiness`：它只做客观下限和"现在最适合"的推荐；**前端永不禁用应用**——所有应用始终可点，是否生成是用户的决定，材料撑不住由插件执行时诚实返回 `CONTENT_NOT_READY` 空态。`/api/apps/execute` 服务端只在客观下限（空内容 / 极短碎片）不过时统一 422 `CONTENT_NOT_READY`，其余放行。M16 起目录按学习动作组织，只突出一个有原文依据的"现在最适合"；首次生成留在矩阵后台完成，结果页不暴露模型选择，分享入口在至少完成一个产物后出现。
 - **遗留死代码（M14.6 前的 marker 链路，待清理）**：`<open_app:KEY/>` marker、`extractOpenAppMarker`、`capOpenAppContract` / `TutorInlineAppKey` 类型、`InlineAppCard` 的 marker 拦截逻辑。（`tutor-tools.ts` 及 4 个无入口 plugin `study-report` / `knowledge-cards` / `confusion-drill` / `review-plan` 已在 M14.6+ 清理删除。）
 
 ### 3.6 God File 提取策略
@@ -356,7 +357,7 @@ ASR 链路（`src/lib/services/asr/`）：
 | 来源 | API | Service | 备注 |
 |------|-----|---------|------|
 | 文章 / 网页 | `/api/article/import` | `web-article-extract-service.ts` + `jina-reader-service.ts` | `.env.example` 配 `FIRECRAWL_API_KEY`（首选） |
-| 微信公众号 | `/api/wechat/*`（bind / callback / mp / capture/[token]） | 6 个 `wechat-*-service.ts`（auth / inbox / media / mp / voice-utils / web-session） | `WECHAT_APP_ID/SECRET` + `WECHAT_MP_TOKEN` |
+| 微信公众号 | `/api/wechat/*`（bind / callback / mp / capture/[token]） | `wechat-*-service.ts`（auth / inbox / media / mp / agent / voice-utils / web-session） | `WECHAT_APP_ID/SECRET` + `WECHAT_MP_TOKEN`；Agent 对话依赖客服消息接口权限 |
 | OpenClaw Gateway | — | `openclaw/`（仓库根目录，与 MeetMind 解耦） | **deprecated**：Firecrawl 替代微信公众号反爬，OpenClaw 仅 fallback |
 
 ### 3.11 今日情报：个人上下文 × 外部真实信息
@@ -569,7 +570,7 @@ src/
     ├── utils/page/DOMAIN.md # page-utils 拆分模块
     ├── db/DOMAIN.md      # IndexedDB Schema + CRUD
     ├── ai-native/DOMAIN.md # 应用插件系统
-    ├── ai-native/plugins/DOMAIN.md # 11 个 Workshop 插件（studio-workshop 含 3 子模块）
+    ├── ai-native/plugins/DOMAIN.md # 8 个 Workshop 插件（studio-workshop 含 3 子模块）
     ├── longcut/DOMAIN.md # 转录算法
     ├── capture/DOMAIN.md # 收集逻辑
     ├── context-reach/DOMAIN.md # 输入分流
@@ -604,7 +605,7 @@ src/
 | `src/lib/utils/tutor-agent-provider.ts` | Tutor Agent provider 解析 + fallback：按请求模型/env 选 StepFun、DeepSeek、DashScope 或 OpenAI，强制 Chat Completions；`resolveTutorAgentProviderFallbacks` 在 primary 可重试失败时切 StepFun→DeepSeek→Qwen |
 | `src/lib/utils/ai-model-preference.ts` | 设置页模型偏好的 key 与 `auto` 解析契约 |
 | `src/lib/ui/copy.ts` | 用户面文案唯一真相源（COPY 对象 + bannedWords 校验） |
-| `src/lib/ai-native/app-catalog.ts` | Workshop 应用矩阵（6 类 ready），`WORKSHOP_APP_CATALOG` + `WorkshopAppKey`；每项含 learningAction / bestFor / timeLabel |
+| `src/lib/ai-native/app-catalog.ts` | Workshop 应用矩阵（7 类 ready），`WORKSHOP_APP_CATALOG` + `WorkshopAppKey`；每项含 learningAction / bestFor / timeLabel |
 | `src/app/api/video/import/route.ts` | 多平台导入管线（已拆 3 子模块） |
 | `src/lib/services/commonstack-echo-service.ts` | Echo LLM 调用，System Prompt 在此 |
 | `src/lib/services/workspace-echo-service.ts` | Echo 数据管线；CommonStack 新 schema 不返回 title，需从 takeaway / echo 生成标题后再进质量门 |

@@ -83,7 +83,10 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   const challengeId = request.nextUrl.searchParams.get('id')?.trim();
-  const browserToken = request.cookies.get(BROWSER_COOKIE)?.value;
+  // 桌面端（Electron）不依赖 cookie：POST 时传入的 clientNonce 可在轮询时原样带回
+  const clientNonce = request.nextUrl.searchParams.get('clientNonce')?.trim();
+  const browserToken = request.cookies.get(BROWSER_COOKIE)?.value
+    || (clientNonce && /^[a-zA-Z0-9_-]{20,100}$/.test(clientNonce) ? clientNonce : undefined);
   const networkLimit = await checkRateLimit(getIdentifier(request), 'wechatQrPoll');
   if (!networkLimit.allowed) {
     return jsonResponse({ success: false, status: 'failed', error: COPY.wechatQr.tooManyRequests }, { status: 429 });

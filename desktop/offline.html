@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>连接失败 - MeetMind</title>
+  <style>
+    /* 断网兜底页：与 MeetMind 纸感设计同源的极简版（独立文件，不依赖任何外部资源） */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #F6F8F6;
+      color: #20312A;
+      font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    }
+    .card { text-align: center; max-width: 360px; padding: 40px; }
+    .title { font-size: 18px; font-weight: 600; margin-bottom: 10px; }
+    .desc { font-size: 13px; color: #53645C; line-height: 1.7; margin-bottom: 24px; }
+    button {
+      padding: 10px 28px;
+      font-size: 14px;
+      color: #fff;
+      background: #2F6B55;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    button:hover { opacity: 0.9; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="title">暂时连不上 MeetMind</div>
+    <div class="desc">检查一下网络连接；如果网络正常，<br />可能是服务正在重启，稍等片刻再试。</div>
+    <button id="retryButton" type="button">重新连接</button>
+  </div>
+  <script>
+    // 目标地址由主进程经 query 传入（见 shell-window.js 的 did-fail-load 兜底）
+    var params = new URLSearchParams(location.search);
+    var retryUrl = params.get('retry') || 'https://capture.meetmind.online/app';
+    document.getElementById('retryButton').addEventListener('click', function () {
+      location.href = retryUrl;
+    });
+  </script>
+</body>
+</html>

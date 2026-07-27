@@ -1,0 +1,76 @@
+# MeetMind 桌面端打包配置（electron-builder）
+#
+# 结构：two-package.json —— desktop/ 是独立的 app 目录（自己的 package.json、
+# 无 npm 运行时依赖），安装包因此只有 Electron 运行时 + 我们的几个 js/html，
+# 不会把 Web 端的 node_modules 打进去。
+#
+# 签名：未配置签名证书（macOS Developer ID / Windows EV）。未签名包的用户体验：
+#   - macOS：首次打开需「右键 → 打开」绕过 Gatekeeper
+#   - Windows：SmartScreen 点「更多信息 → 仍要运行」
+# 后续买到证书后在 CI 注入 CSC_LINK / CSC_KEY_PASSWORD 即可自动签名。
+
+appId: online.meetmind.capture
+productName: MeetMind
+copyright: Copyright © 2026 MeetMind
+
+directories:
+  app: desktop
+  buildResources: desktop/build
+  output: desktop-dist
+
+# 运行时零 npm 依赖，只打这几个文件 + 素材。
+# 注意最后的排除项：electron-builder 在 app 目录找不到 node_modules 时会
+# 向上回溯到仓库根、把 Web 端的生产依赖误打进来（asar 会膨胀到 600MB+），
+# 必须显式排除。
+files:
+  - main.js
+  - shell-window.js
+  - screenshot.js
+  - preload.js
+  - companion.html
+  - companion.css
+  - companion.js
+  - offline.html
+  - assets/**
+  - package.json
+  - '!**/node_modules/**'
+
+asar: true
+
+# 稳定文件名：landing page 下载按钮固定指向
+# github.com/<repo>/releases/latest/download/<artifactName>，发新版不用改前端
+artifactName: MeetMind-${version}-${os}-${arch}.${ext}
+
+mac:
+  category: public.app-category.education
+  artifactName: MeetMind-mac-${arch}.${ext}
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  # 未签名也需要显式关闭 hardened runtime 相关校验
+  identity: null
+
+dmg:
+  title: MeetMind
+  window:
+    width: 540
+    height: 380
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: MeetMind
+  artifactName: MeetMind-win-setup.${ext}
+
+linux:
+  target: AppImage
+  category: Education
+
+# 不做自动更新发布；安装包手动分发 / GitHub Release 附件
+publish: null

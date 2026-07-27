@@ -1,13 +1,13 @@
 const ASSETS = {
-  idle: '../public/images/octo-buddy/idle.png',
-  listening: '../public/images/octo-buddy/excited.png',
-  thinking: '../public/images/octo-buddy/thinking.png',
-  happy: '../public/images/octo-buddy/happy.png',
-  surprised: '../public/images/octo-buddy/surprised.png',
-  love: '../public/images/octo-buddy/love.png',
-  sleeping: '../public/images/octo-buddy/sleeping.png',
-  angry: '../public/images/octo-buddy/surprised.png',
-  game: '../public/images/octo-buddy/excited.png',
+  idle: './assets/octo/idle.png',
+  listening: './assets/octo/excited.png',
+  thinking: './assets/octo/thinking.png',
+  happy: './assets/octo/happy.png',
+  surprised: './assets/octo/surprised.png',
+  love: './assets/octo/love.png',
+  sleeping: './assets/octo/sleeping.png',
+  angry: './assets/octo/surprised.png',
+  game: './assets/octo/excited.png',
 };
 
 const COPY = {
@@ -259,13 +259,15 @@ listenButton.addEventListener('click', () => {
   touch('共同场景：陪你听课，而不是只等你提问。');
   setMood('listening');
   setMotion('breathe');
+  // v2：进壳内主窗口的 /app 听课，不再跳外部浏览器
+  window.meetmindCompanion?.showMain();
 });
 
 askButton.addEventListener('click', () => {
   touch('先打开 MeetMind，把问题交给同学。');
   setMood('thinking');
   setMotion('breathe');
-  window.meetmindCompanion?.openMeetMind();
+  window.meetmindCompanion?.showMain();
 });
 
 gameButton.addEventListener('click', () => {
@@ -280,7 +282,7 @@ openButton.addEventListener('click', () => {
   setMood('love');
   setMotion('celebrate');
   showBurst();
-  window.meetmindCompanion?.openMeetMind();
+  window.meetmindCompanion?.showMain();
 });
 
 document.addEventListener('keydown', (event) => {

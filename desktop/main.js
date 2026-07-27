@@ -1,8 +1,79 @@
+// MeetMind 桌面采集壳 v2 —— 主进程入口
+// 职责：Chromium 启动参数、Octo Buddy 悬浮球窗口（v1 行为全部保留）、
+// 以及把「内嵌主窗口 shell-window」和「全局热键截图 screenshot」两个能力接起来。
 const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, ipcMain, shell, screen } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, screen } = require('electron');
+const {
+  createShellWindow,
+  getShellWindow,
+  showShellWindowAt,
+  toggleShellWindow,
+  createTray,
+} = require('./shell-window');
+const { registerScreenshotHotkey, retryPendingShots } = require('./screenshot');
 
-const MEETMIND_URL = process.env.MEETMIND_URL || 'http://localhost:3002/app';
+// Web 版 MeetMind 地址：生产默认走 capture 站点，本地调试用 MEETMIND_URL 覆盖
+const MEETMIND_URL = process.env.MEETMIND_URL || 'https://capture.meetmind.online/app';
+
+// 单实例锁：重复启动只唤起已有实例的主窗口，避免多个悬浮球/重复热键抢注册
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
+
+// macOS 的 getDisplayMedia 系统声音 loopback 依赖这两个 feature flag，
+// Windows 加上也无害（WASAPI loopback 原生支持）。必须在 app ready 之前追加。
+app.commandLine.appendSwitch(
+  'enable-features',
+  'MacLoopbackAudioForScreenShare,MacSckSystemAudioLoopbackOverride'
+);
+// 网页内录屏时不再弹「选择分享内容」系统选择器，默认给整块屏幕；
+// 真正的授权逻辑在 shell-window.js 的 setDisplayMediaRequestHandler 里。
+app.commandLine.appendSwitch('auto-select-desktop-capture-source', 'Entire screen');
+
+// 应用菜单：没有菜单时 macOS 上网页输入框的 Cmd+C/V/X/A 全部失效（Electron 的
+// 编辑快捷键走菜单 role 注册）。Windows/Linux 菜单栏被 autoHideMenuBar 隐藏，
+// 但快捷键仍然生效。
+function installApplicationMenu() {
+  const template = [];
+  if (process.platform === 'darwin') {
+    template.push({
+      label: app.name,
+      submenu: [
+        { role: 'about', label: '关于 MeetMind' },
+        { type: 'separator' },
+        { role: 'hide', label: '隐藏 MeetMind' },
+        { role: 'hideOthers', label: '隐藏其他' },
+        { type: 'separator' },
+        {
+          label: '退出 MeetMind',
+          accelerator: 'CmdOrCtrl+Q',
+          click: () => {
+            app.isQuitting = true;
+            app.quit();
+          },
+        },
+      ],
+    });
+  }
+  template.push(
+    { role: 'editMenu', label: '编辑' },
+    {
+      label: '视图',
+      submenu: [
+        { role: 'reload', label: '重新加载' },
+        { role: 'togglefullscreen', label: '全屏' },
+        { type: 'separator' },
+        { role: 'resetZoom', label: '实际大小' },
+        { role: 'zoomIn', label: '放大' },
+        { role: 'zoomOut', label: '缩小' },
+      ],
+    },
+    { role: 'windowMenu', label: '窗口' }
+  );
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
 
 let companionWindow = null;
 let expanded = false;
@@ -89,14 +160,41 @@ function createCompanionWindow() {
 }
 
 app.whenReady().then(() => {
+  installApplicationMenu();
   createCompanionWindow();
+  // 常驻主窗口：用户在壳内登录，截图上传复用这里的登录态
+  createShellWindow(MEETMIND_URL);
+  createTray({ onToggle: toggleShellWindow });
+
+  const screenshotDeps = {
+    meetmindUrl: MEETMIND_URL,
+    getShellWindow,
+    showShellWindow: () => showShellWindowAt(MEETMIND_URL),
+  };
+  registerScreenshotHotkey(screenshotDeps);
+  // 上次失败暂存的截图，启动时补传一次（未登录则保留到下次）
+  void retryPendingShots(screenshotDeps);
+
+  // 第二个实例被启动时：唤起主窗口而不是再开一套
+  app.on('second-instance', () => {
+    showShellWindowAt(MEETMIND_URL);
+  });
+
+  // macOS 点 Dock 图标：恢复主窗口（不只是补悬浮球）
   app.on('activate', () => {
     if (!companionWindow) createCompanionWindow();
+    showShellWindowAt(MEETMIND_URL);
   });
 });
 
-app.on('window-all-closed', (event) => {
-  event.preventDefault();
+// 常驻壳：所有窗口关闭也不退出，等托盘菜单或悬浮球显式退出
+app.on('window-all-closed', () => {
+  // 不调用 app.quit()
+});
+
+app.on('before-quit', () => {
+  // 标记真正退出，让主窗口的 close 拦截放行
+  app.isQuitting = true;
 });
 
 ipcMain.handle('companion:set-expanded', (_event, nextExpanded) => {
@@ -127,10 +225,12 @@ ipcMain.handle('companion:move-by', (_event, deltaX, deltaY) => {
   savePosition(nextBounds);
 });
 
-ipcMain.handle('companion:open-meetmind', async () => {
-  await shell.openExternal(MEETMIND_URL);
+// v2：悬浮球的 MeetMind 入口统一走壳内主窗口，不再打开外部浏览器
+ipcMain.handle('companion:show-main', () => {
+  showShellWindowAt(MEETMIND_URL);
 });
 
 ipcMain.handle('companion:quit', () => {
+  app.isQuitting = true;
   app.quit();
 });

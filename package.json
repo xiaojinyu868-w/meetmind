@@ -26,7 +26,11 @@
     "e2e:headed": "playwright test --headed",
     "e2e:ui": "playwright test --ui",
     "desktop": "npx --yes electron desktop/main.js",
-    "desktop:dev": "MEETMIND_URL=http://localhost:3002/app npx --yes electron desktop/main.js"
+    "desktop:dev": "MEETMIND_URL=http://localhost:3002/app npx --yes electron desktop/main.js",
+    "desktop:pack": "electron-builder --dir",
+    "desktop:dist:mac": "electron-builder --mac",
+    "desktop:dist:win": "electron-builder --win",
+    "desktop:dist:linux": "electron-builder --linux"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.62",
@@ -117,6 +121,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.4.0",
     "electron": "^33.4.11",
+    "electron-builder": "^26.15.3",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.35",
     "postcss": "^8.4.0",

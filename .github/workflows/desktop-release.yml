@@ -1,0 +1,75 @@
+name: Desktop Release
+
+# 桌面端安装包构建：mac dmg + win nsis。
+# 触发方式：
+#   1. 手动 Actions → Desktop Release → Run workflow（产出 artifacts，90 天保留）
+#   2. 打 tag（desktop-v*）→ 自动创建 GitHub Release 并附带安装包
+#
+# 签名：未配置证书时为未签名包（mac 右键打开 / win SmartScreen 仍要运行）。
+# 后续配置签名：在仓库 Secrets 注入 CSC_LINK + CSC_KEY_PASSWORD
+# （mac 还需 APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 做公证）。
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'desktop-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: mac dmg (arm64+x64)
+            os: macos-latest
+            args: --mac
+          - name: win nsis (x64)
+            os: windows-latest
+            args: --win
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      # 桌面端运行时零 npm 依赖，但 electron-builder 与 electron 二进制
+      # 仍在 devDependencies，需要完整安装（含 postinstall 下载 Electron）
+      - name: Install deps
+        run: npm ci --no-audit --no-fund
+
+      - name: Build installer
+        run: npx electron-builder ${{ matrix.args }}
+        env:
+          # 未注入证书时明确跳过签名/公证，不报错
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: meetmind-desktop-${{ runner.os }}
+          path: |
+            desktop-dist/*.dmg
+            desktop-dist/*.exe
+            desktop-dist/*.zip
+          if-no-files-found: error
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop-dist/*.dmg
+            desktop-dist/*.exe
+            desktop-dist/*.zip
+          generate_release_notes: true

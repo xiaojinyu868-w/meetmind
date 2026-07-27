@@ -70,7 +70,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/apps/execute` | POST | 执行 AI-Native 应用插件；单课可传 legacy `input`，unit/exam 传 `contextPack`。服务端校验 tier、课数与 catalog 白名单；考试速查表必须有至少两节课，或 exam tier 的大纲/真题范围 |
 | `/api/apps/plugins` | GET | 获取已注册插件列表 |
 | `/api/apps/catalog` | GET | 获取应用目录 |
-| `/api/apps/readiness` | POST | 结合真实原文、场景标题/来源、学习信号与 `contextTier` 判断当前层材料是否足以生成应用；ready 只返回该层 catalog 白名单，单课不含考试速查表。游客复习也会调用，已在 `public-routes.ts` 放行并由 route 自身限流 |
+| `/api/apps/readiness` | POST | 结合真实原文、场景标题/来源、学习信号与 `contextTier` 给出应用推荐；模型判断只影响推荐与提示语气，`allowedAppKeys` 始终是该层 catalog 白名单（单课不含考试速查表），只有空内容 / 极短碎片（<2 段或 <80 字或 <20 秒）才返回 `not_ready`。游客复习也会调用，已在 `public-routes.ts` 放行并由 route 自身限流 |
 | `/api/apps/infographic/generate-image` | POST | Gemini 信息图生成 |
 
 ### 👤 认证
@@ -89,7 +89,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/auth/send-code` | POST | 发送验证码 |
 | `/api/auth/wechat` | GET | 微信内置浏览器 OAuth URL |
 | `/api/auth/wechat/callback` | GET/POST | 微信 OAuth 回调与一次性 Web session 交换 |
-| `/api/auth/wechat/qr` | POST/GET | 创建公众号带参二维码并轮询登录/绑定结果；挑战由 HttpOnly 浏览器 Cookie 绑定，5 分钟过期；POST 按网络身份 + 浏览器双限流并复用有效挑战 |
+| `/api/auth/wechat/qr` | POST/GET | 创建公众号带参二维码并轮询登录/绑定结果；挑战由 HttpOnly 浏览器 Cookie 绑定，5 分钟过期；POST 按网络身份 + 浏览器双限流并复用有效挑战；桌面端（Electron）可用 `clientNonce` 代替 Cookie（POST 传入、GET 轮询原样带回） |
 | `/api/auth/learner-profile` | GET/PATCH | 读取或保存学习者画像；除可纠正的学习理解与轻量学习连续性外，只保存用户对课堂自动归组的改名/确认/暂停偏好，真实课堂 session 不复制进画像 |
 
 ### 📦 Workspace
@@ -100,6 +100,12 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/workspace/local-migration` | POST | 把本地 IndexedDB 学习历史迁移到当前账号的 Workspace |
 | `/api/workspace/captures` | POST/PATCH/DELETE | capture 写入、更新与归档删除；写入时 canonicalize URL，同工作区相同原文自动合并，并持久化 `metadata.provenance` |
 | `/api/workspace/captures/stats` | GET | captures 统计 |
+| `/api/workspace/captures/[captureId]/evidence` | GET | 按 capture 懒加载完整课堂证据（转录分段 + artifacts） |
+| `/api/workspace/captures/[captureId]/artifacts` | POST | 追加证据 artifact（kind 自由字符串，如 `keyframe`/`screenshot`），按 (captureId, kind, artifactKey) 幂等 upsert；桌面壳与录课关键帧的写入入口 |
+| `/api/workspace/upload-audio` | POST | 录音原声持久化（Bearer，按 userId/sessionId 幂等覆盖，异步生成波形 peaks） |
+| `/api/workspace/audio/[user]/[file]` | GET | 流式返回持久化音频（支持 Range；运行时上传文件必须走动态路由） |
+| `/api/workspace/upload-image` | POST | 截图/关键帧原图持久化（Bearer，≤20MB，png/jpg/webp/gif/bmp），返回 mediaUrl 供 capture 或 artifact 引用 |
+| `/api/workspace/images/[user]/[file]` | GET | 返回持久化图片（与 audio 路由同构，不可猜路径防枚举） |
 | `/api/workspace/search` | POST | 全局 AI 检索（SSE 流式） |
 | `/api/workspace/echoes/daily-refresh` | POST | 每日回响刷新 |
 
@@ -107,7 +113,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 
 | 路由 | 方法 | 职责 |
 |------|------|------|
-| `/api/wechat/mp` | GET/POST | 公众号验签、消息接收与自动回复；优先截获二维码 `subscribe/SCAN` 事件更新认证挑战，不写入收集流 |
+| `/api/wechat/mp` | GET/POST | 公众号验签、消息接收与自动回复；优先截获二维码 `subscribe/SCAN` 事件更新认证挑战，不写入收集流；绑定用户的纯文字消息分流给微信 Agent（`wechat-agent-service.ts`），异步客服消息回复，不占 5 秒回执 |
 | `/api/wechat/bind` | POST | Capture 邮箱/密码兼容绑定；必须用服务端 `linkToken` 派生 openId，不接受客户端指定微信身份 |
 | `/api/wechat/bind/callback` | GET/POST | 微信内 Capture OAuth 授权与回调：authorize 必须验证真实 linkToken、双限流并创建数据库一次性 state；POST 交换一次性 Web session |
 | `/api/wechat/capture/[token]` | GET | 读取微信 capture、绑定状态与后台正文解析状态 |

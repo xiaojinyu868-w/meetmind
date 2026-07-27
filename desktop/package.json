@@ -1,0 +1,10 @@
+{
+  "name": "meetmind-companion",
+  "productName": "MeetMind",
+  "version": "1.0.0",
+  "description": "MeetMind 桌面端：Octo 悬浮球、全局热键截图、壳内录课（系统音频）",
+  "main": "main.js",
+  "private": true,
+  "license": "UNLICENSED",
+  "author": "MeetMind"
+}

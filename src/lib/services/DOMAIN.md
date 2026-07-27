@@ -49,7 +49,8 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `workshop-readiness-service.ts` | ~220 | 应用矩阵内容适配判断：先用客观证据阈值拦截空内容和过短材料，再由模型判断内容类型与可选推荐；证据充足后模型不得撤销当前层能力，避免误判让长课堂整页不可用。官方试听课直接采用策划过的 ready 评估 |
 | `dify-service.ts` | 354 | Dify Agent 集成（提问引导 + 联网检索） |
 | `teaching-suggestion.ts` | 256 | 教学改进建议生成 |
-| `gemini-image-service.ts` | 361 | Gemini 图像生成（via undyingapi 代理） |
+| `gemini-image-service.ts` | 365 | Gemini 图像生成（via undyingapi 代理）；`buildImagePrompt` 是两个 provider 共用的提示词真相源 |
+| `dashscope-image-service.ts` | ~180 | DashScope 图像生成（阿里云百炼）：默认 `qwen-image-3.0-pro`（multimodal-generation 同步接口，邀测中），AccessDenied 自动降级 `qwen-image-plus`（image-synthesis 异步任务）；信息图默认 provider，`IMAGE_PROVIDER=gemini` 可退回 Gemini |
 | `qwen-image-service.ts` | 146 | 通义千问图像生成 |
 | `volc-podcast.ts` | 582 | 火山引擎播客 TTS（WebSocket 双向流式） |
 | `web-search-service.ts` | 381 | 服务端通用联网搜索（Bing/SerpAPI/DuckDuckGo HTML + Instant Answer fallback）；`webSearchExact` 仅在 `FEED_SEARCH_MODE=direct` 时为今日情报提供真实结果 |
@@ -99,6 +100,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `wechat-qr-auth-runtime.ts` | ~35 | 装配挑战仓库、公众号 access token 与统一身份服务 |
 | `wechat-qr-auth-client.ts` | ~75 | 浏览器创建/轮询二维码挑战的同源客户端 |
 | `wechat-mp-service.ts` | 252 | 公众号消息解析（XML/签名验证） |
+| `wechat-agent-service.ts` | ~240 | 微信 Agent 对话：分流判定（绑定用户纯文字）、画像/近期收集/历史注入、LLM 回复、客服消息推送（长文按句号切多条）；每日 30 轮成本护栏；会话落 `WechatAgentMessage` 表 |
 | `wechat-media-service.ts` | 222 | 公众号 access token 缓存 + 媒体下载（图片/语音/视频 + 转码） |
 | `wechat-inbox-service.ts` | 195 | 消息智能路由（角色推断/echo/tutor）；微信正文解析状态通过 `received/processing/ready/failed` 同步进 provenance |
 | `wechat-voice-utils.ts` | 58 | 语音工具（预览文本/路径规范化） |
@@ -108,6 +110,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
+| `keyframe/` | ~300 | 录课「屏幕观察」关键帧检测：64 位 DCT pHash（带死区防纯色同值簇失稳）+ 稳定期结算检测器 + 浏览器抓帧（详见 `keyframe/DOMAIN.md`，架构定位见 `roadmap/v4.0-everywhere-capture.md`） |
 | `classroom-data-service.ts` | 1007 | 课堂数据共享（学生↔教师读写） |
 | `classroom-flow-service.ts` | ~280 | 课中课堂脉络增量生成：模型只消费新增转录并返回 now / recent / keep 的 upsert-remove delta，服务端与 priorFlow 确定性合并；不靠每轮重写全文或关键词树切主题，内部 enum / 英文标识会被丢弃 |
 | `meetmind-service.ts` | 436 | 核心业务整合（Open Notebook + LongCut） |
