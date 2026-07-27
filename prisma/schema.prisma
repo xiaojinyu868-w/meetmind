@@ -428,6 +428,20 @@ model WechatInboxMessage {
   @@index([createdAt])
 }
 
+/// 微信 Agent 会话记录：公众号里与「同学」的多轮对话。
+/// 与收集流（WechatInboxMessage）分离——收集是收下，对话是理解。
+model WechatAgentMessage {
+  id        String   @id @default(cuid())
+  openId    String
+  userId    String?
+  role      String // 'user' | 'assistant'
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([openId, createdAt])
+  @@index([userId, createdAt])
+}
+
 /// 公众号带参二维码的短期登录/绑定挑战。只存浏览器随机令牌的 SHA-256，不存会话令牌。
 model WechatOauthState {
   id         String    @id @default(cuid())

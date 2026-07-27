@@ -1,0 +1,238 @@
+import prisma from '@/lib/prisma';
+import { chat } from '@/lib/services/llm-service';
+import { ModelDefaults } from '@/lib/config/app.config';
+import { getWechatAccessToken } from '@/lib/services/wechat-media-service';
+import type { NormalizedWechatMessage } from '@/lib/services/wechat-mp-service';
+import { createLogger } from '@/lib/logger';
+import { COPY } from '@/lib/ui/copy';
+
+const log = createLogger('wechat-agent');
+
+/** 每个 openId 每天的 Agent 对话上限（成本护栏；收集流不受此限）。 */
+const DAILY_AGENT_TURN_LIMIT = 30;
+/** 注入对话的历史轮数。 */
+const HISTORY_LIMIT = 12;
+/** 注入的最近收集条数。 */
+const RECENT_CAPTURE_LIMIT = 6;
+/** 微信客服消息单条文本上限（官方 2048 字节，保守按字符截）。 */
+const CUSTOMER_TEXT_CHUNK = 600;
+
+export interface WechatAgentTurnInput {
+  openId: string;
+  userId?: string;
+  workspaceId?: string;
+  text: string;
+}
+
+interface AgentHistoryRow {
+  role: string;
+  text: string;
+}
+
+/**
+ * 分流判定：绑定用户发来的「纯文字且不是链接」的消息交给 Agent 对话。
+ * 链接 / 语音 / 图片 / 视频仍走收集线；未绑定用户维持原收集 + 绑定引导流程。
+ */
+export function isWechatAgentCandidate(
+  normalized: Pick<NormalizedWechatMessage, 'msgType' | 'sourceUrl' | 'reach'>,
+  bindingStatus: 'bound' | 'unresolved',
+): boolean {
+  if (bindingStatus !== 'bound') return false;
+  if (normalized.msgType !== 'text') return false;
+  if (normalized.sourceUrl) return false;
+  return normalized.reach?.channel === 'quick-note';
+}
+
+export function buildWechatAgentSystemPrompt(): string {
+  return '你是住在用户微信里的「同学」——一个真正听过他的课、看过他收集流的学习伙伴。你读过他最近的课堂和收集，了解他的学习画像。' +
+    '说话方式：像微信里熟悉的同学，不像客服——短、口语、直接，一般 1-3 句，深入讨论时最多 5 句。' +
+    '纯文本，不用 markdown、不用列表符号、不用标题、不堆 emoji。' +
+    '有根：提到他的课堂或收集时要具体（比如「你周二那节计算机网络课」），不空泛；他随口丢来的一句话已经被自动收进收集流了，你自然接应就好，不要说「已保存」。' +
+    '只有下面「关于他」里出现的信息才算数；没有提到他的课堂时，不要虚构他上过的课或老师说过的话。' +
+    '他问学习问题时，基于他真实的课堂和收集回答；上下文里没有的就老实说不知道，不要编。' +
+    '不催他学习，不指导他该怎么学，除非他明确问。';
+}
+
+function buildContextSections(input: {
+  learnerProfile?: { bio?: { headline: string; detail?: string }; goals?: Array<{ title: string }> } | null;
+  recentCaptures: Array<{ title: string | null; previewText: string | null; createdAt: Date }>;
+}): string {
+  const sections: string[] = [];
+  const profile = input.learnerProfile;
+  if (profile?.bio?.headline) {
+    sections.push(`这个人：${profile.bio.headline}${profile.bio.detail ? `（${profile.bio.detail.slice(0, 120)}）` : ''}`);
+  }
+  const goals = (profile?.goals ?? []).slice(0, 3).map((goal) => goal.title).filter(Boolean);
+  if (goals.length > 0) {
+    sections.push(`他正在追的事：${goals.join('、')}`);
+  }
+  if (input.recentCaptures.length > 0) {
+    const lines = input.recentCaptures.map((capture) => {
+      const day = capture.createdAt.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+      const title = (capture.title || capture.previewText || '一条收集').slice(0, 40);
+      return `· ${day} ${title}`;
+    });
+    sections.push(`他最近收进来的：\n${lines.join('\n')}`);
+  }
+  return sections.join('\n\n');
+}
+
+/** 拼 LLM 消息序列（纯函数，可单测）：system + 历史 + 当前输入。 */
+export function buildWechatAgentMessages(input: {
+  systemPrompt: string;
+  contextSections: string;
+  history: AgentHistoryRow[];
+  text: string;
+}): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
+  const system = input.contextSections
+    ? `${input.systemPrompt}\n\n关于他，你现在知道的：\n${input.contextSections}`
+    : input.systemPrompt;
+  const history = input.history
+    .filter((row) => (row.role === 'user' || row.role === 'assistant') && row.text.trim())
+    .map((row) => ({
+      role: row.role as 'user' | 'assistant',
+      content: row.text.slice(0, 800),
+    }));
+  return [
+    { role: 'system', content: system },
+    ...history,
+    { role: 'user', content: input.text.slice(0, 1500) },
+  ];
+}
+
+/** 微信客服消息单条有长度上限，长回复按句号/换行切成多条（纯函数，可单测）。 */
+export function splitWechatText(text: string, chunkSize = CUSTOMER_TEXT_CHUNK): string[] {
+  const normalized = text.trim();
+  if (!normalized) return [];
+  if (normalized.length <= chunkSize) return [normalized];
+  const chunks: string[] = [];
+  let rest = normalized;
+  while (rest.length > chunkSize) {
+    let cut = rest.lastIndexOf('\n', chunkSize);
+    if (cut < chunkSize * 0.5) cut = rest.lastIndexOf('。', chunkSize);
+    if (cut < chunkSize * 0.5) cut = chunkSize;
+    chunks.push(rest.slice(0, cut + 1).trim());
+    rest = rest.slice(cut + 1).trim();
+  }
+  if (rest) chunks.push(rest);
+  return chunks;
+}
+
+async function pushWechatCustomerText(openId: string, text: string): Promise<boolean> {
+  const accessToken = await getWechatAccessToken();
+  if (!accessToken) {
+    log.warn('customer push skipped: no access token');
+    return false;
+  }
+  const chunks = splitWechatText(text);
+  for (const chunk of chunks) {
+    try {
+      const response = await fetch(
+        `https://api.weixin.qq.com/cgi-bin/message/custom/send?access_token=${encodeURIComponent(accessToken)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            touser: openId,
+            msgtype: 'text',
+            text: { content: chunk },
+          }),
+        },
+      );
+      const data = await response.json().catch(() => ({})) as { errcode?: number; errmsg?: string };
+      if (data.errcode && data.errcode !== 0) {
+        // 45047=客服消息条数上限 / 48001=接口未授权 / 45015=48h 窗口外
+        log.warn('customer push rejected', { errcode: data.errcode, errmsg: data.errmsg });
+        return false;
+      }
+    } catch (error) {
+      log.error('customer push failed', error);
+      return false;
+    }
+  }
+  return true;
+}
+
+async function todayAgentTurnCount(openId: string): Promise<number> {
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  return prisma.wechatAgentMessage.count({
+    where: { openId, role: 'assistant', createdAt: { gte: dayStart } },
+  });
+}
+
+/**
+ * 一轮微信 Agent 对话：落库用户消息 → 注入画像/近期收集/历史 → LLM → 落库回复 → 客服消息推送。
+ * 设计为异步调用（公众号 5 秒回执等不起 LLM），失败只记日志，不回抛。
+ */
+export async function runWechatAgentTurn(input: WechatAgentTurnInput): Promise<void> {
+  const text = input.text.trim();
+  if (!input.openId || !text) return;
+
+  try {
+    await prisma.wechatAgentMessage.create({
+      data: { openId: input.openId, userId: input.userId ?? null, role: 'user', text: text.slice(0, 1500) },
+    });
+
+    if ((await todayAgentTurnCount(input.openId)) >= DAILY_AGENT_TURN_LIMIT) {
+      await pushWechatCustomerText(input.openId, COPY.wechatAgent.rateLimited);
+      return;
+    }
+
+    const [history, user, recentCaptures] = await Promise.all([
+      prisma.wechatAgentMessage.findMany({
+        where: { openId: input.openId },
+        orderBy: { createdAt: 'desc' },
+        take: HISTORY_LIMIT,
+        select: { role: true, text: true },
+      }),
+      input.userId
+        ? prisma.user.findUnique({ where: { id: input.userId }, select: { learnerProfileJson: true } })
+        : null,
+      input.userId
+        ? prisma.workspaceCapture.findMany({
+            where: { userId: input.userId },
+            orderBy: { createdAt: 'desc' },
+            take: RECENT_CAPTURE_LIMIT,
+            select: { title: true, previewText: true, createdAt: true },
+          })
+        : [],
+    ]);
+
+    let learnerProfile: { bio?: { headline: string; detail?: string }; goals?: Array<{ title: string }> } | null = null;
+    if (user?.learnerProfileJson) {
+      try {
+        learnerProfile = JSON.parse(user.learnerProfileJson) as typeof learnerProfile;
+      } catch {
+        learnerProfile = null;
+      }
+    }
+
+    const messages = buildWechatAgentMessages({
+      systemPrompt: buildWechatAgentSystemPrompt(),
+      contextSections: buildContextSections({ learnerProfile, recentCaptures }),
+      history: history.reverse(),
+      text,
+    });
+
+    const response = await chat(messages, ModelDefaults.workshop, { temperature: 0.5, maxTokens: 450 });
+    const reply = response.content.replace(/\*\*/g, '').trim();
+    if (!reply) throw new Error('WECHAT_AGENT_EMPTY_REPLY');
+
+    await prisma.wechatAgentMessage.create({
+      data: { openId: input.openId, userId: input.userId ?? null, role: 'assistant', text: reply.slice(0, 2000) },
+    });
+
+    const pushed = await pushWechatCustomerText(input.openId, reply);
+    if (!pushed) {
+      log.warn('agent reply generated but push failed', { openId: input.openId.slice(0, 8) });
+    }
+  } catch (error) {
+    log.error('wechat agent turn failed', error);
+    try {
+      await pushWechatCustomerText(input.openId, COPY.wechatAgent.failed);
+    } catch {
+      // 推送本身失败时不再挣扎，等用户下一条消息
+    }
+  }
+}

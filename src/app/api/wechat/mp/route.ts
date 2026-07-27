@@ -11,6 +11,7 @@ import {
   parseWechatMpXml,
   verifyWechatMpSignature,
 } from '@/lib/services/wechat-mp-service';
+import { isWechatAgentCandidate, runWechatAgentTurn } from '@/lib/services/wechat-agent-service';
 import { extractWechatQrAuthScene } from '@/lib/services/wechat-qr-auth-service';
 import { wechatQrAuthRuntime } from '@/lib/services/wechat-qr-auth-runtime';
 import {
@@ -331,6 +332,18 @@ export async function POST(request: NextRequest) {
   const normalized = normalizeWechatMpMessage(payload);
   const intelligence = await deriveWechatInboxIntelligence(openId, normalized);
   const baseUrl = getWechatH5BaseUrl(request);
+
+  // 绑定用户的纯文字消息 → 微信 Agent 对话（异步客服消息回复，不占 5 秒回执）。
+  // 链接 / 语音 / 图片仍走下方收集线。
+  if (isWechatAgentCandidate(normalized, intelligence.bindingStatus)) {
+    void runWechatAgentTurn({
+      openId,
+      userId: intelligence.userId,
+      workspaceId: intelligence.workspaceId,
+      text: normalized.normalizedText || '',
+    });
+    return textResponse('success');
+  }
 
   try {
     if (normalized.messageId) {
