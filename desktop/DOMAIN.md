@@ -24,6 +24,7 @@ desktop/ → HTTP 调用 {origin}/api/workspace/upload-image + /api/workspace/ca
 | `shell-window.js` | 内嵌主窗口（关闭即隐藏常驻 + 尺寸位置持久化）+ `setDisplayMediaRequestHandler` 免弹窗授予「主屏 + loopback 系统音频」+ 安全策略（权限最小化 / 站外导航与 target=_blank 交系统浏览器）+ 断网兜底页 + 系统托盘（版本、热键说明、开机自启开关） |
 | `screenshot.js` | 全局热键 `Ctrl/Cmd+Shift+M` 截鼠标所在屏 → upload-image 拿 mediaUrl → captures 写收集线；失败重试一次（2s），仍失败暂存 `userData/pending-shots/`，启动时补传一次；`captureOnce` 同时供小窗按钮复用 |
 | `quick-panel.js` | v3 桌面小窗：无边框透明窗加载 Web 端 `/companion` 面板（随手记/随口问/截图），失焦自动收起；与主窗口共用 `persist:meetmind` partition 共享登录态 |
+| `updater.js` | 自动更新检查：启动 20s 首查 + 每 4h 查 GitHub Releases 的 desktop-v* tag，新版本安静通知一次，点击打开对应平台安装包（零依赖，未签名包友好；macOS 有签名后可换 electron-updater） |
 | `panel-preload.js` | 小窗安全桥：注入 `window.meetmindDesktop`（captureScreen / showMain / hidePanel）；浏览器打开 `/companion` 时无此对象，壳能力按钮自动隐藏 |
 | `preload.js` | 悬浮球安全 IPC：展开窗口、拖动窗口、显示主窗口、toggle 小窗、退出 |
 | `companion.html` | 桌面悬浮球 DOM 结构 |
@@ -76,6 +77,13 @@ ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/" \
 ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-builder-binaries/" \
 npm run desktop:pack
 ```
+
+**发布流程（每次发桌面新版）**：
+1. 改 `desktop/package.json` 的 `version`（语义化）
+2. 提交后打同名 tag：`git tag desktop-vX.Y.Z && git push origin desktop-vX.Y.Z`
+3. CI 或本地 Mac 构建（`desktop:dist:mac` + `desktop:dist:win`），产物传 Release
+4. 老用户靠 `updater.js` 自动收到新版本提示（每个版本只提示一次）
+5. landing 下载区按稳定文件名自动指向最新 Release，无需改动
 
 **Landing 下载区**：`src/lib/config/desktop-download.config.ts` 的
 `DESKTOP_DOWNLOAD.enabled` 是总开关（默认 false，不给半成品入口）；首个

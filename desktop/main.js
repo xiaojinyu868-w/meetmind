@@ -13,6 +13,7 @@ const {
 } = require('./shell-window');
 const { registerScreenshotHotkey, retryPendingShots, captureOnce } = require('./screenshot');
 const { toggleQuickPanel, hideQuickPanel } = require('./quick-panel');
+const { startUpdateChecker } = require('./updater');
 
 // Web 版 MeetMind 地址：生产默认走 capture 站点，本地调试用 MEETMIND_URL 覆盖
 const MEETMIND_URL = process.env.MEETMIND_URL || 'https://capture.meetmind.online/app';
@@ -175,6 +176,8 @@ app.whenReady().then(() => {
   registerScreenshotHotkey(screenshotDeps);
   // 上次失败暂存的截图，启动时补传一次（未登录则保留到下次）
   void retryPendingShots(screenshotDeps);
+  // 自动更新检查：发现新 desktop-v* release 时安静提示一次
+  startUpdateChecker();
 
   // 第二个实例被启动时：唤起主窗口而不是再开一套
   app.on('second-instance', () => {

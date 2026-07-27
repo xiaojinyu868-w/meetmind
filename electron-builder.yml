@@ -27,6 +27,7 @@ files:
   - shell-window.js
   - screenshot.js
   - quick-panel.js
+  - updater.js
   - preload.js
   - panel-preload.js
   - companion.html
