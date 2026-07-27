@@ -72,6 +72,21 @@ export function CompanionPanel() {
     }
   }, []);
 
+  // 小窗只在首次创建时读 token 会漏掉「之后才在主窗口登录」的情况：
+  // 每次重新获得焦点/可见时都刷新登录态（token 变化后 transport 会随之重建）
+  React.useEffect(() => {
+    const refresh = () => {
+      const latest = readStoredAccessToken();
+      setToken((current) => (current === latest ? current : latest));
+    };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, []);
+
   const transport = React.useMemo(
     () =>
       new DefaultChatTransport({
