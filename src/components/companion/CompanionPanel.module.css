@@ -1,0 +1,303 @@
+/* /companion 桌面小窗：纸感圆角面板。
+   壳内窗口是 transparent 的，所以页面外层透明、面板自身浮起；
+   浏览器直接打开时铺满视口，同样是这个面板。 */
+
+.page {
+  min-height: 100vh;
+  display: flex;
+  background: transparent;
+}
+
+:global(html:not([data-in-desktop='true'])) .page {
+  background: var(--paper, #f6f8f6);
+}
+
+.panel {
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--divider, #dce5df);
+  border-radius: 16px;
+  background: var(--paper, #f6f8f6);
+  box-shadow: 0 16px 48px rgba(32, 49, 42, 0.12);
+  color: var(--ink, #20312a);
+  font-family: var(--sans, inherit);
+}
+
+/* 壳内无边框窗口：header 区域可拖动（按钮与输入除外） */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--divider, #dce5df);
+  background: var(--card, #fff);
+}
+
+.header[data-drag] {
+  -webkit-app-region: drag;
+}
+
+.header button,
+.header a {
+  -webkit-app-region: no-drag;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.subtitle {
+  flex: 1;
+  color: var(--ink-muted, #819087);
+  font-size: 11px;
+  text-align: right;
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-muted, #819087);
+  cursor: pointer;
+}
+
+.iconButton:hover {
+  background: var(--paper-warm, #edf2ee);
+  color: var(--ink, #20312a);
+}
+
+.loginHint {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 32px;
+  text-align: center;
+}
+
+.loginHint p {
+  color: var(--ink-secondary, #53645c);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.primaryButton {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 22px;
+  border: none;
+  border-radius: 999px;
+  background: var(--pine, #2f6b55);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.primaryButton:hover {
+  opacity: 0.92;
+}
+
+.stream {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.noteEcho {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-secondary, #53645c);
+}
+
+.noteEchoMark {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--pine, #2f6b55);
+}
+
+.noteEcho[data-ok='false'] .noteEchoMark {
+  background: var(--vermilion, #c45e4c);
+}
+
+.noteEchoText em {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-muted, #819087);
+  font-style: normal;
+}
+
+.userBubble {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--pine, #2f6b55);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.answerBubble {
+  align-self: flex-start;
+  max-width: 92%;
+  padding: 8px 12px;
+  border: 1px solid var(--divider, #dce5df);
+  border-radius: 4px 14px 14px 14px;
+  background: var(--card, #fff);
+  font-size: 13px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-muted, #819087);
+  font-size: 12px;
+}
+
+.thinkingDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pine, #2f6b55);
+  animation: panelBreath 1.4s ease-in-out infinite;
+}
+
+@keyframes panelBreath {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+.quickRow {
+  display: flex;
+  gap: 8px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--divider, #dce5df);
+  overflow-x: auto;
+}
+
+.quickAction {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 1px solid var(--divider, #dce5df);
+  border-radius: 999px;
+  background: var(--card, #fff);
+  color: var(--ink-secondary, #53645c);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.quickAction:hover {
+  border-color: var(--pine, #2f6b55);
+  color: var(--pine, #2f6b55);
+}
+
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--divider, #dce5df);
+  background: var(--card, #fff);
+}
+
+.modeSwitch {
+  display: flex;
+  flex-shrink: 0;
+  padding: 2px;
+  border: 1px solid var(--divider, #dce5df);
+  border-radius: 999px;
+  background: var(--paper, #f6f8f6);
+}
+
+.modeTab {
+  padding: 5px 10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-muted, #819087);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.modeTabActive {
+  background: var(--pine, #2f6b55);
+  color: #fff;
+}
+
+.input {
+  flex: 1;
+  max-height: 96px;
+  padding: 8px 4px;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--ink, #20312a);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.input::placeholder {
+  color: var(--ink-muted, #819087);
+}
+
+.sendButton {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: var(--pine, #2f6b55);
+  color: #fff;
+  cursor: pointer;
+}
+
+.sendButton:disabled {
+  opacity: 0.35;
+  cursor: default;
+}

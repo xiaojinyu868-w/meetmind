@@ -1067,6 +1067,27 @@ export const COPY = {
     errorRetry: '重新连接',
   },
 
+  /** 桌面端小窗（/companion）：随手记、随口问，不出小窗完成 */
+  desktopPanel: {
+    title: 'MeetMind 同学',
+    subtitle: '随手记，随口问',
+    modeAsk: '问',
+    modeNote: '记',
+    placeholderAsk: '问点什么，Enter 发送…',
+    placeholderNote: '记下这一刻，Enter 收下…',
+    send: '发送',
+    noteSaved: '收下了',
+    noteFailed: '这次没收下，再试一次。',
+    askFailed: '这次没答上来，再试一次。',
+    thinking: '正在想…',
+    loginHint: '先在主窗口登录，小窗就能用了。',
+    loginAction: '去登录',
+    screenshot: '截图收进来',
+    recordClass: '去录课',
+    openFull: '打开完整 MeetMind',
+    collapse: '收起',
+  },
+
   recording: {
     sourcePrompt: '这节课的声音从哪里来？',
     backToLessons: '返回课程列表',

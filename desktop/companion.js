@@ -264,10 +264,11 @@ listenButton.addEventListener('click', () => {
 });
 
 askButton.addEventListener('click', () => {
-  touch('先打开 MeetMind，把问题交给同学。');
+  touch('小窗就地提问，不用打断手头的事。');
   setMood('thinking');
   setMotion('breathe');
-  window.meetmindCompanion?.showMain();
+  // v3：问同学 = 唤起桌面小窗（就地随手记/随口问），不再只跳主窗口
+  window.meetmindCompanion?.togglePanel();
 });
 
 gameButton.addEventListener('click', () => {

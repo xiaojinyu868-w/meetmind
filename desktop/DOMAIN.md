@@ -22,8 +22,10 @@ desktop/ → HTTP 调用 {origin}/api/workspace/upload-image + /api/workspace/ca
 |------|------|
 | `main.js` | 主进程入口：单实例锁（重复启动只唤起主窗口）、应用菜单（编辑 role 保 Cmd/Ctrl+C/V）、Chromium 启动参数（macOS loopback / 免录屏选择器）、悬浮球窗口、托盘与两个能力模块的接线、IPC |
 | `shell-window.js` | 内嵌主窗口（关闭即隐藏常驻 + 尺寸位置持久化）+ `setDisplayMediaRequestHandler` 免弹窗授予「主屏 + loopback 系统音频」+ 安全策略（权限最小化 / 站外导航与 target=_blank 交系统浏览器）+ 断网兜底页 + 系统托盘（版本、热键说明、开机自启开关） |
-| `screenshot.js` | 全局热键 `Ctrl/Cmd+Shift+M` 截鼠标所在屏 → upload-image 拿 mediaUrl → captures 写收集线；失败重试一次（2s），仍失败暂存 `userData/pending-shots/`，启动时补传一次 |
-| `preload.js` | 安全 IPC：展开窗口、拖动窗口、显示主窗口、退出 |
+| `screenshot.js` | 全局热键 `Ctrl/Cmd+Shift+M` 截鼠标所在屏 → upload-image 拿 mediaUrl → captures 写收集线；失败重试一次（2s），仍失败暂存 `userData/pending-shots/`，启动时补传一次；`captureOnce` 同时供小窗按钮复用 |
+| `quick-panel.js` | v3 桌面小窗：无边框透明窗加载 Web 端 `/companion` 面板（随手记/随口问/截图），失焦自动收起；与主窗口共用 `persist:meetmind` partition 共享登录态 |
+| `panel-preload.js` | 小窗安全桥：注入 `window.meetmindDesktop`（captureScreen / showMain / hidePanel）；浏览器打开 `/companion` 时无此对象，壳能力按钮自动隐藏 |
+| `preload.js` | 悬浮球安全 IPC：展开窗口、拖动窗口、显示主窗口、toggle 小窗、退出 |
 | `companion.html` | 桌面悬浮球 DOM 结构 |
 | `companion.css` | 桌面悬浮球视觉：透明章鱼本体、漂浮/思考/生气/睡眠动画 |
 | `companion.js` | 在场感状态机：待机生命周期、点击强度、任意拖动；听课/问同学/打开 MeetMind 统一走壳内主窗口 |

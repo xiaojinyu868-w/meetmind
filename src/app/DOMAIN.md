@@ -27,6 +27,7 @@ src/app/
 │   └── loading.tsx            # 加载态
 │
 ├── feedback/page.tsx          # 反馈页（215行）
+├── companion/page.tsx         # 桌面端小窗（随手记/随口问/壳内快捷动作；Electron quick-panel 加载，浏览器也可用）
 ├── admin/ai-control/page.tsx  # 管理员 AI 控制中心（上下文 / prompt / 模型 / 版本）
 ├── help/page.tsx             # 帮助页（317行）
 ├── all-notes/page.tsx         # 笔记聚合（440行）

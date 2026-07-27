@@ -76,6 +76,8 @@ const PUBLIC_ROUTES = [
   // 需要鉴权的（创建、领取）由各自 route handler 内部用 authService.verifyToken 自查。
   '/share/*',
   '/api/share/*',
+  // 桌面端小窗：Electron 壳内加载的紧凑面板，浏览器直接打开也可用
+  '/companion',
 ] as const;
 
 function matchPath(pathname: string, patterns: readonly string[]): boolean {

@@ -152,6 +152,9 @@ function createShellWindow(meetmindUrl) {
       // 主窗口加载的是远端网页，安全基线不能松：不开 node、保持隔离
       contextIsolation: true,
       nodeIntegration: false,
+      // 与桌面小窗（quick-panel）共享登录态：token 在 localStorage，
+      // 同一 partition 才有同一份 localStorage
+      partition: 'persist:meetmind',
     },
   });
 

@@ -11,7 +11,8 @@ const {
   toggleShellWindow,
   createTray,
 } = require('./shell-window');
-const { registerScreenshotHotkey, retryPendingShots } = require('./screenshot');
+const { registerScreenshotHotkey, retryPendingShots, captureOnce } = require('./screenshot');
+const { toggleQuickPanel, hideQuickPanel } = require('./quick-panel');
 
 // Web 版 MeetMind 地址：生产默认走 capture 站点，本地调试用 MEETMIND_URL 覆盖
 const MEETMIND_URL = process.env.MEETMIND_URL || 'https://capture.meetmind.online/app';
@@ -228,6 +229,33 @@ ipcMain.handle('companion:move-by', (_event, deltaX, deltaY) => {
 // v2：悬浮球的 MeetMind 入口统一走壳内主窗口，不再打开外部浏览器
 ipcMain.handle('companion:show-main', () => {
   showShellWindowAt(MEETMIND_URL);
+});
+
+// v3：悬浮球唤起桌面小窗（随手记 / 随口问 / 截图）
+ipcMain.handle('companion:toggle-panel', () => {
+  toggleQuickPanel(MEETMIND_URL);
+});
+
+ipcMain.handle('panel:hide', () => {
+  hideQuickPanel();
+});
+
+// 小窗「截图收进来」：与全局热键同一条流程
+ipcMain.handle('desktop:capture-screen', () => {
+  return captureOnce({
+    meetmindUrl: MEETMIND_URL,
+    getShellWindow,
+    showShellWindow: () => showShellWindowAt(MEETMIND_URL),
+  });
+});
+
+// 小窗打开主窗口；path 只允许站内相对路径，防被注入站外 URL
+ipcMain.handle('desktop:show-main', (_event, path) => {
+  const origin = new URL(MEETMIND_URL).origin;
+  const safePath = typeof path === 'string' && path.startsWith('/') && !path.startsWith('//')
+    ? path
+    : '/app';
+  showShellWindowAt(`${origin}${safePath}`);
 });
 
 ipcMain.handle('companion:quit', () => {

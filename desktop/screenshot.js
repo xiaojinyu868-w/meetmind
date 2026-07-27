@@ -221,4 +221,6 @@ async function retryPendingShots(deps) {
 module.exports = {
   registerScreenshotHotkey,
   retryPendingShots,
+  // 小窗「截图收进来」按钮与全局热键共用同一条流程
+  captureOnce: handleHotkey,
 };
