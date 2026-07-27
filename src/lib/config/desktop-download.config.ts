@@ -12,8 +12,8 @@
 const RELEASES_BASE = 'https://github.com/xiaojinyu868-w/meetmind/releases';
 
 export const DESKTOP_DOWNLOAD = {
-  enabled: false,
-  version: '1.0.0',
+  enabled: true,
+  version: '1.1.0',
   releasesPage: `${RELEASES_BASE}/latest`,
   macArm64: `${RELEASES_BASE}/latest/download/MeetMind-mac-arm64.dmg`,
   macIntel: `${RELEASES_BASE}/latest/download/MeetMind-mac-x64.dmg`,
