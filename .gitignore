@@ -95,3 +95,7 @@ tests/eval/**/runs/*.jsonl
 
 # Sentry
 .sentryclirc
+
+# Python 缓存
+__pycache__/
+*.pyc

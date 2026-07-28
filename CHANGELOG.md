@@ -5,6 +5,55 @@
 
 ---
 
+## 2026-07-28 — v4.0 全端采集层 + 标题系统 + 课后理解 + teach-back + 微信 Agent + 桌面端 v1.2.0
+
+> 一周交付两条主线：(1) 应用矩阵与收集线的产品闭环（teach-back / 微信 Agent / 分享页 / 复习体验）；
+> (2) v4.0 全端采集层从调研到分发全链路（桌面壳 / 小窗 / 关键帧 / 标题 / 课后理解）。
+> 架构北极星：`roadmap/v4.0-everywhere-capture.md`（采集 / 学习线索 / 规则 Hook 三层）。
+> 备份点：`backup/pre-v4-desktop-20260727` tag（此周期一切改动之前的 main 快照）。
+
+### 桌面端（desktop-v1.1.0 / v1.2.0，landing 已开放下载）
+- **桌面壳 v2**：内嵌 MeetMind 网页 + `setDisplayMediaRequestHandler` 免弹窗授予主屏 + loopback 系统音频（录网课无机器人，Windows WASAPI / macOS SCK）；完备化：单实例锁 / 应用菜单（保 Cmd/Ctrl+C/V）/ 窗口状态持久化 / 断网兜底页 / 权限与外链策略 / 托盘常驻 + 开机自启
+- **桌面小窗 v3**（`/companion` 路由 + `quick-panel.js`）：随手记（直收收集线）+ 随口问（流式，mode=global）+ 截图快捷动作；失焦自动收起；`persist:meetmind` 共享登录态；网页远程加载，壳只承载
+- **全局热键 `Cmd/Ctrl+Shift+M`**：录制感知分流——录屏类课时当前帧挂课堂时间轴（调网页 `__meetmindCaptureFrame` 钩子），否则截图收进收集线；按 scaleFactor 抓全分辨率；401 引导重登
+- **自动更新检查**（`updater.js`）：启动 20s 首查 + 每 4h 查 desktop-v* Release，新版本安静通知一次（零依赖，未签名包友好）
+- **打包分发**：electron-builder two-package 结构（asar 360K 零 node_modules）+ 稳定文件名 + `desktop-release.yml` CI（mac dmg + win nsis）+ landing 下载区（`DESKTOP_DOWNLOAD.enabled` 门控，已开）
+
+### 课中「截取这一页」（主动截图 > 自动检测的产品决策）
+- recorder-audio-source 保留屏幕视频轨；Recorder 注册帧源 + 武装桌面热键钩子
+- 课中按钮（帧源存在才露出，曾修 P0 断链：ClassroomView/ClassroomLeftPanel 透传）+ 桌面热键同一条 `captureCurrentFrame`（时间戳取 Recorder 录音时钟，与转录严格同轴）
+- Dexie v8 `keyframes` 表；课后 upload-image → artifacts(kind='keyframe') 静默上传（100 条分批；音频上传成功点自动重试）
+- 复习页 TranscriptFlowView 按时间轴插入缩略图条（可点击回跳）；evidence.keyframes 跨设备回填（mergeCloudKeyframes 只补缺）
+- 自动 pHash 翻页检测引擎（死区防纯色同值簇失稳，15 单测）保留为远期备选
+
+### 标题系统 + 课后理解（一次 LLM 调用替代 3-4 次全文复读）
+- 标题契约 `主题 · 课程 · M-D` + 零信息词质量门（宁缺毋滥，12 单测）；用户手动改名双锁（本地 topicLocked + 服务端 titleSource='user'）
+- `/api/classroom/understanding`：定稿后一次调用产出 topic+overview+takeaways+highlights，标题/摘要/精选三个 artifact 一次落齐（解析校验 6 单测；归属校验防 IDOR）
+- 存量回填：每次工作区加载静默重命名最多 10 条（失败打标不无限重试）；新标题同步 collection feed SourceIngestItem
+
+### teach-back「讲给同桌听」（应用矩阵第 7 应用）
+- 选点插件 + evaluate（四象限服务端映射）+ cover-check 轻量覆盖检测；像素教室 + 四象限揭示 + 盲区重讲 + 打字降级
+- readiness 去门禁：前端永不"暂不可用"，CONTENT_NOT_READY 安静空态（且清旧产物缓存）；legacy 快照课堂按文字量放行
+
+### 微信 Agent（公众号绑定用户文字对话）
+- 画像 + 近期收集 + 12 轮历史 → LLM → 客服消息异步推送；MsgId 幂等防重推；护栏按用户消息计数 + 每日只提醒一次；逐片重试 + token 过期刷新；未送达回复不进历史；WechatAgentMessage 表（+messageId 列）
+
+### 其他产品面
+- 分享落地页重设计：思维导图真渲染（ShareMindmapGraph）+ 产物展品卡为主角 + 删文字墙；畸形 artifact 前端守卫
+- 复习体验：波形三层加速（服务端 ffmpeg peaks + IndexedDB 缓存）+ 复制 AI 回答去时间戳（跳过围栏/行内代码，空位清理局部化）
+- 图像生成切 DashScope：qwen-image-3.0-pro 优先（邀测 403 自动降级 plus，plus 独立尺寸枚举）
+
+### 五路分片审计修复（25 文件）+ 遗留清零
+- P0：课中截图按钮 prop 断链（JSX spread 不做类型检查）
+- 高：understanding IDOR / 小窗 transport 锁死 null token / 内联应用伪造产物 / 微信 prompt 谎言与幂等护栏推送
+- 中：backfill 无限重试 / highlight 残留 / cover-check 闭包 / 分享页崩溃 / 复制破坏缩进 等 12 项
+- 清零：删死代码（maybeRetitleLesson + titles/lesson 路由、octo.png、globals.v6.bak.css、tracked pycache）
+
+### 质量基线
+899 vitest 全绿；eval-guard：ASR avg CER 1.22%（baseline ×1.1 内）、Tutor pass 92.9%（baseline 内）；真实 LLM 冒烟（标题/课后理解 JSON mode）通过
+
+---
+
 ## 2026-06-02（晚 +4）— M11.5：bio 进入所有模式 + 设置页画像 + SharedAgentChat 迁底座 + 4 模式 e2e（26/26）
 
 > 一轮交付：bio 不只在 IntentDialog 里记下来，而是进入复习态、课堂同桌、设置页——每个用户面都接得上。
