@@ -101,3 +101,59 @@ export function silentBackfillLessonTitles(accessToken: string | null | undefine
     headers: { Authorization: `Bearer ${accessToken}` },
   }).catch(() => undefined);
 }
+
+/** 带时间锚点的转录样本（课后理解需要锚点来定位精选片段） */
+function buildAnchoredSample(segments: TranscriptSegment[]): string {
+  let sample = '';
+  for (const segment of segments) {
+    if (sample.length >= 40_000) break;
+    const totalSec = Math.floor(segment.startMs / 1000);
+    const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
+    const ss = String(totalSec % 60).padStart(2, '0');
+    sample += `[${mm}:${ss}] ${segment.text}\n`;
+  }
+  return sample.trim();
+}
+
+/**
+ * 课后理解：定稿后一次 LLM 调用 → 标题（锁保护）+ 摘要 + 精选片段一次落齐。
+ * 返回的新标题用于同步本地课堂列表；skipped/失败都静默。
+ */
+export async function requestLessonUnderstanding(params: RetitleParams): Promise<void> {
+  const { sessionId, captureId, segments, courseTitle, occurredAtMs, accessToken } = params;
+  if (!sessionId || !captureId || !accessToken || segments.length === 0) return;
+
+  try {
+    const transcriptSample = buildAnchoredSample(segments);
+    if (transcriptSample.length < 200) return;
+
+    const response = await fetch('/api/classroom/understanding', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        captureId,
+        sessionId,
+        transcriptSample,
+        courseTitle,
+        occurredAt: new Date(occurredAtMs).toISOString(),
+      }),
+    });
+    const data = (await response.json().catch(() => null)) as {
+      success?: boolean;
+      skipped?: boolean;
+      title?: string;
+    } | null;
+    if (!response.ok || !data?.success || data.skipped || !data.title) return;
+
+    // 本地课堂列表标题（不加锁：自动行为，用户之后仍可手动改）
+    const session = await db.audioSessions.where('sessionId').equals(sessionId).first();
+    if (!session?.topicLocked) {
+      await updateSessionTopic(sessionId, data.title);
+    }
+  } catch {
+    // 课后理解失败永远静默：旧标题和旧摘要还在
+  }
+}

@@ -34,11 +34,14 @@ import {
   runDiarizationForSession,
   shouldRunPostBatchDiarization,
 } from '@/lib/services/asr/diarization-service';
+import { readStoredAccessToken } from '@/lib/hooks/useAuth';
+import { requestLessonUnderstanding } from '@/lib/services/lesson-title-client';
+import { uploadRecordingKeyframes } from '@/lib/services/upload-recording-keyframes';
 
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface UseTranscriptHandlersDeps {
-  /** Persist capture to workspace API */
+  /** Persist capture to workspace API（返回 captureId，供课后理解/关键帧挂载） */
   persistCaptureToWorkspace: (params: {
     sourceType: string;
     sourceKey: string;
@@ -52,7 +55,7 @@ export interface UseTranscriptHandlersDeps {
     tutorContext?: string;
     occurredAt?: string;
     metadata?: Record<string, unknown>;
-  }) => void;
+  }) => Promise<string | undefined>;
   /** Resolve pending recorded audio by recordingId */
   resolvePendingRecordedAudio: (recordingId?: string) => PendingRecordedAudio | null;
   /** Clear pending recorded audio by recordingId */
@@ -224,6 +227,24 @@ export function useTranscriptHandlers(
             endMs: s.endMs,
           })),
         },
+      }).then((captureId) => {
+        // 完整原声定稿回来 = 这节课的文本最终版：课后理解（标题+摘要+精选）
+        // 和关键帧上传都挂在这里——streaming 主链路在 stop 时文本是草稿，
+        // 这两个动作必须等定稿（2026-07-28 审计发现的缺口）
+        const token = readStoredAccessToken();
+        if (!captureId || !token) return;
+        void requestLessonUnderstanding({
+          sessionId: pendingAudio.sessionId,
+          captureId,
+          segments: appendedSegments,
+          occurredAtMs: Date.now() - pendingAudio.durationMs,
+          accessToken: token,
+        });
+        void uploadRecordingKeyframes({
+          sessionId: pendingAudio.sessionId,
+          captureId,
+          authToken: token,
+        }).catch(() => undefined);
       });
 
       classroomDataService.saveSession({

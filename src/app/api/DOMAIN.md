@@ -56,6 +56,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/classroom/foresight` | POST | 课堂预知气泡生成（qwen3.7-plus） |
 | `/api/classroom/flow` | POST | 课中课堂脉络：请求体用 `newSegments` 只提交上次成功更新后新增的实时转录，并携 `priorFlow` 工作记忆；模型返回 upsert/remove 增量，服务端合并成稳定渲染 JSON；生成失败返回 5xx，让客户端保留未消费游标重试 |
 | `/api/classroom/lesson-digest` | POST | 课堂结构化分段总结生成（飞书妙记形态，segments + 图片锚点 → 分段 digest） |
+| `/api/classroom/understanding` | POST | 课后理解（定稿后一次 LLM 调用）：标题（用户锁保护）+ 课堂摘要 + 精选片段一次落齐，替代过去定稿后 3-4 次全文级重复调用 |
 | `/api/translate/en-zh` | POST | 课堂英文片段翻译为中文 |
 | `/api/translate/zh-en` | POST | 课堂中文片段翻译为英文 |
 | `/api/generate-summary` | POST | 课堂摘要生成 |

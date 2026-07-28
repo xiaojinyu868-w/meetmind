@@ -112,7 +112,8 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 |------|------|------|
 | `keyframe/` | ~300 | 录课「屏幕观察」关键帧检测：64 位 DCT pHash（带死区防纯色同值簇失稳）+ 稳定期结算检测器 + 浏览器抓帧（详见 `keyframe/DOMAIN.md`，架构定位见 `roadmap/v4.0-everywhere-capture.md`） |
 | `lesson-title-service.ts` | ~260 | 课堂标题服务端：`主题 · 课程 · M-D` 契约 + 零信息词质量门（宁缺毋滥）+ titleSource 用户锁 + 存量回填 |
-| `lesson-title-client.ts` | ~100 | 课堂标题客户端触发层：课后静默重命名 / 用户改名加锁 / 进入应用静默回填 |
+| `lesson-title-client.ts` | ~100 | 课堂标题客户端触发层：课后静默重命名 / 用户改名加锁 / 进入应用静默回填 / `requestLessonUnderstanding` 定稿后触发课后理解 |
+| `lesson-understanding-service.ts` | ~180 | 课后理解：一次 LLM 调用输出 topic+overview+takeaways+highlights（解析校验可单测），标题/摘要/精选三个产物一次落齐 |
 | `classroom-data-service.ts` | 1007 | 课堂数据共享（学生↔教师读写） |
 | `classroom-flow-service.ts` | ~280 | 课中课堂脉络增量生成：模型只消费新增转录并返回 now / recent / keep 的 upsert-remove delta，服务端与 priorFlow 确定性合并；不靠每轮重写全文或关键词树切主题，内部 enum / 英文标识会被丢弃 |
 | `meetmind-service.ts` | 436 | 核心业务整合（Open Notebook + LongCut） |

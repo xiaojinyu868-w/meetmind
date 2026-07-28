@@ -18,7 +18,7 @@ import { memoryService } from '@/lib/services/memory-service';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
 import { uploadRecordingAudio } from '@/lib/services/upload-recording-audio';
 import { uploadRecordingKeyframes } from '@/lib/services/upload-recording-keyframes';
-import { maybeRetitleLesson } from '@/lib/services/lesson-title-client';
+import { requestLessonUnderstanding } from '@/lib/services/lesson-title-client';
 import {
   runDiarizationForSession,
   shouldRunPostBatchDiarization,
@@ -445,8 +445,8 @@ export function useRecordingLifecycle(
               captureId,
               authToken: accessToken,
             }).catch(() => undefined);
-            // 标题：用开头转录静默生成「主题 · 课程 · M-D」（用户锁/质量门兜底）
-            void maybeRetitleLesson({
+            // 课后理解（一次 LLM 调用）：标题 + 摘要 + 精选片段一次落齐
+            void requestLessonUnderstanding({
               sessionId: effectiveSessionId,
               captureId,
               segments: publishableSegments,
