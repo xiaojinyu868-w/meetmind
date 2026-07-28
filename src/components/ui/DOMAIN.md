@@ -13,7 +13,7 @@
 - 投影：`shadow-soft` / `shadow-card` / `shadow-float` / `shadow-modal` / `shadow-ai-glow`
 - 字体：`font-sans` (Inter) · `font-serif` (Instrument Serif italic) · `font-mono` (JetBrains Mono)
 
-详见 `AGENTS.md` 第 5 节设计系统 + `design-demo/v7/` 完整 showcase。
+详见 `docs/DESIGN_SYSTEM.md`（设计系统 v7 文字真相源）+ `design-demo/v7/` 完整 showcase。
 
 ## 文件清单
 

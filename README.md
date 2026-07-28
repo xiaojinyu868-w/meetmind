@@ -239,7 +239,7 @@ MeetMind 不只是在产品里使用 AI，也在用一种 **Agent-native 的方�
 | 文件 | 主要读者 | 作用 |
 |---|---|---|
 | [`README.md`](./README.md) | 用户、合作方、贡献者 | 认识 MeetMind 是什么、为什么存在、现在能做什么 |
-| [`AGENTS.md`](./AGENTS.md) | Coding Agent 与开发者 | 任务阅读路径、架构全貌、设计铁律、Golden Commands |
+| [`AGENTS.md`](./AGENTS.md) | Coding Agent 与开发者 | 全局入口：铁律、Golden Commands、任务路由表、wiki 索引 |
 | `src/**/DOMAIN.md` | 正在修改某个领域的 Agent | 该目录的职责、依赖边界、关键文件和真实数据流 |
 | [`skills/`](./skills/) | 执行任务的 Agent | 变更、调试、架构检查和代码审查的标准流程 |
 | [`docs/`](./docs/) 与 [`roadmap/`](./roadmap/) | 产品与技术决策者 | 深入的产品定义、技术链路和阶段性决策 |

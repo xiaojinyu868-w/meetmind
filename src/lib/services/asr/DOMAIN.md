@@ -1,6 +1,6 @@
 # lib/services/asr — ASR 飞书妙记级工艺（纯逻辑层）
 
-> 课堂转写的核心算法与约束，全部是纯 TS（无 React / 无 Next 依赖），方便单测与 server/ 镜像复用。完整工艺总图见 `docs/ASR_PIPELINE.md`，AGENTS.md §3.8 有摘要。
+> 课堂转写的核心算法与约束，全部是纯 TS（无 React / 无 Next 依赖），方便单测与 server/ 镜像复用。完整工艺总图见 `docs/ASR_PIPELINE.md`，AGENTS.md §3 架构主线有摘要。
 
 ## 文件索引
 
