@@ -60,7 +60,6 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/translate/en-zh` | POST | 课堂英文片段翻译为中文 |
 | `/api/translate/zh-en` | POST | 课堂中文片段翻译为英文 |
 | `/api/generate-summary` | POST | 课堂摘要生成 |
-| `/api/titles/lesson` | POST | 课堂标题生成（`主题 · 课程 · M-D` 契约，零信息词质量门；capture titleSource='user' 时跳过） |
 | `/api/titles/lock` | POST | 用户手动改名加锁：写标题 + metadata.titleSource='user'，自动标题系统不再覆盖 |
 | `/api/titles/backfill` | POST | 存量零信息标题（录音 HH:MM / 屏幕截图）静默回填，单次最多 10 条 |
 | `/api/generate-topics` | POST | 精选片段生成（Smart/Fast） |

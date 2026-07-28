@@ -2,8 +2,8 @@
  * lesson-title-client — 课堂标题的客户端触发层
  *
  * 三个动作：
- *   - maybeRetitleLesson：课后静默生成「主题 · 课程 · M-D」（stop 后调用；
- *     本地 topicLocked 或服务端 titleSource='user' 都会跳过）
+ *   - requestLessonUnderstanding：定稿后触发课后理解（一次 LLM 调用出
+ *     标题 + 摘要 + 精选），返回新标题供调用方同步本地列表
  *   - lockLessonTitleByUser：用户手动改名 → 本地加锁 + 服务端加锁
  *   - silentBackfillLessonTitles：进入应用后每次静默回填最多 10 条历史零信息标题
  */
@@ -21,29 +21,32 @@ interface RetitleParams {
   accessToken: string;
 }
 
-/** 取前 ~3000 字作为标题样本（标题只看大方向，不需要全文） */
-function buildTranscriptSample(segments: TranscriptSegment[]): string {
+/** 带时间锚点的转录样本（课后理解需要锚点来定位精选片段） */
+function buildAnchoredSample(segments: TranscriptSegment[]): string {
   let sample = '';
   for (const segment of segments) {
-    if (sample.length >= 3000) break;
-    sample += `${segment.text}\n`;
+    if (sample.length >= 40_000) break;
+    const totalSec = Math.floor(segment.startMs / 1000);
+    const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
+    const ss = String(totalSec % 60).padStart(2, '0');
+    sample += `[${mm}:${ss}] ${segment.text}\n`;
   }
   return sample.trim();
 }
 
-export async function maybeRetitleLesson(params: RetitleParams): Promise<void> {
+/**
+ * 课后理解：定稿后一次 LLM 调用 → 标题（锁保护）+ 摘要 + 精选片段一次落齐。
+ * 返回新标题（调用方用它同步 collection 列表等本地状态）；skipped/失败返回 undefined。
+ */
+export async function requestLessonUnderstanding(params: RetitleParams): Promise<string | undefined> {
   const { sessionId, captureId, segments, courseTitle, occurredAtMs, accessToken } = params;
-  if (!sessionId || !accessToken || segments.length === 0) return;
+  if (!sessionId || !captureId || !accessToken || segments.length === 0) return undefined;
 
   try {
-    // 本地锁：用户手动改过标题，自动系统不再碰
-    const session = await db.audioSessions.where('sessionId').equals(sessionId).first();
-    if (session?.topicLocked) return;
+    const transcriptSample = buildAnchoredSample(segments);
+    if (transcriptSample.length < 200) return undefined;
 
-    const transcriptSample = buildTranscriptSample(segments);
-    if (transcriptSample.length < 80) return;
-
-    const response = await fetch('/api/titles/lesson', {
+    const response = await fetch('/api/classroom/understanding', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -51,6 +54,7 @@ export async function maybeRetitleLesson(params: RetitleParams): Promise<void> {
       },
       body: JSON.stringify({
         captureId,
+        sessionId,
         transcriptSample,
         courseTitle,
         occurredAt: new Date(occurredAtMs).toISOString(),
@@ -61,12 +65,17 @@ export async function maybeRetitleLesson(params: RetitleParams): Promise<void> {
       skipped?: boolean;
       title?: string;
     } | null;
-    if (!response.ok || !data?.success || data.skipped || !data.title) return;
+    if (!response.ok || !data?.success || data.skipped || !data.title) return undefined;
 
-    // 本地课堂列表标题（不加锁：这是自动行为，用户之后仍可手动改）
-    await updateSessionTopic(sessionId, data.title);
+    // 本地课堂列表标题（不加锁：自动行为，用户之后仍可手动改）
+    const session = await db.audioSessions.where('sessionId').equals(sessionId).first();
+    if (!session?.topicLocked) {
+      await updateSessionTopic(sessionId, data.title);
+    }
+    return data.title;
   } catch {
-    // 标题失败永远静默：旧标题还在，不打扰学习现场
+    // 课后理解失败永远静默：旧标题和旧摘要还在
+    return undefined;
   }
 }
 
@@ -100,60 +109,4 @@ export function silentBackfillLessonTitles(accessToken: string | null | undefine
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
   }).catch(() => undefined);
-}
-
-/** 带时间锚点的转录样本（课后理解需要锚点来定位精选片段） */
-function buildAnchoredSample(segments: TranscriptSegment[]): string {
-  let sample = '';
-  for (const segment of segments) {
-    if (sample.length >= 40_000) break;
-    const totalSec = Math.floor(segment.startMs / 1000);
-    const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
-    const ss = String(totalSec % 60).padStart(2, '0');
-    sample += `[${mm}:${ss}] ${segment.text}\n`;
-  }
-  return sample.trim();
-}
-
-/**
- * 课后理解：定稿后一次 LLM 调用 → 标题（锁保护）+ 摘要 + 精选片段一次落齐。
- * 返回的新标题用于同步本地课堂列表；skipped/失败都静默。
- */
-export async function requestLessonUnderstanding(params: RetitleParams): Promise<void> {
-  const { sessionId, captureId, segments, courseTitle, occurredAtMs, accessToken } = params;
-  if (!sessionId || !captureId || !accessToken || segments.length === 0) return;
-
-  try {
-    const transcriptSample = buildAnchoredSample(segments);
-    if (transcriptSample.length < 200) return;
-
-    const response = await fetch('/api/classroom/understanding', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        captureId,
-        sessionId,
-        transcriptSample,
-        courseTitle,
-        occurredAt: new Date(occurredAtMs).toISOString(),
-      }),
-    });
-    const data = (await response.json().catch(() => null)) as {
-      success?: boolean;
-      skipped?: boolean;
-      title?: string;
-    } | null;
-    if (!response.ok || !data?.success || data.skipped || !data.title) return;
-
-    // 本地课堂列表标题（不加锁：自动行为，用户之后仍可手动改）
-    const session = await db.audioSessions.where('sessionId').equals(sessionId).first();
-    if (!session?.topicLocked) {
-      await updateSessionTopic(sessionId, data.title);
-    }
-  } catch {
-    // 课后理解失败永远静默：旧标题和旧摘要还在
-  }
 }

@@ -239,6 +239,14 @@ export function useTranscriptHandlers(
           segments: appendedSegments,
           occurredAtMs: Date.now() - pendingAudio.durationMs,
           accessToken: token,
+        }).then((newTitle) => {
+          // 同步 collection feed 的条目标题（原本只有 audioSessions.topic 被更新）
+          if (!newTitle) return;
+          useCollectionStore.getState().actions.setSourceItems((prev: SourceIngestItem[]) =>
+            prev.map((item) =>
+              item.sessionId === pendingAudio.sessionId ? { ...item, title: newTitle } : item,
+            ),
+          );
         });
         void uploadRecordingKeyframes({
           sessionId: pendingAudio.sessionId,

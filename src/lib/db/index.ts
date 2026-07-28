@@ -41,6 +41,7 @@ export {
   getPendingKeyframes,
   markKeyframeUploaded,
   deleteSessionKeyframes,
+  mergeCloudKeyframes,
 } from './keyframes';
 export {
   addTranscript,

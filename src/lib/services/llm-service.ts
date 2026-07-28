@@ -417,7 +417,7 @@ async function callQwen(
 async function callRelay(
   messages: ChatMessage[],
   modelId: string,
-  options?: { temperature?: number; maxTokens?: number }
+  options?: { temperature?: number; maxTokens?: number; responseFormat?: 'json_object' | 'text' }
 ): Promise<LLMResponse> {
   const config = getApiConfig('relay');
 
@@ -443,6 +443,7 @@ async function callRelay(
       messages: formattedMessages,
       temperature: options?.temperature ?? 0.7,
       max_tokens: options?.maxTokens ?? 2000,
+      ...(options?.responseFormat === 'json_object' ? { response_format: { type: 'json_object' } } : {}),
     }),
   });
 
@@ -470,7 +471,7 @@ async function callRelay(
 async function callVolcengine(
   messages: ChatMessage[],
   modelId: string,
-  options?: { temperature?: number; maxTokens?: number }
+  options?: { temperature?: number; maxTokens?: number; responseFormat?: 'json_object' | 'text' }
 ): Promise<LLMResponse> {
   const config = getApiConfig('volcengine');
 
@@ -492,6 +493,7 @@ async function callVolcengine(
       messages: formattedMessages,
       temperature: options?.temperature ?? 0.7,
       max_tokens: options?.maxTokens ?? 2000,
+      ...(options?.responseFormat === 'json_object' ? { response_format: { type: 'json_object' } } : {}),
     }),
   });
 

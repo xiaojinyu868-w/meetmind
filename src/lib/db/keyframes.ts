@@ -40,3 +40,31 @@ export async function markKeyframeUploaded(id: number, mediaUrl: string): Promis
 export async function deleteSessionKeyframes(sessionId: string): Promise<void> {
   await db.keyframes.where('sessionId').equals(sessionId).delete();
 }
+
+/**
+ * 云端关键帧回填（跨设备恢复）：evidence 下发的 keyframe artifacts
+ * 合并进本地表——只补缺（同 sessionId + timestampMs 已存在就跳过），
+ * 不覆盖本机已有帧。云端帧没有 blob，只有 mediaUrl。
+ */
+export async function mergeCloudKeyframes(
+  sessionId: string,
+  frames: Array<{ mediaUrl: string; timestampSec: number }>,
+): Promise<number> {
+  if (!sessionId || frames.length === 0) return 0;
+  const existing = await db.keyframes.where('sessionId').equals(sessionId).toArray();
+  const existingTimestamps = new Set(existing.map((frame) => Math.round(frame.timestampMs / 1000)));
+  const fresh = frames.filter(
+    (frame) => frame.mediaUrl && !existingTimestamps.has(Math.round(frame.timestampSec)),
+  );
+  if (fresh.length === 0) return 0;
+  await db.keyframes.bulkAdd(
+    fresh.map((frame) => ({
+      sessionId,
+      timestampMs: Math.round(frame.timestampSec) * 1000,
+      uploaded: true,
+      mediaUrl: frame.mediaUrl,
+      createdAt: new Date(),
+    })),
+  );
+  return fresh.length;
+}

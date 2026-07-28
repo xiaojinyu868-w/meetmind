@@ -452,6 +452,14 @@ export function useRecordingLifecycle(
               segments: publishableSegments,
               occurredAtMs: Date.now() - duration,
               accessToken,
+            }).then((newTitle) => {
+              // 同步 collection feed 的条目标题
+              if (!newTitle) return;
+              colAct.setSourceItems((prev: SourceIngestItem[]) =>
+                prev.map((item) =>
+                  item.sessionId === effectiveSessionId ? { ...item, title: newTitle } : item,
+                ),
+              );
             });
           }
         });

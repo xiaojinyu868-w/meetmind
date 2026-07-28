@@ -6,6 +6,7 @@
  */
 
 import { backfillCapturesToIndexedDB } from '@/lib/services/backfill-captures-to-indexeddb';
+import { mergeCloudKeyframes } from '@/lib/db/keyframes';
 import type { WorkspaceCaptureMessage } from '@/types/page-types';
 
 export interface WorkspaceEvidenceClientPayload {
@@ -32,6 +33,8 @@ export interface WorkspaceEvidenceClientPayload {
   classSummary?: Record<string, unknown>;
   highlightTopics: unknown[];
   notes: unknown[];
+  /** 课中「截取这一页」关键帧（payload: { mediaUrl, timestampSec }） */
+  keyframes?: unknown[];
 }
 
 const pendingEvidenceRequests = new Map<string, Promise<WorkspaceEvidenceClientPayload>>();
@@ -81,6 +84,21 @@ async function requestEvidence(params: {
   }
 
   await backfillCapturesToIndexedDB([buildPortableCapture(payload.evidence)], params.userId, true);
+
+  // 关键帧跨设备恢复：evidence 里的 keyframe artifacts 合并进本地表（只补缺）
+  const keyframes = Array.isArray(payload.evidence.keyframes) ? payload.evidence.keyframes : [];
+  if (keyframes.length > 0) {
+    const frames = keyframes
+      .map((item) => (item && typeof item === 'object' ? (item as Record<string, unknown>) : null))
+      .filter((item): item is Record<string, unknown> => item !== null)
+      .map((item) => ({
+        mediaUrl: typeof item.mediaUrl === 'string' ? item.mediaUrl : '',
+        timestampSec: typeof item.timestampSec === 'number' ? item.timestampSec : 0,
+      }))
+      .filter((frame) => frame.mediaUrl && frame.timestampSec >= 0);
+    await mergeCloudKeyframes(payload.evidence.sessionId, frames).catch(() => 0);
+  }
+
   return payload.evidence;
 }
 

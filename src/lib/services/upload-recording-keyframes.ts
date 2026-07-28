@@ -37,7 +37,8 @@ export async function uploadRecordingKeyframes(
   }
 
   const pending = (await getPendingKeyframes(sessionId).catch(() => [])).filter(
-    (frame) => frame.id != null && frame.timestampMs <= MAX_FRAME_TIMESTAMP_MS,
+    // 云端回填的帧没有 blob（只有 mediaUrl，已 uploaded），本地待上传的帧必须有原图
+    (frame) => frame.id != null && frame.blob && frame.timestampMs <= MAX_FRAME_TIMESTAMP_MS,
   );
   if (pending.length === 0) {
     return { ok: true, uploaded: 0, total: 0 };
@@ -47,6 +48,7 @@ export async function uploadRecordingKeyframes(
   const uploadedIds: Array<{ id: number; mediaUrl: string }> = [];
 
   for (const frame of pending) {
+    if (!frame.blob) continue;
     const formData = new FormData();
     formData.append('image', frame.blob, `keyframe-${frame.id}.jpg`);
     formData.append('imageKey', `kf-${sessionId}-${frame.id}`);
@@ -76,18 +78,22 @@ export async function uploadRecordingKeyframes(
     return { ok: false, uploaded: 0, total: pending.length, error: '全部帧上传失败' };
   }
 
-  const resp = await fetch(`/api/workspace/captures/${captureId}/artifacts`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${authToken}`,
-    },
-    body: JSON.stringify({ sessionId, artifacts }),
-  }).catch(() => null);
-  const data = resp ? ((await resp.json().catch(() => ({}))) as { success?: boolean }) : {};
-
-  if (!resp?.ok || !data.success) {
-    return { ok: false, uploaded: 0, total: pending.length, error: 'artifacts 写入失败' };
+  // artifacts 路由单次上限 100 条：分批写入，全部成功才算成功
+  const BATCH_SIZE = 100;
+  for (let offset = 0; offset < artifacts.length; offset += BATCH_SIZE) {
+    const batch = artifacts.slice(offset, offset + BATCH_SIZE);
+    const resp = await fetch(`/api/workspace/captures/${captureId}/artifacts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ sessionId, artifacts: batch }),
+    }).catch(() => null);
+    const data = resp ? ((await resp.json().catch(() => ({}))) as { success?: boolean }) : {};
+    if (!resp?.ok || !data.success) {
+      return { ok: false, uploaded: 0, total: pending.length, error: 'artifacts 写入失败' };
+    }
   }
 
   for (const { id, mediaUrl } of uploadedIds) {

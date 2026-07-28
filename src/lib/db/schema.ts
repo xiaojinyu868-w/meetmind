@@ -58,8 +58,8 @@ export interface KeyframeRecord {
   sessionId: string;
   /** 录音时间轴毫秒（与 TranscriptSegment.startMs 同根） */
   timestampMs: number;
-  /** 本地 JPEG 原图（上传后保留供本机复习页离线用） */
-  blob: Blob;
+  /** 本地 JPEG 原图（本机截取的帧才有；云端回填的帧只有 mediaUrl） */
+  blob?: Blob;
   uploaded?: boolean;
   /** 上传成功后的服务端图片地址（/api/workspace/images/...） */
   mediaUrl?: string;

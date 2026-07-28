@@ -110,22 +110,21 @@ async function uploadOnce(pngBuffer, origin, token, ts) {
   if (!captureRes.ok) throw new Error(`captures 返回 ${captureRes.status}`);
 }
 
-// 失败重试一次（间隔 2s）再放弃，交给 pending-shots 兜底
+// 失败重试一次（间隔 2s）再放弃，交给 pending-shots 兜底。
+// 返回 'ok' | 'auth' | 'fail'：401 说明登录过期，文案要区分（用户能做的事不同）
 async function uploadWithRetry(pngBuffer, origin, token, ts) {
-  try {
-    await uploadOnce(pngBuffer, origin, token, ts);
-    return true;
-  } catch (err) {
-    console.warn('[desktop] 截图上传失败，2s 后重试一次', err);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (attempt > 0) await delay(RETRY_DELAY_MS);
+    try {
+      await uploadOnce(pngBuffer, origin, token, ts);
+      return 'ok';
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[desktop] 截图上传第 ${attempt + 1} 次失败`, err);
+      if (message.includes('返回 401')) return 'auth';
+    }
   }
-  await delay(RETRY_DELAY_MS);
-  try {
-    await uploadOnce(pngBuffer, origin, token, ts);
-    return true;
-  } catch (err) {
-    console.warn('[desktop] 截图上传重试仍失败', err);
-    return false;
-  }
+  return 'fail';
 }
 
 // 上传失败的 PNG 落盘暂存，文件名带时间戳，补传时直接复用
@@ -183,9 +182,20 @@ async function handleHotkey(deps) {
       return;
     }
     const ts = Date.now();
-    const ok = await uploadWithRetry(pngBuffer, origin, token, ts);
-    if (ok) {
+    const result = await uploadWithRetry(pngBuffer, origin, token, ts);
+    if (result === 'ok') {
       notify({ title: 'MeetMind', body: '已收进 MeetMind', onClick: deps.showShellWindow });
+      return;
+    }
+    if (result === 'auth') {
+      // 登录过期：暂存可以，但用户真正要做的是重新登录——文案说清楚
+      stashPending(pngBuffer, ts);
+      notify({
+        title: 'MeetMind',
+        body: '登录已过期，截图已暂存；请打开主窗口重新登录，之后会自动补传',
+        onClick: deps.showShellWindow,
+      });
+      deps.showShellWindow();
       return;
     }
     stashPending(pngBuffer, ts);
@@ -238,8 +248,8 @@ async function retryPendingShots(deps) {
     try {
       const ts = Number(name.match(/^shot-(\d+)\.png$/)?.[1]) || Date.now();
       const pngBuffer = fs.readFileSync(filePath);
-      const ok = await uploadWithRetry(pngBuffer, origin, token, ts);
-      if (ok) fs.unlinkSync(filePath);
+      const result = await uploadWithRetry(pngBuffer, origin, token, ts);
+      if (result === 'ok') fs.unlinkSync(filePath);
     } catch (err) {
       console.warn(`[desktop] 补传 ${name} 失败，保留到下次`, err);
     }
