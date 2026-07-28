@@ -22,11 +22,20 @@ interface InfographicImageRequest {
   scenePreset?: string;
 }
 
+/** 与 POST 实际生图逻辑保持一致的 provider 判定（单一真相） */
+function resolveImageProvider(): 'dashscope' | 'gemini' | null {
+  const preferGemini = process.env.IMAGE_PROVIDER?.trim() === 'gemini' && isGeminiImageEnabled();
+  if (preferGemini) return 'gemini';
+  if (isDashscopeImageEnabled()) return 'dashscope';
+  if (isGeminiImageEnabled()) return 'gemini';
+  return null;
+}
+
 export async function GET() {
   return NextResponse.json({
     ok: true,
-    enabled: isDashscopeImageEnabled() || isGeminiImageEnabled(),
-    provider: isDashscopeImageEnabled() ? 'dashscope' : isGeminiImageEnabled() ? 'gemini' : null,
+    enabled: resolveImageProvider() !== null,
+    provider: resolveImageProvider(),
   });
 }
 
@@ -69,8 +78,8 @@ export async function POST(request: NextRequest) {
 
     // 图像 provider 可切换：IMAGE_PROVIDER=gemini 时退回 Gemini 代理（长文渲染更稳），
     // 默认 DashScope（阿里云百炼 · qwen-image-plus，摆脱第三方代理）。
-    const useGemini = process.env.IMAGE_PROVIDER?.trim() === 'gemini' && isGeminiImageEnabled();
-    const generate = !useGemini && isDashscopeImageEnabled() ? generateDashscopeImage : generateGeminiImage;
+    const provider = resolveImageProvider();
+    const generate = provider === 'dashscope' ? generateDashscopeImage : generateGeminiImage;
     const result = await generate({
       prompt: draftPrompt,
       stylePreset,

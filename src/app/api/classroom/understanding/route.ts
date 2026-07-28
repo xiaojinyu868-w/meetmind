@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
 import { authService } from '@/lib/services/auth-service';
 import {
   applyLessonUnderstanding,
@@ -44,6 +45,16 @@ export async function POST(request: NextRequest) {
         { success: false, error: '缺少 captureId / sessionId / 转录样本' },
         { status: 400 },
       );
+    }
+
+    // 归属校验：summary/highlight artifacts 直接按 captureId 写库，
+    // 必须先确认这条 capture 属于当前用户（防 IDOR 注入伪造产物）
+    const owned = await prisma.workspaceCapture.findFirst({
+      where: { id: body.captureId, userId: auth.sub, status: { not: 'deleted' } },
+      select: { id: true },
+    });
+    if (!owned) {
+      return NextResponse.json({ success: false, error: '未找到课堂' }, { status: 404 });
     }
 
     const understanding = await generateLessonUnderstanding({

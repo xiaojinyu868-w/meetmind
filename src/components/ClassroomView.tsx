@@ -88,6 +88,8 @@ export interface ClassroomViewProps {
   onRenameLesson?: (id: string, title: string) => void;
   /** 课中拍照：透传到 ClassroomRecordingView */
   onQuickPhoto?: (capturedAtMs: number) => void;
+  /** 课中「截取这一页」：透传到 ClassroomRecordingView（屏幕流帧源存在时由 page.tsx 传入） */
+  onCaptureFrame?: (capturedAtMs: number) => void;
   /** 首页“放入学习材料”——由 page.tsx 打开收集文件入口 */
   onAddMaterial?: () => void;
   /** 首页“找到并继续问”——由 page.tsx 打开全局搜索 */
@@ -106,6 +108,7 @@ export function ClassroomView({
   onOpenDemoReview,
   onRenameLesson,
   onQuickPhoto,
+  onCaptureFrame,
   onAddMaterial,
   onSearch,
 }: ClassroomViewProps) {
@@ -580,11 +583,12 @@ export function ClassroomView({
         onOpenApp={onOpenApp}
         onRenameLesson={onRenameLesson}
         onQuickPhoto={onQuickPhoto}
+        onCaptureFrame={onCaptureFrame}
         onAddMaterial={onAddMaterial}
         onSearch={onSearch}
       />
     ),
-    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, handleBackToList, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, classroomFlow, classroomFlowNewIds, isUnderstandingClassroomFlow, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, onOpenApp, onRenameLesson, onQuickPhoto, onAddMaterial, onSearch],
+    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, handleBackToList, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, classroomFlow, classroomFlowNewIds, isUnderstandingClassroomFlow, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, onOpenApp, onRenameLesson, onQuickPhoto, onCaptureFrame, onAddMaterial, onSearch],
   );
 
   const demoSuggestedPrompts = useMemo(

@@ -32,6 +32,14 @@ const SIZE_BY_ORIENTATION: Record<string, string> = {
   square: '1024*1024',
 };
 
+// qwen-image-plus（image-synthesis 异步接口）只接受 5 个固定枚举尺寸，
+// 用 pro 的自由尺寸提交会直接 InvalidParameter——降级通道必须有独立映射
+const PLUS_SIZE_BY_ORIENTATION: Record<string, string> = {
+  landscape: '1664*928',
+  portrait: '928*1664',
+  square: '1328*1328',
+};
+
 export function isDashscopeImageEnabled(): boolean {
   return Boolean(process.env.DASHSCOPE_API_KEY?.trim());
 }
@@ -165,9 +173,10 @@ async function generateWithPlus(prompt: string, size: string, apiKey: string): P
 }
 
 function isAccessDenied(error: unknown): boolean {
+  // 仅邀测未开通（AccessDenied）才降级；欠费/限流/参数错不降级（plus 同样会失败）
   const code = (error as { code?: string })?.code || '';
   const message = error instanceof Error ? error.message : String(error);
-  return code === 'AccessDenied' || code === '403' || /access denied/i.test(message);
+  return code === 'AccessDenied' || code === '403' || /accessdenied/i.test(message.replace(/[ _-]/g, ''));
 }
 
 export async function generateDashscopeImage(params: GeminiImageParams): Promise<GeminiImageResult> {
@@ -188,6 +197,8 @@ export async function generateDashscopeImage(params: GeminiImageParams): Promise
   } catch (error) {
     if (!isAccessDenied(error)) throw error;
     log.warn('pro model access denied, falling back to plus', { model: MODEL, fallback: FALLBACK_MODEL });
-    return generateWithPlus(fullPrompt, size, apiKey);
+    // plus 是 image-synthesis 接口，只接受固定枚举尺寸，不能用 pro 的自由尺寸
+    const plusSize = PLUS_SIZE_BY_ORIENTATION[params.orientation || 'landscape'] || PLUS_SIZE_BY_ORIENTATION.landscape;
+    return generateWithPlus(fullPrompt, plusSize, apiKey);
   }
 }

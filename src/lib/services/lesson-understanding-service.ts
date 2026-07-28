@@ -158,7 +158,11 @@ export async function applyLessonUnderstanding(params: {
     result.summaryWritten = true;
   }
 
-  // highlight artifacts：精选片段（带时间锚点）
+  // highlight artifacts：精选片段（带时间锚点）。
+  // 先清掉上一轮理解写下的同前缀片段，避免「上次 6 条这次 3 条」时旧片段残留
+  await prisma.workspaceCaptureArtifact.deleteMany({
+    where: { captureId, kind: 'highlight', artifactKey: { startsWith: 'lu-' } },
+  });
   for (const [index, highlight] of understanding.highlights.entries()) {
     await prisma.workspaceCaptureArtifact.upsert({
       where: {

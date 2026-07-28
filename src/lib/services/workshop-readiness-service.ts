@@ -7,6 +7,7 @@ import {
 import type { WorkshopReadinessAssessment } from '@/lib/ai-native/types';
 import { createLogger } from '@/lib/logger';
 import { chat } from '@/lib/services/llm-service';
+import { parseJsonResponse } from '@/lib/utils/json-utils';
 
 export {
   fallbackWorkshopReadiness,
@@ -86,7 +87,7 @@ export async function assessWorkshopReadiness(
       undefined,
       { temperature: 0.1, maxTokens: 500, responseFormat: 'json_object' },
     );
-    return sanitizeWorkshopReadinessAssessment(JSON.parse(response.content), input);
+    return sanitizeWorkshopReadinessAssessment(parseJsonResponse(response.content), input);
   } catch (error) {
     log.warn('readiness assessment fallback', {
       message: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),

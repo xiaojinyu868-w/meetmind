@@ -436,10 +436,13 @@ model WechatAgentMessage {
   userId    String?
   role      String // 'user' | 'assistant'
   text      String
+  /// 微信侧的 MsgId：公众号重推去重（收集流同款幂等）
+  messageId String?
   createdAt DateTime @default(now())
 
   @@index([openId, createdAt])
   @@index([userId, createdAt])
+  @@index([messageId])
 }
 
 /// 公众号带参二维码的短期登录/绑定挑战。只存浏览器随机令牌的 SHA-256，不存会话令牌。

@@ -38,9 +38,12 @@ function pendingDir() {
 // 取鼠标所在那块屏的截图：多屏环境下 source.display_id 与 display.id 对应
 async function captureCursorScreen() {
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  // 按显示器实际像素抓（4K/Retina 不缩到 1080p，板书和代码细节不糊）
+  const pixelWidth = Math.round(display.size.width * display.scaleFactor);
+  const pixelHeight = Math.round(display.size.height * display.scaleFactor);
   const sources = await desktopCapturer.getSources({
     types: ['screen'],
-    thumbnailSize: { width: 1920, height: 1080 },
+    thumbnailSize: { width: pixelWidth, height: pixelHeight },
   });
   const source =
     sources.find((item) => String(item.display_id) === String(display.id)) || sources[0];

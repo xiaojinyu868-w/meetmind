@@ -70,14 +70,14 @@ const SECTION_ACCENT: Record<string, { bar: string; tint: string; label: string 
 };
 
 function pickCheatsheetItem(section: CheatsheetSection): CheatsheetItem | null {
-  if (!section.items || section.items.length === 0) return null;
+  if (!Array.isArray(section.items) || section.items.length === 0) return null;
   const strong = section.items.find((it) => it.emphasis === 'strong');
   return strong ?? section.items[0];
 }
 
 function CheatsheetPreview({ payload }: { payload: CheatsheetPayload }) {
   const usable = (payload.sections ?? [])
-    .filter((s) => s.items && s.items.length > 0)
+    .filter((s) => Array.isArray(s.items) && s.items.length > 0)
     .slice(0, 6);
 
   if (usable.length === 0) {
@@ -175,7 +175,10 @@ interface QuizPayload {
 function getQuizQuestions(p: unknown): QuizQuestion[] {
   if (!p || typeof p !== 'object') return [];
   const obj = p as QuizPayload;
-  return obj.questions ?? obj.items ?? [];
+  // 畸形/旧数据里 questions 可能是数字或对象，不是数组就当没有——分享页不能崩
+  if (Array.isArray(obj.questions)) return obj.questions;
+  if (Array.isArray(obj.items)) return obj.items;
+  return [];
 }
 
 function QuizPreview({ payload }: { payload: unknown }) {

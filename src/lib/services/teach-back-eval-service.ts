@@ -107,7 +107,7 @@ export function normalizeTeachBackEvaluation(
     const draft = byTargetId.get(target.id);
     const coverage = normalizeCoverage(draft?.coverage);
     const confidence = normalizeConfidence(draft?.confidence);
-    const note = compact(draft?.note, 240) || '没有讲到这个点。';
+    const note = compact(draft?.note, 240) || (coverage === 'missed' ? '没有讲到这个点。' : '');
     let evidence = target.evidence;
     const anchorText = compact(draft?.anchorText, 600);
     if (anchorText) {

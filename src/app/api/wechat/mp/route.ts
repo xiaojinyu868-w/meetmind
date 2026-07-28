@@ -341,6 +341,7 @@ export async function POST(request: NextRequest) {
       userId: intelligence.userId,
       workspaceId: intelligence.workspaceId,
       text: normalized.normalizedText || '',
+      messageId: normalized.messageId,
     });
     return textResponse('success');
   }

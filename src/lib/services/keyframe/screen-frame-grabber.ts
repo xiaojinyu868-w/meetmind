@@ -39,11 +39,24 @@ export function hasActiveScreenTrack(): boolean {
 }
 
 /**
+ * 通过 Recorder 武装的录制钩子抓帧（时间戳取自 Recorder 的录音时钟，
+ * 与转录段 startMs 严格同根——课中按钮应走这里而不是视图层的 seconds）。
+ */
+export async function captureFrameViaRecordingHook(): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const hook = (window as HookWindow)[HOOK_NAME];
+  if (typeof hook !== 'function') return false;
+  return hook();
+}
+
+/**
  * 抓当前帧并存入 IndexedDB。timestampMs 必须来自录音时间轴
  * （Recorder 的 startTimeRef 同根）。成功返回 true。
  */
 export async function captureCurrentFrame(sessionId: string, timestampMs: number): Promise<boolean> {
   if (!activeVideo || !sessionId) return false;
+  // 用户中途停止屏幕共享后 track 变 ended，抓到的只是定格的最后一帧，没价值
+  if (!activeTrack || activeTrack.readyState !== 'live') return false;
   if (activeVideo.videoWidth === 0 || activeVideo.videoHeight === 0) return false;
   try {
     const blob = await grabFrameJpeg(activeVideo);

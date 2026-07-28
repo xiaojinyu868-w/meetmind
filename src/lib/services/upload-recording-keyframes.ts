@@ -25,7 +25,7 @@ export interface UploadRecordingKeyframesResult {
   error?: string;
 }
 
-/** 单帧超过 5 分钟的课大概率是计时异常，不上传 */
+/** 单帧超过 5 小时的课大概率是计时异常，不上传 */
 const MAX_FRAME_TIMESTAMP_MS = 5 * 60 * 60 * 1000;
 
 export async function uploadRecordingKeyframes(

@@ -423,6 +423,19 @@ export function useClassroomCompanion(
             return;
           }
 
+          // 服务端诚实空态（材料不足/内容不适合）：不能用原文伪造一套假产物——
+          // 那直接违反「有根」。把气泡置为安静的失败态，告诉学生真实原因。
+          if (data?.error === 'CONTENT_NOT_READY' || data?.error === 'APP_NOT_SUITABLE') {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === messageId
+                  ? { ...m, inlineApp: { appKey, status: 'error' as const, error: data.error } }
+                  : m,
+              ),
+            );
+            return;
+          }
+
           lastError = data?.error || '生成失败';
           if (!shouldRetryInlineAppExecute({ status: response.status, attempt })) break;
         } catch (err) {

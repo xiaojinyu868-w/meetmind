@@ -120,6 +120,8 @@ export interface ClassroomLeftPanelProps {
   onRenameLesson?: (id: string, title: string) => void;
   /** 课中拍照：透传到 ClassroomRecordingView */
   onQuickPhoto?: (capturedAtMs: number) => void;
+  /** 课中「截取这一页」：透传到 ClassroomRecordingView */
+  onCaptureFrame?: (capturedAtMs: number) => void;
   /** 首页放入材料 */
   onAddMaterial?: () => void;
   /** 首页搜索课堂和资料 */
@@ -611,6 +613,7 @@ export function ClassroomLeftPanel({
   onOpenApp,
   onRenameLesson,
   onQuickPhoto,
+  onCaptureFrame,
   onAddMaterial,
   onSearch,
 }: ClassroomLeftPanelProps) {
@@ -699,6 +702,7 @@ export function ClassroomLeftPanel({
             onReplayDemo={onReplayDemo}
             onFinishDemo={onFinishDemo}
             onQuickPhoto={onQuickPhoto}
+            onCaptureFrame={onCaptureFrame}
           />
         )}
       </div>

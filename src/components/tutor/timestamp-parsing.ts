@@ -81,17 +81,34 @@ export function findTimestamps(text: string): TimestampMatch[] {
 /**
  * 一键复制场景：把 [MM:SS] / [t=MM:SS] / [MM:SS-MM:SS] 标记从文本里抹掉。
  * 只抹能通过 parseTimestamp 校验的标记，[99:99] 这类误匹配原样保留。
- * 顺带清理标记走后留下的空位（标点前的空格、连续空格、行尾空格）。
+ *
+ * 保护规则（复制出去的文本会进笔记/微信/打印）：
+ *   - 围栏代码块（```）与行内代码（`...`）整段跳过——`a[10:20]` 是切片不是时间戳
+ *   - 空位清理只折叠「两个非空白字符之间」的多余空格，不动行首缩进与行尾
+ *     （markdown 嵌套列表和硬换行不能被复制动作破坏）
  */
 export function stripTimestamps(text: string): string {
-  TIMESTAMP_RE.lastIndex = 0;
+  const stripInPlainText = (segment: string): string => {
+    TIMESTAMP_RE.lastIndex = 0;
+    return segment
+      .replace(TIMESTAMP_RE, (raw, display: string) => (parseTimestamp(display) === null ? raw : ''))
+      .replace(/[ \t]+([，。、；：？！,.!?;:])/g, '$1')
+      .replace(/([，。、；：？！])[ \t]+/g, '$1')
+      .replace(/([（(「『【])[ \t]+/g, '$1')
+      .replace(/(?<=\S)[ \t]{2,}(?=\S)/g, ' ');
+  };
+
+  // 先按围栏代码块切分，再按行内代码切分，只处理「既不是围栏也不是行内代码」的部分
   return text
-    .replace(TIMESTAMP_RE, (raw, display: string) => (parseTimestamp(display) === null ? raw : ''))
-    .replace(/[ \t]+([，。、；：？！,.!?;:])/g, '$1')
-    .replace(/([，。、；：？！])[ \t]+/g, '$1')
-    .replace(/([（(「『【])[ \t]+/g, '$1')
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/[ \t]+\n/g, '\n')
+    .split(/(```[\s\S]*?```)/g)
+    .map((block) => {
+      if (block.startsWith('```')) return block;
+      return block
+        .split(/(`[^`\n]*`)/g)
+        .map((span) => (span.startsWith('`') ? span : stripInPlainText(span)))
+        .join('');
+    })
+    .join('')
     .trim();
 }
 

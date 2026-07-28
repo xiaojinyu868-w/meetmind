@@ -87,11 +87,17 @@ export function CompanionPanel() {
     };
   }, []);
 
+  // headers 用函数形式：useChat 只在 mount 时创建一次 Chat 实例，
+  // 对象形式的 headers 会把首次渲染的 null token 锁死（提问永远是访客身份）；
+  // 函数形式每次请求才取值，登录态变化即时生效
   const transport = React.useMemo(
     () =>
       new DefaultChatTransport({
         api: '/api/tutor/agent',
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        headers: (): Record<string, string> => {
+          const latest = readStoredAccessToken();
+          return latest ? { Authorization: `Bearer ${latest}` } : {};
+        },
         body: () => ({
           mode: 'global',
           sessionId: 'desktop-panel',
@@ -99,7 +105,7 @@ export function CompanionPanel() {
           options: {},
         }),
       }),
-    [token],
+    [],
   );
   const { messages, sendMessage, status } = useChat({ transport });
   const asking = status === 'submitted' || status === 'streaming';

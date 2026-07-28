@@ -178,6 +178,8 @@ export async function backfillGenericLessonTitles(params: {
         { title: { startsWith: '录音' } },
         { title: { startsWith: '屏幕截图' } },
       ],
+      // 失败过的候选打标排除：不对同一批坏候选无限重试 LLM
+      NOT: { metadataJson: { contains: '"titleBackfillFailedAt"' } },
     },
     select: { id: true, title: true, normalizedText: true, occurredAt: true, createdAt: true },
     orderBy: { createdAt: 'desc' },
@@ -192,11 +194,13 @@ export async function backfillGenericLessonTitles(params: {
     const sample = (capture.normalizedText || '').trim();
     if (sample.length < 80) {
       skipped += 1;
-      continue;
+      continue; // 文本太短是客观状态，下节课内容变长后再试，不打标
     }
     const topic = await generateLessonTopic({ transcriptSample: sample });
     if (!topic) {
       skipped += 1;
+      // 质量门不过/LLM 失败：打标，避免每次进应用都对同一候选重复打 LLM
+      await markBackfillFailed(capture.id);
       continue;
     }
     const title = composeLessonTitle({
@@ -212,4 +216,26 @@ export async function backfillGenericLessonTitles(params: {
     else skipped += 1;
   }
   return { scanned: candidates.length, retitled, skipped };
+}
+
+/** 回填失败打标（下次扫描排除，防无限重试） */
+async function markBackfillFailed(captureId: string): Promise<void> {
+  try {
+    const capture = await prisma.workspaceCapture.findUnique({
+      where: { id: captureId },
+      select: { metadataJson: true },
+    });
+    const metadata = JSON.parse(capture?.metadataJson || '{}') as Record<string, unknown>;
+    await prisma.workspaceCapture.update({
+      where: { id: captureId },
+      data: {
+        metadataJson: JSON.stringify({
+          ...metadata,
+          titleBackfillFailedAt: new Date().toISOString(),
+        }),
+      },
+    });
+  } catch {
+    // 打标失败不阻塞主流程
+  }
 }

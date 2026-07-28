@@ -1,5 +1,6 @@
 import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
+import { createLogger } from '@/lib/logger';
 import type {
   AppExecutionContext,
   AppExecutionResult,
@@ -183,9 +184,10 @@ export const teachBackPlugin: AppPlugin = {
   },
 };
 
+const log = createLogger('teach-back-plugin');
+
 function traceLlmError(error: unknown): void {
-  console.error(
-    '[teach-back-plugin] targets LLM failed:',
-    error instanceof Error ? error.message : error,
-  );
+  log.error('targets LLM failed', {
+    error: error instanceof Error ? error.message : String(error),
+  });
 }

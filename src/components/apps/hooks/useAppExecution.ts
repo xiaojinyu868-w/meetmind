@@ -407,10 +407,14 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
             throw new Error(data?.error || '生成请求过于频繁，请稍等片刻再点重试');
           }
           if (data?.error === 'CONTENT_NOT_READY' || data?.error === 'APP_NOT_SUITABLE') {
-            // 材料不足是预期内的诚实空态：不抛错、不进红色失败态，窗口回空态 + 一句安静说明
+            // 材料不足是预期内的诚实空态：不抛错、不进红色失败态，窗口回空态 + 一句安静说明。
+            // 同时清掉旧结果与缓存：空态意味着旧产物不能再代表当前材料，
+            // 避免页面一边说没做好，一边还展示/分享旧的伪成品。
             const idleState = nowTaskState('idle');
             setTaskState(idleState);
             writeCachedTaskState(sessionId, app.key, idleState);
+            setResult(null);
+            removeCacheEntry(buildResultCacheKey(sessionId, app.key));
             toast.message(
               data.error === 'CONTENT_NOT_READY'
                 ? COPY.apps.matrix.executeNotReady
@@ -445,12 +449,7 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
               : error instanceof Error
                 ? error.message
                 : '应用执行失败';
-        // 语义上的“材料不成立”意味着旧产物也不能继续代表当前范围。
-        // 清掉结果与缓存，避免页面一边说没做好，一边还允许分享旧的伪成品。
-        if (message === COPY.apps.matrix.executeNotReady) {
-          setResult(null);
-          removeCacheEntry(buildResultCacheKey(sessionId, app.key));
-        }
+        // CONTENT_NOT_READY 的清理已在上面早退分支完成；这里只剩真实失败
         const failedState = nowTaskState('error', message);
         setTaskState(failedState);
         writeCachedTaskState(sessionId, app.key, failedState);

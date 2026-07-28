@@ -30,13 +30,13 @@ function resolveLocalWechatMediaPath(value?: string | null): string | null {
   return path.join(process.cwd(), 'public', pathname.replace(/^\//, ''));
 }
 
-export async function getWechatAccessToken(): Promise<string | null> {
+export async function getWechatAccessToken(forceRefresh = false): Promise<string | null> {
   if (!WECHAT_APP_ID || !WECHAT_APP_SECRET) {
     return null;
   }
 
   const now = Date.now();
-  if (cachedAccessToken && cachedAccessToken.expiresAt > now) {
+  if (!forceRefresh && cachedAccessToken && cachedAccessToken.expiresAt > now) {
     return cachedAccessToken.token;
   }
 

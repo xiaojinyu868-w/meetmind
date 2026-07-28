@@ -84,6 +84,12 @@ export function TeachBackClassroom({
   const [speakerIndex, setSpeakerIndex] = useState<number | null>(null);
   const [hasStarted, setHasStarted] = useState(false);
   const [coveredIds, setCoveredIds] = useState<ReadonlySet<string>>(new Set());
+  // interval 闭包只能拿到创建帧的 state，用 ref 同步最新集合，
+  // 否则「全部目标已划掉后停止轮询」永远不生效
+  const coveredIdsRef = useRef<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    coveredIdsRef.current = coveredIds;
+  }, [coveredIds]);
   const [noddingIds, setNoddingIds] = useState<ReadonlySet<string>>(new Set());
   const [isNarrow, setIsNarrow] = useState(false);
   const lastSpeakerRef = useRef(-1);
@@ -166,7 +172,7 @@ export function TeachBackClassroom({
     return () => window.clearInterval(timer);
   }, [targets]);
 
-  const coveredRefSize = () => coveredIds.size;
+  const coveredRefSize = () => coveredIdsRef.current.size;
 
   /* AI 开口时，随机点一名学生举手提问（不连续点同一个） */
   useEffect(() => {

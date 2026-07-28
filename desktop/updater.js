@@ -101,7 +101,6 @@ async function checkForUpdates() {
   if (!latest || !isNewer(latest.version, current)) return;
   if (readDismissedVersion() === latest.tag) return; // 这个版本已经提示过
 
-  writeDismissedVersion(latest.tag);
   const downloadUrl = pickAssetUrl(latest.assets) || latest.pageUrl;
   try {
     const notification = new Notification({
@@ -113,6 +112,8 @@ async function checkForUpdates() {
       void shell.openExternal(downloadUrl);
     });
     notification.show();
+    // 提示成功展示后再标记：通知服务不可用时不能静默吞掉这个版本的提醒
+    writeDismissedVersion(latest.tag);
   } catch (err) {
     console.warn('[desktop] 更新提示不可用，已跳过', err);
   }

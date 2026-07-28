@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'rea
 import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
-import { hasActiveScreenTrack, captureCurrentFrame } from '@/lib/services/keyframe/screen-frame-grabber';
+import { hasActiveScreenTrack, captureFrameViaRecordingHook } from '@/lib/services/keyframe/screen-frame-grabber';
 import { lockLessonTitleByUser } from '@/lib/services/lesson-title-client';
 import { useUIActions, useUIStore, type MobileSubPage } from '@/stores/ui-store';
 import { usePlayerStore } from '@/stores/player-store';
@@ -2231,9 +2231,11 @@ function StudentAppContent({
                 }
               }}
               {...(hasActiveScreenTrack() ? {
-                onCaptureFrame: (capturedAtMs: number) => {
-                  // 课中「截取这一页」：从屏幕流抓当前帧挂到课堂时间轴（主动意图锚点）
-                  void captureCurrentFrame(sessionId || '', capturedAtMs).then((ok) => {
+                onCaptureFrame: () => {
+                  // 课中「截取这一页」：走 Recorder 武装的录制钩子抓帧，
+                  // 时间戳取自 Recorder 的录音时钟（与转录严格同根），
+                  // 不用视图层 seconds（它来自最后落定句的 endMs，静默期会漂移）
+                  void captureFrameViaRecordingHook().then((ok) => {
                     toast(ok ? COPY.recording.captureFrameSaved : COPY.recording.captureFrameFailed, { duration: 2500 });
                   });
                 },
