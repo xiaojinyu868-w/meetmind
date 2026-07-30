@@ -155,6 +155,9 @@ function createShellWindow(meetmindUrl) {
       // 与桌面小窗（quick-panel）共享登录态：token 在 localStorage，
       // 同一 partition 才有同一份 localStorage
       partition: 'persist:meetmind',
+      // 旁听录音发生在隐藏窗口里：关掉 Chromium 后台节流，
+      // 否则隐藏页面的定时器/音频回调被降频，PCM 发送被拖慢导致转录吞段
+      backgroundThrottling: false,
     },
   });
 

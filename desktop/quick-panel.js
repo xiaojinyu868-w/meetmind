@@ -49,6 +49,7 @@ function createQuickPanel(meetmindUrl) {
       preload: path.join(__dirname, 'panel-preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false,
       // 与 shell-window 主窗口共享登录态（localStorage 里的 access token）
       partition: 'persist:meetmind',
     },

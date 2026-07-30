@@ -28,6 +28,7 @@ import {
 } from './recorder/recorder-utils';
 import { acquireAudioStream } from './recorder/recorder-audio-source';
 import { registerScreenTrack, armDesktopCaptureHook, releaseScreenTrack } from '@/lib/services/keyframe/screen-frame-grabber';
+import { createPcmCapture, type PcmCapture } from './recorder/pcm-capture';
 import { buildAudioConstraints } from '@/lib/services/asr/audio-constraints';
 import { toast } from 'sonner';
 import { COPY } from '@/lib/ui/copy';
@@ -125,7 +126,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   const pendingAsrClientRef = useRef<DashScopeASRClient | null>(null);
   const asrSwitchGenerationRef = useRef(0);
   const transcriptRef = useRef<TranscriptSegment[]>([]);
-  const pcmProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const pcmCaptureRef = useRef<PcmCapture | null>(null);
   const pcmResamplerRef = useRef<StreamingPcmResampler | null>(null);
   const isStartingRecordingRef = useRef(false);
   const lastAutoStartSignalRef = useRef(0);
@@ -342,11 +343,8 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
-      if (pcmProcessorRef.current) {
-        pcmProcessorRef.current.disconnect();
-        pcmProcessorRef.current.onaudioprocess = null;
-        pcmProcessorRef.current = null;
-      }
+      pcmCaptureRef.current?.stop();
+      pcmCaptureRef.current = null;
       pcmResamplerRef.current = null;
       if (mediaRecorderRef.current) {
         await stopMediaRecorderSafely();
@@ -618,19 +616,21 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
         // 先挂 PCM pipeline：DashScopeASRClient 在 !ready 时会将 chunk 有界排队，
         // 因此首字之前的语音也不会丢。
+        // AudioWorklet 优先（音频线程，不随主线程卡顿丢帧），ScriptProcessor 兜底。
         pcmResamplerRef.current = new StreamingPcmResampler(actualSampleRate, wsSampleRate);
-        pcmProcessorRef.current = audioContext.createScriptProcessor(PCM_PROCESSOR_BUFFER_SIZE, 1, 1);
-        pcmProcessorRef.current.onaudioprocess = (e) => {
-          if (asrClientRef.current || pendingAsrClientRef.current) {
-            const inputData = e.inputBuffer.getChannelData(0);
-            const resampledData = pcmResamplerRef.current?.process(inputData) ?? new Float32Array();
-            if (resampledData.length === 0) return;
-            const pcmData = float32ToInt16(resampledData);
-            sendPcmToAsrClients(pcmData.buffer as ArrayBuffer);
-          }
-        };
-        source.connect(pcmProcessorRef.current);
-        pcmProcessorRef.current.connect(audioContext.destination);
+        pcmCaptureRef.current = await createPcmCapture({
+          audioContext,
+          source,
+          bufferSize: PCM_PROCESSOR_BUFFER_SIZE,
+          onChunk: (inputData) => {
+            if (asrClientRef.current || pendingAsrClientRef.current) {
+              const resampledData = pcmResamplerRef.current?.process(inputData) ?? new Float32Array();
+              if (resampledData.length === 0) return;
+              const pcmData = float32ToInt16(resampledData);
+              sendPcmToAsrClients(pcmData.buffer as ArrayBuffer);
+            }
+          },
+        });
 
         // 不让 WebSocket 握手阻塞「已开始录音」。连接失败时原声仍继续，
         // 结束后会自动走完整原声转写。
@@ -663,11 +663,8 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         stream.getTracks().forEach(track => track.stop());
       }
       releaseScreenTrack();
-      if (pcmProcessorRef.current) {
-        pcmProcessorRef.current.disconnect();
-        pcmProcessorRef.current.onaudioprocess = null;
-        pcmProcessorRef.current = null;
-      }
+      pcmCaptureRef.current?.stop();
+      pcmCaptureRef.current = null;
       if (audioContext) {
         await audioContext.close().catch(() => {});
         if (audioContextRef.current === audioContext) {
@@ -745,34 +742,30 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   }, []);
 
   /** Rebuild the PCM->ASR pipeline after ASR reconnection. */
-  const rebuildPcmPipeline = useCallback(() => {
+  const rebuildPcmPipeline = useCallback(async () => {
     const audioContext = audioContextRef.current;
     const source = sourceNodeRef.current;
     if (!audioContext || !source || !asrClientRef.current?.isConnected()) return;
 
     // Disconnect old processor
-    if (pcmProcessorRef.current) {
-      pcmProcessorRef.current.disconnect();
-      pcmProcessorRef.current.onaudioprocess = null;
-      pcmProcessorRef.current = null;
-    }
+    pcmCaptureRef.current?.stop();
+    pcmCaptureRef.current = null;
 
     const actualSampleRate = audioContext.sampleRate;
     pcmResamplerRef.current ??= new StreamingPcmResampler(actualSampleRate, wsSampleRate);
-    pcmProcessorRef.current = audioContext.createScriptProcessor(PCM_PROCESSOR_BUFFER_SIZE, 1, 1);
-
-    pcmProcessorRef.current.onaudioprocess = (e) => {
-      if (asrClientRef.current || pendingAsrClientRef.current) {
-        const inputData = e.inputBuffer.getChannelData(0);
-        const resampledData = pcmResamplerRef.current?.process(inputData) ?? new Float32Array();
-        if (resampledData.length === 0) return;
-        const pcmData = float32ToInt16(resampledData);
-        sendPcmToAsrClients(pcmData.buffer as ArrayBuffer);
-      }
-    };
-
-    source.connect(pcmProcessorRef.current);
-    pcmProcessorRef.current.connect(audioContext.destination);
+    pcmCaptureRef.current = await createPcmCapture({
+      audioContext,
+      source,
+      bufferSize: PCM_PROCESSOR_BUFFER_SIZE,
+      onChunk: (inputData) => {
+        if (asrClientRef.current || pendingAsrClientRef.current) {
+          const resampledData = pcmResamplerRef.current?.process(inputData) ?? new Float32Array();
+          if (resampledData.length === 0) return;
+          const pcmData = float32ToInt16(resampledData);
+          sendPcmToAsrClients(pcmData.buffer as ArrayBuffer);
+        }
+      },
+    });
   }, [sendPcmToAsrClients, wsSampleRate]);
 
   // 录音中切换说话人分离引擎。
@@ -1144,14 +1137,11 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     }
 
     try {
-      if (pcmProcessorRef.current) {
-        pcmProcessorRef.current.disconnect();
-        pcmProcessorRef.current.onaudioprocess = null;
-        pcmProcessorRef.current = null;
-      }
+      pcmCaptureRef.current?.stop();
+      pcmCaptureRef.current = null;
     } catch (err) {
-      console.error('[Recorder] pcmProcessor disconnect error:', err);
-      pcmProcessorRef.current = null;
+      console.error('[Recorder] pcmCapture stop error:', err);
+      pcmCaptureRef.current = null;
     }
     pcmResamplerRef.current = null;
 
@@ -1319,11 +1309,8 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     await Promise.all(clients.map(async (client) => {
       try { await client.stop(); } catch { /* ignore */ }
     }));
-    if (pcmProcessorRef.current) {
-      pcmProcessorRef.current.disconnect();
-      pcmProcessorRef.current.onaudioprocess = null;
-      pcmProcessorRef.current = null;
-    }
+    pcmCaptureRef.current?.stop();
+    pcmCaptureRef.current = null;
     pcmResamplerRef.current = null;
     if (animationIdRef.current) {
       cancelAnimationFrame(animationIdRef.current);
@@ -1396,10 +1383,8 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     return () => {
       if (animationIdRef.current) cancelAnimationFrame(animationIdRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
-      if (pcmProcessorRef.current) {
-        pcmProcessorRef.current.disconnect();
-        pcmProcessorRef.current.onaudioprocess = null;
-      }
+      pcmCaptureRef.current?.stop();
+      pcmCaptureRef.current = null;
       pcmResamplerRef.current = null;
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop();
