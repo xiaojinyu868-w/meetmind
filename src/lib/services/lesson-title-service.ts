@@ -69,6 +69,8 @@ export function isGenericLessonTitle(title: string): boolean {
   if (!trimmed) return true;
   if (/^录音\s*\d{1,2}:\d{2}/.test(trimmed)) return true;
   if (/^屏幕截图/.test(trimmed)) return true;
+  // 纯数字长串：时间戳文件名（如 1785177988742）或 ID 被误当标题
+  if (/^\d{6,}$/.test(trimmed)) return true;
   return BANNED_GENERIC_WORDS.includes(trimmed);
 }
 
@@ -174,16 +176,12 @@ export async function backfillGenericLessonTitles(params: {
       userId: params.userId,
       status: { not: 'deleted' },
       normalizedText: { not: null },
-      OR: [
-        { title: { startsWith: '录音' } },
-        { title: { startsWith: '屏幕截图' } },
-      ],
       // 失败过的候选打标排除：不对同一批坏候选无限重试 LLM
       NOT: { metadataJson: { contains: '"titleBackfillFailedAt"' } },
     },
     select: { id: true, title: true, normalizedText: true, occurredAt: true, createdAt: true },
     orderBy: { createdAt: 'desc' },
-    take: limit * 3, // 多取一些，质量门刷掉后仍能凑满 limit
+    take: limit * 6, // 多取一些：零信息判断在 JS 侧做（录音/截图/纯数字文件名…），刷掉后仍能凑满 limit
   });
 
   let retitled = 0;

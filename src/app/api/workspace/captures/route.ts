@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authService } from '@/lib/services/auth-service';
 import { isCommonstackEchoConfigured } from '@/lib/services/commonstack-echo-service';
+import prisma from '@/lib/prisma';
 import workspaceContextService from '@/lib/services/workspace-context-service';
 import workspaceEchoService from '@/lib/services/workspace-echo-service';
+import { isGenericLessonTitle } from '@/lib/services/lesson-title-service';
+import {
+  applyLessonUnderstanding,
+  generateLessonUnderstanding,
+} from '@/lib/services/lesson-understanding-service';
 import { createLogger } from '@/lib/logger';
 const log = createLogger('workspace/captures');
 
@@ -65,6 +71,40 @@ export async function POST(request: NextRequest) {
     });
 
     const echoStatus = await workspaceEchoService.getDailyEchoStatusForWorkspace(result.workspace.id);
+
+    // 课后理解安全网：录课 capture 落库时若标题仍是零信息（录音 HH:MM、纯数字文件名…）
+    // 且带转录文本，45s 后复查——客户端 stop 路径的理解通常已完成改名（直接跳过）；
+    // 客户端中途关闭/样本当时太短导致没改名时，服务端补一次（标题 + 摘要）。
+    if (
+      result.capture
+      && typeof body.normalizedText === 'string'
+      && body.normalizedText.trim().length >= 80
+      && isGenericLessonTitle(result.capture.title)
+    ) {
+      const captureId = result.capture.id;
+      const sessionId = typeof body.metadata?.sessionId === 'string' ? body.metadata.sessionId : captureId;
+      const occurredAt = body.occurredAt ? new Date(body.occurredAt) : new Date();
+      const sample = body.normalizedText.trim();
+      setTimeout(() => {
+        void (async () => {
+          const current = await prisma.workspaceCapture.findUnique({
+            where: { id: captureId },
+            select: { title: true },
+          });
+          if (!current || !isGenericLessonTitle(current.title)) return;
+          const understanding = await generateLessonUnderstanding({ transcriptSample: sample });
+          if (!understanding) return;
+          // 这份样本没有时间锚点：精选片段留给客户端锚点版去写，这里只补标题和摘要
+          await applyLessonUnderstanding({
+            userId: payload.sub,
+            captureId,
+            sessionId,
+            understanding: { ...understanding, highlights: [] },
+            occurredAt,
+          });
+        })().catch((error) => log.warn('capture understanding safety-net failed', { error: String(error) }));
+      }, 45_000);
+    }
 
     return NextResponse.json({
       success: true,

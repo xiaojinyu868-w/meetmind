@@ -95,7 +95,7 @@ export async function generateLessonUnderstanding(params: {
   courseTitle?: string | null;
 }): Promise<LessonUnderstanding | null> {
   const sample = params.transcriptSample.trim().slice(0, SAMPLE_MAX_CHARS);
-  if (sample.length < 200) return null;
+  if (sample.length < 80) return null;
 
   try {
     const response = await chat(

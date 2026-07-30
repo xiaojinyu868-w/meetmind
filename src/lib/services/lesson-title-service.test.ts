@@ -65,6 +65,16 @@ describe('isGenericLessonTitle', () => {
     expect(isGenericLessonTitle('屏幕截图 · 14:32')).toBe(true);
   });
 
+  it('识别纯数字时间戳/ID 标题', () => {
+    expect(isGenericLessonTitle('1785177988742')).toBe(true);
+    expect(isGenericLessonTitle('20260726')).toBe(true);
+  });
+
+  it('含文字的数字标题不误判', () => {
+    expect(isGenericLessonTitle('第 3 讲')).toBe(false);
+    expect(isGenericLessonTitle('条件概率与贝叶斯公式 · 概率论 · 7-28')).toBe(false);
+  });
+
   it('真实标题不误判', () => {
     expect(isGenericLessonTitle('条件概率与贝叶斯公式 · 概率论 · 7-28')).toBe(false);
   });

@@ -44,7 +44,7 @@ export async function requestLessonUnderstanding(params: RetitleParams): Promise
 
   try {
     const transcriptSample = buildAnchoredSample(segments);
-    if (transcriptSample.length < 200) return undefined;
+    if (transcriptSample.length < 80) return undefined;
 
     const response = await fetch('/api/classroom/understanding', {
       method: 'POST',
