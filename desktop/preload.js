@@ -16,5 +16,9 @@ contextBridge.exposeInMainWorld('meetmindCompanion', {
   showPetMenu: () => ipcRenderer.invoke('pet:menu'),
   // 捕获成功的吞食动画（截图进收集线后由主进程推来）
   onGulp: (handler) => ipcRenderer.on('pet:gulp', () => handler()),
+  // 姿态圆钮：扩/缩宠物窗口给圆钮腾位置（底部锚定，宠物不动）
+  setDock: (open) => ipcRenderer.invoke('pet:set-dock', Boolean(open)),
+  // 圆钮「收下这一页」：与全局热键同一条截图流程
+  captureScreen: () => ipcRenderer.invoke('desktop:capture-screen'),
   quit: () => ipcRenderer.invoke('companion:quit'),
 });

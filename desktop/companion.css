@@ -35,9 +35,61 @@ html, body {
   opacity: 0;
   transition: opacity 0.22s ease, transform 0.22s ease;
   pointer-events: none;
-  z-index: 2;
+  z-index: 3;
 }
 .speech[data-visible='true'] {
   opacity: 1;
   transform: translate(-50%, 0);
+}
+
+/* 姿态圆钮：点宠物后浮出的一排小动作，看得见、不用猜 */
+#dock {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  z-index: 2;
+  pointer-events: none;
+}
+#dock[data-open='true'] { pointer-events: auto; }
+
+#dock button {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  width: 52px;
+  padding: 8px 0 7px;
+  border: 1px solid rgba(23, 23, 19, 0.14);
+  border-radius: 15px;
+  background: rgba(248, 247, 242, 0.97);
+  color: #171713;
+  cursor: pointer;
+  box-shadow: 0 10px 26px rgba(23, 23, 19, 0.16);
+  opacity: 0;
+  transform: translateY(8px) scale(0.86);
+  transition: opacity 0.22s ease, transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease;
+  pointer-events: none;
+}
+#dock button svg { width: 18px; height: 18px; }
+#dock button span { font-size: 10px; font-weight: 650; line-height: 1; }
+#dock button:hover { background: #fff; transform: translateY(0) scale(1.04); }
+#dock button:active { transform: translateY(1px) scale(0.97); }
+
+#dock[data-open='true'] button {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+#dock[data-open='true'] button:nth-child(1) { transition-delay: 0ms; }
+#dock[data-open='true'] button:nth-child(2) { transition-delay: 55ms; }
+#dock[data-open='true'] button:nth-child(3) { transition-delay: 110ms; }
+
+/* 旁听中：耳朵钮点亮 */
+#dock button[data-act='listen'][data-active='true'] {
+  background: #ff6424;
+  border-color: #ff6424;
+  color: #171713;
 }

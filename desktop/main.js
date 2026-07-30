@@ -311,6 +311,28 @@ ipcMain.handle('pet:drop-files', async (_event, files) => {
   if (uploaded > 0) companionWindow?.webContents.send('pet:gulp');
   return { ok: uploaded > 0, uploaded };
 });
+
+// 姿态圆钮：宠物窗口扩/缩给圆钮腾位置。
+// 画布是底部锚定的，向上扩窗宠物在屏幕上原地不动；顶部没空间就向下扩。
+let dockCollapsedBounds = null;
+ipcMain.handle('pet:set-dock', (_event, open) => {
+  if (!companionWindow) return;
+  const DOCK_H = 78;
+  if (open) {
+    dockCollapsedBounds = companionWindow.getBounds();
+    const b = dockCollapsedBounds;
+    const area = screen.getDisplayMatching(b).workArea;
+    const roomAbove = b.y - area.y >= DOCK_H;
+    const next = roomAbove
+      ? { x: b.x, y: b.y - DOCK_H, width: b.width, height: b.height + DOCK_H }
+      : { x: b.x, y: b.y, width: b.width, height: b.height + DOCK_H };
+    companionWindow.setBounds(clampToWorkArea(next));
+  } else if (dockCollapsedBounds) {
+    companionWindow.setBounds(dockCollapsedBounds);
+    dockCollapsedBounds = null;
+  }
+});
+
 ipcMain.handle('pet:menu', () => {
   const menu = Menu.buildFromTemplate([
     { label: '打开 MeetMind', click: () => showShellWindowAt(MEETMIND_URL) },
