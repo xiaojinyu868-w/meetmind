@@ -100,6 +100,17 @@ function say(line, duration = 1800) {
   speechTimer = setTimeout(() => { speechEl.dataset.visible = 'false'; }, duration);
 }
 
+/* 旁听时长：悬停时轻声报时（每 5s 刷新，不打扰） */
+let listenSpeechTimer = null;
+function updateListenSpeech() {
+  if (!pet.listening) return;
+  const totalSec = Math.floor((Date.now() - pet.listeningSince) / 1000);
+  const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
+  const ss = String(totalSec % 60).padStart(2, '0');
+  speechEl.textContent = `旁听中 ${mm}:${ss}`;
+  speechEl.dataset.visible = 'true';
+}
+
 /* ---------- 状态切换（交叉淡化） ---------- */
 function setSprite(next) {
   if (pet.sprite === next) return;
@@ -279,6 +290,18 @@ function touch() {
 canvas.addEventListener('pointerenter', () => {
   touch();
   leanY.kick(-0.6);
+  if (pet.listening) {
+    updateListenSpeech();
+    listenSpeechTimer = setInterval(updateListenSpeech, 5000);
+  }
+});
+
+canvas.addEventListener('pointerleave', () => {
+  if (listenSpeechTimer) {
+    clearInterval(listenSpeechTimer);
+    listenSpeechTimer = null;
+    speechEl.dataset.visible = 'false';
+  }
 });
 
 canvas.addEventListener('pointermove', (event) => {
@@ -365,6 +388,10 @@ async function toggleListening() {
     } else {
       if (pet.listening) say('记下了，去整理', 1800);
       pet.listening = false;
+      if (listenSpeechTimer) {
+        clearInterval(listenSpeechTimer);
+        listenSpeechTimer = null;
+      }
       setMode('idle');
       if (result?.reason === 'not-logged-in') say('先在主窗口登录一下', 2200);
       if (result?.reason === 'hook-missing') say('主窗口还没准备好', 2000);

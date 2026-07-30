@@ -12,7 +12,7 @@ const {
   createTray,
 } = require('./shell-window');
 const { registerScreenshotHotkey, retryPendingShots, captureOnce, uploadImageFile, readAccessToken } = require('./screenshot');
-const { toggleQuickPanel, hideQuickPanel } = require('./quick-panel');
+const { toggleQuickPanel, hideQuickPanel, registerQuickPanelHotkey } = require('./quick-panel');
 const { startUpdateChecker } = require('./updater');
 
 // Web 版 MeetMind 地址：生产默认走 capture 站点，本地调试用 MEETMIND_URL 覆盖
@@ -175,6 +175,8 @@ app.whenReady().then(() => {
     onCaptured: () => companionWindow?.webContents.send('pet:gulp'),
   };
   registerScreenshotHotkey(screenshotDeps);
+  // 全局热键 Cmd/Ctrl+Shift+K：随时唤起小窗提问
+  registerQuickPanelHotkey(MEETMIND_URL);
   // 上次失败暂存的截图，启动时补传一次（未登录则保留到下次）
   void retryPendingShots(screenshotDeps);
   // 自动更新检查：发现新 desktop-v* release 时安静提示一次

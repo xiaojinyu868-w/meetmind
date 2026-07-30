@@ -83,8 +83,23 @@ function hideQuickPanel() {
   if (panelWindow?.isVisible()) panelWindow.hide();
 }
 
+// 全局热键 Cmd/Ctrl+Shift+K：任何时候伸手就能问（K = 问 / quick ask）
+function registerQuickPanelHotkey(meetmindUrl) {
+  try {
+    const { globalShortcut, app } = require('electron');
+    const ok = globalShortcut.register('CommandOrControl+Shift+K', () => {
+      toggleQuickPanel(meetmindUrl);
+    });
+    if (!ok) console.warn('[desktop] 全局热键 Cmd/Ctrl+Shift+K 注册失败（可能被占用）');
+    app.on('will-quit', () => globalShortcut.unregisterAll());
+  } catch (err) {
+    console.warn('[desktop] 小窗热键注册异常', err);
+  }
+}
+
 module.exports = {
   createQuickPanel,
   toggleQuickPanel,
   hideQuickPanel,
+  registerQuickPanelHotkey,
 };
