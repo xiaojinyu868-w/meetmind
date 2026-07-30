@@ -115,6 +115,8 @@ export function useMobileNav() {
   return {
     currentScreen: current.screen,
     reviewContext: current.reviewContext ?? resolveRetainedReviewContext(stack),
+    /** 栈内是否还有可返回的上一页（resetTo 直入的页面为 false） */
+    canPop: stack.length > 1,
     push,
     replace,
     pop,

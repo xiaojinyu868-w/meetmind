@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>方案 A · 深夜森林 — MeetMind 视觉系统</title>
+<style>
+  @font-face { font-family: 'Inter'; src: url('../../public/fonts/inter-var-latin.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+  @font-face { font-family: 'Instrument Serif'; src: url('../../public/fonts/instrument-serif-400.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+  @font-face { font-family: 'Instrument Serif'; src: url('../../public/fonts/instrument-serif-400-italic.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+  @font-face { font-family: 'JetBrains Mono'; src: url('../../public/fonts/jetbrains-mono-var-latin.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+
+  :root {
+    --bg: #0a1510;
+    --bg-2: #0e1c15;
+    --glass: rgba(255, 255, 255, 0.045);
+    --glass-2: rgba(255, 255, 255, 0.08);
+    --line: rgba(255, 255, 255, 0.12);
+    --ink: #eef3ec;
+    --ink-2: rgba(238, 243, 236, 0.64);
+    --ink-3: rgba(238, 243, 236, 0.38);
+    --jade: #7fd6a8;
+    --jade-bright: #96e8bd;
+    --jade-glow: rgba(127, 214, 168, 0.16);
+    --vermilion: #e8735c;
+    --vermilion-glow: rgba(232, 115, 92, 0.14);
+    --serif: 'Instrument Serif', Georgia, serif;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background:
+      radial-gradient(90% 60% at 85% -5%, rgba(47, 107, 85, 0.55) 0%, transparent 55%),
+      radial-gradient(60% 45% at -5% 35%, rgba(36, 76, 61, 0.5) 0%, transparent 60%),
+      radial-gradient(55% 40% at 55% 105%, rgba(47, 107, 85, 0.35) 0%, transparent 65%),
+      var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  }
+  main { position: relative; z-index: 1; }
+  .wrap { width: min(100% - 48px, 1180px); margin: 0 auto; }
+
+  /* ---------- 导航 ---------- */
+  nav {
+    position: sticky;
+    top: 14px;
+    z-index: 50;
+    display: flex;
+    width: min(100% - 28px, 1180px);
+    min-height: 58px;
+    margin: 14px auto 0;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px 0 16px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(10, 21, 16, 0.65);
+    backdrop-filter: blur(20px);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  }
+  .brand { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 750; letter-spacing: -0.02em; }
+  .brand i { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--glass-2); font-style: normal; }
+  nav .links { display: flex; align-items: center; gap: 2px; }
+  nav .links a { padding: 8px 13px; border-radius: 999px; color: var(--ink-2); font-size: 12px; font-weight: 600; text-decoration: none; transition: 0.15s; }
+  nav .links a:hover { background: var(--glass-2); color: var(--ink); }
+  nav .cta { margin-left: 6px; padding: 10px 18px !important; background: var(--jade) !important; color: #0a1510 !important; font-weight: 700 !important; box-shadow: 0 0 24px rgba(127, 214, 168, 0.35); }
+
+  /* ---------- 通用标签 ---------- */
+  .eyebrow { display: inline-flex; align-items: center; gap: 8px; color: var(--jade); font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; }
+  .eyebrow::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--vermilion); box-shadow: 0 0 12px var(--vermilion); }
+  h2.sec { margin-top: 20px; font-family: var(--serif); font-size: clamp(38px, 4.6vw, 58px); font-weight: 400; letter-spacing: -0.015em; line-height: 1.12; }
+  h2.sec em { font-style: italic; color: var(--jade); }
+  p.lead { max-width: 34em; margin-top: 18px; color: var(--ink-2); font-size: 15px; line-height: 1.85; }
+  section { padding: clamp(80px, 9vw, 130px) 0; }
+
+  /* ---------- Hero ---------- */
+  .hero { position: relative; display: flex; min-height: 92vh; align-items: center; justify-content: center; text-align: center; }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 8%; left: 50%;
+    width: 720px; height: 480px;
+    background: radial-gradient(50% 50% at 50% 50%, rgba(127, 214, 168, 0.14) 0%, transparent 70%);
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+  .hero-inner { position: relative; }
+  .hero .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--glass);
+    color: var(--ink-2);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    backdrop-filter: blur(10px);
+  }
+  .hero .tag i { width: 6px; height: 6px; border-radius: 50%; background: var(--jade); box-shadow: 0 0 10px var(--jade); animation: pulse 2.4s ease-out infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(127,214,168,.5);} 70% { box-shadow: 0 0 0 8px rgba(127,214,168,0);} 100% { box-shadow: 0 0 0 0 rgba(127,214,168,0);} }
+  .hero h1 { margin-top: 30px; font-size: clamp(52px, 7vw, 96px); font-weight: 690; letter-spacing: -0.06em; line-height: 1.02; }
+  .hero h1 em { font-family: var(--serif); font-style: italic; font-weight: 400; letter-spacing: -0.02em; color: var(--jade); text-shadow: 0 0 60px rgba(127, 214, 168, 0.4); }
+  .hero p { max-width: 34em; margin: 28px auto 0; color: var(--ink-2); font-size: 16px; line-height: 1.85; }
+  .hero .actions { display: flex; margin-top: 40px; align-items: center; justify-content: center; gap: 14px; }
+  .btn-primary {
+    display: inline-flex;
+    min-height: 52px;
+    align-items: center;
+    gap: 9px;
+    padding: 0 26px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--jade-bright), var(--jade));
+    color: #0a1510;
+    font-size: 14px;
+    font-weight: 750;
+    text-decoration: none;
+    box-shadow: 0 8px 40px rgba(127, 214, 168, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    transition: transform 0.18s, box-shadow 0.18s;
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 14px 56px rgba(127, 214, 168, 0.5), inset 0 1px 0 rgba(255,255,255,.4); }
+  .btn-ghost {
+    display: inline-flex;
+    min-height: 52px;
+    align-items: center;
+    padding: 0 24px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--glass);
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 650;
+    text-decoration: none;
+    backdrop-filter: blur(10px);
+    transition: background 0.18s;
+  }
+  .btn-ghost:hover { background: var(--glass-2); }
+  /* 悬浮碎片 */
+  .orb { position: absolute; padding: 11px 18px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,0.07); color: var(--ink-2); font-size: 11.5px; font-weight: 600; backdrop-filter: blur(14px); box-shadow: 0 18px 44px rgba(0,0,0,.35); animation: float 7s ease-in-out infinite; }
+  .orb.o1 { top: 24%; left: 8%; }
+  .orb.o2 { top: 20%; right: 7%; animation-delay: 1.6s; color: var(--jade); }
+  .orb.o3 { bottom: 18%; left: 12%; animation-delay: 3s; }
+  .orb.o4 { bottom: 24%; right: 10%; animation-delay: 2.2s; }
+  @keyframes float { 0%,100% { transform: translateY(0) rotate(-1deg);} 50% { transform: translateY(-12px) rotate(1deg);} }
+  @media (max-width: 900px) { .orb { display: none; } }
+
+  /* ---------- 课堂线：时间轴 ---------- */
+  .timeline { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 56px; gap: 18px; }
+  .moment {
+    position: relative;
+    display: flex;
+    min-height: 380px;
+    flex-direction: column;
+    padding: 22px;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background: linear-gradient(170deg, var(--glass-2), var(--glass));
+    backdrop-filter: blur(12px);
+    transition: transform 0.3s cubic-bezier(.22,1,.36,1), border-color 0.3s, box-shadow 0.3s;
+  }
+  .moment:hover { transform: translateY(-5px); border-color: rgba(127, 214, 168, 0.4); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45), 0 0 50px rgba(127, 214, 168, 0.07); }
+  .moment .time { display: flex; align-items: center; gap: 8px; color: var(--ink-3); font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.08em; }
+  .moment .time i { width: 8px; height: 8px; border: 2px solid var(--jade); border-radius: 50%; box-shadow: 0 0 10px rgba(127, 214, 168, 0.6); }
+  .moment .verb { position: absolute; top: 18px; right: 18px; display: grid; width: 34px; height: 34px; place-items: center; border-radius: 11px; background: linear-gradient(150deg, #2f6650, #1d4232); color: var(--jade-bright); font-family: var(--serif); font-size: 17px; box-shadow: 0 6px 20px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.15); }
+  .moment .mock { flex: 1; margin-top: 18px; padding: 16px; border: 1px solid var(--line); border-radius: 15px; background: rgba(0, 0, 0, 0.25); }
+  .moment h3 { margin-top: 18px; font-size: 19px; font-weight: 680; letter-spacing: -0.02em; }
+  .moment > p { margin-top: 8px; color: var(--ink-2); font-size: 12.5px; line-height: 1.75; }
+  .mock .live { display: inline-flex; align-items: center; gap: 7px; color: var(--vermilion); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 0.12em; }
+  .mock .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--vermilion); box-shadow: 0 0 10px var(--vermilion); }
+  .mock .tline { margin-top: 10px; color: var(--ink-3); font-size: 12.5px; line-height: 1.7; }
+  .mock .tline.hot { color: var(--ink); font-weight: 620; }
+  .mock .chips { display: flex; gap: 6px; margin-top: 14px; }
+  .mock .chips span { padding: 4px 10px; border: 1px solid rgba(127,214,168,.35); border-radius: 999px; background: var(--jade-glow); color: var(--jade); font-size: 10px; font-weight: 650; }
+  .mock .q { margin-left: auto; max-width: 88%; padding: 9px 12px; border-radius: 12px 12px 4px 12px; background: linear-gradient(140deg, #35795c, #265642); color: #eafff3; font-size: 12px; line-height: 1.55; }
+  .mock .a { margin-top: 9px; max-width: 94%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px 12px 12px 4px; background: var(--glass-2); color: var(--ink); font-size: 12px; line-height: 1.6; }
+  .mock .a b { margin-left: 7px; padding: 2px 7px; border-radius: 999px; background: var(--vermilion-glow); color: var(--vermilion); font-family: var(--mono); font-size: 9px; }
+  .mock .sheet strong { display: block; padding-bottom: 8px; border-bottom: 1px solid var(--line); color: var(--ink); font-size: 11.5px; }
+  .mock .sheet span { display: block; margin-top: 8px; color: var(--ink-2); font-family: var(--mono); font-size: 10px; line-height: 1.7; }
+  .mock .sheet span::before { content: '◆ '; color: var(--vermilion); font-size: 7px; }
+  @media (max-width: 900px) { .timeline { grid-template-columns: 1fr; } }
+
+  /* ---------- 应用矩阵 ---------- */
+  .switch { display: grid; grid-template-columns: 250px 1fr; margin-top: 56px; gap: 18px; }
+  .tabs { display: flex; flex-direction: column; gap: 6px; }
+  .tabs button {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 13px 16px; border: 1px solid transparent; border-radius: 14px;
+    background: transparent; color: var(--ink); cursor: pointer; text-align: left;
+    font-family: inherit; transition: 0.18s;
+  }
+  .tabs button strong { font-size: 13.5px; font-weight: 650; }
+  .tabs button span { color: var(--ink-3); font-size: 10.5px; }
+  .tabs button:hover { background: var(--glass); }
+  .tabs button.on { border-color: rgba(127, 214, 168, 0.45); background: linear-gradient(140deg, rgba(127,214,168,.16), rgba(127,214,168,.05)); box-shadow: 0 0 30px rgba(127, 214, 168, 0.08), inset 0 1px 0 rgba(255,255,255,.08); }
+  .tabs button.on strong { color: var(--jade-bright); }
+  .tabs button.on span { color: var(--jade); }
+  .stage {
+    min-height: 400px;
+    padding: 30px;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background: linear-gradient(170deg, var(--glass-2), rgba(255,255,255,0.02));
+    backdrop-filter: blur(12px);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.4);
+  }
+  .fcard {
+    display: grid; height: 300px; place-items: center;
+    border: 1px solid rgba(127, 214, 168, 0.3); border-radius: 18px;
+    background:
+      radial-gradient(80% 90% at 50% 0%, rgba(127, 214, 168, 0.12) 0%, transparent 60%),
+      rgba(0, 0, 0, 0.3);
+    color: var(--ink); font-size: 20px; font-weight: 650;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 20px 50px rgba(0,0,0,.35);
+    cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .fcard:hover { border-color: rgba(127, 214, 168, 0.6); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 20px 60px rgba(127,214,168,.12); }
+  .fbar { display: flex; margin-top: 16px; align-items: center; justify-content: space-between; color: var(--ink-3); font-family: var(--mono); font-size: 10px; }
+  .fbar b { padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px; color: var(--jade); font-weight: 600; cursor: pointer; }
+  @media (max-width: 860px) { .switch { grid-template-columns: 1fr; } .tabs { flex-direction: row; overflow-x: auto; } }
+
+  /* ---------- 收集线 ---------- */
+  .collect { border: 1px solid var(--line); border-radius: 30px; background: linear-gradient(150deg, rgba(47, 107, 85, 0.28), rgba(10, 21, 16, 0.4) 55%); padding: clamp(44px, 6vw, 80px); backdrop-filter: blur(10px); }
+  .collect .grid { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: clamp(40px, 5vw, 72px); }
+  .stream { display: flex; flex-direction: column; gap: 12px; }
+  .msg { padding: 13px 15px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(8px); }
+  .msg .ch { display: inline-block; margin-bottom: 9px; padding: 3px 9px; border-radius: 999px; font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 0.1em; }
+  .msg .ch.wx { background: rgba(155, 226, 115, 0.15); color: #a8e583; }
+  .msg .ch.dt { background: rgba(140, 190, 220, 0.15); color: #a5cbe2; }
+  .msg .out { margin-left: auto; width: fit-content; max-width: 86%; padding: 9px 12px; border-radius: 12px 12px 4px 12px; background: #95e06f; color: #12260f; font-size: 12px; line-height: 1.55; box-shadow: 0 8px 24px rgba(149, 224, 111, 0.15); }
+  .msg .out.plain { background: var(--glass-2); color: var(--ink); border: 1px solid var(--line); box-shadow: none; }
+  .msg .in { margin-top: 8px; display: flex; gap: 8px; color: var(--ink-2); font-size: 11.5px; line-height: 1.6; }
+  .msg .in i { width: 6px; height: 6px; flex: 0 0 auto; margin-top: 6px; border-radius: 50%; background: var(--jade); box-shadow: 0 0 8px rgba(127,214,168,.7); }
+  .collect h2.sec { color: #fff; }
+  .collect .note { display: flex; gap: 12px; margin-top: 30px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--glass); color: var(--ink-2); font-size: 13px; line-height: 1.75; }
+  .collect .note i { width: 7px; height: 7px; flex: 0 0 auto; margin-top: 7px; border-radius: 50%; background: var(--vermilion); box-shadow: 0 0 10px var(--vermilion); }
+  @media (max-width: 900px) { .collect .grid { grid-template-columns: 1fr; } }
+
+  /* ---------- 上下文 ---------- */
+  .memory { width: min(100%, 720px); margin: 52px auto 0; overflow: hidden; border: 1px solid var(--line); border-radius: 22px; background: linear-gradient(170deg, var(--glass-2), var(--glass)); backdrop-filter: blur(12px); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.4); }
+  .memory > header { padding: 15px 22px; border-bottom: 1px solid var(--line); color: var(--ink-2); font-size: 12px; font-weight: 700; letter-spacing: 0.02em; }
+  .mrow { display: flex; align-items: center; gap: 14px; padding: 15px 22px; border-top: 1px solid var(--line); }
+  .mrow:first-of-type { border-top: 0; }
+  .kind { flex: 0 0 auto; padding: 4px 10px; border-radius: 999px; font-size: 10px; font-weight: 700; }
+  .kind.k1 { background: var(--vermilion-glow); color: var(--vermilion); border: 1px solid rgba(232,115,92,.3); }
+  .kind.k2 { background: var(--jade-glow); color: var(--jade); border: 1px solid rgba(127,214,168,.3); }
+  .kind.k3 { background: rgba(240, 220, 150, 0.12); color: #e8d48a; border: 1px solid rgba(240,220,150,.25); }
+  .kind.k4 { background: rgba(150, 200, 235, 0.12); color: #a5cbe2; border: 1px solid rgba(150,200,235,.25); }
+  .mrow .main { flex: 1; min-width: 0; }
+  .mrow .main strong { display: block; font-size: 13.5px; font-weight: 650; }
+  .mrow .main small { color: var(--ink-3); font-family: var(--mono); font-size: 9.5px; }
+  .mrow .acts { display: flex; gap: 2px; }
+  .mrow .acts b { padding: 6px 10px; border-radius: 8px; color: var(--ink-3); font-size: 11px; font-weight: 620; cursor: pointer; transition: 0.15s; }
+  .mrow .acts b:hover { background: var(--glass-2); color: var(--ink); }
+  .memory > footer { display: flex; align-items: center; gap: 9px; padding: 13px 22px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 11.5px; }
+  .memory > footer i { width: 6px; height: 6px; border-radius: 50%; background: var(--jade); }
+
+  /* ---------- CTA ---------- */
+  .final { padding-bottom: clamp(90px, 10vw, 140px); text-align: center; }
+  .final h2 { font-family: var(--serif); font-size: clamp(42px, 5.4vw, 72px); font-weight: 400; letter-spacing: -0.02em; line-height: 1.08; }
+  .final h2 em { font-style: italic; color: var(--jade); }
+  .final .actions { margin-top: 38px; }
+  footer.page { display: flex; width: min(100% - 48px, 1180px); margin: 0 auto; align-items: center; justify-content: space-between; padding: 26px 0 34px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 11px; }
+</style>
+</head>
+<body>
+<main>
+  <nav>
+    <span class="brand"><i>🐙</i>MeetMind</span>
+    <div class="links">
+      <a href="#class">课堂线</a><a href="#apps">应用矩阵</a><a href="#collect">收集线</a><a href="#">技术</a><a href="#">登录</a>
+      <a class="cta" href="#">先试听一节课</a>
+    </div>
+  </nav>
+
+  <header class="hero wrap">
+    <span class="orb o1">条件概率 · 18:42</span>
+    <span class="orb o2">已接上：上节课的贝叶斯公式</span>
+    <span class="orb o3">板书已收下</span>
+    <span class="orb o4">课堂脉络正在生长</span>
+    <div class="hero-inner">
+      <span class="tag"><i></i>真正听过这节课的 AI 同学</span>
+      <h1>真正听过这节课，<br /><em>才知道你哪里没懂。</em></h1>
+      <p>录下课堂，发来资料。MeetMind 记得老师怎么讲，也知道你在哪里卡住，把每一次学习接成一条不会断的线。</p>
+      <div class="actions">
+        <a class="btn-primary" href="#">先试听一节课 →</a>
+        <a class="btn-ghost" href="#class">看看它怎么工作</a>
+      </div>
+    </div>
+  </header>
+
+  <section class="wrap" id="class">
+    <span class="eyebrow">课堂线</span>
+    <h2 class="sec">从一节真实的课，<br /><em>一直陪到考试。</em></h2>
+    <div class="timeline">
+      <article class="moment">
+        <span class="time"><i></i>09:02 · 上课中</span><span class="verb">录</span>
+        <div class="mock">
+          <span class="live"><i></i>LIVE</span>
+          <p class="tline">条件概率不是换一个公式，</p>
+          <p class="tline hot">而是缩小我们正在观察的世界。</p>
+          <div class="chips"><span>条件概率</span><span>样本空间</span></div>
+        </div>
+        <h3>先录下这节课</h3>
+        <p>麦克风、电脑声音，或两路都录。原声一直在，转录只是开始。</p>
+      </article>
+      <article class="moment">
+        <span class="time"><i></i>09:47 · 课中</span><span class="verb">问</span>
+        <div class="mock">
+          <div class="q">这里为什么能直接用贝叶斯？</div>
+          <div class="a">老师先把观察范围缩小到了「检测为阳性」的人。<b>18:42</b></div>
+        </div>
+        <h3>同桌跟上课堂</h3>
+        <p>卡住时直接问，不用举手，也不用等下课。</p>
+      </article>
+      <article class="moment">
+        <span class="time"><i></i>考前 · 一周</span><span class="verb">考</span>
+        <div class="mock sheet">
+          <strong>概率论 · 期末一页纸</strong>
+          <span>P(A|B) = P(AB) / P(B)</span>
+          <span>后验 ∝ 似然 × 先验</span>
+          <span>易错：混淆 P(A|B) 与 P(B|A)</span>
+        </div>
+        <h3>多节课连成考试范围</h3>
+        <p>几节课成单元，一学期压成一张能带进考场的速查表。</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="wrap" id="apps">
+    <span class="eyebrow">应用矩阵</span>
+    <h2 class="sec">一节课，<em>长出七种学法。</em></h2>
+    <p class="lead">不是模板生成。每个应用都从老师真正讲过的内容里长出来，练完还能跳回原话对答案。</p>
+    <div class="switch">
+      <div class="tabs">
+        <button class="on"><strong>闪卡训练</strong><span>主动回忆</span></button>
+        <button><strong>课堂测验</strong><span>理解检验</span></button>
+        <button><strong>思维导图</strong><span>结构学习</span></button>
+        <button><strong>考试速查表</strong><span>可打印</span></button>
+        <button><strong>课堂播客</strong><span>通勤可听</span></button>
+        <button><strong>课堂信息图</strong><span>一张图带走</span></button>
+        <button><strong>讲给同桌听</strong><span>费曼检验</span></button>
+      </div>
+      <div class="stage">
+        <div class="fcard">什么是条件概率？</div>
+        <div class="fbar"><span>点卡片翻面 · 1 / 3</span><b>下一张 →</b></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="collect">
+    <div class="collect">
+      <div class="grid">
+        <div class="stream">
+          <div class="msg">
+            <span class="ch wx">微信</span>
+            <div class="out">贝叶斯定理的直觉解释</div>
+            <div class="in"><i></i>已收下这篇网页，归到「概率论 · 第 3 讲」</div>
+          </div>
+          <div class="msg">
+            <span class="ch dt">桌面端</span>
+            <div class="out plain">🖼 黑板照片</div>
+            <div class="in"><i></i>板书已收下，认出 4 个公式，接回今天的课堂</div>
+          </div>
+          <div class="msg">
+            <span class="ch wx">微信</span>
+            <div class="out">贝叶斯那里我还是没懂</div>
+            <div class="in"><i></i>你上节课卡在条件空间的变化——先沿板书把样本空间重新圈一遍</div>
+          </div>
+        </div>
+        <div>
+          <span class="eyebrow">收集线</span>
+          <h2 class="sec">像发消息一样，<br /><em>先把它收下。</em></h2>
+          <p class="lead">微信、截图、网页、语音和一闪而过的想法。不用分类，不用打标签。</p>
+          <div class="note"><i></i>模型在后台判断它属于哪门课、哪个目标、哪个问题，再悄悄回流到课堂和你的长期上下文。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div style="text-align:center">
+      <span class="eyebrow">上下文属于你</span>
+      <h2 class="sec">它记住的，<em>你都能改。</em></h2>
+    </div>
+    <div class="memory">
+      <header>它现在记得</header>
+      <div class="mrow"><span class="kind k1">困惑</span><div class="main"><strong>条件空间的变化</strong><small>概率论 · 第 3 讲 18:42</small></div><div class="acts"><b>纠正</b><b>暂停</b><b>忘掉</b></div></div>
+      <div class="mrow"><span class="kind k2">目标</span><div class="main"><strong>期末 85+</strong><small>概率论与数理统计</small></div><div class="acts"><b>纠正</b><b>暂停</b><b>忘掉</b></div></div>
+      <div class="mrow"><span class="kind k3">收藏</span><div class="main"><strong>贝叶斯定理的直觉解释</strong><small>来自网页 · 已接回第 3 讲</small></div><div class="acts"><b>纠正</b><b>暂停</b><b>忘掉</b></div></div>
+      <div class="mrow"><span class="kind k4">习惯</span><div class="main"><strong>先听一遍原声，再看整理</strong><small>最近 4 节课</small></div><div class="acts"><b>纠正</b><b>暂停</b><b>忘掉</b></div></div>
+      <footer><i></i>每一条都可以纠正、暂停，或者彻底忘掉。</footer>
+    </div>
+  </section>
+
+  <section class="final wrap">
+    <h2>下一次下课，<br /><em>别再从头整理。</em></h2>
+    <div class="actions"><a class="btn-primary" href="#">先试听一节课 →</a></div>
+  </section>
+
+  <footer class="page">
+    <span>🐙 MeetMind</span><span>真正懂你在学什么的 AI 同学</span><span>© 2026</span>
+  </footer>
+</main>
+</body>
+</html>

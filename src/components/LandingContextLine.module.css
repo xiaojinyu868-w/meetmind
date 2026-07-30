@@ -1,0 +1,122 @@
+/* 上下文段：一张「它现在记得」的记忆卡。按钮是真的——纠正可改、暂停可切换、忘掉会移除。 */
+
+.contextLine { padding: clamp(60px, 8vw, 120px) 0; }
+.lead { max-width: 32em; margin: 0; color: var(--ink-secondary); font-size: 14px; line-height: 1.85; }
+
+.memoryPanel {
+  position: relative;
+  width: min(100% - 48px, 720px);
+  margin: clamp(36px, 4vw, 52px) auto 0;
+  overflow: hidden;
+  border: 1px solid var(--divider);
+  border-radius: 22px;
+  background: var(--card);
+  box-shadow: 0 18px 50px rgba(32, 49, 42, 0.09);
+}
+/* SpotlightCard 聚光灯 */
+.memoryPanel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: radial-gradient(300px circle at var(--mx, 50%) var(--my, 50%), rgba(47, 107, 85, 0.1), transparent 65%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.memoryPanel:hover::after { opacity: 1; }
+.memoryPanel > * { position: relative; z-index: 1; }
+.memoryPanel > header {
+  padding: 15px 22px;
+  border-bottom: 1px solid var(--divider);
+  background: var(--paper-warm);
+  color: var(--ink-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.memoryPanel ul { margin: 0; padding: 0; list-style: none; }
+
+.memoryRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 22px;
+  border-top: 1px solid var(--divider);
+  transition: opacity 0.45s ease, transform 0.45s ease, max-height 0.45s ease, padding 0.45s ease;
+  max-height: 90px;
+}
+.memoryRow:first-child { border-top: 0; }
+.memoryRow[data-forgotten='true'] {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top-width: 0;
+  opacity: 0;
+  transform: translateX(18px);
+  overflow: hidden;
+  pointer-events: none;
+}
+.memoryRow[data-paused='true'] .memoryMain,
+.memoryRow[data-paused='true'] .kind { opacity: 0.42; }
+
+.kind {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.kind[data-kind='困惑'] { background: var(--vermilion-mist); color: var(--vermilion); }
+.kind[data-kind='目标'] { background: var(--pine-fog); color: var(--pine); }
+.kind[data-kind='收藏'] { background: #f0e8d2; color: #8a6d2f; }
+.kind[data-kind='习惯'] { background: #dfe9ec; color: #4b6b78; }
+
+.memoryMain { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
+.memoryMain strong { overflow: hidden; font-size: 13.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.memoryMain small { color: var(--ink-muted); font-family: var(--font-jetbrains-mono); font-size: 9.5px; letter-spacing: 0.03em; }
+.memoryInput {
+  width: 100%;
+  padding: 3px 8px;
+  border: 1px solid var(--pine);
+  border-radius: 7px;
+  background: var(--pine-fog);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  outline: none;
+}
+
+.memoryActions { display: flex; flex: 0 0 auto; gap: 4px; }
+.memoryActions button {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 620;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+.memoryActions button:hover { background: var(--paper-warm); color: var(--ink); }
+.memoryActions .forget:hover { background: var(--vermilion-mist); color: var(--vermilion); }
+
+.memoryPanel > footer {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 13px 22px;
+  border-top: 1px solid var(--divider);
+  color: var(--ink-muted);
+  font-size: 11.5px;
+}
+.memoryPanel > footer i { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--pine); }
+
+@media (max-width: 720px) {
+  .contextLine { padding: 70px 0; }
+  .memoryPanel { width: calc(100% - 36px); }
+  .memoryRow { flex-wrap: wrap; gap: 8px 12px; padding: 13px 16px; }
+  .memoryActions { margin-left: auto; }
+}

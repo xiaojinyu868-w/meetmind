@@ -1,0 +1,317 @@
+/* 应用矩阵：左侧应用 tab + 右侧可交互舞台。每个舞台都是能上手的最小实例。 */
+
+.appsLine { padding: clamp(60px, 8vw, 110px) 0; }
+.appsLead { max-width: 34em; margin: 0; color: var(--ink-secondary); font-size: 14px; line-height: 1.85; }
+
+.switchboard {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  width: min(100% - 48px, 1080px);
+  margin: clamp(40px, 5vw, 60px) auto 0;
+  gap: 18px;
+}
+
+/* === 应用 tabs === */
+.appTabs { position: relative; display: flex; flex-direction: column; gap: 6px; }
+.appTabs button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  overflow: hidden;
+  padding: 13px 16px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  transition: background 180ms ease, border-color 180ms ease;
+}
+/* SpotlightCard 聚光灯 */
+.appTabs button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  background: radial-gradient(140px circle at var(--mx, 50%) var(--my, 50%), rgba(127, 214, 168, 0.22), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+.appTabs button:hover::after { opacity: 1; }
+.appTabs button strong { position: relative; z-index: 1; font-size: 13.5px; font-weight: 650; }
+.appTabs button span { position: relative; z-index: 1; color: var(--ink-muted); font-size: 10.5px; }
+.appTabs button:hover { background: var(--paper-warm); }
+.appTabs button[data-active='true'] { border-color: var(--ink); }
+.appTabs button[data-active='true'] strong { color: #f4f1e9; }
+.appTabs button[data-active='true'] span { color: rgba(244, 241, 233, 0.6); }
+/* 滑动指示丸（测量定位，CSS 过渡滑动） */
+.tabPill {
+  position: absolute;
+  z-index: 0;
+  border-radius: 14px;
+  background: var(--ink);
+  box-shadow: 0 10px 26px rgba(32, 49, 42, 0.28);
+  transition: top 0.38s cubic-bezier(0.22, 1, 0.36, 1), left 0.38s cubic-bezier(0.22, 1, 0.36, 1), width 0.38s cubic-bezier(0.22, 1, 0.36, 1), height 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* === 舞台 === */
+.appStage {
+  position: relative;
+  min-height: 400px;
+  overflow: hidden;
+  padding: clamp(22px, 3vw, 34px);
+  border: 1px solid var(--divider);
+  border-radius: 22px;
+  background: var(--card);
+  box-shadow: 0 18px 50px rgba(32, 49, 42, 0.09);
+}
+/* SpotlightCard 聚光灯 */
+.appStage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: radial-gradient(320px circle at var(--mx, 50%) var(--my, 50%), rgba(47, 107, 85, 0.1), transparent 65%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.appStage:hover::after { opacity: 1; }
+.appStage > * { position: relative; z-index: 1; }
+.stageMotion { display: flex; min-height: 330px; flex-direction: column; }
+
+/* === 闪卡：真翻面 === */
+.flashcardsStage { display: flex; height: 100%; flex-direction: column; gap: 16px; }
+.flashcard { flex: 1; padding: 0; border: 0; background: transparent; cursor: pointer; perspective: 900px; }
+.flashcardInner {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+  transform-style: preserve-3d;
+}
+.flashcardFront,
+.flashcardBack {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  border: 1px solid var(--divider);
+  border-radius: 18px;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.6;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.flashcardFront { background: linear-gradient(160deg, var(--pine-fog), #fff 75%); color: var(--ink); }
+.flashcardBack { background: var(--pine-deep); color: #f4f1e9; font-size: 15px; font-weight: 550; transform: rotateY(180deg); }
+.flashcardsBar { display: flex; align-items: center; justify-content: space-between; color: var(--ink-muted); font-family: var(--font-jetbrains-mono); font-size: 10px; }
+.flashcardsBar button { padding: 6px 12px; border: 1px solid var(--divider); border-radius: 999px; background: transparent; color: var(--pine); font-size: 11px; font-weight: 650; cursor: pointer; transition: border-color 150ms ease, background 150ms ease; }
+.flashcardsBar button:hover { border-color: var(--pine); background: var(--pine-fog); }
+
+/* === 测验：真作答 === */
+.quizStage { display: flex; height: 100%; flex-direction: column; }
+.quizStage > p { margin: 0 0 16px; font-size: 15.5px; font-weight: 650; line-height: 1.55; }
+.quizStage ul { display: flex; flex-direction: column; margin: 0; padding: 0; gap: 9px; list-style: none; }
+.quizStage ul button {
+  width: 100%;
+  padding: 12px 15px;
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+.quizStage ul button:hover:not(:disabled) { border-color: var(--pine); }
+.quizStage ul button[data-state='correct'] { border-color: var(--pine); background: var(--pine-fog); color: var(--pine-deep); font-weight: 650; }
+.quizStage ul button[data-state='wrong'] { border-color: var(--vermilion); background: var(--vermilion-mist); color: var(--vermilion); }
+.quizStage ul button:disabled { cursor: default; }
+.quizFeedback {
+  display: flex;
+  margin-top: 16px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+.quizFeedback[data-correct='true'] { background: var(--pine-fog); color: var(--pine-deep); }
+.quizFeedback[data-correct='false'] { background: var(--vermilion-mist); color: var(--vermilion); }
+.quizEvidence { flex: 0 0 auto; font-family: var(--font-jetbrains-mono); font-size: 9.5px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+/* === 思维导图：真展开 === */
+.mindmapStage { position: relative; display: flex; height: 100%; align-items: center; gap: clamp(18px, 3vw, 40px); padding-bottom: 20px; }
+.mindmapStage > b {
+  flex: 0 0 auto;
+  padding: 13px 17px;
+  border-radius: 14px;
+  background: var(--pine);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+.mindmapStage > ul { position: relative; display: flex; flex: 1; flex-direction: column; margin: 0; padding: 0 0 0 26px; gap: 12px; list-style: none; }
+.mindmapStage > ul::before { content: ''; position: absolute; top: 14px; bottom: 14px; left: 0; width: 1px; background: var(--divider); }
+.mindmapStage li { position: relative; }
+.mindmapStage li::before { content: ''; position: absolute; top: 19px; left: -26px; width: 26px; height: 1px; background: var(--divider); }
+.mindmapStage li > button {
+  padding: 9px 14px;
+  border: 1px solid var(--divider);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 620;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+.mindmapStage li > button:hover { border-color: var(--pine); }
+.mindmapStage li[data-open='true'] > button { border-color: var(--pine); background: var(--pine-fog); color: var(--pine-deep); }
+.mindmapChildren { display: flex; overflow: hidden; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.mindmapChildren span { padding: 5px 11px; border: 1px dashed var(--divider); border-radius: 999px; color: var(--ink-secondary); font-size: 11px; }
+.mindmapStage > small { position: absolute; bottom: 0; left: 0; color: var(--ink-muted); font-size: 10px; }
+
+/* === 播客：播放动效 + 章节 === */
+.podcastStage { display: flex; height: 100%; flex-direction: column; justify-content: center; gap: 18px; }
+.podcastTop { display: flex; align-items: center; gap: 14px; }
+.podcastPlay {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--pine);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform 150ms ease;
+}
+.podcastPlay:hover { transform: scale(1.05); }
+.podcastTop strong { display: block; font-size: 14px; font-weight: 700; }
+.podcastTop em { color: var(--ink-muted); font-family: var(--font-jetbrains-mono); font-size: 10px; font-style: normal; }
+.podcastWave { display: flex; height: 44px; align-items: center; gap: 3px; }
+.podcastWave i { width: 3px; flex: 1; max-width: 4px; border-radius: 999px; background: var(--pine); opacity: 0.7; }
+.podcastWave i:nth-child(4n + 1) { height: 30%; }
+.podcastWave i:nth-child(4n + 2) { height: 62%; }
+.podcastWave i:nth-child(4n + 3) { height: 88%; }
+.podcastWave i:nth-child(4n) { height: 48%; }
+.podcastWave[data-playing='true'] i { animation: waveDance 0.9s ease-in-out infinite alternate; }
+.podcastWave[data-playing='true'] i:nth-child(2n) { animation-delay: 0.22s; }
+.podcastWave[data-playing='true'] i:nth-child(3n) { animation-delay: 0.4s; }
+@keyframes waveDance {
+  from { transform: scaleY(0.5); }
+  to { transform: scaleY(1.15); }
+}
+.podcastChapters { display: flex; flex-wrap: wrap; gap: 7px; }
+.podcastChapters button {
+  padding: 6px 12px;
+  border: 1px solid var(--divider);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-secondary);
+  font-family: var(--font-jetbrains-mono);
+  font-size: 9.5px;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+.podcastChapters button:hover { border-color: var(--pine); }
+.podcastChapters button[data-active='true'] { border-color: var(--pine); background: var(--pine-fog); color: var(--pine-deep); font-weight: 700; }
+.podcastProgress { height: 5px; border-radius: 999px; background: var(--pine-mist); cursor: pointer; outline-offset: 3px; }
+.podcastProgress i { display: block; height: 100%; border-radius: inherit; background: var(--pine); transition: width 0.2s linear; }
+
+/* === 速查表（静态） === */
+.cheatsheetStage { height: 100%; padding: 20px 24px; border: 1px solid var(--divider); border-radius: 16px; background: #fff; box-shadow: 0 8px 22px rgba(32, 49, 42, 0.07); }
+.cheatsheetStage > strong { display: block; padding-bottom: 10px; border-bottom: 1px solid var(--divider); font-size: 14px; font-weight: 700; }
+.cheatsheetStage ul { display: flex; flex-direction: column; margin: 12px 0 0; padding: 0; gap: 11px; list-style: none; }
+.cheatsheetStage li { display: flex; align-items: baseline; gap: 8px; color: var(--ink-secondary); font-family: var(--font-jetbrains-mono); font-size: 12px; line-height: 1.55; }
+.cheatsheetStage li::before { content: ''; width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--vermilion); transform: translateY(-1px); }
+
+/* === 信息图（保持原 mock） === */
+.infographicStage {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px;
+  border-radius: 18px;
+  background: linear-gradient(165deg, var(--pine-deep), var(--pine));
+  color: #f4f1e9;
+}
+.infographicStage small { font-family: var(--font-jetbrains-mono); font-size: 10px; letter-spacing: 0.08em; opacity: 0.75; text-transform: uppercase; }
+.infographicStage blockquote { margin: 0; font-family: var(--serif); font-size: clamp(18px, 2vw, 23px); line-height: 1.55; }
+.infographicStage span { margin-top: auto; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.28); font-size: 12px; opacity: 0.85; }
+
+/* === 讲给同桌听：盲区可点开 === */
+.teachbackStage { display: flex; height: 100%; flex-direction: column; }
+.teachbackStage > p { margin: 0 0 16px; font-size: 15px; font-weight: 650; line-height: 1.5; }
+.teachbackStage ul { display: flex; flex-direction: column; margin: 0; padding: 0; gap: 10px; list-style: none; }
+.teachbackStage li { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.teachbackStage li::before {
+  display: grid;
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 10px;
+}
+.teachbackStage li[data-state='pass'] { color: var(--ink-secondary); }
+.teachbackStage li[data-state='pass']::before { content: '✓'; background: var(--pine-fog); color: var(--pine); }
+.teachbackStage li[data-state='blind']::before { content: '!'; background: var(--vermilion-mist); color: var(--vermilion); }
+.teachbackStage li[data-state='blind'] button {
+  padding: 0 0 2px;
+  border: 0;
+  border-bottom: 1px dashed var(--vermilion);
+  background: transparent;
+  color: var(--vermilion);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.teachbackNote {
+  margin-top: 14px;
+  padding: 11px 14px;
+  border-left: 3px solid var(--vermilion);
+  border-radius: 0 10px 10px 0;
+  background: var(--vermilion-mist);
+  color: var(--vermilion);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 860px) {
+  .switchboard { grid-template-columns: 1fr; }
+  .appTabs { flex-direction: row; overflow-x: auto; padding-bottom: 6px; scrollbar-width: none; }
+  .appTabs::-webkit-scrollbar { display: none; }
+  .appTabs button { flex: 0 0 auto; }
+  .appStage { min-height: 360px; }
+}
+
+@media (max-width: 720px) {
+  .appsLine { padding: 70px 0; }
+  .switchboard { width: calc(100% - 36px); }
+  .mindmapStage { flex-direction: column; align-items: flex-start; padding-bottom: 26px; }
+  .mindmapStage > ul::before { display: none; }
+  .mindmapStage li::before { display: none; }
+  .mindmapStage > ul { padding-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .podcastWave[data-playing='true'] i { animation: none; }
+  .podcastProgress i,
+  .tabPill { transition: none; }
+}

@@ -3,9 +3,14 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight, Download, ExternalLink } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
 import { COPY } from '@/lib/ui/copy';
 import { DESKTOP_DOWNLOAD } from '@/lib/config/desktop-download.config';
+import { LandingAppsLine } from './LandingAppsLine';
+import { LandingClassroomLine } from './LandingClassroomLine';
+import { LandingCollectionLine } from './LandingCollectionLine';
+import { LandingContextLine } from './LandingContextLine';
+import { handleSpotlightMove } from './landing-spotlight';
 import styles from './LandingPage.module.css';
 
 function Brand() {
@@ -23,8 +28,6 @@ const STAGE_TONES = ['pine', 'sand', 'rose', 'sky', 'ink'] as const;
 
 export function LandingPage() {
   const copy = COPY.landing;
-  const stageRailRef = useRef<HTMLDivElement>(null);
-  const [activeStage, setActiveStage] = useState(0);
 
   // 入场揭示：滚动到可视区后 stagger 浮现
   useEffect(() => {
@@ -46,65 +49,6 @@ export function LandingPage() {
     return () => observer.disconnect();
   }, []);
 
-  // 课堂线 rail：滚动时同步活跃卡
-  useEffect(() => {
-    const rail = stageRailRef.current;
-    if (!rail) return;
-    const cards = Array.from(rail.querySelectorAll<HTMLElement>('[data-stage-index]'));
-    let animationFrame = 0;
-    const update = () => {
-      const center = rail.scrollLeft + rail.clientWidth / 2;
-      let closest = 0;
-      let closestDistance = Number.POSITIVE_INFINITY;
-      cards.forEach((card, index) => {
-        const distance = Math.abs(card.offsetLeft + card.clientWidth / 2 - center);
-        if (distance < closestDistance) {
-          closestDistance = distance;
-          closest = index;
-        }
-      });
-      setActiveStage(closest);
-    };
-    const onScroll = () => {
-      window.cancelAnimationFrame(animationFrame);
-      animationFrame = window.requestAnimationFrame(update);
-    };
-    rail.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll);
-    update();
-    return () => {
-      window.cancelAnimationFrame(animationFrame);
-      rail.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
-    };
-  }, []);
-
-  const scrollToStage = (index: number) => {
-    const rail = stageRailRef.current;
-    const card = rail?.querySelector<HTMLElement>(`[data-stage-index="${index}"]`);
-    if (!rail || !card) return;
-    rail.scrollTo({
-      left: card.offsetLeft - (rail.clientWidth - card.clientWidth) / 2,
-      behavior: 'smooth',
-    });
-  };
-
-  // 课堂线 rail：自动循环滚动，悬停 / 触摸时暂停
-  const [railPaused, setRailPaused] = useState(false);
-  useEffect(() => {
-    if (railPaused) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const timer = window.setInterval(() => {
-      setActiveStage((current) => {
-        const next = (current + 1) % copy.classroomLine.stages.length;
-        scrollToStage(next);
-        return next;
-      });
-    }, 3600);
-    return () => window.clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [railPaused]);
-
   return (
     <main className={styles.page}>
       <header className={styles.header}>
@@ -113,6 +57,7 @@ export function LandingPage() {
         </Link>
         <nav className={styles.navigation} aria-label={copy.navigation.product}>
           <a href="#classroom">{copy.classroomLine.eyebrow}</a>
+          <a href="#apps">{copy.appsLine.eyebrow}</a>
           <a href="#collection">{copy.collectionLine.eyebrow}</a>
           <Link href="/technology">{copy.navigation.technology}</Link>
           <Link href="/login">{copy.navigation.signIn}</Link>
@@ -133,7 +78,28 @@ export function LandingPage() {
           <div className={styles.heroShade} />
           <div className={styles.heroContent}>
             <span className={styles.heroEyebrow}>{copy.hero.eyebrow}</span>
-            <h1 id="landing-title">{copy.hero.title}</h1>
+            <h1 id="landing-title" aria-label={copy.hero.title.replaceAll('\n', '')}>
+              {(() => {
+                let offset = 0;
+                return copy.hero.title.split('\n').map((line) => {
+                  const start = offset;
+                  offset += line.length;
+                  return (
+                    <span className={styles.heroTitleLine} aria-hidden="true" key={line}>
+                      {Array.from(line).map((char, index) => (
+                        <span
+                          className={styles.heroTitleChar}
+                          style={{ animationDelay: `${(start + index) * 42 + 150}ms` }}
+                          key={`${line}-${index}`}
+                        >
+                          {char}
+                        </span>
+                      ))}
+                    </span>
+                  );
+                });
+              })()}
+            </h1>
             <p>{copy.hero.body}</p>
             <div className={styles.heroActions}>
               <Link className={styles.heroPrimary} href="/app?guest=1&entry=demo">
@@ -158,111 +124,11 @@ export function LandingPage() {
         </p>
       </section>
 
-      <section className={styles.classroomLine} id="classroom" aria-labelledby="classroom-line-title">
-        <div className={styles.lineHeading}>
-          <span className={styles.eyebrow} data-reveal>{copy.classroomLine.eyebrow}</span>
-          <h2 id="classroom-line-title" data-reveal style={{ transitionDelay: '80ms' }}>{copy.classroomLine.title}</h2>
-          <div className={styles.lineAside}>
-            <p data-reveal style={{ transitionDelay: '160ms' }}>{copy.classroomLine.body}</p>
-            <div className={styles.railControls} data-reveal style={{ transitionDelay: '220ms' }}>
-              <button type="button" onClick={() => scrollToStage(activeStage - 1)} disabled={activeStage === 0} aria-label={copy.classroomLine.previous}>←</button>
-              <span>{copy.classroomLine.stages[activeStage].step} / {String(copy.classroomLine.stages.length).padStart(2, '0')}</span>
-              <button type="button" onClick={() => scrollToStage(activeStage + 1)} disabled={activeStage === copy.classroomLine.stages.length - 1} aria-label={copy.classroomLine.next}>→</button>
-            </div>
-          </div>
-        </div>
+      <LandingClassroomLine />
 
-        <div
-          ref={stageRailRef}
-          className={styles.stageRail}
-          role="list"
-          aria-label={copy.classroomLine.ariaLabel}
-          onPointerEnter={() => setRailPaused(true)}
-          onPointerLeave={() => setRailPaused(false)}
-          onPointerDown={() => {
-            setRailPaused(true);
-            window.setTimeout(() => setRailPaused(false), 8000);
-          }}
-        >
-          {copy.classroomLine.stages.map((stage, index) => (
-            <article
-              className={styles.stageCard}
-              data-active={index === activeStage}
-              data-stage-index={index}
-              data-tone={STAGE_TONES[index % STAGE_TONES.length]}
-              key={stage.step}
-              role="listitem"
-            >
-              <span className={styles.stageOrbit} aria-hidden="true" />
-              <span className={styles.stageVerb} aria-hidden="true">{stage.verb}</span>
-              <div className={styles.stageCopy}>
-                <span className={styles.stageStep}>{stage.step}</span>
-                <h3>{stage.title}</h3>
-                <p>{stage.body}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-        <div className={styles.railProgress} aria-hidden="true">
-          {copy.classroomLine.stages.map((stage, index) => (
-            <span data-active={index === activeStage} key={stage.step} />
-          ))}
-        </div>
-      </section>
+      <LandingAppsLine />
 
-      <section className={styles.collectionLine} id="collection" aria-labelledby="collection-line-title">
-        <div className={styles.collectionStage}>
-          <div className={styles.collectionVisual} aria-hidden="true">
-            <div className={styles.collectionThread}>
-              {copy.collectionLine.samples.map((sample, index) => (
-                <div
-                  className={styles.collectionBubble}
-                  data-kind={sample.kind}
-                  key={sample.label}
-                  style={{ animationDelay: `${index * 0.7}s` }}
-                >
-                  {sample.kind === 'voice' ? (
-                    <span className={styles.bubbleVoice}>
-                      <i /><i /><i /><i /><i /><i /><i />
-                      <em>{sample.text}</em>
-                    </span>
-                  ) : sample.kind === 'image' ? (
-                    <span className={styles.bubbleImage}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="1.6" /><path d="m4 18 5-5 3 3 4-4 4 4" /></svg>
-                      <em>{sample.text}</em>
-                    </span>
-                  ) : sample.kind === 'file' ? (
-                    <span className={styles.bubbleFile}>
-                      <b>PDF</b>
-                      <em>{sample.text}</em>
-                    </span>
-                  ) : sample.kind === 'link' ? (
-                    <span className={styles.bubbleLink}>
-                      <i />
-                      <em>{sample.text}</em>
-                    </span>
-                  ) : (
-                    <span className={styles.bubbleText}>{sample.text}</span>
-                  )}
-                </div>
-              ))}
-            </div>
-            <div className={styles.collectionStatus}>
-              <i />
-              <span>{copy.collectionLine.statusLabel}</span>
-            </div>
-          </div>
-          <div className={styles.collectionCopy}>
-            <span className={styles.eyebrow} data-reveal>{copy.collectionLine.eyebrow}</span>
-            <h2 id="collection-line-title" data-reveal style={{ transitionDelay: '80ms' }}>{copy.collectionLine.title}</h2>
-            <p data-reveal style={{ transitionDelay: '160ms' }}>{copy.collectionLine.body}</p>
-            <p className={styles.collectionNote} data-reveal style={{ transitionDelay: '240ms' }}>
-              <i />
-              {copy.collectionLine.silentNote}
-            </p>
-          </div>
-        </div>
-      </section>
+      <LandingCollectionLine />
 
       <section className={styles.bridge} id="philosophy" aria-labelledby="bridge-title">
         <span className={styles.eyebrow} data-reveal>{copy.bridge.eyebrow}</span>
@@ -293,6 +159,7 @@ export function LandingPage() {
               key={item.number}
               data-reveal
               style={{ transitionDelay: `${index * 110}ms` }}
+              onMouseMove={handleSpotlightMove}
             >
               <span className={styles.outcomeOrbit} aria-hidden="true" />
               <small>{item.scope}</small>
@@ -303,34 +170,16 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className={styles.contextControl} aria-labelledby="context-title">
-        <div className={styles.contextPanel} data-reveal>
-          <span className={styles.eyebrow}>{copy.context.eyebrow}</span>
-          <h2 id="context-title">{copy.context.title}</h2>
-          <p>{copy.context.body}</p>
-          <div className={styles.contextFlow} aria-hidden="true">
-            {copy.context.flow.map((node, index) => (
-              <span key={node} data-final={index === copy.context.flow.length - 1}>{node}</span>
-            ))}
-          </div>
-        </div>
-        <div className={styles.controlCard} data-reveal style={{ transitionDelay: '160ms' }}>
-          <h3>{copy.control.title}</h3>
-          <p>{copy.control.body}</p>
-          <ul>
-            {copy.control.items.map((item) => (
-              <li key={item}><i />{item}</li>
-            ))}
-          </ul>
-        </div>
-      </section>
+      <LandingContextLine />
 
       <section className={styles.liveSection}>
         <div className={styles.liveCopy}>
           <span className={styles.liveStatus}><i />{copy.livePreview.status}</span>
           <h2>{copy.livePreview.title}</h2>
-          <p>{copy.livePreview.body}</p>
-          <Link href="/app?guest=1&entry=demo" target="_blank" rel="noopener noreferrer">{copy.livePreview.action}<ExternalLink size={15} /></Link>
+          <div>
+            <p>{copy.livePreview.body}</p>
+            <Link href="/app?guest=1&entry=demo" target="_blank" rel="noopener noreferrer">{copy.livePreview.action}<ExternalLink size={15} /></Link>
+          </div>
         </div>
         <div className={styles.liveStage}>
           <iframe src="/app?guest=1&entry=demo" title={copy.livePreview.frameTitle} loading="lazy" tabIndex={-1} />

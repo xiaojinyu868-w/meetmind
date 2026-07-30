@@ -1,0 +1,337 @@
+/* 课堂线：一节课的真实时间线。卡片头部的时间刻度连成时间轴，中间是产品时刻的 HTML mock。 */
+
+.classroomLine { padding: clamp(80px, 10vw, 140px) 0 clamp(90px, 11vw, 150px); }
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--pine);
+  font-family: var(--font-jetbrains-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.eyebrow::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--vermilion); }
+
+.lineHeading {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+  width: min(100% - 48px, 1240px);
+  margin: 0 auto;
+  align-items: end;
+  gap: clamp(40px, 6vw, 90px);
+}
+.lineHeading .eyebrow { grid-column: 1 / -1; }
+.lineHeading h2 { max-width: 12em; margin: 0; font-family: var(--serif); font-size: clamp(40px, 5vw, 66px); font-weight: 400; letter-spacing: -0.02em; line-height: 1.12; white-space: pre-line; }
+.lineAside { display: flex; align-items: flex-start; flex-direction: column; gap: 24px; }
+.lineAside > p { margin: 0; color: var(--ink-secondary); font-size: 14px; line-height: 1.8; }
+.railControls { display: flex; align-items: center; gap: 12px; }
+.railControls button {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--divider);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--pine-deep);
+  font-size: 15px;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.railControls button:hover:not(:disabled) { border-color: var(--pine); background: var(--pine-fog); }
+.railControls button:disabled { color: var(--ink-muted); cursor: default; opacity: 0.45; }
+.railControls span { min-width: 54px; color: var(--ink-muted); font-family: var(--font-jetbrains-mono); font-size: 10px; text-align: center; }
+
+/* === 时间线轨道 === */
+.stageRail {
+  --stage-card-width: min(400px, 34vw);
+  display: flex;
+  margin-top: clamp(48px, 6vw, 72px);
+  gap: clamp(14px, 1.8vw, 24px);
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  padding: 24px max(24px, calc((100vw - var(--stage-card-width)) / 2)) 26px;
+  scroll-behavior: smooth;
+  scroll-padding-inline: max(24px, calc((100vw - var(--stage-card-width)) / 2));
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.stageRail::-webkit-scrollbar { display: none; }
+
+.stageCard {
+  position: relative;
+  display: flex;
+  width: var(--stage-card-width);
+  min-height: 480px;
+  flex: 0 0 var(--stage-card-width);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--divider);
+  border-radius: 24px;
+  background: var(--card);
+  box-shadow: 0 14px 40px rgba(32, 49, 42, 0.08);
+  opacity: 0.55;
+  scroll-snap-align: center;
+  transform: scale(0.965);
+  transition: opacity 320ms ease, transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.stageCard[data-active='true'] { opacity: 1; transform: scale(1); }
+
+/* 时间刻度：圆点 + 向右延伸的线，卡片连成一排即时间轴 */
+.stageHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 22px 0;
+}
+.stageTime {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-muted);
+  font-family: var(--font-jetbrains-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.stageTime i { width: 8px; height: 8px; flex: 0 0 auto; border: 2px solid var(--pine); border-radius: 50%; background: var(--card); }
+.stageTime::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 10px);
+  width: 100vw;
+  height: 1px;
+  background: var(--divider);
+}
+.stageCard:last-child .stageTime::after { display: none; }
+.stageVerb {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--pine-deep);
+  color: #f4f1e9;
+  font-family: var(--serif);
+  font-size: 17px;
+}
+
+.stageMoment { display: flex; flex: 1; flex-direction: column; padding: 18px 22px 0; }
+
+.stageCopy { padding: 18px 22px 24px; }
+.stageStep { color: var(--ink-muted); font-family: var(--font-jetbrains-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.14em; }
+.stageCopy h3 { margin: 10px 0 0; font-size: clamp(19px, 1.8vw, 23px); font-weight: 650; letter-spacing: -0.03em; line-height: 1.25; }
+.stageCopy p { margin: 9px 0 0; color: var(--ink-secondary); font-size: 12.5px; line-height: 1.75; }
+
+.railProgress { display: flex; width: min(100% - 48px, 1240px); margin: 20px auto 0; gap: 5px; }
+.railProgress span { height: 2px; flex: 1; border-radius: 999px; background: var(--divider); transition: background 220ms ease; }
+.railProgress span[data-active='true'] { background: var(--pine); }
+
+/* === Mock：课中 LIVE（转录持续滚动） === */
+.mockLive { display: flex; flex: 1; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--divider); border-radius: 16px; background: var(--paper); }
+.mockLiveHead { display: inline-flex; align-items: center; gap: 7px; color: var(--vermilion); font-family: var(--font-jetbrains-mono); font-size: 9px; font-weight: 700; letter-spacing: 0.1em; }
+.liveDot { width: 7px; height: 7px; border-radius: 50%; background: var(--vermilion); animation: livePulse 1.8s ease-out infinite; }
+@keyframes livePulse {
+  0% { box-shadow: 0 0 0 0 rgba(196, 94, 76, 0.4); }
+  70% { box-shadow: 0 0 0 7px rgba(196, 94, 76, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(196, 94, 76, 0); }
+}
+.mockLiveRoll { height: 3.4em; overflow: hidden; }
+.mockLiveRoll ul { margin: 0; padding: 0; list-style: none; animation: transcriptRoll 8s ease-in-out infinite; }
+.mockLiveRoll li { height: 1.7em; overflow: hidden; color: var(--ink); font-size: 13px; font-weight: 600; line-height: 1.7em; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes transcriptRoll {
+  0%, 26% { transform: translateY(0); }
+  33%, 59% { transform: translateY(-1.7em); }
+  66%, 92% { transform: translateY(-3.4em); }
+  100% { transform: translateY(-5.1em); }
+}
+.mockChips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+.mockChips span { padding: 4px 10px; border-radius: 999px; background: var(--pine-fog); color: var(--pine); font-size: 10px; font-weight: 650; }
+
+/* === Mock：问同桌（问答循环上演） === */
+.mockAsk { display: flex; flex: 1; flex-direction: column; gap: 10px; justify-content: center; }
+.mockQuestion {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 9px 13px;
+  border-radius: 13px 13px 5px 13px;
+  background: var(--pine);
+  color: #fff;
+  font-size: 12.5px;
+  line-height: 1.55;
+  animation: askIn 9s ease-in-out infinite;
+}
+.mockAnswer {
+  align-self: flex-start;
+  max-width: 92%;
+  padding: 10px 13px;
+  border: 1px solid var(--divider);
+  border-radius: 13px 13px 13px 5px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.6;
+  animation: answerIn 9s ease-in-out infinite;
+}
+@keyframes askIn {
+  0% { opacity: 0; transform: translateY(10px); }
+  9%, 86% { opacity: 1; transform: none; }
+  95%, 100% { opacity: 0; }
+}
+@keyframes answerIn {
+  0%, 20% { opacity: 0; transform: translateY(10px); }
+  32%, 86% { opacity: 1; transform: none; }
+  95%, 100% { opacity: 0; }
+}
+.mockCite {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--vermilion-mist);
+  color: var(--vermilion);
+  font-family: var(--font-jetbrains-mono);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+/* === Mock：闪卡（自动翻面） === */
+.mockFlashcard {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px 16px 14px;
+  border: 1px solid var(--divider);
+  border-radius: 16px;
+  background: linear-gradient(160deg, var(--pine-fog), #fff 70%);
+  text-align: center;
+}
+.mockFlip {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  transform-style: preserve-3d;
+  animation: flipCycle 6.5s cubic-bezier(0.65, 0.05, 0.25, 1) infinite;
+}
+.mockFlipFace {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.5;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.mockFlipFace[data-face='back'] { color: var(--pine-deep); font-size: 12.5px; font-weight: 600; transform: rotateY(180deg); }
+@keyframes flipCycle {
+  0%, 36% { transform: rotateY(0); }
+  50%, 86% { transform: rotateY(180deg); }
+  100% { transform: rotateY(360deg); }
+}
+.mockFlashcard footer { display: flex; width: 100%; align-items: center; gap: 10px; margin-top: 6px; }
+.mockFlashcard footer i { height: 3px; flex: 0 0 25%; border-radius: 999px; background: var(--pine); }
+.mockFlashcard footer em { color: var(--ink-muted); font-family: var(--font-jetbrains-mono); font-size: 9px; font-style: normal; }
+
+/* === Mock：证据（高亮扫过原话） === */
+.mockEvidence { display: flex; flex: 1; flex-direction: column; gap: 10px; justify-content: center; }
+.mockEvidence > p { margin: 0; font-size: 13px; font-weight: 600; line-height: 1.6; }
+.mockEvidenceChip {
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--vermilion-mist);
+  color: var(--vermilion);
+  font-family: var(--font-jetbrains-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  animation: chipPulse 2.6s ease-in-out infinite;
+}
+@keyframes chipPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(196, 94, 76, 0.35); }
+  50% { box-shadow: 0 0 0 5px rgba(196, 94, 76, 0); }
+}
+.mockEvidence blockquote {
+  position: relative;
+  overflow: hidden;
+  margin: 0;
+  padding: 10px 13px;
+  border-left: 3px solid var(--pine);
+  border-radius: 0 10px 10px 0;
+  background: var(--pine-fog);
+  color: var(--pine-deep);
+  font-family: var(--serif);
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.55;
+}
+.mockEvidence blockquote::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 25%, rgba(47, 107, 85, 0.18) 50%, transparent 75%);
+  transform: translateX(-101%);
+  animation: evidenceSweep 4.6s ease-in-out infinite;
+}
+@keyframes evidenceSweep {
+  0% { transform: translateX(-101%); }
+  42%, 100% { transform: translateX(101%); }
+}
+
+/* === Mock：速查表（逐行生长） === */
+.mockSheet { flex: 1; padding: 14px 16px; border: 1px solid var(--divider); border-radius: 14px; background: #fff; box-shadow: 0 6px 16px rgba(32, 49, 42, 0.06); }
+.mockSheet strong { display: block; padding-bottom: 8px; border-bottom: 1px solid var(--divider); font-size: 11.5px; font-weight: 700; }
+.mockSheet ul { display: flex; flex-direction: column; margin: 8px 0 0; padding: 0; gap: 7px; list-style: none; }
+.mockSheet li { display: flex; align-items: baseline; gap: 7px; color: var(--ink-secondary); font-family: var(--font-jetbrains-mono); font-size: 10px; line-height: 1.5; opacity: 0; animation: sheetLine 7.5s ease-in-out infinite; }
+.mockSheet li:nth-child(1) { animation-delay: 0.2s; }
+.mockSheet li:nth-child(2) { animation-delay: 0.55s; }
+.mockSheet li:nth-child(3) { animation-delay: 0.9s; }
+@keyframes sheetLine {
+  0% { opacity: 0; transform: translateX(-6px); }
+  7%, 86% { opacity: 1; transform: none; }
+  95%, 100% { opacity: 0; }
+}
+.mockSheet li::before { content: ''; width: 5px; height: 5px; flex: 0 0 auto; border-radius: 50%; background: var(--vermilion); transform: translateY(-1px); }
+
+@media (max-width: 980px) {
+  .lineHeading { grid-template-columns: 1fr; gap: 24px; }
+  .lineAside { max-width: 40em; }
+}
+
+@media (max-width: 720px) {
+  .classroomLine { padding: 70px 0 86px; }
+  .lineHeading { display: block; width: 100%; padding: 0 18px; }
+  .lineHeading h2 { margin-top: 20px; font-size: 38px; }
+  .lineAside { margin-top: 20px; gap: 18px; }
+  .stageRail { --stage-card-width: calc(100vw - 44px); margin-top: 38px; gap: 12px; padding: 18px 22px 22px; scroll-padding-inline: 22px; }
+  .stageCard { min-height: 460px; }
+  .railProgress { width: calc(100% - 36px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stageCard,
+  .railProgress span { transition: none; }
+  .stageRail { scroll-behavior: auto; }
+  .liveDot,
+  .mockLiveRoll ul,
+  .mockFlip,
+  .mockQuestion,
+  .mockAnswer,
+  .mockEvidence blockquote::after,
+  .mockEvidenceChip,
+  .mockSheet li { animation: none; }
+  .mockSheet li { opacity: 1; }
+}

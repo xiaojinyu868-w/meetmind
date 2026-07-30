@@ -417,7 +417,7 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
 // ═══ 录课态 ═══
 
 function RecordingScreen({ p }: { p: MobileAppShellProps }) {
-  const { pop, replace } = useMobileNav();
+  const { pop, replace, resetToHome, canPop } = useMobileNav();
   const allSegments = useCaptureEditorStore(s => s.segments);
   const segments = p.demoMode
     ? selectDemoLiveSegments(p.currentTime / 1000)
@@ -518,7 +518,16 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
       {/* 顶栏 */}
       <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60 z-20">
         <div className="flex items-center gap-2.5">
-          <button aria-label={COPY.navigation.back} onClick={() => pop()} className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1">
+          <button
+            aria-label={COPY.navigation.back}
+            onClick={() => {
+              // 试听课 resetTo('recording') 直入时栈内没有上一页，pop 是空操作——回退到首页
+              if (p.demoMode && p.isPlaying) p.onPlayPause();
+              if (canPop) pop();
+              else resetToHome();
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1"
+          >
             <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
           </button>
           <div className="flex items-center gap-1.5">

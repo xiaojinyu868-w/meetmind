@@ -42,7 +42,12 @@ components/
 
 | 文件 | 职责 |
 |------|------|
-| `LandingPage.tsx` / `LandingPage.module.css` | 消费级主域 `/` 默认交付的落地页（React + COPY 驱动，metadata/OG 生效）。视觉语言继承原概念版：暖纸颗粒底、悬浮玻璃导航、深色电影感 Hero（`classroom-hero.webp`）、衬线巨字纯色阶段卡（录/问/练/证/考）、深绿收集线舞台、上下文公式带、成果纯色卡、可交互试听 iframe、深绿收尾 CTA。按迭代原则不使用真实产品截图/录屏，真实影像只保留给未来验收后的产品宣传片；设计参考存档在 `public/landing-concept-v1.html` |
+| `LandingPage.tsx` / `LandingPage.module.css` | 消费级主域 `/` 默认交付的落地页（React + COPY 驱动，metadata/OG 生效）。视觉语言继承原概念版：暖纸颗粒底、悬浮玻璃导航、深色电影感 Hero（`classroom-hero.webp`）、上下文公式带、成果纯色卡、可交互试听 iframe、深绿收尾 CTA。课堂线 / 应用矩阵 / 收集线 / 上下文段已拆为独立组件（见下四行）。动效层（React Bits / Aceternity 风格）：Hero 标题 BlurText 逐字揭示、全局 reveal 模糊纵深、主按钮 shine 扫光、成果卡 SpotlightCard 聚光灯。按迭代原则不使用真实产品截图/录屏，真实影像只保留给未来验收后的产品宣传片；设计参考存档在 `public/landing-concept-v1.html` |
+| `landing-spotlight.ts` | SpotlightCard 鼠标聚光灯共享钩子：mousemove 写入 `--mx` / `--my` CSS 变量，配合各卡片 CSS 里的 `radial-gradient(circle at var(--mx) var(--my))`（成果卡 / 应用 tabs 与舞台 / 上下文记忆卡） |
+| `LandingClassroomLine.tsx` / `.module.css` | 落地页课堂线段（`#classroom`）：一节课的真实时间线（上课中→课中→下课→复习→考前），卡片头部时间刻度连成时间轴，中间是该时刻的 HTML 产品 mock（LIVE 转录 / 问同桌 / 闪卡 / 证据锚点 / 速查表）；scroll-snap 轨道 + 自动轮播（悬停/触摸暂停） |
+| `LandingAppsLine.tsx` / `.module.css` | 落地页应用矩阵段（`#apps`）：左侧 7 应用 tab + 右侧可交互舞台——闪卡真翻面、测验真作答并出证据锚点、导图真展开、播客章节切换、讲给同桌听盲区可点开；自动轮播悬停暂停、手动选择后停止 |
+| `LandingCollectionLine.tsx` / `.module.css` | 落地页收集线段（`#collection`）：深绿舞台，视觉主体是一台微信界面的手机——公众号对话按 18s 循环依次上演（链接卡 / 板书照片 / 直接提问，绿气泡发出 + 白气泡"已收下"回复）；桌面端 / 随手记退为两侧漂浮辅助卡；理念：让收集在微信里自然发生 |
+| `LandingContextLine.tsx` / `.module.css` | 落地页上下文段（`#context`）：「它现在记得」记忆卡——每条记忆带 纠正（行内可编辑）/ 暂停（可切换）/ 忘掉（淡出移除）真实操作，用具象 UI 代替概念解释 |
 | `TechnologyPage.tsx` / `TechnologyPage.module.css` | 面向投资人、研究者和合作伙伴的独立技术介绍，承载上下文架构、ASR、评测与技术问答，并保留回到消费端产品的路径 |
 
 ### 录音 / 转录

@@ -26,7 +26,7 @@
 | `DedaoTimeline.tsx` | 得到风格时间线 |
 | `MobileCollectionSheet.tsx` | 收集列表底部抽屉（全量 feed） |
 | `MobileReviewSheet.tsx` | 复习态底部可拖拽 Sheet（收起/半展/全展三档） |
-| `MobileAppNavigator.tsx` | 移动端统一导航栈（push/pop/popTo/replace/reset，screen 枚举：home/recording/processing/review/flashcards/quiz/cheatsheet/apps/classmate/empty）；嵌套应用继续持有最近 reviewContext，证据引用可直接回到课后原文 |
+| `MobileAppNavigator.tsx` | 移动端统一导航栈（push/pop/popTo/replace/reset，screen 枚举：home/recording/processing/review/flashcards/quiz/cheatsheet/apps/classmate/empty）；`useMobileNav` 暴露 `canPop`（栈长 > 1），`resetTo` 直入的页面（如试听课 recording）返回键须用 `canPop ? pop() : resetToHome()` 兜底；嵌套应用继续持有最近 reviewContext，证据引用可直接回到课后原文 |
 | `mobile-navigation-model.ts` | 移动端导航类型与纯栈模型：保留最近 reviewContext、跨过应用目录返回课后证据时间；与 React Provider 解耦并可单测 |
 | `MobileAppShell.tsx` | **移动端统一页面壳**：接入真实数据，渲染各 screen。零内容首屏直接展示“录课 / 放资料 / 问 MeetMind”三条路径；开始录课必须等待 Recorder 返回成功后才 push 录课页，避免权限失败时出现假的 `00:00` 或旧课转录。内置 90 秒试听用真实音频时钟驱动转录与课堂脉络渐进出现，英文试听默认 EN→中，结束后进入同一套课后笔记和应用门禁。官方试听在手机端也必须保留六类应用的完整能力预览，推荐只改变排序与强调；六类应用统一走 `CatalogAppScreen → MobileAppRunner`，共享标题、数据源和失败恢复体验；真实短材料继续由 readiness 控制可生成范围。是否为零内容同时读取收集、笔记总结、记忆、近期活动和活跃学习线程；录课页复用 `useClassroomFlow + ClassroomFlowCanvas`，默认展示课堂脉络并可切回原话；AI 对话通过 render slot 接收 page.tsx 传入的 SafeAITutor。首页把活跃学习线和“最近收下”的原件明确分层；无昵称时只显示中性个人图标，不伪造用户身份。管理员开启管理视图时只在头像上显示微小状态点，开关仍收在设置页，不新增悬浮工具栏压住手机内容。 |
 | `MobileFirstLearningScreen.tsx` | 手机端真正零内容用户的首次学习页：一个主心智、一个录课主动作，加上放资料、问 MeetMind 和真实试听；不再堆能力清单与小字说明 |

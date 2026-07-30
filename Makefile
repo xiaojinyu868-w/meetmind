@@ -24,7 +24,7 @@ check: ## 类型检查（最常用，每次改完必跑）
 
 .PHONY: build
 build: ## 生产构建
-	NEXT_BUILD_CPUS=1 NODE_OPTIONS="--max-old-space-size=1024" npm run build
+	NEXT_BUILD_CPUS=1 NODE_OPTIONS="--max-old-space-size=1536" npm run build
 
 .PHONY: deploy
 deploy: build ## 构建 + PM2 优雅停机后重启 + 健康检查

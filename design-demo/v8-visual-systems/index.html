@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MeetMind v8 · 视觉系统选型</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #111; color: #eee; font-family: system-ui, sans-serif; display: grid; min-height: 100vh; place-items: center; padding: 40px 20px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 340px)); gap: 20px; justify-content: center; width: 100%; }
+  a { display: block; padding: 34px 30px; border: 1px solid #333; border-radius: 18px; background: #1a1a1a; color: #eee; text-decoration: none; transition: 0.2s; }
+  a:hover { border-color: #666; transform: translateY(-3px); }
+  h1 { grid-column: 1 / -1; margin-bottom: 10px; font-size: 22px; font-weight: 700; text-align: center; }
+  p.sub { grid-column: 1 / -1; margin-bottom: 20px; color: #888; font-size: 13px; text-align: center; }
+  b { display: block; font-size: 18px; }
+  span { display: block; margin-top: 10px; color: #999; font-size: 13px; line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="grid">
+  <h1>MeetMind Landing · 视觉系统选型</h1>
+  <p class="sub">同一套内容，三个方向。点开看整页，定一套再落到 landing。</p>
+  <a href="./a-deep-forest.html"><b>方案 A · 深夜森林</b><span>暗色高级感：深绿黑底 + 松绿辉光 + 玻璃拟态。参考 Linear / Raycast。科技感和"AI 感"最强，暗色里产品卡用深色玻璃呈现。</span></a>
+  <a href="./b-studio-light.html"><b>方案 B · 明亮工作室</b><span>高对比亮色：近白底 + 特大黑字 + 饱和松绿/朱砂 + bento 色块。参考 Stripe / Apple。信息最清晰、最"明快"，和现有品牌色最连贯。</span></a>
+  <a href="./c-geist-grid.html"><b>方案 C · 极客网格</b><span>黑白硬朗：纯黑白 + 单荧光绿 + 1.5px 黑边硬阴影 + 网格线 + 等宽字体。参考 Vercel / Geist。最个性、最"工程师"，但离现有品牌最远。</span></a>
+</div>
+</body>
+</html>

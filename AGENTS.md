@@ -43,7 +43,7 @@
 # 日常
 make dev            # 开发服务器（默认 3001，PORT 可覆盖）
 make check          # 类型检查（每次改完必跑）
-make build          # 生产构建（限单核 + 1GB 防 OOM）
+make build          # 生产构建（限单核 + 1.5GB 防 OOM）
 make deploy         # 构建 + PM2 优雅重启 + /api/health 验证
 
 # 质量
@@ -150,7 +150,7 @@ make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
 | `skills/code-review/SKILL.md` | 完成变更后自审 |
 | `skills/debugging/SKILL.md` | 遇到 bug 时 |
 
-**技术栈速记**：Next.js 14 + 自定义 `server.js`（ASR WS 代理）+ TS 5.3 · Tailwind 3.4 · Prisma + SQLite · Dexie · Zustand · AI SDK v6 · PM2 · Electron（`desktop/`）
+**技术栈速记**：Next.js 14 + 自定义 `server.js`（ASR WS 代理）+ TS 5.3 · Tailwind 3.4 · Prisma + SQLite · Dexie · Zustand · AI SDK v6 · Motion（营销页动效，`motion/react`）· PM2 · Electron（`desktop/`）
 
 ---
 
