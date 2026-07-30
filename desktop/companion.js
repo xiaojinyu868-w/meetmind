@@ -1,14 +1,13 @@
 /**
- * Octo Buddy — 参数化宠物渲染器（v3）
+ * Octo Buddy — 参数化宠物渲染器（v3.1 人格回归版）
  *
- * 原则：原画 100% 保留（精灵图不重绘），生命感全部来自连续参数：
- *   - 呼吸：绕底边锚点的 scale 振荡（弹簧叠加，不是硬循环）
- *   - 眨眼：sprite-map 给的眼位 + 同色眼皮遮罩，随机间隔 2.6–6.5s
- *   - 眼随：整只身体朝光标微微倾身（±3px + ±2°），弹簧回中
- *   - 果冻：拖拽/落地用 velocity 驱动 squash & stretch
- *   - 状态：sprite 之间 260ms 交叉淡入，绝不硬切
- *   - 听讲：身体周围泛开声波涟漪（loopback 旁听中）
- *   - 睡觉：超时/深夜自动 dim + 慢呼吸，靠近就醒
+ * 原则（向 shimeji 学的）：生命感 = 离散动作 × 丰富表情 × 克制的频率，
+ * 不是持续的物理抖动。
+ *   - 物理全部近临界阻尼：一下就是一下，绝不来回晃（v3 果冻发晕的教训）
+ *   - 表情是主角：7 张精灵都有戏（开心/喜欢/惊讶/思考/睡着/兴奋）
+ *   - 小动作离散且稀少：每 18–30s 才做一个（peek/wiggle/hop），做完就安静
+ *   - 生物钟：40s 想你了 → 80s 犯困 → 140s 睡着；被点会醒
+ *   - 呼吸/眨眼/眼随/涟漪/阴影：v3 的底子全部保留，只做更轻
  */
 
 const SPRITE_KEYS = ['idle', 'happy', 'excited', 'thinking', 'surprised', 'love', 'sleeping'];
@@ -18,20 +17,18 @@ const canvas = document.getElementById('stage');
 const ctx = canvas.getContext('2d');
 const speechEl = document.getElementById('speech');
 
-/* ---------- 小工具 ---------- */
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const rand = (lo, hi) => lo + Math.random() * (hi - lo);
 
-/** 一维弹簧：x 向 target 收敛，返回当前值（每帧调用） */
-function makeSpring(stiffness = 0.14, damping = 0.72) {
+/** 一维弹簧。stiffness/damping 取近临界：快速收敛、几乎无过冲 */
+function makeSpring(stiffness = 0.2, damping = 0.84) {
   let x = 0;
   let v = 0;
   let target = 0;
   return {
     set(t) { target = t; },
-    snap(t) { x = v = 0; target = t; x = t; },
+    snap(t) { x = t; v = 0; target = t; },
     kick(impulse) { v += impulse; },
-    get target() { return target; },
     step() {
       v = (v + (target - x) * stiffness) * damping;
       x += v;
@@ -41,7 +38,7 @@ function makeSpring(stiffness = 0.14, damping = 0.72) {
   };
 }
 
-/* ---------- 资源加载 ---------- */
+/* ---------- 资源 ---------- */
 const images = {};
 let spriteMap = null;
 
@@ -61,46 +58,42 @@ async function loadAssets() {
 
 /* ---------- 宠物状态 ---------- */
 const pet = {
-  sprite: 'idle',       // 当前表情
-  prevSprite: null,     // 交叉淡化来源
-  fade: 1,              // 淡化进度 0→1
-  mode: 'idle',         // idle | listening | thinking | sleeping | celebrate | gulp
+  sprite: 'idle',
+  prevSprite: null,
+  fade: 1,
   listening: false,
   listeningSince: 0,
   asleep: false,
   lastInteraction: Date.now(),
+  clickIntensity: 0,
+  busy: false, // 正在做小动作/反应，不叠加
 };
 
-// 弹簧组
-const lean = makeSpring(0.12, 0.68);   // 身体朝光标倾身（px）
-const leanY = makeSpring(0.12, 0.68);
-const tilt = makeSpring(0.10, 0.66);   // 旋转（弧度）
-const squashX = makeSpring(0.16, 0.62);
-const squashY = makeSpring(0.16, 0.62);
-const dim = makeSpring(0.05, 0.85);    // 睡眠/深夜压暗
-
+const lean = makeSpring(0.14, 0.78);   // 眼随倾身（慢半拍才像活的）
+const leanY = makeSpring(0.16, 0.8);
+const tilt = makeSpring(0.14, 0.78);
+const squashX = makeSpring(0.24, 0.86); // 果冻：近临界，一下收敛
+const squashY = makeSpring(0.24, 0.86);
+const dim = makeSpring(0.05, 0.85);
 squashX.snap(1);
 squashY.snap(1);
 
-// 眨眼
 let blinkAt = Date.now() + rand(2600, 5200);
 let blinkStart = -1;
-const BLINK_MS = 150;
+const BLINK_MS = 140;
 
-// 涟漪
 const ripples = [];
 let lastRippleAt = 0;
 
 /* ---------- 说话 ---------- */
 let speechTimer = null;
-function say(line, duration = 1800) {
+function say(line, duration = 1700) {
   speechEl.textContent = line;
   speechEl.dataset.visible = 'true';
   clearTimeout(speechTimer);
   speechTimer = setTimeout(() => { speechEl.dataset.visible = 'false'; }, duration);
 }
 
-/* 旁听时长：悬停时轻声报时（每 5s 刷新，不打扰） */
 let listenSpeechTimer = null;
 function updateListenSpeech() {
   if (!pet.listening) return;
@@ -111,7 +104,7 @@ function updateListenSpeech() {
   speechEl.dataset.visible = 'true';
 }
 
-/* ---------- 状态切换（交叉淡化） ---------- */
+/* ---------- 表情（交叉淡化） ---------- */
 function setSprite(next) {
   if (pet.sprite === next) return;
   pet.prevSprite = pet.sprite;
@@ -119,20 +112,80 @@ function setSprite(next) {
   pet.fade = 0;
 }
 
-function setMode(next) {
-  pet.mode = next;
-  switch (next) {
-    case 'idle': setSprite(pet.asleep ? 'sleeping' : 'idle'); break;
-    case 'listening': setSprite('idle'); break;
-    case 'thinking': setSprite('thinking'); break;
-    case 'celebrate': setSprite('excited'); break;
-    case 'gulp': setSprite('happy'); break;
-    case 'sleeping': setSprite('sleeping'); break;
+/** 临时表情：show 一会儿，然后回 idle（或睡觉/听讲态） */
+let moodResetTimer = null;
+function showMood(sprite, ms = 2200) {
+  setSprite(sprite);
+  clearTimeout(moodResetTimer);
+  moodResetTimer = setTimeout(() => {
+    if (pet.asleep) setSprite('sleeping');
+    else setSprite('idle');
+  }, ms);
+}
+
+/* ---------- 离散小动作（每 18–30s 一个，做完就安静） ---------- */
+let motionUntil = 0;
+let motionKind = null;
+
+function doPeek() {
+  motionKind = 'peek';
+  const side = Math.random() > 0.5 ? 1 : -1;
+  lean.set(side * 2.6);
+  tilt.set(side * 0.03);
+  motionUntil = performance.now() + 900;
+}
+
+function doWiggle() {
+  motionKind = 'wiggle';
+  motionUntil = performance.now() + 720;
+}
+
+function doHop() {
+  motionKind = 'hop';
+  leanY.kick(-2.4);
+  motionUntil = performance.now() + 320;
+}
+
+function scheduleAmbient() {
+  const every = rand(18000, 30000);
+  setTimeout(() => {
+    scheduleAmbient();
+    if (pet.busy || pet.listening || pet.asleep || dragState) return;
+    if (document.hidden) return;
+    const pick = Math.random();
+    if (pick < 0.45) doPeek();
+    else if (pick < 0.8) doWiggle();
+    else doHop();
+  }, every);
+}
+
+/* ---------- 生物钟 ---------- */
+setInterval(() => {
+  if (pet.listening || dragState) return;
+  const idleFor = Date.now() - pet.lastInteraction;
+  if (idleFor > 140000) {
+    if (!pet.asleep) {
+      pet.asleep = true;
+      setSprite('sleeping');
+    }
+  } else if (idleFor > 80000) {
+    if (!pet.asleep && pet.sprite === 'idle') setSprite('thinking');
+  } else if (idleFor > 40000) {
+    if (!pet.asleep && pet.sprite === 'idle') showMood('love', 3000);
+  }
+}, 4000);
+
+function touch() {
+  pet.lastInteraction = Date.now();
+  if (pet.asleep) {
+    pet.asleep = false;
+    showMood('surprised', 1400);
+    say('醒啦', 1200);
   }
 }
 
 /* ---------- 布局与绘制 ---------- */
-const CANONICAL_W = 122; // 统一身体宽度（px），不同尺寸精灵归一
+const CANONICAL_W = 122;
 let dpr = 1;
 
 function resizeCanvas() {
@@ -143,11 +196,11 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-function drawSprite(key, alpha, baseX, baseY, scale) {
+function drawSprite(key, alpha, baseX, baseY) {
   const img = images[key];
   const map = spriteMap?.[key];
   if (!img || !map) return;
-  const k = (CANONICAL_W * scale) / map.width;
+  const k = CANONICAL_W / map.width;
   const w = map.width * k;
   const h = map.height * k;
   ctx.globalAlpha = alpha;
@@ -161,7 +214,6 @@ function drawBlink(layout) {
   if (!map?.eyesOpen || blinkStart < 0 || !layout) return;
   const progress = (performance.now() - blinkStart) / BLINK_MS;
   if (progress >= 1) { blinkStart = -1; return; }
-  // 下-上两相：前半闭眼，后半睁开
   const phase = progress < 0.5 ? progress * 2 : (1 - progress) * 2;
   for (const eye of map.eyes) {
     const [r, g, b] = eye.lidColor || [139, 92, 246];
@@ -175,7 +227,7 @@ function drawBlink(layout) {
   }
 }
 
-function drawRipples(now, cx, cy, scale) {
+function drawRipples(now, cx, cy) {
   if (!pet.listening) { ripples.length = 0; return; }
   if (now - lastRippleAt > 1600) {
     ripples.push({ born: now });
@@ -184,18 +236,15 @@ function drawRipples(now, cx, cy, scale) {
   for (let i = ripples.length - 1; i >= 0; i -= 1) {
     const age = (now - ripples[i].born) / 2400;
     if (age >= 1) { ripples.splice(i, 1); continue; }
-    const radius = (34 + age * 46) * scale;
-    const alpha = 0.34 * (1 - age);
     ctx.beginPath();
-    ctx.arc(cx, cy - 30 * scale, radius, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(139, 92, 246, ${alpha.toFixed(3)})`;
+    ctx.arc(cx, cy - 30, 34 + age * 46, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(139, 92, 246, ${(0.34 * (1 - age)).toFixed(3)})`;
     ctx.lineWidth = 1.6;
     ctx.stroke();
   }
-  // 听讲时一层极淡的橙：存在感但不吵
   const inner = (Math.sin(now / 600) + 1) / 2;
   ctx.beginPath();
-  ctx.arc(cx, cy - 30 * scale, 20 * scale, 0, Math.PI * 2);
+  ctx.arc(cx, cy - 30, 20, 0, Math.PI * 2);
   ctx.strokeStyle = `rgba(255, 100, 36, ${(0.08 + inner * 0.08).toFixed(3)})`;
   ctx.lineWidth = 1.2;
   ctx.stroke();
@@ -211,17 +260,24 @@ function frame(now) {
   ctx.save();
   ctx.scale(dpr, dpr);
 
-  // 睡眠调度
-  const idleFor = Date.now() - pet.lastInteraction;
   const night = new Date().getHours() >= 23 || new Date().getHours() < 7;
-  pet.asleep = idleFor > 120000;
-  dim.set(pet.asleep ? 0.4 : night ? 0.22 : 0);
-  if (pet.asleep && pet.sprite !== 'sleeping') setSprite('sleeping');
+  dim.set(pet.asleep ? 0.4 : night ? 0.2 : 0);
 
-  // 呼吸：慢周期，幅度随睡眠加深
-  const breatheAmp = pet.asleep ? 0.010 : pet.listening ? 0.020 : 0.015;
-  const breatheRate = pet.asleep ? 2.8 : 1.9;
+  // 呼吸：很轻，睡着更深更慢
+  const breatheAmp = pet.asleep ? 0.008 : pet.listening ? 0.016 : 0.011;
+  const breatheRate = pet.asleep ? 3.0 : 2.1;
   const breathe = Math.sin((t * Math.PI * 2) / breatheRate);
+
+  // 小动作的 tilt 波形
+  if (motionKind === 'wiggle' && now < motionUntil) {
+    tilt.set(Math.sin(now / 46) * 0.022);
+  }
+  if (motionKind && now >= motionUntil) {
+    if (motionKind === 'peek') { lean.set(0); tilt.set(0); }
+    if (motionKind === 'wiggle') tilt.set(0);
+    if (motionKind === 'hop') squashY.kick(0.05);
+    motionKind = null;
+  }
 
   const lx = lean.step();
   const ly = leanY.step();
@@ -233,10 +289,9 @@ function frame(now) {
   const W = canvas.clientWidth;
   const H = canvas.clientHeight;
   const baseX = W / 2 + lx;
-  const baseY = H - 16 + ly + breathe * breatheAmp * 26;
+  const baseY = H - 16 + ly + breathe * breatheAmp * 22;
 
-  // 贴地阴影：随挤压反向变化，宠物落地不悬浮
-  const shadowScale = clamp(1 - (sy - 1) * 1.8, 0.7, 1.25);
+  const shadowScale = clamp(1 - (sy - 1) * 1.8, 0.8, 1.2);
   ctx.beginPath();
   ctx.ellipse(baseX - lx * 0.5, H - 13, 36 * shadowScale, 6, 0, 0, Math.PI * 2);
   ctx.fillStyle = `rgba(23, 23, 19, ${(0.17 * (1 - dimV * 0.55)).toFixed(3)})`;
@@ -244,19 +299,16 @@ function frame(now) {
 
   ctx.translate(baseX, baseY);
   ctx.rotate(rot);
-  ctx.scale(sx * (1 + breathe * breatheAmp * 0.55), sy * (1 - breathe * breatheAmp));
+  ctx.scale(sx * (1 + breathe * breatheAmp * 0.45), sy * (1 - breathe * breatheAmp));
   ctx.translate(-baseX, -baseY);
 
-  // 交叉淡化
   if (pet.fade < 1) pet.fade = clamp(pet.fade + 0.055, 0, 1);
-  let layout = null;
-  if (pet.prevSprite && pet.fade < 1) drawSprite(pet.prevSprite, 1 - pet.fade, baseX, baseY, 1);
-  layout = drawSprite(pet.sprite, pet.prevSprite ? pet.fade : 1, baseX, baseY, 1);
+  if (pet.prevSprite && pet.fade < 1) drawSprite(pet.prevSprite, 1 - pet.fade, baseX, baseY);
+  const layout = drawSprite(pet.sprite, pet.prevSprite ? pet.fade : 1, baseX, baseY);
 
   drawBlink(layout);
-  drawRipples(now, baseX, baseY, 1);
+  drawRipples(now, baseX, baseY);
 
-  // 睡眠/深夜压暗
   if (dimV > 0.01) {
     ctx.fillStyle = `rgba(16, 14, 26, ${(dimV * 0.5).toFixed(3)})`;
     ctx.globalCompositeOperation = 'source-atop';
@@ -266,7 +318,6 @@ function frame(now) {
 
   ctx.restore();
 
-  // 眨眼调度
   if (blinkStart < 0 && Date.now() > blinkAt && !pet.asleep) {
     blinkStart = now;
     blinkAt = Date.now() + rand(2600, 6500);
@@ -276,27 +327,31 @@ function frame(now) {
 /* ---------- 交互 ---------- */
 let dragState = null;
 let clickTimer = null;
-
-function touch() {
-  pet.lastInteraction = Date.now();
-  if (pet.asleep) {
-    pet.asleep = false;
-    setSprite('surprised');
-    say('醒啦', 1200);
-    setTimeout(() => setSprite(pet.listening ? 'idle' : 'idle'), 1200);
-  }
-}
+let intensityTimer = null;
 
 canvas.addEventListener('pointerenter', () => {
-  touch();
-  leanY.kick(-0.6);
+  pet.lastInteraction = Date.now(); // hover 只是看你，不算打扰，也不说话
+  leanY.kick(-0.5);
   if (pet.listening) {
     updateListenSpeech();
     listenSpeechTimer = setInterval(updateListenSpeech, 5000);
   }
 });
 
+canvas.addEventListener('pointermove', (event) => {
+  if (dragState) return;
+  const rect = canvas.getBoundingClientRect();
+  const nx = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
+  const ny = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
+  lean.set(clamp(nx * 3.0, -3.0, 3.0));
+  leanY.set(clamp(ny * 1.4, -1.4, 1.4));
+  tilt.set(clamp(nx * 0.03, -0.03, 0.03));
+});
+
 canvas.addEventListener('pointerleave', () => {
+  lean.set(0);
+  leanY.set(0);
+  tilt.set(0);
   if (listenSpeechTimer) {
     clearInterval(listenSpeechTimer);
     listenSpeechTimer = null;
@@ -304,27 +359,11 @@ canvas.addEventListener('pointerleave', () => {
   }
 });
 
-canvas.addEventListener('pointermove', (event) => {
-  if (dragState) return;
-  const rect = canvas.getBoundingClientRect();
-  const nx = ((event.clientX - rect.left) / rect.width - 0.5) * 2; // -1..1
-  const ny = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
-  lean.set(clamp(nx * 3.2, -3.2, 3.2));
-  leanY.set(clamp(ny * 1.6, -1.6, 1.6));
-  tilt.set(clamp(nx * 0.045, -0.045, 0.045));
-});
-
-canvas.addEventListener('pointerleave', () => {
-  lean.set(0);
-  leanY.set(0);
-  tilt.set(0);
-});
-
 canvas.addEventListener('pointerdown', (event) => {
   canvas.setPointerCapture(event.pointerId);
   touch();
-  squashX.set(0.9);
-  squashY.set(1.1);
+  squashX.set(0.97);
+  squashY.set(1.03);
   dragState = { pointerId: event.pointerId, lastX: event.screenX, lastY: event.screenY, moved: false };
 });
 
@@ -345,35 +384,54 @@ function releaseDrag(event) {
   canvas.releasePointerCapture(event.pointerId);
   const moved = dragState.moved;
   dragState = null;
-  // 果冻回弹
   squashX.set(1);
   squashY.set(1);
-  squashX.kick(0.24);
-  squashY.kick(-0.2);
   if (!moved) handleTap();
 }
 canvas.addEventListener('pointerup', releaseDrag);
 canvas.addEventListener('pointercancel', () => { dragState = null; squashX.set(1); squashY.set(1); });
 
+/** 点击反应（人格核心）：1 下开心、2 下喜欢、3 下惊讶、4+ 假装生气 */
+function reactToTap() {
+  pet.clickIntensity += 1;
+  clearTimeout(intensityTimer);
+  intensityTimer = setTimeout(() => { pet.clickIntensity = Math.max(0, pet.clickIntensity - 1); }, 1600);
+
+  if (pet.clickIntensity <= 1) {
+    showMood('happy');
+    say('我在');
+  } else if (pet.clickIntensity === 2) {
+    showMood('love');
+    say('今天也一起学');
+  } else if (pet.clickIntensity === 3) {
+    showMood('surprised');
+    say('哎？');
+  } else {
+    showMood('surprised', 2600);
+    doWiggle();
+    say('别一直戳我', 2200);
+    pet.clickIntensity = 0;
+  }
+}
+
 /** 单击=随手问（小窗）；双击=旁听开关 */
 function handleTap() {
   touch();
-  squashY.kick(0.3);
+  squashY.kick(0.05);
   if (clickTimer) {
     clearTimeout(clickTimer);
     clickTimer = null;
+    pet.clickIntensity = 0;
     toggleListening();
     return;
   }
   clickTimer = setTimeout(() => {
     clickTimer = null;
-    setSprite('happy');
-    setTimeout(() => { if (pet.sprite === 'happy') setSprite('idle'); }, 1400);
+    reactToTap();
     window.meetmindCompanion?.togglePanel();
-  }, 280);
+  }, 300);
 }
 
-/** 旁听开关：IPC 到主进程 → 驱动隐藏主窗口里的网页 Recorder */
 async function toggleListening() {
   touch();
   const bridge = window.meetmindCompanion;
@@ -383,16 +441,19 @@ async function toggleListening() {
     if (result?.listening) {
       pet.listening = true;
       pet.listeningSince = Date.now();
-      setMode('listening');
+      setSprite('idle');
       say('我在旁边听', 1600);
     } else {
-      if (pet.listening) say('记下了，去整理', 1800);
+      if (pet.listening) {
+        showMood('happy', 1600);
+        say('记下了，去整理', 1800);
+      }
       pet.listening = false;
       if (listenSpeechTimer) {
         clearInterval(listenSpeechTimer);
         listenSpeechTimer = null;
       }
-      setMode('idle');
+      setSprite('idle');
       if (result?.reason === 'not-logged-in') say('先在主窗口登录一下', 2200);
       if (result?.reason === 'hook-missing') say('主窗口还没准备好', 2000);
     }
@@ -401,14 +462,13 @@ async function toggleListening() {
   }
 }
 
-/** 右键：最小菜单（打开主窗口 / 退出） */
 canvas.addEventListener('contextmenu', (event) => {
   event.preventDefault();
   touch();
   window.meetmindCompanion?.showPetMenu();
 });
 
-/** 拖文件到宠物身上 = 收下（当前只收图片） */
+/* ---------- 拖图片收下 ---------- */
 document.addEventListener('dragover', (event) => event.preventDefault());
 document.addEventListener('drop', async (event) => {
   event.preventDefault();
@@ -419,8 +479,6 @@ document.addEventListener('drop', async (event) => {
     say('我还只会收图片', 1800);
     return;
   }
-  squashY.set(0.88);
-  setTimeout(() => squashY.set(1), 180);
   say('张嘴接住…', 1200);
   try {
     const payload = await Promise.all(imagesOnly.map(async (file) => ({
@@ -435,7 +493,6 @@ document.addEventListener('drop', async (event) => {
     })));
     const result = await window.meetmindCompanion?.dropFiles?.(payload);
     if (result?.ok) {
-      // 吞食动画由主进程 pet:gulp 触发，这里只兜底没桥接时的反馈
       say(`收下了 ${result.uploaded} 张`, 1600);
     } else if (result?.reason === 'not-logged-in') {
       say('先在主窗口登录一下', 2200);
@@ -447,19 +504,20 @@ document.addEventListener('drop', async (event) => {
   }
 });
 
-/** 捕获成功（截图/收下）→ 吞食动画 */
+/* ---------- 捕获成功的吞食动画 ---------- */
 window.meetmindCompanion?.onGulp?.(() => {
   touch();
-  setMode('gulp');
-  squashY.set(0.78);
-  squashX.set(1.14);
-  setTimeout(() => { squashX.set(1); squashY.set(1); squashX.kick(-0.18); squashY.kick(0.22); }, 160);
+  setSprite('happy');
+  squashX.set(1.05);
+  squashY.set(0.94);
+  setTimeout(() => { squashX.set(1); squashY.set(1); }, 140);
   say('收下了', 1300);
-  setTimeout(() => setMode(pet.listening ? 'listening' : 'idle'), 1300);
+  setTimeout(() => { if (pet.sprite === 'happy') setSprite('idle'); }, 1300);
 });
 
 /* ---------- 启动 ---------- */
 loadAssets().then(() => {
   requestAnimationFrame(frame);
+  scheduleAmbient();
   setTimeout(() => say('同学在这', 2000), 900);
 });
