@@ -224,6 +224,13 @@ function frame(now) {
   const baseX = W / 2 + lx;
   const baseY = H - 16 + ly + breathe * breatheAmp * 26;
 
+  // 贴地阴影：随挤压反向变化，宠物落地不悬浮
+  const shadowScale = clamp(1 - (sy - 1) * 1.8, 0.7, 1.25);
+  ctx.beginPath();
+  ctx.ellipse(baseX - lx * 0.5, H - 13, 36 * shadowScale, 6, 0, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(23, 23, 19, ${(0.17 * (1 - dimV * 0.55)).toFixed(3)})`;
+  ctx.fill();
+
   ctx.translate(baseX, baseY);
   ctx.rotate(rot);
   ctx.scale(sx * (1 + breathe * breatheAmp * 0.55), sy * (1 - breathe * breatheAmp));
@@ -372,6 +379,45 @@ canvas.addEventListener('contextmenu', (event) => {
   event.preventDefault();
   touch();
   window.meetmindCompanion?.showPetMenu();
+});
+
+/** 拖文件到宠物身上 = 收下（当前只收图片） */
+document.addEventListener('dragover', (event) => event.preventDefault());
+document.addEventListener('drop', async (event) => {
+  event.preventDefault();
+  touch();
+  const files = Array.from(event.dataTransfer?.files || []);
+  const imagesOnly = files.filter((f) => f.type.startsWith('image/')).slice(0, 5);
+  if (imagesOnly.length === 0) {
+    say('我还只会收图片', 1800);
+    return;
+  }
+  squashY.set(0.88);
+  setTimeout(() => squashY.set(1), 180);
+  say('张嘴接住…', 1200);
+  try {
+    const payload = await Promise.all(imagesOnly.map(async (file) => ({
+      name: file.name,
+      type: file.type,
+      dataBase64: await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      }),
+    })));
+    const result = await window.meetmindCompanion?.dropFiles?.(payload);
+    if (result?.ok) {
+      // 吞食动画由主进程 pet:gulp 触发，这里只兜底没桥接时的反馈
+      say(`收下了 ${result.uploaded} 张`, 1600);
+    } else if (result?.reason === 'not-logged-in') {
+      say('先在主窗口登录一下', 2200);
+    } else {
+      say('没收进去，再试一次', 1800);
+    }
+  } catch {
+    say('没收进去，再试一次', 1800);
+  }
 });
 
 /** 捕获成功（截图/收下）→ 吞食动画 */

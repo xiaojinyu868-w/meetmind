@@ -110,6 +110,43 @@ async function uploadOnce(pngBuffer, origin, token, ts) {
   if (!captureRes.ok) throw new Error(`captures 返回 ${captureRes.status}`);
 }
 
+// 拖文件进收集线（桌宠拖放）：与截图同一条两步链，只是标题/来源不同
+async function uploadImageFile(buffer, { origin, token, title, fileName, mime }) {
+  const form = new FormData();
+  form.append('image', new Blob([buffer], { type: mime || 'image/png' }), fileName || 'drop.png');
+  form.append('imageKey', `drop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+  const uploadRes = await fetch(`${origin}/api/workspace/upload-image`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  if (!uploadRes.ok) throw new Error(`upload-image 返回 ${uploadRes.status}`);
+  const uploadData = await uploadRes.json();
+  if (!uploadData?.success || !uploadData.mediaUrl) {
+    throw new Error('upload-image 返回缺少 mediaUrl');
+  }
+
+  const now = new Date();
+  const captureRes = await fetch(`${origin}/api/workspace/captures`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      sourceType: 'desktop-drop',
+      sourceKey: `desktop-drop-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      role: 'support',
+      contentType: 'image',
+      title,
+      mediaUrl: uploadData.mediaUrl,
+      occurredAt: now.toISOString(),
+      metadata: { channel: 'desktop-companion' },
+    }),
+  });
+  if (!captureRes.ok) throw new Error(`captures 返回 ${captureRes.status}`);
+}
+
 // 失败重试一次（间隔 2s）再放弃，交给 pending-shots 兜底。
 // 返回 'ok' | 'auth' | 'fail'：401 说明登录过期，文案要区分（用户能做的事不同）
 async function uploadWithRetry(pngBuffer, origin, token, ts) {
@@ -262,4 +299,7 @@ module.exports = {
   retryPendingShots,
   // 小窗「截图收进来」按钮与全局热键共用同一条流程
   captureOnce: handleHotkey,
+  // 桌宠拖放图片进收集线
+  uploadImageFile,
+  readAccessToken,
 };

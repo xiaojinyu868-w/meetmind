@@ -11,7 +11,7 @@ const {
   toggleShellWindow,
   createTray,
 } = require('./shell-window');
-const { registerScreenshotHotkey, retryPendingShots, captureOnce } = require('./screenshot');
+const { registerScreenshotHotkey, retryPendingShots, captureOnce, uploadImageFile, readAccessToken } = require('./screenshot');
 const { toggleQuickPanel, hideQuickPanel } = require('./quick-panel');
 const { startUpdateChecker } = require('./updater');
 
@@ -271,7 +271,32 @@ ipcMain.handle('pet:toggle-listen', async () => {
   }
 });
 
-// 宠物右键最小菜单：打开主窗口 / 退出（交互即姿态，其余一概不放）
+// 桌宠拖放图片 → 收集线（与截图同一条两步链；成功喂吞食动画）
+ipcMain.handle('pet:drop-files', async (_event, files) => {
+  if (!Array.isArray(files) || files.length === 0) return { ok: false, reason: 'empty' };
+  const token = await readAccessToken(getShellWindow);
+  if (!token) return { ok: false, reason: 'not-logged-in' };
+  const origin = new URL(MEETMIND_URL).origin;
+  let uploaded = 0;
+  for (const file of files.slice(0, 5)) {
+    try {
+      const buffer = Buffer.from(String(file.dataBase64), 'base64');
+      if (buffer.length === 0 || buffer.length > 12 * 1024 * 1024) continue;
+      await uploadImageFile(buffer, {
+        origin,
+        token,
+        title: typeof file.name === 'string' && file.name ? file.name : '拖进来的图',
+        fileName: file.name,
+        mime: file.type,
+      });
+      uploaded += 1;
+    } catch (err) {
+      console.warn('[desktop] 拖放上传失败', err);
+    }
+  }
+  if (uploaded > 0) companionWindow?.webContents.send('pet:gulp');
+  return { ok: uploaded > 0, uploaded };
+});
 ipcMain.handle('pet:menu', () => {
   const menu = Menu.buildFromTemplate([
     { label: '打开 MeetMind', click: () => showShellWindowAt(MEETMIND_URL) },
