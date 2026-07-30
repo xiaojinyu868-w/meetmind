@@ -5,6 +5,31 @@
 
 ---
 
+## 2026-07-30 — Octo Buddy 参数化宠物 v3 + 旁听闭环（桌面端 v1.3.0）
+
+> 桌宠从"换皮挂件"升级为"活的生命"：原画 100% 保留，生命感全部来自连续参数。
+> 三种姿态闭环：随手问（单击/热键）、快速捕获（截图/拖拽）、旁听（双击）。
+> 备份点：`backup/octo-buddy-pre-parametric-20260730` 分支（参数化之前的完整快照）。
+
+### 形象保留：精灵图算法分解（不重绘、不描摹、不矢量化）
+- `scripts/octo-sprite-map.js`：近黑像素连通域提取眼位、alpha 包围盒定身体锚点、眼周多点采样取眼皮同色（排除体素接缝透明点与纯白高光）；闭眼态精灵（excited/sleeping）从 idle 按 body 比例映射
+- 产物 `desktop/assets/octo/octo-sprite-map.json`：参数化动画的全部锚点
+
+### canvas 参数化渲染（companion.js 重写）
+- 呼吸振荡（底边锚点，睡眠时更深更慢）、2.6–6.5s 随机眨眼（同色眼皮遮罩）、眼随光标倾身（±3px + ±2° 弹簧）、拖拽果冻物理（velocity 驱动 squash & stretch）、精灵间 260ms 交叉淡化（不硬切）、贴地椭圆阴影（随挤压反向缩放）、深夜/超时自动压暗入睡
+- 交互即姿态，无按钮面板：单击随手问（小窗）、双击旁听、拖动位移、右键最小菜单
+
+### 旁听闭环（壳做身体，网页做大脑）
+- 宠物双击 → `pet:toggle-listen` IPC → 隐藏主窗口 `window.__meetmindDesktopRecording.toggle()`（`src/lib/services/desktop-recording-bridge.ts`）→ `autoStartSignal` 以 system 声源起录
+- Recorder / ASR / 课后理解 / 标题全复用，旁听结束即一节完整的课；旁听中宠物泛声波涟漪，悬停轻声报时
+- 全局热键 `Cmd/Ctrl+Shift+K` 随时唤起小窗提问（截图热键 Cmd/Ctrl+Shift+M 不变）
+
+### 捕获姿态
+- 拖图片到宠物身上即收收集线（`pet:drop-files` → uploadImageFile，与截图同一条两步链）
+- 截图/拖拽成功触发吞食动画（`onCaptured` → `pet:gulp`）
+
+---
+
 ## 2026-07-28 — v4.0 全端采集层 + 标题系统 + 课后理解 + teach-back + 微信 Agent + 桌面端 v1.2.0
 
 > 一周交付两条主线：(1) 应用矩阵与收集线的产品闭环（teach-back / 微信 Agent / 分享页 / 复习体验）；

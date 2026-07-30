@@ -74,7 +74,7 @@ make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
 4. **应用矩阵 M14.6**：结构化产物不走 LLM marker，前端 SkillChip 直调 `/api/apps/execute` → `src/lib/ai-native/DOMAIN.md` + `docs/APPLICATION_MATRIX_PRD.md`
 5. **ASR 两段式**：课中 realtime 保延迟，课后完整原声 batch 定稿替换 → `docs/ASR_PIPELINE.md` + `src/lib/services/asr/DOMAIN.md`
 6. **跨设备证据**：服务端正规化（TranscriptSegment + CaptureArtifact），按课堂懒拉回填 IndexedDB，不覆盖本机编辑 → `roadmap/v2.1-cross-browser-sync-gap.md`
-7. **v4.0 全端采集层**：桌面壳（Electron：内嵌网页 + loopback 系统音频 + 全局热键截图 + 小窗）+ 课中主动截图关键帧 + 移动端 Capacitor（方向已定未动工）→ `roadmap/v4.0-everywhere-capture.md` + `desktop/DOMAIN.md`
+7. **v4.0 全端采集层**：桌面壳（Electron：参数化桌宠 Octo Buddy + 内嵌网页 + loopback 系统音频 + 全局热键截图/小窗热键 + 双击旁听）+ 课中主动截图关键帧 + 移动端 Capacitor（方向已定未动工）→ `roadmap/v4.0-everywhere-capture.md` + `desktop/DOMAIN.md`
 8. **标题与课后理解**：`主题 · 课程 · M-D` 契约 + 用户改名双锁；定稿后一次 LLM 调用出标题/摘要/精选 → `src/lib/services/lesson-understanding-service.ts` + `src/app/api/DOMAIN.md`
 9. **分享裂变 v3.0**：场景上下文可分享、个人上下文默认私有、Agent 是分享单元 → `roadmap/v3.0-virality-agent.md` + `src/app/share/DOMAIN.md`
 10. **微信链路**：公众号收集 + 绑定用户文字走微信 Agent（客服消息推送）+ 桌面扫码登录 → `src/app/api/DOMAIN.md` 微信段
