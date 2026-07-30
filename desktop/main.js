@@ -151,8 +151,15 @@ function createCompanionWindow() {
     },
   });
 
-  companionWindow.setAlwaysOnTop(true, 'floating');
+  companionWindow.setAlwaysOnTop(true, 'screen-saver');
   companionWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Windows 上锁屏/UAC/其他置顶窗口会把桌宠压下去：
+  // screen-saver 是最高档，仍可能被系统事件偷走置顶，所以定时重新断言
+  setInterval(() => {
+    if (companionWindow && !companionWindow.isDestroyed()) {
+      companionWindow.setAlwaysOnTop(true, 'screen-saver');
+    }
+  }, 5000);
   placeInitialWindow(companionWindow);
   companionWindow.loadFile(path.join(__dirname, 'companion.html'));
   companionWindow.once('ready-to-show', () => companionWindow?.show());
