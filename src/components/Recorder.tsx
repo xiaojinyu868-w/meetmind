@@ -568,14 +568,15 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       // 旧顺序会在弱网 / 冷启动时丢掉开头数秒，而且这些话连课后 batch
       // 都无法找回。新顺序是：MediaRecorder 立即收原声，PCM 在 ASR 连接前
       // 进 DashScopeASRClient 队列，ready 后按原顺序补送。
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : 'audio/webm';
+      // Safari 不支持 webm：逐个探测受支持容器（mp4 兜底），全不支持则交给浏览器自选，
+      // 否则 start() 会抛 "There was an error starting the MediaRecorder"。
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']
+        .find((candidate) => MediaRecorder.isTypeSupported(candidate));
 
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType,
-        audioBitsPerSecond: 64000,
-      });
+      const mediaRecorder = new MediaRecorder(
+        stream,
+        mimeType ? { mimeType, audioBitsPerSecond: 64000 } : { audioBitsPerSecond: 64000 },
+      );
 
       mediaRecorder.ondataavailable = async (event) => {
         if (event.data.size > 0) {
@@ -914,7 +915,9 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     try {
       const createFormData = () => {
         const formData = new FormData();
-        formData.append('audio', audioBlob, 'recording.webm');
+        // 容器格式随浏览器协商结果变化（Safari 录出 mp4），文件名后缀要匹配实际上传内容
+        const ext = audioBlob.type.includes('mp4') ? 'm4a' : audioBlob.type.includes('ogg') ? 'ogg' : 'webm';
+        formData.append('audio', audioBlob, `recording.${ext}`);
         if (contextHint.trim()) {
           formData.append('context', contextHint.trim());
         }
