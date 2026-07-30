@@ -372,16 +372,30 @@ function StudentAppContent({
   const isRecordingRef = useRef(isRecording);
   useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
   useEffect(() => {
+    let openedByBridge = false;
     const uninstall = installDesktopRecordingBridge({
       isRecording: () => isRecordingRef.current,
       start: async () => {
-        if (!recorderRef.current) return false;
+        // Recorder 只在课堂/录制视图挂载；收集视图下先挂出录音条，等 ref 就位
+        if (!recorderRef.current) {
+          uiActions.setShowMobileRecorder(true);
+          openedByBridge = true;
+          const deadline = Date.now() + 2500;
+          while (!recorderRef.current && Date.now() < deadline) {
+            await new Promise((resolve) => { setTimeout(resolve, 120); });
+          }
+          if (!recorderRef.current) return false;
+        }
         captureEditorActions.setRecorderAudioSource('system');
         captureEditorActions.setRecorderAutoStartSignal(Date.now());
         return waitForRecordingStart(() => isRecordingRef.current);
       },
       stop: async () => {
         await recorderRef.current?.stopRecording();
+        if (openedByBridge) {
+          uiActions.setShowMobileRecorder(false);
+          openedByBridge = false;
+        }
       },
     });
     return uninstall;

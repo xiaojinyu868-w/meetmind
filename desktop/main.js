@@ -266,6 +266,11 @@ ipcMain.handle('pet:toggle-listen', async () => {
       'window.__meetmindDesktopRecording ? window.__meetmindDesktopRecording.toggle() : { listening: false, reason: "hook-missing" }',
       true,
     );
+    // 钩子不存在时分辩一下：在登录页 → 提示登录；其余 → 页面还没加载完
+    if (result?.reason === 'hook-missing') {
+      const url = win.webContents.getURL();
+      if (url.includes('/login')) return { listening: false, reason: 'not-logged-in' };
+    }
     return result || { listening: false, reason: 'hook-missing' };
   } catch (err) {
     console.warn('[desktop] pet:toggle-listen 失败', err);

@@ -414,7 +414,8 @@ function reactToTap() {
   }
 }
 
-/** 单击=随手问（小窗）；双击=旁听开关 */
+/** 单击=随手问（小窗）；双击=旁听开关。
+ *  判定窗口取 460ms：Windows 系统双击时间默认 500ms，300ms 会把慢双击拆成两次单击 */
 function handleTap() {
   touch();
   squashY.kick(0.05);
@@ -429,13 +430,14 @@ function handleTap() {
     clickTimer = null;
     reactToTap();
     window.meetmindCompanion?.togglePanel();
-  }, 300);
+  }, 460);
 }
 
 async function toggleListening() {
   touch();
   const bridge = window.meetmindCompanion;
   if (!bridge?.toggleListen) return;
+  if (!pet.listening) say('竖起耳朵…', 1500); // 启动有等待（loopback 授权 + ASR），先给确定感
   try {
     const result = await bridge.toggleListen();
     if (result?.listening) {
@@ -443,20 +445,29 @@ async function toggleListening() {
       pet.listeningSince = Date.now();
       setSprite('idle');
       say('我在旁边听', 1600);
-    } else {
-      if (pet.listening) {
-        showMood('happy', 1600);
-        say('记下了，去整理', 1800);
-      }
-      pet.listening = false;
-      if (listenSpeechTimer) {
-        clearInterval(listenSpeechTimer);
-        listenSpeechTimer = null;
-      }
-      setSprite('idle');
-      if (result?.reason === 'not-logged-in') say('先在主窗口登录一下', 2200);
-      if (result?.reason === 'hook-missing') say('主窗口还没准备好', 2000);
+      return;
     }
+    const wasListening = pet.listening;
+    pet.listening = false;
+    if (listenSpeechTimer) {
+      clearInterval(listenSpeechTimer);
+      listenSpeechTimer = null;
+    }
+    if (wasListening) {
+      showMood('happy', 1600);
+      say('记下了，去整理', 1800);
+      setSprite('idle');
+      return;
+    }
+    setSprite('idle');
+    const reasons = {
+      'not-logged-in': '先在主窗口登录一下',
+      'hook-missing': '主窗口还没准备好',
+      'no-shell-window': '主窗口还没准备好',
+      'start-failed': '没拿到电脑声音，再试一次',
+      error: '旁听没起来，再试一次',
+    };
+    say(reasons[result?.reason] || '旁听没起来，再试一次', 2400);
   } catch {
     say('旁听没起来，再试一次', 1800);
   }
