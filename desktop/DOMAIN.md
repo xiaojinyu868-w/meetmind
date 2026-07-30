@@ -20,18 +20,19 @@ desktop/ → HTTP 调用 {origin}/api/workspace/upload-image + /api/workspace/ca
 
 | 文件 | 职责 |
 |------|------|
-| `main.js` | 主进程入口：单实例锁（重复启动只唤起主窗口）、应用菜单（编辑 role 保 Cmd/Ctrl+C/V）、Chromium 启动参数（macOS loopback / 免录屏选择器）、悬浮球窗口、托盘与两个能力模块的接线、IPC |
+| `main.js` | 主进程入口：单实例锁（重复启动只唤起主窗口）、应用菜单（编辑 role 保 Cmd/Ctrl+C/V）、Chromium 启动参数（macOS loopback / 免录屏选择器）、悬浮球窗口、托盘与两个能力模块的接线、IPC（含 `pet:toggle-listen` 旁听驱动网页 Recorder、`pet:menu` 右键最小菜单、截图成功向宠物推 `pet:gulp`） |
 | `shell-window.js` | 内嵌主窗口（关闭即隐藏常驻 + 尺寸位置持久化）+ `setDisplayMediaRequestHandler` 免弹窗授予「主屏 + loopback 系统音频」+ 安全策略（权限最小化 / 站外导航与 target=_blank 交系统浏览器）+ 断网兜底页 + 系统托盘（版本、热键说明、开机自启开关） |
-| `screenshot.js` | 全局热键 `Ctrl/Cmd+Shift+M`：**录制感知分流**——壳内正在录屏类课时先调网页 `__meetmindCaptureFrame` 钩子把当前帧挂到课堂时间轴；不在录才走收集线截图（截鼠标所在屏 → upload-image → captures）；失败重试一次（2s），仍失败暂存 `userData/pending-shots/`，启动时补传一次；`captureOnce` 同时供小窗按钮复用 |
+| `screenshot.js` | 全局热键 `Ctrl/Cmd+Shift+M`：**录制感知分流**——壳内正在录屏类课时先调网页 `__meetmindCaptureFrame` 钩子把当前帧挂到课堂时间轴；不在录才走收集线截图（截鼠标所在屏 → upload-image → captures）；失败重试一次（2s），仍失败暂存 `userData/pending-shots/`，启动时补传一次；`captureOnce` 同时供小窗按钮复用；成功时调 `deps.onCaptured` 触发宠物吞食动画 |
 | `quick-panel.js` | v3 桌面小窗：无边框透明窗加载 Web 端 `/companion` 面板（随手记/随口问/截图），失焦自动收起；与主窗口共用 `persist:meetmind` partition 共享登录态 |
 | `updater.js` | 自动更新检查：启动 20s 首查 + 每 4h 查 GitHub Releases 的 desktop-v* tag，新版本安静通知一次，点击打开对应平台安装包（零依赖，未签名包友好；macOS 有签名后可换 electron-updater） |
 | `panel-preload.js` | 小窗安全桥：注入 `window.meetmindDesktop`（captureScreen / showMain / hidePanel）；浏览器打开 `/companion` 时无此对象，壳能力按钮自动隐藏 |
-| `preload.js` | 悬浮球安全 IPC：展开窗口、拖动窗口、显示主窗口、toggle 小窗、退出 |
-| `companion.html` | 桌面悬浮球 DOM 结构 |
-| `companion.css` | 桌面悬浮球视觉：透明章鱼本体、漂浮/思考/生气/睡眠动画 |
-| `companion.js` | 在场感状态机：待机生命周期、点击强度、任意拖动；听课/问同学/打开 MeetMind 统一走壳内主窗口 |
+| `preload.js` | 悬浮球安全 IPC：展开窗口、拖动窗口、显示主窗口、toggle 小窗、`toggleListen`（旁听）、`showPetMenu`（右键菜单）、`onGulp`（吞食动画）、退出 |
+| `companion.html` | 桌宠 DOM：全尺寸 canvas + 说话气泡（无按钮面板——交互即姿态） |
+| `companion.css` | 桌宠视觉：透明窗 + 气泡样式（角色渲染全在 canvas） |
+| `companion.js` | **参数化宠物**（v3）：canvas 渲染精灵图，原画 100% 保留，生命感全部来自连续参数——呼吸振荡 / 随机眨眼（sprite-map 眼位 + 同色眼皮遮罩）/ 眼随光标倾身 / 拖拽果冻物理 / 旁听声波涟漪 / 睡眠与深夜压暗；单击随手问（小窗）、双击旁听、右键最小菜单 |
 | `offline.html` | 断网兜底页（主窗口 loadURL 失败时加载，带「重新连接」） |
 | `assets/octo/*.png` | Octo Buddy 精灵图（从 `public/images/octo-buddy/` 复制——安装包只打 desktop/，外部素材必须进 assets） |
+| `assets/octo/octo-sprite-map.json` | 精灵图算法分解产物（`scripts/octo-sprite-map.js` 生成）：body 包围盒、眼位、眼皮同色采样——参数化动画的锚点，闭眼态（excited/sleeping）从 idle 按比例映射 |
 | `assets/tray-icon.png` / `assets/tray-iconTemplate.png` | 托盘图标 18x18（Win/Linux）与 macOS Template 22x22（sharp 生成） |
 | `build/icon.png` | 安装包图标 512x512（sharp 从 original.png 生成；icns/ico 由 electron-builder 自动转） |
 | `package.json` | two-package 结构的 app 清单（electron-builder 以 desktop/ 为 app 目录） |

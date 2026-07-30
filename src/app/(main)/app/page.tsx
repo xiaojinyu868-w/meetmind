@@ -83,6 +83,7 @@ import { useLessonDigest } from '@/hooks/useLessonDigest';
 
 import type { WaveformPlayerRef, WaveformAnchor } from '@/components/WaveformPlayer';
 import { Recorder, type RecorderHandle } from '@/components/Recorder';
+import { installDesktopRecordingBridge, waitForRecordingStart } from '@/lib/services/desktop-recording-bridge';
 import { useClassCheck } from '@/hooks/useClassCheck';
 import type { ClassCheckHighlight } from '@/app/api/class-check/plan/route';
 import type { VideoInsightItem } from '@/components/VideoInsightTimeline';
@@ -365,7 +366,28 @@ function StudentAppContent({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  
+
+  // 桌面壳「旁听」钩子：桌宠双击 → 主进程 IPC → window.__meetmindDesktopRecording.toggle()
+  // 壳做身体（loopback 授权），网页做大脑（Recorder + ASR + 课后理解全复用）
+  const isRecordingRef = useRef(isRecording);
+  useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
+  useEffect(() => {
+    const uninstall = installDesktopRecordingBridge({
+      isRecording: () => isRecordingRef.current,
+      start: async () => {
+        if (!recorderRef.current) return false;
+        captureEditorActions.setRecorderAudioSource('system');
+        captureEditorActions.setRecorderAutoStartSignal(Date.now());
+        return waitForRecordingStart(() => isRecordingRef.current);
+      },
+      stop: async () => {
+        await recorderRef.current?.stopRecording();
+      },
+    });
+    return uninstall;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const { user, isAuthenticated, accessToken, isCheckingAuth } = useAuth();
   
 

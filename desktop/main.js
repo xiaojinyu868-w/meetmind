@@ -172,6 +172,7 @@ app.whenReady().then(() => {
     meetmindUrl: MEETMIND_URL,
     getShellWindow,
     showShellWindow: () => showShellWindowAt(MEETMIND_URL),
+    onCaptured: () => companionWindow?.webContents.send('pet:gulp'),
   };
   registerScreenshotHotkey(screenshotDeps);
   // 上次失败暂存的截图，启动时补传一次（未登录则保留到下次）
@@ -249,7 +250,41 @@ ipcMain.handle('desktop:capture-screen', () => {
     meetmindUrl: MEETMIND_URL,
     getShellWindow,
     showShellWindow: () => showShellWindowAt(MEETMIND_URL),
+    onCaptured: () => companionWindow?.webContents.send('pet:gulp'),
   });
+});
+
+// 宠物双击「旁听」：驱动隐藏主窗口里的网页 Recorder（loopback 系统声录课）。
+// 网页钩子由 /app 注入 window.__meetmindDesktopRecording；未注入多半是未登录或旧版网页。
+ipcMain.handle('pet:toggle-listen', async () => {
+  const win = getShellWindow();
+  if (!win) return { listening: false, reason: 'no-shell-window' };
+  try {
+    const result = await win.webContents.executeJavaScript(
+      'window.__meetmindDesktopRecording ? window.__meetmindDesktopRecording.toggle() : { listening: false, reason: "hook-missing" }',
+      true,
+    );
+    return result || { listening: false, reason: 'hook-missing' };
+  } catch (err) {
+    console.warn('[desktop] pet:toggle-listen 失败', err);
+    return { listening: false, reason: 'error' };
+  }
+});
+
+// 宠物右键最小菜单：打开主窗口 / 退出（交互即姿态，其余一概不放）
+ipcMain.handle('pet:menu', () => {
+  const menu = Menu.buildFromTemplate([
+    { label: '打开 MeetMind', click: () => showShellWindowAt(MEETMIND_URL) },
+    { type: 'separator' },
+    {
+      label: '退出',
+      click: () => {
+        app.isQuitting = true;
+        app.quit();
+      },
+    },
+  ]);
+  if (companionWindow) menu.popup({ window: companionWindow });
 });
 
 // 小窗打开主窗口；path 只允许站内相对路径，防被注入站外 URL

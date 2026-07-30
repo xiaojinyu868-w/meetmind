@@ -7,5 +7,11 @@ contextBridge.exposeInMainWorld('meetmindCompanion', {
   showMain: () => ipcRenderer.invoke('companion:show-main'),
   // v3： toggle 桌面小窗（/companion 面板：随手记、随口问、截图）
   togglePanel: () => ipcRenderer.invoke('companion:toggle-panel'),
+  // v4：旁听开关——主进程驱动隐藏主窗口里的网页 Recorder（loopback 系统声）
+  toggleListen: () => ipcRenderer.invoke('pet:toggle-listen'),
+  // 右键最小菜单（打开主窗口 / 退出）
+  showPetMenu: () => ipcRenderer.invoke('pet:menu'),
+  // 捕获成功的吞食动画（截图进收集线后由主进程推来）
+  onGulp: (handler) => ipcRenderer.on('pet:gulp', () => handler()),
   quit: () => ipcRenderer.invoke('companion:quit'),
 });

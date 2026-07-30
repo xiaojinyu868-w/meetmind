@@ -185,6 +185,7 @@ async function handleHotkey(deps) {
     const result = await uploadWithRetry(pngBuffer, origin, token, ts);
     if (result === 'ok') {
       notify({ title: 'MeetMind', body: '已收进 MeetMind', onClick: deps.showShellWindow });
+      deps.onCaptured?.(); // 宠物吞食动画
       return;
     }
     if (result === 'auth') {
