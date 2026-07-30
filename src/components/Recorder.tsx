@@ -568,23 +568,42 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       // 旧顺序会在弱网 / 冷启动时丢掉开头数秒，而且这些话连课后 batch
       // 都无法找回。新顺序是：MediaRecorder 立即收原声，PCM 在 ASR 连接前
       // 进 DashScopeASRClient 队列，ready 后按原顺序补送。
-      // Safari 不支持 webm：逐个探测受支持容器（mp4 兜底），全不支持则交给浏览器自选，
-      // 否则 start() 会抛 "There was an error starting the MediaRecorder"。
+      // Safari 不支持 webm：逐个探测受支持容器（mp4 兜底），全不支持则交给浏览器自选。
+      // 仍有环境（部分 Safari / 嵌入式 Chromium）探测过了但 start() 拒绝显式容器，
+      // 所以 start 失败时用浏览器自选容器重试一次；再失败就带诊断信息抛出。
       const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']
         .find((candidate) => MediaRecorder.isTypeSupported(candidate));
 
-      const mediaRecorder = new MediaRecorder(
-        stream,
-        mimeType ? { mimeType, audioBitsPerSecond: 64000 } : { audioBitsPerSecond: 64000 },
-      );
-
-      mediaRecorder.ondataavailable = async (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
+      const attachChunkHandler = (recorder: MediaRecorder) => {
+        recorder.ondataavailable = async (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
       };
 
-      mediaRecorder.start(1000);
+      let mediaRecorder: MediaRecorder;
+      try {
+        mediaRecorder = new MediaRecorder(
+          stream,
+          mimeType ? { mimeType, audioBitsPerSecond: 64000 } : undefined,
+        );
+        attachChunkHandler(mediaRecorder);
+        mediaRecorder.start(1000);
+      } catch (firstStartError) {
+        console.warn('[Recorder] MediaRecorder start failed with negotiated options, retrying with browser defaults:', firstStartError);
+        mediaRecorder = new MediaRecorder(stream);
+        attachChunkHandler(mediaRecorder);
+        try {
+          mediaRecorder.start(1000);
+        } catch {
+          const trackInfo = stream.getAudioTracks()
+            .map((track) => `${track.readyState}${track.muted ? ':muted' : ''}`)
+            .join(',') || 'no-audio-track';
+          throw new Error(`无法启动录音（格式协商: ${mimeType ?? '浏览器自选'}；音轨: ${trackInfo}）`);
+        }
+      }
+
       mediaRecorderRef.current = mediaRecorder;
       timerRef.current = setInterval(() => {
         setElapsedMs(Date.now() - startTimeRef.current);
