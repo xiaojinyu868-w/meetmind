@@ -38,6 +38,11 @@ import { MobileFirstLearningScreen } from './MobileFirstLearningScreen';
 import { selectDemoLiveSegments } from '@/components/classroom/DemoLessonLoader';
 import { GUEST_DEMO_LESSON_TITLE } from '@/components/classroom/guest-demo-entry';
 import { useAdminLens } from '@/components/admin/AdminLensProvider';
+import {
+  ClassroomFlowMatrixEntry,
+  ClassroomFlowReviewWorkspace,
+} from '@/components/apps/ClassroomFlowArtifact';
+import type { ClassroomFlowState } from '@/types/classroom-flow';
 
 export interface MobileAppShellProps {
   children?: React.ReactNode;
@@ -470,6 +475,7 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
     isUnderstanding: isUnderstandingClassroomFlow,
   } = useClassroomFlow({
     enabled: p.isRecording || Boolean(p.demoMode),
+    sessionId: p.sessionId || undefined,
     segments,
     recordingStartAt: p.demoMode ? demoRecordingStartAt : recordingStartAt,
   });
@@ -1175,7 +1181,8 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
 // ═══ 应用矩阵 ═══
 
 function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
-  const { pop, push, reviewContext } = useMobileNav();
+  const { pop, push, popTo, reviewContext } = useMobileNav();
+  const [activeClassroomFlow, setActiveClassroomFlow] = useState<ClassroomFlowState | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const iconByKey: Record<WorkshopAppKey, React.ReactNode> = {
@@ -1217,6 +1224,21 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
     : assessment?.reason === 'unreliable_transcript'
       ? COPY.apps.matrix.unreliableBody
       : COPY.apps.matrix.insufficientBody;
+
+  if (activeClassroomFlow) {
+    return (
+      <ClassroomFlowReviewWorkspace
+        flow={activeClassroomFlow}
+        contextTitle={reviewContext?.title || _p.selectedReviewItem?.title}
+        onBack={() => setActiveClassroomFlow(null)}
+        onSeek={(timeMs) => {
+          _p.onSeek(timeMs);
+          popTo('review', { focusTimestampMs: timeMs });
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-paper m-page-in">
       <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60">
@@ -1238,6 +1260,13 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
           <div className="rounded-[18px] border border-divider bg-white px-4 py-5">
             <p className="text-[15px] font-semibold text-ink">{blockedTitle}</p>
           </div>
+        ) : null}
+        {_p.sessionId ? (
+          <ClassroomFlowMatrixEntry
+            sessionId={_p.sessionId}
+            onOpen={setActiveClassroomFlow}
+            compact
+          />
         ) : null}
         <div className="flex flex-col gap-2.5">
           {apps.map((app, i) => (

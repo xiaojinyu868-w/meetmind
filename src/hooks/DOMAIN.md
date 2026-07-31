@@ -60,7 +60,8 @@ hooks → stores + types + lib/db + lib/utils
 | `useSourceItemManagement.ts` | ~120 | 源项 CRUD（appendSourceItem + updateSourceItem + appendSupportSource），从 page.tsx 提取（Phase 6） |
 | `useClassroomLessons.ts` | ~130 | 课堂列表数据适配（audioSessions + transcripts + highlightTopics + workspaceEchoes/Captures + preferences + sourceItems → Lesson[] + markReviewed），响应式 |
 | `useClassroomCompanion.ts` | ~260 | 课堂同桌对话（/api/tutor 流式 + 动态开场白 + 按 session 历史持久化 + 错误降级 + short-circuit），为 ClassroomView 专属 |
-| `useClassroomFlow.ts` | ~140 | 课中课堂脉络请求与稳定状态：只把上次成功请求后未消费的 segment 作为 `newSegments` 按字符预算顺序分批发送，失败不推进游标；保留上一轮有用理解并标记新内容，不用关键词替模型切主题 |
+| `useClassroomFlow.ts` | ~145 | 课中课堂脉络请求与稳定状态：只把上次成功请求后未消费的 segment 作为 `newSegments` 按字符预算顺序分批发送，失败不推进游标；成功结果按 sessionId 持久化，课后应用矩阵直接复用；保留上一轮有用理解并标记新内容，不用关键词替模型切主题 |
+| `usePersistedClassroomFlow.ts` | ~45 | 按当前 sessionId 读取录课中已保存的课堂脉络，并在切换课堂时取消旧读取结果；同时为本地试听脉络提供按 updatedAt 去重的持久化桥，供桌面与移动应用矩阵共享 |
 | `useLiveConcepts.ts` | ~100 | 录课中关键概念启发式抽取（订阅 captureEditorStore.segments，零 API），ClassroomRecordingView 消费 |
 | `useLearningContext.ts` | ~220 | 双层学习上下文状态：登录态合并写入 `learnerProfile`，游客写 IndexedDB；长期学习理解可由模型整理、用户纠正，客观最近学习现场独立保存，并通过页面事件同步多个消费组件 |
 | `useCourseContextPack.ts` | ~110 | 按学生选中的真实课堂懒加载转录、标记与摘要；至少两节有原文时构造 unit ContextPack，有学生确认的考试对象时升级为 exam tier 并注入考试名/日期/方式/大纲，不把空课堂或模型猜测伪装成考试材料 |

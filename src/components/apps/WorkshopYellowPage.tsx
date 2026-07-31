@@ -34,6 +34,8 @@ import { createLogger } from '@/lib/logger';
 import { recommendWorkshopApp } from './workshop-recommendation';
 import { useWorkshopReadiness } from './hooks/useWorkshopReadiness';
 import { AdminAiInspectorLink } from '@/components/admin/AdminAiInspectorLink';
+import { ClassroomFlowMatrixEntry } from './ClassroomFlowArtifact';
+import type { ClassroomFlowState } from '@/types/classroom-flow';
 import { buildPromptAnchorContext, buildPromptTranscriptContext } from '@/lib/ai-native/prompt-context';
 import {
   buildAudioOverviewChapterEvidence,
@@ -103,6 +105,7 @@ interface WorkshopYellowPageProps {
   keyDifficulties?: string[];
   contextTitle?: string;
   onOpenAppWindow?: (appKey: WorkshopAppKey) => void;
+  onOpenClassroomFlow?: (flow: ClassroomFlowState) => void;
   /**
    * 当前矩阵展示的层（PRD v1.1 §3 / §8）。
    *
@@ -917,6 +920,10 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           <span className={styles.readinessPulse} aria-hidden />
           {COPY.apps.matrix.assessing}
         </div>
+      ) : null}
+
+      {tier === 'class' && props.onOpenClassroomFlow ? (
+        <ClassroomFlowMatrixEntry sessionId={sessionId} onOpen={props.onOpenClassroomFlow} />
       ) : null}
 
       {recommendedApp ? (

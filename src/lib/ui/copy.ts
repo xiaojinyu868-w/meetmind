@@ -1378,6 +1378,17 @@ export const COPY = {
 
   apps: {
     inlineSource: '已放进对话',
+    classroomFlowArtifact: {
+      sectionTitle: '录课时已经整理好',
+      name: '课堂脉络',
+      ready: '随录课生成',
+      open: '打开复习',
+      back: '返回应用矩阵',
+      timelineTitle: '这节课怎么走过来',
+      keepTitle: '留到课后再看的内容',
+      cardSummary: (moments: number, keeps: number): string => `${moments} 个课堂节点 · ${keeps} 个课后保留点`,
+      reviewSummary: (moments: number, keeps: number): string => `上课时形成的 ${moments} 个推进节点和 ${keeps} 个保留点都在这里。`,
+    },
     placeholder: {
       defaultAppName: '应用内容',
       workingElapsed: (seconds: number): string => `同学正在整理 · ${seconds.toString().padStart(2, '0')}s`,

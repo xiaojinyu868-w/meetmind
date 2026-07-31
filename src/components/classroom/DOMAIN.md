@@ -31,7 +31,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 | `ClassroomLaunchpad.tsx` | ~100 | 课堂首页能力入口：让开始课堂、放入材料、搜索并继续问第一眼可见；只呈现三条学习路径，不做完整功能黄页 |
 | `ClassroomLessonCard.tsx` | ~160 | 一张课的卡片（四种时态视觉差异：upcoming/recording/processing/ready）；时间只显示为元信息，不再伪装成课堂标题 |
 | `ClassroomRecordingView.tsx` | ~640 | 录课中视图（宽桌面左侧实时文字 + 中间课堂脉络；移动端和中等宽度桌面在“脉络 / 原话”之间切换，避免三栏硬挤；含翻译与试听课音频控制）。试听课默认 EN→中，音频结束后只引导点击“结束这节课”，由上层切到课后复习页 / 应用矩阵；转录卡头部有呼吸球仪式（listening 时存在、试听完成即消散）和返回课程列表的退出入口（试听课先暂停音频，真实录音由活动条承接可回来），句首时间戳统一 `.cite-ts`；DemoAfterClassPanel 为 v7 收尾卡（纸感 + pine CTA + Octo happy + 一次柔光扫过） |
-| `ClassroomFlowCanvas.tsx` | ~220 | 课中中间主画布：空态只显示真实听课状态，不用解释文案教育用户；内容出现后突出“正在讲”，以低权重时间线呈现近期推进，并将真正值得回来的定义/公式/问题留到课后；不画课中思维导图；新增脉络项用 `flow-grow` 生长进入（translate+opacity，近期推进逐条 stagger），「正在理解」用 `.thinking-strip`，时间锚点统一 `.cite-ts` |
+| `ClassroomFlowCanvas.tsx` | ~220 | 课中中间主画布：空态只显示真实听课状态，不用解释文案教育用户；内容出现后突出“正在讲”，以低权重时间线呈现已经走过的推进，并将真正值得回来的定义/公式/问题留到课后；画布可滚动查看较早节点，数据层不得只保留当前附近的少数几条；不画课中思维导图；新增脉络项用 `flow-grow` 生长进入（translate+opacity，近期推进逐条 stagger），「正在理解」用 `.thinking-strip`，时间锚点统一 `.cite-ts` |
 | `ClassroomRecordingView.model.ts` | ~16 | 录课视图纯模型：翻译模式循环 + 会话级默认翻译模式解析 |
 | `types.ts` | ~55 | Lesson / LessonStatus / ClassroomPaneState / CompanionMessage / CompanionCard |
 | `demoData.ts` | ~90 | Demo 数据（暂未使用，保留供 storybook/演示） |
@@ -86,7 +86,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 - 录课中关键概念用客户端启发式（2-6 字中文词 + 停用词过滤），不调用后端，追求"感知在场"而非语义精准
 - 移动端（<lg）右侧同桌面板只在录课 / 示例课听课态提供底部"问同学"按钮触发全屏 sheet；空课堂不展示该入口
 - 课中目标是"跟上老师正在讲什么"；中间主画布是模型自主理解的课堂脉络，不是思维导图。思维导图 / 闪卡 / 测验 / 主动回忆训练放在课后复习与应用矩阵，不抢课堂主叙事
-- 真实课堂脉络按“未消费的新转录 → delta upsert/remove → 服务端合并”增长；成功后才推进 segment 游标，禁止每 30 秒重喂近 180 段并整体改写既有纪要
+- 真实课堂脉络按“未消费的新转录 → delta upsert/remove → 服务端合并”增长；成功后才推进 segment 游标，禁止每 30 秒重喂近 180 段并整体改写既有纪要。较早推进作为课后复习材料保留，模型工作记忆只读取近期窗口；成功结果按 sessionId 保存，下课后在应用矩阵作为已生成成果直接打开
 - 课中请求固定 `returnTimestamps: false`，不得重新接入 citation chip 或跳转 handler；时间引用与原声回跳只在课后复习态成立
 - Demo 不能伪装成“完整课已经听完”的课中现场；如果进入 recording 视图，必须由真实 `/demo-audio.mp3` 播放驱动转录渐进露出，自动播放被浏览器拦截时必须提供“播放声音”按钮；用户主动点击“结束这节课”时，无论试听音频是否自然播完，都进入同一套课后复习页 / 应用矩阵，不能把课堂上下文丢回首页
 - 英文试听课默认开启 EN→中翻译，但这是会话默认，不应强行覆盖用户手动切换后的选择

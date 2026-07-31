@@ -39,6 +39,7 @@ import { useClassroomLessons } from '@/hooks/useClassroomLessons';
 import { useClassroomCompanion } from '@/hooks/useClassroomCompanion';
 import { useClassroomForesight } from '@/hooks/useClassroomForesight';
 import { useClassroomFlow } from '@/hooks/useClassroomFlow';
+import { usePersistClassroomFlow } from '@/hooks/usePersistedClassroomFlow';
 import { useLiveConcepts } from '@/hooks/useLiveConcepts';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useSessionStore } from '@/stores/session-store';
@@ -116,6 +117,7 @@ export function ClassroomView({
   const { lessons, markReviewed } = useClassroomLessons();
   const captureActions = useCaptureEditorStore((s) => s.actions);
   const segments = useCaptureEditorStore((s) => s.segments);
+  const activeSessionId = useSessionStore((s) => s.sessionId);
   const sessionActions = useSessionStore((s) => s.actions);
 
   // 左侧面板视图态：list ↔ recording
@@ -437,6 +439,7 @@ export function ClassroomView({
     isUnderstanding: isUnderstandingClassroomFlow,
   } = useClassroomFlow({
     enabled: paneState === 'recording' && !isDemoRecordingPane,
+    sessionId: activeSessionId,
     segments: recordingSegments ?? [],
     recordingStartAt,
     lessonTitle: activeRecordingLessonTitle,
@@ -447,6 +450,7 @@ export function ClassroomView({
     () => buildDemoClassroomFlow(effectiveRecordingSeconds),
     [effectiveRecordingSeconds],
   );
+  usePersistClassroomFlow(DEMO_SESSION_ID, demoClassroomFlow.flow, isDemoRecordingPane);
   const classroomFlow = isDemoRecordingPane ? demoClassroomFlow.flow : generatedClassroomFlow;
   const classroomFlowNewIds = isDemoRecordingPane
     ? demoClassroomFlow.newItemIds

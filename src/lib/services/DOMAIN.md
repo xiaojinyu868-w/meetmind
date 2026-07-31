@@ -115,7 +115,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `lesson-title-client.ts` | ~100 | 课堂标题客户端触发层：课后静默重命名 / 用户改名加锁 / 进入应用静默回填 / `requestLessonUnderstanding` 定稿后触发课后理解 |
 | `lesson-understanding-service.ts` | ~180 | 课后理解：一次 LLM 调用输出 topic+overview+takeaways+highlights（解析校验可单测），标题/摘要/精选三个产物一次落齐 |
 | `classroom-data-service.ts` | 1007 | 课堂数据共享（学生↔教师读写） |
-| `classroom-flow-service.ts` | ~280 | 课中课堂脉络增量生成：模型只消费新增转录并返回 now / recent / keep 的 upsert-remove delta，服务端与 priorFlow 确定性合并；不靠每轮重写全文或关键词树切主题，内部 enum / 英文标识会被丢弃 |
+| `classroom-flow-service.ts` | ~290 | 课中课堂脉络增量生成：模型只消费新增转录并返回 now / recent / keep 的 upsert-remove delta，服务端与 priorFlow 确定性合并；较早推进会作为课后复习材料保留，发给模型的工作记忆只带近期窗口，避免长课输入持续膨胀；内部 enum / 英文标识会被丢弃 |
 | `meetmind-service.ts` | 436 | 核心业务整合（Open Notebook + LongCut） |
 | `note-service.ts` | 393 | 个人笔记 CRUD |
 | `notebook-service.ts` | 314 | Open Notebook（向量搜索/嵌入/笔记管理） |

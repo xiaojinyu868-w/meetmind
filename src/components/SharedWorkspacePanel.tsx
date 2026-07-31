@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 import type {
   ClassSummary,
   TranscriptSegment,
@@ -8,7 +10,9 @@ import type { SharedWorkspaceTab, DataSource } from '@/types/page-types';
 import type { Anchor } from '@/lib/services/anchor-service';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { WorkshopYellowPage } from '@/components/apps/WorkshopYellowPage';
+import { ClassroomFlowReviewWorkspace } from '@/components/apps/ClassroomFlowArtifact';
 import { ReviewLearningWorkspace } from '@/components/ReviewLearningWorkspace';
+import type { ClassroomFlowState } from '@/types/classroom-flow';
 
 interface SharedWorkspacePanelProps {
   tab: SharedWorkspaceTab;
@@ -41,7 +45,24 @@ export function SharedWorkspacePanel({
   contextTitle,
   onLearningActivity,
 }: SharedWorkspacePanelProps) {
+  const [activeClassroomFlow, setActiveClassroomFlow] = useState<ClassroomFlowState | null>(null);
+
+  useEffect(() => {
+    setActiveClassroomFlow(null);
+  }, [sessionId]);
+
   // tab 现在只有 'apps' 一种可能
+  if (activeClassroomFlow) {
+    return (
+      <ClassroomFlowReviewWorkspace
+        flow={activeClassroomFlow}
+        contextTitle={contextTitle}
+        onBack={() => setActiveClassroomFlow(null)}
+        onSeek={onSeek}
+      />
+    );
+  }
+
   if (activeAppKey) {
     return (
       <ReviewLearningWorkspace
@@ -70,6 +91,7 @@ export function SharedWorkspacePanel({
       summaryOverview={classSummary?.overview}
       keyDifficulties={classSummary?.keyDifficulties}
       contextTitle={contextTitle}
+      onOpenClassroomFlow={setActiveClassroomFlow}
       onOpenAppWindow={(appKey) => {
         if (onActiveAppChange) {
           onActiveAppChange(appKey);

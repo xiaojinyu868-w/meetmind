@@ -107,3 +107,7 @@ export {
   deletePreference,
   resetAppState,
 } from './preferences';
+export {
+  getClassroomFlow,
+  saveClassroomFlow,
+} from './classroom-flows';

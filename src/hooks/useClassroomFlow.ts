@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { TranscriptSegment } from '@/types';
 import type { ClassroomFlowState } from '@/types/classroom-flow';
+import { saveClassroomFlow } from '@/lib/db/classroom-flows';
 
 const MIN_ELAPSED_MS = 20_000;
 const MIN_TRANSCRIPT_CHARS = 60;
@@ -19,6 +20,7 @@ const EMPTY_FLOW: ClassroomFlowState = {
 
 export interface UseClassroomFlowInput {
   enabled: boolean;
+  sessionId?: string;
   segments: TranscriptSegment[];
   recordingStartAt: number | null;
   lessonTitle?: string;
@@ -33,6 +35,7 @@ export interface UseClassroomFlowReturn {
 
 export function useClassroomFlow({
   enabled,
+  sessionId,
   segments,
   recordingStartAt,
   lessonTitle,
@@ -68,7 +71,7 @@ export function useClassroomFlow({
     setFlow(EMPTY_FLOW);
     setNewItemIds(new Set());
     setIsUnderstanding(false);
-  }, [enabled, recordingStartAt]);
+  }, [enabled, recordingStartAt, sessionId]);
 
   useEffect(() => {
     if (!enabled || !recordingStartAt || segments.length === 0) return;
@@ -120,6 +123,9 @@ export function useClassroomFlow({
         }
         priorFlowRef.current = data.flow;
         setFlow(data.flow);
+        if (sessionId) {
+          void saveClassroomFlow(sessionId, data.flow).catch(() => undefined);
+        }
         setNewItemIds(addedIds);
         window.setTimeout(() => setNewItemIds(new Set()), 1_600);
       } catch (error) {
@@ -131,7 +137,7 @@ export function useClassroomFlow({
         setIsUnderstanding(false);
       }
     })();
-  }, [enabled, importedHints, lessonTitle, recordingStartAt, segments]);
+  }, [enabled, importedHints, lessonTitle, recordingStartAt, segments, sessionId]);
 
   return { flow, newItemIds, isUnderstanding };
 }

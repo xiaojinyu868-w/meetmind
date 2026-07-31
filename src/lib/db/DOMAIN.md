@@ -46,4 +46,5 @@ hooks/services → lib/db → types
 | `anchors.ts` | 39 | 锚点 CRUD |
 | `keyframes.ts` | ~50 | 课中「截取这一页」关键帧 CRUD（v8 新表，timestampMs 与转录同轴，上传后回写 mediaUrl） |
 | `preferences.ts` | 24 | 偏好 KV 存储 |
+| `classroom-flows.ts` | ~40 | 按 sessionId 保存录课中已生成的课堂脉络，供课后应用矩阵直接复用，不在下课后重复生成 |
 | `index.ts` | 98 | barrel 导出 |

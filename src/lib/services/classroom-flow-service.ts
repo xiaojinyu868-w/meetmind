@@ -11,8 +11,12 @@ import type {
 const log = createLogger('classroom-flow');
 
 const MAX_TRANSCRIPT_CHARS = 8_000;
-const MAX_RECENT_MOMENTS = 4;
-const MAX_KEEP_SIGNALS = 4;
+// 课堂脉络同时是课后复习材料，不能为了课中首屏简短而把较早节点从数据里删掉。
+// 这里保留一节长课的完整路径；发给模型的工作记忆另行收窄，避免输入随录课时长膨胀。
+const MAX_FLOW_MOMENTS = 240;
+const MAX_KEEP_SIGNALS = 80;
+const MAX_PROMPT_RECENT_MOMENTS = 8;
+const MAX_PROMPT_KEEP_SIGNALS = 12;
 const SIGNAL_KINDS = new Set<ClassroomSignalKind>([
   'definition',
   'formula',
@@ -57,7 +61,12 @@ export async function generateClassroomFlow(
 
   const transcript = formatTranscript(validSegments).slice(-MAX_TRANSCRIPT_CHARS);
   const priorFlow = input.priorFlow ?? createEmptyClassroomFlow(input.elapsedMs, input.lessonTitle);
-  const priorBlock = `\n这是已经发布的课堂脉络。只提交本轮增量，不要重写未变化内容：\n${JSON.stringify(priorFlow)}`;
+  const promptPriorFlow: ClassroomFlowState = {
+    ...priorFlow,
+    recent: priorFlow.recent.slice(-MAX_PROMPT_RECENT_MOMENTS),
+    keep: priorFlow.keep.slice(-MAX_PROMPT_KEEP_SIGNALS),
+  };
+  const priorBlock = `\n这是已经发布的课堂脉络的近期工作记忆。只提交本轮增量，不要重写未变化内容：\n${JSON.stringify(promptPriorFlow)}`;
   const materialBlock = input.importedHints?.length
     ? `\n学生在这节课附近放入过这些材料，可用于识别专名，但不要据此补写课堂没有讲的内容：${input.importedHints.slice(0, 12).join('、')}`
     : '';
@@ -157,7 +166,7 @@ export function mergeClassroomFlowDelta(
   return {
     title: cleanText(value.title, 42) || priorFlow.title || lessonTitle || patchedNow?.title || '',
     now: patchedNow,
-    recent: [...recent.values()].sort((a, b) => a.anchorMs - b.anchorMs).slice(-MAX_RECENT_MOMENTS),
+    recent: [...recent.values()].sort((a, b) => a.anchorMs - b.anchorMs).slice(-MAX_FLOW_MOMENTS),
     keep: [...keep.values()].sort((a, b) => a.anchorMs - b.anchorMs).slice(-MAX_KEEP_SIGNALS),
     updatedAtMs: clampMs(value.updatedAtMs, elapsedMs, elapsedMs),
   };
@@ -179,7 +188,7 @@ export function sanitizeClassroomFlow(
         .map((item, index) => sanitizeMoment(item, elapsedMs, `recent-${index}`))
         .filter((item): item is ClassroomMoment => item !== null)
         .sort((a, b) => a.anchorMs - b.anchorMs)
-        .slice(-MAX_RECENT_MOMENTS)
+        .slice(-MAX_FLOW_MOMENTS)
     : [];
   const keep = Array.isArray(value.keep)
     ? value.keep

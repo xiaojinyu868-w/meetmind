@@ -39,7 +39,7 @@ describe('classroom-flow-service', () => {
     expect(flow.keep[1].kind).toBe('other');
   });
 
-  it('limits the visible state without requiring the model to fill a quota', () => {
+  it('keeps earlier classroom steps for long-form review', () => {
     const flow = sanitizeClassroomFlow({
       recent: Array.from({ length: 8 }, (_, index) => ({
         id: `r${index}`,
@@ -54,8 +54,10 @@ describe('classroom-flow-service', () => {
       })),
     }, 20_000);
 
-    expect(flow.recent.map((item) => item.id)).toEqual(['r4', 'r5', 'r6', 'r7']);
-    expect(flow.keep).toHaveLength(4);
+    expect(flow.recent.map((item) => item.id)).toEqual([
+      'r0', 'r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7',
+    ]);
+    expect(flow.keep).toHaveLength(8);
   });
 
   it('drops internal teaching-move enum names instead of leaking them into the classroom UI', () => {
