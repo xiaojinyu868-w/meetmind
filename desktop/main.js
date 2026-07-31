@@ -162,12 +162,45 @@ function createCompanionWindow() {
       companionWindow.setAlwaysOnTop(true, 'screen-saver');
     }
   }, 5000);
+
+  // 形状命中：只有光标落在宠物身体上窗口才吃鼠标事件，
+  // 身体之外的透明区域全部穿透给下层应用（"看得到的才点得到"）。
+  // 主进程 80ms 轮询光标做 hit-test，Windows/macOS 通用，
+  // 不依赖 setIgnoreMouseEvents 的 forward 模式（macOS 不支持）。
+  startShapeHitTest(companionWindow);
+
   placeInitialWindow(companionWindow);
   companionWindow.loadFile(path.join(__dirname, 'companion.html'));
   companionWindow.once('ready-to-show', () => companionWindow?.show());
   companionWindow.on('closed', () => {
     companionWindow = null;
   });
+}
+
+/** 宠物身体在窗口里的命中区域（设计空间 150×140 的像素比例） */
+function bodyHitRegion(bounds) {
+  return {
+    left: bounds.x + bounds.width * (30 / 150),
+    right: bounds.x + bounds.width * (120 / 150),
+    top: bounds.y + bounds.height * (36 / 140),
+    bottom: bounds.y + bounds.height * (126 / 140),
+  };
+}
+
+function startShapeHitTest(win) {
+  let interactive = true; // 初始可点，避免启动瞬间点不到
+  setInterval(() => {
+    if (!win || win.isDestroyed() || !win.isVisible()) return;
+    const cursor = screen.getCursorScreenPoint();
+    const region = bodyHitRegion(win.getBounds());
+    const over = cursor.x >= region.left && cursor.x <= region.right
+      && cursor.y >= region.top && cursor.y <= region.bottom;
+    if (over !== interactive) {
+      interactive = over;
+      if (over) win.setIgnoreMouseEvents(false);
+      else win.setIgnoreMouseEvents(true, { forward: true });
+    }
+  }, 50);
 }
 
 app.whenReady().then(() => {
