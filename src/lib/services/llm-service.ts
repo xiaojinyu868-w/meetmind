@@ -257,7 +257,7 @@ async function callStepFun(
 async function callDeepSeek(
   messages: ChatMessage[],
   modelId: string,
-  options?: { temperature?: number; maxTokens?: number; responseFormat?: 'json_object' | 'text' }
+  options?: { temperature?: number; maxTokens?: number; responseFormat?: 'json_object' | 'text'; thinking?: boolean }
 ): Promise<LLMResponse> {
   const config = getApiConfig('deepseek');
   const modelConfig = getModelConfig(modelId);
@@ -266,7 +266,9 @@ async function callDeepSeek(
     throw new Error('DEEPSEEK_API_KEY 未配置');
   }
 
-  const enableThinking = modelConfig?.enableThinking ?? false;
+  // thinking 三态：调用方显式 true/false 优先；不传则沿用模型配置的 enableThinking。
+  // 注意 DeepSeek V4 的 API 默认就是"思考开启"——要速度必须显式 disabled。
+  const enableThinking = options?.thinking ?? modelConfig?.enableThinking ?? false;
   const requestBody: Record<string, unknown> = {
     model: resolveDeepSeekApiModelName(config.baseUrl, modelId),
     messages: buildOpenAIMessages(messages, false),
@@ -281,7 +283,9 @@ async function callDeepSeek(
     requestBody.response_format = { type: 'json_object' };
   }
 
-  if (enableThinking) {
+  if (options?.thinking === false) {
+    requestBody.thinking = { type: 'disabled' };
+  } else if (enableThinking) {
     requestBody.thinking = { type: 'enabled' };
     requestBody.reasoning_effort = 'high';
   }
@@ -524,7 +528,7 @@ async function callVolcengine(
 export async function chat(
   messages: ChatMessage[],
   modelId: string = DEFAULT_MODEL_ID,
-  options?: { temperature?: number; maxTokens?: number; responseFormat?: 'json_object' | 'text' }
+  options?: { temperature?: number; maxTokens?: number; responseFormat?: 'json_object' | 'text'; thinking?: boolean }
 ): Promise<LLMResponse> {
   const modelConfig = resolveModelConfigOrDefault(modelId);
   const resolvedId = modelConfig.id;
@@ -564,7 +568,7 @@ export async function chat(
 export async function* chatStream(
   messages: ChatMessage[],
   modelId: string = DEFAULT_MODEL_ID,
-  options?: { temperature?: number; maxTokens?: number; smooth?: 'word' | 'off' }
+  options?: { temperature?: number; maxTokens?: number; smooth?: 'word' | 'off'; thinking?: boolean }
 ): AsyncGenerator<StreamChunk> {
   const smoothMode = options?.smooth ?? 'word';
   const raw = chatStreamRaw(messages, modelId, options);
@@ -632,7 +636,7 @@ async function* smoothChunks(
 async function* chatStreamRaw(
   messages: ChatMessage[],
   modelId: string,
-  options?: { temperature?: number; maxTokens?: number }
+  options?: { temperature?: number; maxTokens?: number; thinking?: boolean }
 ): AsyncGenerator<StreamChunk> {
   const modelConfig = resolveModelConfigOrDefault(modelId);
   const resolvedId = modelConfig.id;
@@ -661,7 +665,7 @@ async function* chatStreamRaw(
   }
 
   const supportsMultimodal = isMultimodalModel(resolvedId);
-  const enableThinking = modelConfig.enableThinking ?? false;
+  const enableThinking = options?.thinking ?? modelConfig.enableThinking ?? false;
   const formattedMessages = buildOpenAIMessages(messages, supportsMultimodal);
 
   // 构建请求体
@@ -681,7 +685,10 @@ async function* chatStreamRaw(
     requestBody.enable_thinking = enableThinking;
   }
 
-  if (enableThinking && modelConfig.provider === 'deepseek') {
+  if (modelConfig.provider === 'deepseek' && options?.thinking === false) {
+    // 要速度的路径（Tutor/标题/快速问答）必须显式关思考——V4 默认带思维链
+    requestBody.thinking = { type: 'disabled' };
+  } else if (enableThinking && modelConfig.provider === 'deepseek') {
     requestBody.thinking = { type: 'enabled' };
     requestBody.reasoning_effort = 'high';
   }

@@ -42,6 +42,10 @@ export type { UseAutoFollowScrollOptions, UseAutoFollowScrollResult } from './ho
 export { collectMessageText } from './markers/collectMessageText';
 export type { MessageLike } from './markers/collectMessageText';
 
+export { collectMessageReasoning } from './markers/collectMessageReasoning';
+export { ChatReasoningBlock } from './ChatReasoningBlock';
+export type { ChatReasoningBlockProps } from './ChatReasoningBlock';
+
 export { extractIntentSummary } from './markers/extractIntentSummary';
 export type { IntentSummaryExtraction } from './markers/extractIntentSummary';
 

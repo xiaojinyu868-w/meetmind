@@ -37,7 +37,9 @@ import {
   ChatComposer,
   ChatMessageList,
   ChatRenderer,
+  ChatReasoningBlock,
   ChatThinkingStripBubble,
+  collectMessageReasoning,
   collectMessageText,
   useChatComposer,
   useChatFileUpload,
@@ -434,6 +436,7 @@ export function GlobalAskPanel({
             >
           {messages.map((message, index) => {
             const text = collectMessageText(message);
+            const reasoning = collectMessageReasoning(message);
             const isStreaming = busy && index === messages.length - 1 && message.role === 'assistant';
             return (
               <ChatBubble
@@ -443,7 +446,10 @@ export function GlobalAskPanel({
                 messageId={message.id}
               >
                 {message.role === 'assistant' ? (
-                  <ChatRenderer content={text} isStreaming={isStreaming} messageId={message.id} />
+                  <>
+                    {reasoning ? <ChatReasoningBlock reasoning={reasoning} isStreaming={isStreaming} /> : null}
+                    <ChatRenderer content={text} isStreaming={isStreaming} messageId={message.id} />
+                  </>
                 ) : <span className="whitespace-pre-wrap">{text}</span>}
               </ChatBubble>
             );

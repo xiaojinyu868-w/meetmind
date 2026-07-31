@@ -92,7 +92,8 @@ export async function generateLessonTopic(params: {
         },
       ],
       ModelDefaults.tutorQuick,
-      { temperature: 0.2, maxTokens: 40 },
+      // 标题生成是轻活：显式关思考（V4 默认带思维链，白付延迟和 token）
+      { temperature: 0.2, maxTokens: 40, thinking: false },
     );
     const topic = response.content.trim().split('\n')[0].trim();
     return passesTopicQualityGate(topic) ? topic : null;

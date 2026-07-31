@@ -649,6 +649,8 @@ export const COPY = {
     deepExamples: ['我想系统学懂这个主题，并检验自己是否真的会了', '围绕期末目标，把相关课堂整理成一条学习路线'] as const,
     composerQuick: '问任何正在学、正在想的事',
     composerDeep: '说说这次想真正学会什么',
+    reasoningTitle: '思考过程',
+    reasoningStreaming: '同学正在想…',
     startersTitle: '也可以从这里开始',
     send: '发送',
     stop: '停止',

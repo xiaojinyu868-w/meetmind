@@ -317,8 +317,11 @@ function createTutorAttemptStream({
         if (!provider.apiKey) continue;
 
   const { modelId } = provider;
+        // 思考分档：deep（陪我学会）开思考并流式回传思维链；其余全部显式关——
+        // DeepSeek V4 默认带思维链，不关就是白付首 token 延迟。
+        const thinkingEnabled = body.context.global?.depth === 'deep';
         // 正式 Tutor 与管理员试跑共用模型构造，确保 Qwen thinking 等 provider 细节完全一致。
-        const model = createTutorAgentChatModel(provider);
+        const model = createTutorAgentChatModel(provider, { thinking: thinkingEnabled });
         const firstTokenController = new AbortController();
         const firstTokenTimer = setTimeout(() => {
           firstTokenController.abort(new Error(`Tutor first token timeout after ${firstTokenTimeoutMs}ms`));

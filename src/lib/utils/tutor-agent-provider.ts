@@ -1,4 +1,5 @@
 import { createOpenAI } from '@ai-sdk/openai';
+import { createDeepSeek } from '@ai-sdk/deepseek';
 
 type EnvLike = Record<string, string | undefined>;
 
@@ -15,8 +16,41 @@ export interface TutorAgentProviderOptions {
   modelId?: string;
 }
 
-export function createTutorAgentChatModel(provider: TutorAgentProviderConfig) {
+export interface TutorAgentChatModelOptions {
+  /**
+   * DeepSeek V4 思考开关（三态）：
+   *   true  = 开思考（deep 模式，思维链经 @ai-sdk/deepseek 流式回传）
+   *   false = 显式关闭（V4 默认带思维链，快路径必须显式 disabled 才有速度）
+   *   不传  = 沿用 API 默认（开）
+   */
+  thinking?: boolean;
+}
+
+export function createTutorAgentChatModel(provider: TutorAgentProviderConfig, options?: TutorAgentChatModelOptions) {
   const { apiKey, baseURL, modelId } = provider;
+
+  // DeepSeek 走官方 @ai-sdk/deepseek：只有它能正确把 reasoning_content 解析成
+  // AI SDK 的 reasoning parts（思维链展示的数据源）。官方域名只收小写模型名。
+  if (isDeepSeekModel(modelId) || isDeepSeekBaseUrl(baseURL)) {
+    const deepseekOptions: Parameters<typeof createDeepSeek>[0] = { apiKey, baseURL };
+    if (options?.thinking === false) {
+      deepseekOptions.fetch = async (url, init) => {
+        if (init?.body && typeof init.body === 'string') {
+          try {
+            const body = JSON.parse(init.body) as Record<string, unknown>;
+            body.thinking = { type: 'disabled' };
+            init = { ...init, body: JSON.stringify(body) };
+          } catch {
+            // 保留 provider 原请求体
+          }
+        }
+        return fetch(url, init);
+      };
+    }
+    const apiModelId = isDeepSeekBaseUrl(baseURL) ? modelId.toLowerCase() : modelId;
+    return createDeepSeek(deepseekOptions).chat(apiModelId);
+  }
+
   const isQwenThinkingModel = /^qwen3?\.?\d*[-.]?plus/i.test(modelId) || /^qwen3/i.test(modelId);
   const openaiOptions: Parameters<typeof createOpenAI>[0] = { apiKey, baseURL };
   if (isQwenThinkingModel) {
