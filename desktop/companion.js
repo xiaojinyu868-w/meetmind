@@ -1,93 +1,65 @@
 /**
- * Octo Buddy — 参数化宠物（v3.2 交互重构版）
+ * Octo Buddy — 全参数化矢量宠物（v4）
  *
- * 交互模型（不让用户猜）：
- *   单击 = 互动 + 浮出姿态圆钮（问 / 旁听 / 收下）——功能是看得见的，不是背的
- *   拖动 = 位移 · 右键 = 菜单 · 拖文件 = 收下 · 没有双击这种东西
+ * 不再有贴图：角色由 canvas 矢量绘制（squircle 方块头 / 双眼 / 微笑 / 四只触手），
+ * 所有状态都是同一组几何参数的 lerp——没有"换图"这个概念，自然没有瞬变。
  *
- * 状态语言（让切换"看得见"）：
- *   - 每个表情配动作签名：开心=小跳、喜欢=歪头、惊讶=后仰、生气=快摇
- *   - 渐变分级：同族表情 200ms，大状态（醒↔睡）600ms + 压暗缓入
- *   - 睡眠三段式：打哈欠(thinking) → 眼皮半垂 → 睡着，全程 ~2s
- *   - 旁听：蹲下=坐下听，起身+小跳=记完了
+ * 参数模型（全部连续插值）：
+ *   eyeOpenL/R  眼皮（0 闭 1 开，眨眼是 1→0→1 的快速往返）
+ *   eyeLook     瞳孔偏移（跟随光标，这才是"它在看你"）
+ *   eyeCurve    眼形（0 圆眼 1 弯月笑眼）
+ *   mouthOpen   嘴的开合（0 微笑 1 张开）
+ *   mouthCurve  嘴角弧度（正=笑 负=惊讶 o 嘴）
+ *   squashX/Y   身体挤压（果冻，近临界阻尼）
+ *   dim         睡眠/深夜压暗
+ *   触手        各自相位差轻摆（永不整齐划一）
+ *
+ * 安静是底线：呼吸幅度 0.4%、小动作 45–90s 一次、只有眨眼和眼随常在。
  */
-
-const SPRITE_KEYS = ['idle', 'happy', 'excited', 'thinking', 'surprised', 'love', 'sleeping'];
-const SPRITE_DIR = './assets/octo/';
 
 const canvas = document.getElementById('stage');
 const ctx = canvas.getContext('2d');
 const speechEl = document.getElementById('speech');
-const dockEl = document.getElementById('dock');
-const listenBtn = dockEl.querySelector("[data-act='listen']");
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const rand = (lo, hi) => lo + Math.random() * (hi - lo);
+const lerp = (a, b, t) => a + (b - a) * t;
 
-function makeSpring(stiffness = 0.2, damping = 0.84) {
-  let x = 0;
-  let v = 0;
-  let target = 0;
-  return {
-    set(t) { target = t; },
-    snap(t) { x = t; v = 0; target = t; },
-    kick(impulse) { v += impulse; },
-    step() {
-      v = (v + (target - x) * stiffness) * damping;
-      x += v;
-      return x;
-    },
-    get value() { return x; },
-  };
-}
-
-/* ---------- 资源 ---------- */
-const images = {};
-let spriteMap = null;
-
-async function loadAssets() {
-  const [map, ...loaded] = await Promise.all([
-    fetch(`${SPRITE_DIR}octo-sprite-map.json`).then((r) => r.json()),
-    ...SPRITE_KEYS.map((key) => new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => resolve([key, img]);
-      img.onerror = () => resolve([key, null]);
-      img.src = `${SPRITE_DIR}${key}.png`;
-    })),
-  ]);
-  spriteMap = map;
-  for (const [key, img] of loaded) images[key] = img;
-}
+/* ---------- 连续参数（每帧向目标收敛） ---------- */
+const P = {
+  eyeOpenL: 1, eyeOpenR: 1,
+  eyeLookX: 0, eyeLookY: 0,
+  eyeCurve: 0,          // 0 圆眼 → 1 弯月
+  mouthOpen: 0,         // 0 闭合微笑 → 1 张开
+  mouthCurve: 1,        // 1 笑 0 平 -1 惊讶
+  blush: 0,
+  squashX: 1, squashY: 1,
+  dim: 0,
+  breathePhase: 0,
+};
+const T = { ...P }; // 目标值
+const SPEED = {
+  eyeOpen: 0.35, eyeLook: 0.08, eyeCurve: 0.12,
+  mouth: 0.14, blush: 0.08, squash: 0.2, dim: 0.04,
+};
 
 /* ---------- 宠物状态 ---------- */
 const pet = {
-  sprite: 'idle',
-  prevSprite: null,
-  fade: 1,
-  fadeStep: 0.055,
   listening: false,
   listeningSince: 0,
   asleep: false,
-  halfLid: false,
   lastInteraction: Date.now(),
   clickIntensity: 0,
+  sleepStage: 0,
 };
-
-const lean = makeSpring(0.14, 0.78);
-const leanY = makeSpring(0.16, 0.8);
-const tilt = makeSpring(0.14, 0.78);
-const squashX = makeSpring(0.24, 0.86);
-const squashY = makeSpring(0.24, 0.86);
-const dim = makeSpring(0.06, 0.86);
-squashX.snap(1);
-squashY.snap(1);
 
 let blinkAt = Date.now() + rand(2600, 5200);
 let blinkStart = -1;
-const BLINK_MS = 140;
+const BLINK_MS = 130;
 
 const ripples = [];
 let lastRippleAt = 0;
+const zeds = []; // 睡觉的 Z 粒子
 
 /* ---------- 说话 ---------- */
 let speechTimer = null;
@@ -108,95 +80,65 @@ function updateListenSpeech() {
   speechEl.dataset.visible = 'true';
 }
 
-/* ---------- 表情（分级渐变） ---------- */
-const FADE = { fast: 0.09, normal: 0.055, slow: 0.028 };
-
-function setSprite(next, speed = 'normal') {
-  if (pet.sprite === next) return;
-  pet.prevSprite = pet.sprite;
-  pet.sprite = next;
-  pet.fade = 0;
-  pet.fadeStep = FADE[speed] || FADE.normal;
-}
-
+/* ---------- 情绪（参数组 + 小动作签名） ---------- */
 let moodResetTimer = null;
-function showMood(sprite, ms = 2200) {
-  setSprite(sprite, 'fast');
+function showMood(name, ms = 2200) {
+  applyMood(name);
   clearTimeout(moodResetTimer);
-  moodResetTimer = setTimeout(() => {
-    setSprite(pet.asleep ? 'sleeping' : 'idle');
-  }, ms);
+  moodResetTimer = setTimeout(() => applyMood(pet.asleep ? 'sleeping' : 'idle'), ms);
 }
 
-/* ---------- 动作签名（表情切换的"看得见"层） ---------- */
-function cueHop() { leanY.kick(-2.6); }
-function cueLean() { tilt.set(0.05); setTimeout(() => tilt.set(0), 900); }
-function cueStartle() { leanY.kick(1.6); tilt.set(-0.05); setTimeout(() => tilt.set(0), 700); }
-function cueShake() {
-  tilt.set(0.06);
-  setTimeout(() => tilt.set(-0.06), 110);
-  setTimeout(() => tilt.set(0.05), 220);
-  setTimeout(() => tilt.set(0), 340);
+function applyMood(name) {
+  switch (name) {
+    case 'idle':
+      T.eyeCurve = 0; T.mouthOpen = 0; T.mouthCurve = 1; T.blush = 0; T.eyeOpenL = 1; T.eyeOpenR = 1;
+      break;
+    case 'happy':
+      T.eyeCurve = 1; T.mouthOpen = 0.7; T.mouthCurve = 1; T.blush = 0.5;
+      break;
+    case 'love':
+      T.eyeCurve = 1; T.mouthOpen = 0.25; T.mouthCurve = 1; T.blush = 0.9;
+      break;
+    case 'surprised':
+      T.eyeCurve = 0; T.mouthOpen = 0.9; T.mouthCurve = -1; T.blush = 0;
+      break;
+    case 'thinking':
+      T.eyeCurve = 0.25; T.mouthOpen = 0; T.mouthCurve = 0.2; T.blush = 0;
+      break;
+    case 'sleeping':
+      T.eyeOpenL = 0; T.eyeOpenR = 0; T.mouthOpen = 0; T.mouthCurve = 0.4; T.blush = 0;
+      break;
+  }
 }
 
-/* ---------- 离散小动作（每 18–30s 一个） ---------- */
-let motionUntil = 0;
-let motionKind = null;
-
-function scheduleAmbient() {
-  const every = rand(18000, 30000);
-  setTimeout(() => {
-    scheduleAmbient();
-    if (pet.listening || pet.asleep || dragState || dockOpen) return;
-    if (document.hidden) return;
-    const pick = Math.random();
-    if (pick < 0.45) {
-      motionKind = 'peek';
-      const side = Math.random() > 0.5 ? 1 : -1;
-      lean.set(side * 2.4);
-      tilt.set(side * 0.028);
-      motionUntil = performance.now() + 900;
-    } else if (pick < 0.8) {
-      motionKind = 'wiggle';
-      motionUntil = performance.now() + 720;
-    } else {
-      motionKind = null;
-      cueHop();
-    }
-  }, every);
-}
-
-/* ---------- 生物钟：犯困 → 半垂 → 睡着（三段式） ---------- */
-let sleepStage = 0; // 0 清醒 1 犯困 2 半垂 3 睡着
+/* ---------- 生物钟：犯困 → 闭眼 → 睡着 ---------- */
 setInterval(() => {
   if (pet.listening || dragState) return;
   const idleFor = Date.now() - pet.lastInteraction;
-  if (idleFor > 140000 && sleepStage < 3) {
-    enterSleep();
-  } else if (idleFor > 80000 && sleepStage === 0) {
-    sleepStage = 1;
-    setSprite('thinking', 'slow'); // 打哈欠
+  if (idleFor > 140000 && pet.sleepStage < 3) enterSleep();
+  else if (idleFor > 80000 && pet.sleepStage === 0) {
+    pet.sleepStage = 1;
+    applyMood('thinking');
   }
 }, 4000);
 
 function enterSleep() {
-  if (sleepStage === 3) return;
-  sleepStage = 2;
-  setSprite('thinking', 'slow');
-  pet.halfLid = true; // 眼皮半垂
+  if (pet.sleepStage === 3) return;
+  pet.sleepStage = 2;
+  // 眼皮慢慢垂下来（这是连续参数，不是换图）
+  T.eyeOpenL = 0.25; T.eyeOpenR = 0.25;
+  T.eyeCurve = 0; T.mouthCurve = 0.3;
   setTimeout(() => {
-    sleepStage = 3;
+    pet.sleepStage = 3;
     pet.asleep = true;
-    pet.halfLid = false;
-    setSprite('sleeping', 'slow'); // 600ms 渐变 + 压暗缓入
-  }, 1800);
+    applyMood('sleeping');
+  }, 1600);
 }
 
 function wakeUp() {
-  if (sleepStage === 0) return;
-  sleepStage = 0;
+  if (pet.sleepStage === 0) return;
+  pet.sleepStage = 0;
   pet.asleep = false;
-  pet.halfLid = false;
   showMood('surprised', 1500);
   say('醒啦', 1200);
 }
@@ -206,36 +148,36 @@ function touch() {
   wakeUp();
 }
 
-/* ---------- 姿态圆钮 ---------- */
-let dockOpen = false;
-let dockTimer = null;
-
-function setDock(open) {
-  if (dockOpen === open) return;
-  dockOpen = open;
-  dockEl.dataset.open = String(open);
-  window.meetmindCompanion?.setDock(open);
-  clearTimeout(dockTimer);
-  if (open) dockTimer = setTimeout(() => setDock(false), 6000);
+/* ---------- 离散小动作（45–90s 一次，做完就静） ---------- */
+function scheduleAmbient() {
+  const every = rand(45000, 90000);
+  setTimeout(() => {
+    scheduleAmbient();
+    if (pet.listening || pet.asleep || dragState || document.hidden) return;
+    if (Math.random() < 0.5) {
+      // 小跳一下
+      T.squashY = 1.05; T.squashX = 0.96;
+      setTimeout(() => { T.squashX = 1; T.squashY = 1; }, 180);
+    } else {
+      // 歪头看你
+      T.eyeLookX = 0;
+      tiltSpring.kick(0.04);
+      setTimeout(() => tiltSpring.kick(-0.02), 700);
+    }
+  }, every);
 }
 
-dockEl.querySelector("[data-act='ask']").addEventListener('click', () => {
-  setDock(false);
-  window.meetmindCompanion?.togglePanel();
-});
-listenBtn.addEventListener('click', () => {
-  setDock(false);
-  toggleListening();
-});
-dockEl.querySelector("[data-act='capture']").addEventListener('click', () => {
-  setDock(false);
-  window.meetmindCompanion?.captureScreen?.();
-});
+const tiltSpring = (() => {
+  let x = 0, v = 0, target = 0;
+  return {
+    kick(i) { v += i; },
+    set(t) { target = t; },
+    step() { v = (v + (target - x) * 0.12) * 0.8; x += v; return x; },
+  };
+})();
 
-/* ---------- 布局与绘制 ---------- */
-const CANONICAL_W = 122;
+/* ---------- 画布 ---------- */
 let dpr = 1;
-
 function resizeCanvas() {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = Math.round(canvas.clientWidth * dpr);
@@ -244,44 +186,194 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-function drawSprite(key, alpha, baseX, baseY) {
-  const img = images[key];
-  const map = spriteMap?.[key];
-  if (!img || !map) return;
-  const k = CANONICAL_W / map.width;
-  const w = map.width * k;
-  const h = map.height * k;
-  ctx.globalAlpha = alpha;
-  ctx.drawImage(img, baseX - w / 2, baseY - h, w, h);
-  ctx.globalAlpha = 1;
-  return { k, left: baseX - w / 2, top: baseY - h };
+/* ---------- 角色几何（设计坐标 150×140） ---------- */
+const GEO = {
+  cx: 75,
+  baseY: 122,
+  head: { x: 36, y: 42, w: 78, h: 64, r: 22 },
+  eyeL: { x: 58, y: 72 }, eyeR: { x: 92, y: 72 },
+  eyeW: 9, eyeH: 15,
+  mouth: { x: 75, y: 92 },
+  tentacles: [
+    { x: 44, y: 104, phase: 0 },
+    { x: 62, y: 108, phase: 1.6 },
+    { x: 88, y: 108, phase: 3.1 },
+    { x: 106, y: 104, phase: 4.4 },
+  ],
+};
+
+function squirclePath(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
-function drawEyes(layout) {
-  const map = spriteMap?.[pet.sprite];
-  if (!map?.eyesOpen || !layout) return;
-  let lidPhase = 0;
-  if (blinkStart >= 0) {
-    const progress = (performance.now() - blinkStart) / BLINK_MS;
-    if (progress >= 1) blinkStart = -1;
-    else lidPhase = progress < 0.5 ? progress * 2 : (1 - progress) * 2;
+function drawTentacle(tx, ty, sway) {
+  ctx.beginPath();
+  ctx.moveTo(tx - 11, ty);
+  ctx.quadraticCurveTo(tx - 12 + sway, ty + 15, tx + sway * 0.6, ty + 17);
+  ctx.quadraticCurveTo(tx + 12 + sway, ty + 15, tx + 11, ty);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawBuddy(now) {
+  const t = now / 1000;
+  const W = canvas.clientWidth;
+  const H = canvas.clientHeight;
+  const sx = (W / 150) * P.squashX;
+  const sy = (H / 140) * P.squashY;
+  const tilt = tiltSpring.step();
+
+  const breathe = Math.sin(t * 2.2) * 0.004; // 0.4%，几乎不可见
+  const cx = W / 2;
+  const baseY = H - 16;
+
+  // 贴地阴影
+  ctx.beginPath();
+  ctx.ellipse(cx, H - 14, 34 * P.squashX, 5.5, 0, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(23, 23, 19, ${(0.16 * (1 - P.dim * 0.5)).toFixed(3)})`;
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(cx, baseY);
+  ctx.rotate(tilt);
+  ctx.scale(sx * (1 + breathe), sy * (1 - breathe));
+  ctx.translate(-GEO.cx, -GEO.baseY);
+
+  // 涟漪（旁听）
+  if (pet.listening) drawRipples(now);
+
+  // 触手（各自相位，永不整齐）
+  ctx.fillStyle = '#6b4cd8';
+  for (const tc of GEO.tentacles) {
+    drawTentacle(tc.x, tc.y, Math.sin(t * 1.8 + tc.phase) * 1.6);
   }
-  if (pet.halfLid) lidPhase = Math.max(lidPhase, 0.55); // 半垂眼
-  if (lidPhase <= 0) return;
-  for (const eye of map.eyes) {
-    const [r, g, b] = eye.lidColor || [139, 92, 246];
-    ctx.fillStyle = `rgb(${r},${g},${b})`;
-    ctx.fillRect(
-      layout.left + (eye.x - 1) * layout.k,
-      layout.top + (eye.y - 1) * layout.k,
-      (eye.w + 2) * layout.k,
-      (eye.h + 1) * layout.k * lidPhase,
-    );
+
+  // 头：紫渐变 squircle
+  const grad = ctx.createLinearGradient(GEO.head.x, GEO.head.y, GEO.head.x + GEO.head.w, GEO.head.y + GEO.head.h);
+  grad.addColorStop(0, '#a68bfa');
+  grad.addColorStop(1, '#7a52e8');
+  squirclePath(GEO.head.x, GEO.head.y, GEO.head.w, GEO.head.h, GEO.head.r);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // 顶部柔光（一点点体积感，不是描边）
+  ctx.beginPath();
+  ctx.ellipse(GEO.head.x + 22, GEO.head.y + 13, 20, 9, -0.35, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.10)';
+  ctx.fill();
+
+  // 腮红
+  if (P.blush > 0.02) {
+    ctx.fillStyle = `rgba(255, 148, 120, ${(P.blush * 0.32).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.ellipse(50, 84, 6, 3.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(100, 84, 6, 3.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  drawEye(GEO.eyeL, P.eyeOpenL, now);
+  drawEye(GEO.eyeR, P.eyeOpenR, now);
+  drawMouth();
+
+  // 睡眠 Z
+  if (pet.asleep) drawZeds(now);
+
+  // 压暗
+  if (P.dim > 0.01) {
+    ctx.fillStyle = `rgba(16, 14, 26, ${(P.dim * 0.45).toFixed(3)})`;
+    squirclePath(GEO.head.x - 12, GEO.head.y - 8, GEO.head.w + 24, GEO.head.h + 36, GEO.head.r);
+    ctx.fill();
+    for (const tc of GEO.tentacles) {
+      drawTentacle(tc.x, tc.y, 0);
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawEye(eye, open, now) {
+  if (open < 0.04) {
+    // 闭合：一条安静的弯线
+    ctx.beginPath();
+    ctx.moveTo(eye.x - 5, eye.y + 2);
+    ctx.quadraticCurveTo(eye.x, eye.y + 6, eye.x + 5, eye.y + 2);
+    ctx.strokeStyle = '#241d38';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    return;
+  }
+  const h = GEO.eyeH * open;
+  const curve = P.eyeCurve;
+  ctx.save();
+  ctx.beginPath();
+  // 眼形：圆角矩形 → 弯月（curve 越大下缘越平）
+  const w = GEO.eyeW;
+  ctx.ellipse(eye.x, eye.y + (GEO.eyeH - h) * 0.5, w / 2, h / 2, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#241d38';
+  ctx.fill();
+  if (curve > 0.05) {
+    // 弯月笑眼：用头色盖掉下半部分
+    ctx.save();
+    ctx.clip();
+    const grad = ctx.createLinearGradient(GEO.head.x, GEO.head.y, GEO.head.x + GEO.head.w, GEO.head.y + GEO.head.h);
+    grad.addColorStop(0, '#a68bfa');
+    grad.addColorStop(1, '#7a52e8');
+    ctx.fillStyle = grad;
+    ctx.fillRect(eye.x - w / 2 - 1, eye.y + h * (0.35 - curve * 0.55), w + 2, h);
+    ctx.restore();
+  }
+  // 瞳孔高光（跟手）
+  const px = clamp(P.eyeLookX, -2, 2);
+  const py = clamp(P.eyeLookY, -1.5, 1.5);
+  ctx.beginPath();
+  ctx.arc(eye.x + 1.5 + px, eye.y - 2 + py, 1.6, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawMouth() {
+  const { x, y } = GEO.mouth;
+  const open = P.mouthOpen;
+  const curve = P.mouthCurve;
+  ctx.lineCap = 'round';
+  if (open > 0.55 && curve < 0) {
+    // 惊讶 o 嘴
+    ctx.beginPath();
+    ctx.ellipse(x, y + 2, 3.4, 4.2 * open, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#241d38';
+    ctx.fill();
+    return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(x - 7, y);
+  ctx.quadraticCurveTo(x, y + 5.5 * curve + open * 6, x + 7, y);
+  if (open > 0.3) {
+    // 张嘴笑：填充
+    ctx.quadraticCurveTo(x, y - 1.5, x - 7, y);
+    ctx.fillStyle = '#241d38';
+    ctx.fill();
+  } else {
+    ctx.strokeStyle = '#241d38';
+    ctx.lineWidth = 2;
+    ctx.stroke();
   }
 }
 
-function drawRipples(now, cx, cy) {
-  if (!pet.listening) { ripples.length = 0; return; }
+function drawRipples(now) {
   if (now - lastRippleAt > 1600) {
     ripples.push({ born: now });
     lastRippleAt = now;
@@ -290,91 +382,70 @@ function drawRipples(now, cx, cy) {
     const age = (now - ripples[i].born) / 2400;
     if (age >= 1) { ripples.splice(i, 1); continue; }
     ctx.beginPath();
-    ctx.arc(cx, cy - 30, 34 + age * 46, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(139, 92, 246, ${(0.34 * (1 - age)).toFixed(3)})`;
+    ctx.arc(GEO.cx, GEO.baseY - 40, 40 + age * 42, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(122, 82, 232, ${(0.3 * (1 - age)).toFixed(3)})`;
     ctx.lineWidth = 1.6;
     ctx.stroke();
   }
-  const inner = (Math.sin(now / 600) + 1) / 2;
-  ctx.beginPath();
-  ctx.arc(cx, cy - 30, 20, 0, Math.PI * 2);
-  ctx.strokeStyle = `rgba(255, 100, 36, ${(0.08 + inner * 0.08).toFixed(3)})`;
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
+}
+
+function drawZeds(now) {
+  if (Math.random() < 0.012 && zeds.length < 3) {
+    zeds.push({ born: now, drift: rand(-4, 4) });
+  }
+  ctx.textAlign = 'center';
+  for (let i = zeds.length - 1; i >= 0; i -= 1) {
+    const age = (now - zeds[i].born) / 3200;
+    if (age >= 1) { zeds.splice(i, 1); continue; }
+    const x = GEO.cx + 34 + zeds[i].drift * age;
+    const y = GEO.head.y - 6 - age * 26;
+    ctx.globalAlpha = (1 - age) * 0.7;
+    ctx.fillStyle = '#7a52e8';
+    ctx.font = `${10 + age * 5}px sans-serif`;
+    ctx.fillText('z', x, y);
+    ctx.globalAlpha = 1;
+  }
 }
 
 /* ---------- 主循环 ---------- */
 function frame(now) {
   requestAnimationFrame(frame);
-  if (document.hidden || !spriteMap) return;
+  if (document.hidden) return;
 
-  const t = now / 1000;
+  // 参数收敛
+  P.eyeOpenL = lerp(P.eyeOpenL, T.eyeOpenL, SPEED.eyeOpen);
+  P.eyeOpenR = lerp(P.eyeOpenR, T.eyeOpenR, SPEED.eyeOpen);
+  P.eyeLookX = lerp(P.eyeLookX, T.eyeLookX, SPEED.eyeLook);
+  P.eyeLookY = lerp(P.eyeLookY, T.eyeLookY, SPEED.eyeLook);
+  P.eyeCurve = lerp(P.eyeCurve, T.eyeCurve, SPEED.eyeCurve);
+  P.mouthOpen = lerp(P.mouthOpen, T.mouthOpen, SPEED.mouth);
+  P.mouthCurve = lerp(P.mouthCurve, T.mouthCurve, SPEED.mouth);
+  P.blush = lerp(P.blush, T.blush, SPEED.blush);
+  P.squashX = lerp(P.squashX, T.squashX, SPEED.squash);
+  P.squashY = lerp(P.squashY, T.squashY, SPEED.squash);
+
+  const night = new Date().getHours() >= 23 || new Date().getHours() < 7;
+  T.dim = pet.asleep ? 0.4 : night ? 0.2 : 0;
+  P.dim = lerp(P.dim, T.dim, SPEED.dim);
+
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.save();
   ctx.scale(dpr, dpr);
-
-  const night = new Date().getHours() >= 23 || new Date().getHours() < 7;
-  dim.set(pet.asleep ? 0.4 : night ? 0.2 : 0);
-
-  const breatheAmp = pet.asleep ? 0.008 : pet.listening ? 0.016 : 0.011;
-  const breatheRate = pet.asleep ? 3.0 : 2.1;
-  const breathe = Math.sin((t * Math.PI * 2) / breatheRate);
-
-  if (motionKind === 'wiggle' && now < motionUntil) {
-    tilt.set(Math.sin(now / 46) * 0.022);
-  }
-  if (motionKind && now >= motionUntil) {
-    lean.set(0);
-    tilt.set(0);
-    motionKind = null;
-  }
-
-  const lx = lean.step();
-  const ly = leanY.step();
-  const rot = tilt.step();
-  const sx = squashX.step();
-  const sy = squashY.step();
-  const dimV = clamp(dim.step(), 0, 1);
-
-  const W = canvas.clientWidth;
-  const H = canvas.clientHeight;
-  const baseX = W / 2 + lx;
-  const baseY = H - 16 + ly + breathe * breatheAmp * 22;
-
-  const shadowScale = clamp(1 - (sy - 1) * 1.8, 0.8, 1.2);
-  ctx.beginPath();
-  ctx.ellipse(baseX - lx * 0.5, H - 13, 36 * shadowScale, 6, 0, 0, Math.PI * 2);
-  ctx.fillStyle = `rgba(23, 23, 19, ${(0.17 * (1 - dimV * 0.55)).toFixed(3)})`;
-  ctx.fill();
-
-  ctx.translate(baseX, baseY);
-  ctx.rotate(rot);
-  ctx.scale(sx * (1 + breathe * breatheAmp * 0.45), sy * (1 - breathe * breatheAmp));
-  ctx.translate(-baseX, -baseY);
-
-  if (pet.fade < 1) pet.fade = clamp(pet.fade + pet.fadeStep, 0, 1);
-  if (pet.prevSprite && pet.fade < 1) drawSprite(pet.prevSprite, 1 - pet.fade, baseX, baseY);
-  const layout = drawSprite(pet.sprite, pet.prevSprite ? pet.fade : 1, baseX, baseY);
-
-  drawEyes(layout);
-  drawRipples(now, baseX, baseY);
-
-  if (dimV > 0.01) {
-    ctx.fillStyle = `rgba(16, 14, 26, ${(dimV * 0.5).toFixed(3)})`;
-    ctx.globalCompositeOperation = 'source-atop';
-    ctx.fillRect(0, 0, W, H);
-    ctx.globalCompositeOperation = 'source-over';
-  }
-
+  drawBuddy(now);
   ctx.restore();
 
-  if (blinkStart < 0 && Date.now() > blinkAt && !pet.asleep && !pet.halfLid) {
+  // 眨眼（快速 1→0→1）
+  if (blinkStart < 0 && Date.now() > blinkAt && !pet.asleep && pet.sleepStage < 2) {
     blinkStart = now;
-    blinkAt = Date.now() + rand(2600, 6500);
+    T.eyeOpenL = 0; T.eyeOpenR = 0;
+    setTimeout(() => { T.eyeOpenL = 1; T.eyeOpenR = 1; }, BLINK_MS * 0.6);
+    blinkStart = -2; // 冷却标记
+    setTimeout(() => { blinkStart = -1; }, BLINK_MS);
+    blinkAt = Date.now() + rand(2800, 6800);
   }
 }
 
-/* ---------- 交互：单击 = 互动 + 姿态圆钮 ---------- */
+/* ---------- 交互：单击=互动 · 右键=功能 · 拖动=位移 · 拖文件=收下 ---------- */
 let dragState = null;
 let intensityTimer = null;
 
@@ -385,19 +456,21 @@ function reactToTap() {
 
   if (pet.clickIntensity <= 1) {
     showMood('happy');
-    cueHop();
+    T.squashY = 1.06; T.squashX = 0.95;
+    setTimeout(() => { T.squashX = 1; T.squashY = 1; }, 160);
     say('我在');
   } else if (pet.clickIntensity === 2) {
     showMood('love');
-    cueLean();
+    tiltSpring.kick(0.05);
     say('今天也一起学');
   } else if (pet.clickIntensity === 3) {
     showMood('surprised');
-    cueStartle();
+    tiltSpring.kick(-0.06);
     say('哎？');
   } else {
     showMood('surprised', 2600);
-    cueShake();
+    tiltSpring.kick(0.08);
+    setTimeout(() => tiltSpring.kick(-0.08), 120);
     say('别一直戳我', 2200);
     pet.clickIntensity = 0;
   }
@@ -405,7 +478,6 @@ function reactToTap() {
 
 canvas.addEventListener('pointerenter', () => {
   pet.lastInteraction = Date.now();
-  leanY.kick(-0.5);
   if (pet.listening) {
     updateListenSpeech();
     listenSpeechTimer = setInterval(updateListenSpeech, 5000);
@@ -415,17 +487,16 @@ canvas.addEventListener('pointerenter', () => {
 canvas.addEventListener('pointermove', (event) => {
   if (dragState) return;
   const rect = canvas.getBoundingClientRect();
+  // 眼睛看向光标（相对身体中心的方向，幅度克制）
   const nx = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
   const ny = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
-  lean.set(clamp(nx * 3.0, -3.0, 3.0));
-  leanY.set(clamp(ny * 1.4, -1.4, 1.4));
-  tilt.set(clamp(nx * 0.03, -0.03, 0.03));
+  T.eyeLookX = clamp(nx * 2.2, -2.2, 2.2);
+  T.eyeLookY = clamp(ny * 1.6, -1.6, 1.6);
 });
 
 canvas.addEventListener('pointerleave', () => {
-  lean.set(0);
-  leanY.set(0);
-  tilt.set(0);
+  T.eyeLookX = 0;
+  T.eyeLookY = 0;
   if (listenSpeechTimer) {
     clearInterval(listenSpeechTimer);
     listenSpeechTimer = null;
@@ -436,9 +507,8 @@ canvas.addEventListener('pointerleave', () => {
 canvas.addEventListener('pointerdown', (event) => {
   canvas.setPointerCapture(event.pointerId);
   touch();
-  squashX.set(0.97);
-  squashY.set(1.03);
-  if (dockOpen) setDock(false); // 拖动前先把圆钮收起来
+  T.squashX = 0.97;
+  T.squashY = 1.03;
   dragState = { pointerId: event.pointerId, lastX: event.screenX, lastY: event.screenY, moved: false };
 });
 
@@ -459,24 +529,27 @@ function releaseDrag(event) {
   canvas.releasePointerCapture(event.pointerId);
   const moved = dragState.moved;
   dragState = null;
-  squashX.set(1);
-  squashY.set(1);
-  if (moved) return;
-  // 单击：互动反应 + 姿态圆钮（功能是看得见的）
-  reactToTap();
-  setDock(true);
+  T.squashX = 1;
+  T.squashY = 1;
+  if (!moved) reactToTap();
 }
 canvas.addEventListener('pointerup', releaseDrag);
-canvas.addEventListener('pointercancel', () => { dragState = null; squashX.set(1); squashY.set(1); });
+canvas.addEventListener('pointercancel', () => { dragState = null; T.squashX = 1; T.squashY = 1; });
 
-/* ---------- 旁听 ---------- */
+canvas.addEventListener('contextmenu', (event) => {
+  event.preventDefault();
+  touch();
+  window.meetmindCompanion?.showPetMenu();
+});
+
+/* ---------- 旁听（右键菜单触发，pet:action 消息） ---------- */
 async function toggleListening() {
   touch();
   const bridge = window.meetmindCompanion;
   if (!bridge?.toggleListen) return;
   if (!pet.listening) {
-    squashY.set(0.94); // 蹲下 = 坐下听
-    setTimeout(() => squashY.set(1), 240);
+    T.squashY = 0.94;
+    setTimeout(() => { T.squashY = 1; }, 260);
     say('竖起耳朵…', 1500);
   }
   try {
@@ -484,26 +557,22 @@ async function toggleListening() {
     if (result?.listening) {
       pet.listening = true;
       pet.listeningSince = Date.now();
-      listenBtn.dataset.active = 'true';
-      setSprite('idle');
+      applyMood('idle');
       say('我在旁边听', 1600);
       return;
     }
     const wasListening = pet.listening;
     pet.listening = false;
-    listenBtn.dataset.active = 'false';
     if (listenSpeechTimer) {
       clearInterval(listenSpeechTimer);
       listenSpeechTimer = null;
     }
     if (wasListening) {
       showMood('happy', 1600);
-      cueHop(); // 起身 + 小跳 = 记完了
       say('记下了，去整理', 1800);
-      setSprite('idle');
       return;
     }
-    setSprite('idle');
+    applyMood('idle');
     const reasons = {
       'not-logged-in': '先在主窗口登录一下',
       'hook-missing': '主窗口还没准备好',
@@ -517,10 +586,10 @@ async function toggleListening() {
   }
 }
 
-canvas.addEventListener('contextmenu', (event) => {
-  event.preventDefault();
-  touch();
-  window.meetmindCompanion?.showPetMenu();
+window.meetmindCompanion?.onPetAction?.((action) => {
+  if (action === 'listen') void toggleListening();
+  if (action === 'ask') window.meetmindCompanion?.togglePanel();
+  if (action === 'capture') window.meetmindCompanion?.captureScreen?.();
 });
 
 /* ---------- 拖图片收下 ---------- */
@@ -535,6 +604,7 @@ document.addEventListener('drop', async (event) => {
     return;
   }
   say('张嘴接住…', 1200);
+  T.mouthOpen = 1;
   try {
     const payload = await Promise.all(imagesOnly.map(async (file) => ({
       name: file.name,
@@ -556,23 +626,24 @@ document.addEventListener('drop', async (event) => {
     }
   } catch {
     say('没收进去，再试一次', 1800);
+  } finally {
+    T.mouthOpen = 0;
   }
 });
 
 /* ---------- 捕获成功的吞食动画 ---------- */
 window.meetmindCompanion?.onGulp?.(() => {
   touch();
-  setSprite('happy', 'fast');
-  squashX.set(1.05);
-  squashY.set(0.94);
-  setTimeout(() => { squashX.set(1); squashY.set(1); }, 140);
+  T.mouthOpen = 1;
+  T.squashX = 1.05;
+  T.squashY = 0.94;
+  setTimeout(() => { T.squashX = 1; T.squashY = 1; }, 160);
+  setTimeout(() => { T.mouthOpen = 0; showMood('happy', 900); }, 420);
   say('收下了', 1300);
-  setTimeout(() => { if (pet.sprite === 'happy') setSprite('idle'); }, 1300);
 });
 
 /* ---------- 启动 ---------- */
-loadAssets().then(() => {
-  requestAnimationFrame(frame);
-  scheduleAmbient();
-  setTimeout(() => say('同学在这', 2000), 900);
-});
+applyMood('idle');
+requestAnimationFrame(frame);
+scheduleAmbient();
+setTimeout(() => say('同学在这', 2000), 900);

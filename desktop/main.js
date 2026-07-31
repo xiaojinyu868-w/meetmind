@@ -114,7 +114,8 @@ function savePosition(bounds) {
 }
 
 function windowSize() {
-  return expanded ? { width: 340, height: 310 } : { width: 176, height: 176 };
+  // 窗口紧贴身体：矢量角色设计空间 150×140，没有需要容纳贴图的空白边
+  return { width: 150, height: 140 };
 }
 
 function placeInitialWindow(win) {
@@ -335,7 +336,12 @@ ipcMain.handle('pet:set-dock', (_event, open) => {
 });
 
 ipcMain.handle('pet:menu', () => {
+  const send = (action) => companionWindow?.webContents.send('pet:action', action);
   const menu = Menu.buildFromTemplate([
+    { label: '问同学', click: () => send('ask') },
+    { label: '旁听', click: () => send('listen') },
+    { label: '收下这一页', click: () => send('capture') },
+    { type: 'separator' },
     { label: '打开 MeetMind', click: () => showShellWindowAt(MEETMIND_URL) },
     { type: 'separator' },
     {

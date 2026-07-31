@@ -20,5 +20,7 @@ contextBridge.exposeInMainWorld('meetmindCompanion', {
   setDock: (open) => ipcRenderer.invoke('pet:set-dock', Boolean(open)),
   // 圆钮「收下这一页」：与全局热键同一条截图流程
   captureScreen: () => ipcRenderer.invoke('desktop:capture-screen'),
+  // 右键菜单动作回投（问 / 旁听 / 收下）
+  onPetAction: (handler) => ipcRenderer.on('pet:action', (_e, action) => handler(action)),
   quit: () => ipcRenderer.invoke('companion:quit'),
 });

@@ -1,4 +1,4 @@
-/* Octo Buddy — 参数化宠物（透明窗，无 chrome） */
+/* Octo Buddy — 全参数化矢量宠物（透明窗，无 chrome） */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
   width: 100%;
@@ -19,77 +19,25 @@ html, body {
 
 .speech {
   position: absolute;
-  top: 6px;
+  top: 4px;
   left: 50%;
-  max-width: 178px;
-  transform: translate(-50%, 6px);
-  padding: 7px 12px;
+  max-width: 140px;
+  transform: translate(-50%, 5px);
+  padding: 6px 11px;
   border: 1px solid rgba(23, 23, 19, 0.14);
-  border-radius: 13px;
+  border-radius: 12px;
   background: rgba(248, 247, 242, 0.96);
   color: #171713;
-  font-size: 11px;
-  line-height: 1.55;
+  font-size: 10.5px;
+  line-height: 1.5;
   text-align: center;
   box-shadow: 0 8px 24px rgba(23, 23, 19, 0.14);
   opacity: 0;
   transition: opacity 0.22s ease, transform 0.22s ease;
   pointer-events: none;
-  z-index: 3;
+  z-index: 2;
 }
 .speech[data-visible='true'] {
   opacity: 1;
   transform: translate(-50%, 0);
-}
-
-/* 姿态圆钮：点宠物后浮出的一排小动作，看得见、不用猜 */
-#dock {
-  position: absolute;
-  top: 10px;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  z-index: 2;
-  pointer-events: none;
-}
-#dock[data-open='true'] { pointer-events: auto; }
-
-#dock button {
-  display: grid;
-  justify-items: center;
-  gap: 3px;
-  width: 52px;
-  padding: 8px 0 7px;
-  border: 1px solid rgba(23, 23, 19, 0.14);
-  border-radius: 15px;
-  background: rgba(248, 247, 242, 0.97);
-  color: #171713;
-  cursor: pointer;
-  box-shadow: 0 10px 26px rgba(23, 23, 19, 0.16);
-  opacity: 0;
-  transform: translateY(8px) scale(0.86);
-  transition: opacity 0.22s ease, transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease;
-  pointer-events: none;
-}
-#dock button svg { width: 18px; height: 18px; }
-#dock button span { font-size: 10px; font-weight: 650; line-height: 1; }
-#dock button:hover { background: #fff; transform: translateY(0) scale(1.04); }
-#dock button:active { transform: translateY(1px) scale(0.97); }
-
-#dock[data-open='true'] button {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  pointer-events: auto;
-}
-#dock[data-open='true'] button:nth-child(1) { transition-delay: 0ms; }
-#dock[data-open='true'] button:nth-child(2) { transition-delay: 55ms; }
-#dock[data-open='true'] button:nth-child(3) { transition-delay: 110ms; }
-
-/* 旁听中：耳朵钮点亮 */
-#dock button[data-act='listen'][data-active='true'] {
-  background: #ff6424;
-  border-color: #ff6424;
-  color: #171713;
 }
