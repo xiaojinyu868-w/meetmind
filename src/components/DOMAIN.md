@@ -56,7 +56,7 @@ components/
 |------|------|------|
 | `Recorder.tsx` | 1694 | 录音主组件（采集/实时转录/暂停/恢复；实时 final 进入 `recorder-utils.mergeRealtimeTranscriptSegment` 去重/修时间戳）；首屏静态挂载以保留首次录音的用户手势与冷启动 ASR，子模块在 `recorder/` |
 | `TranscriptFlowView.tsx` | 778 | 转录内容流式视图；v7 引用资产化：段落章标与悬停时刻统一 `.cite-ts`，搜索命中高亮用 `.mark-vermilion`，全部 v7 token（无 v6 直写 hex） |
-| `LessonDigestCard.tsx` | ~220 | 课堂结构化笔记纯展示组件（飞书妙记式分段总结 + 图片内联 + 时间戳跳转 + 原文折叠 + 长按标记困惑；桌面移动共用）；标题不再叠加“课堂总结”等重复说明，降级路径不向用户暴露 LLM 等内部术语 |
+| `LessonDigestCard.tsx` | ~220 | 课堂结构化笔记纯展示组件（飞书妙记式分段总结 + 图片内联 + 时间戳跳转 + 可访问的原文折叠 + 长按标记困惑；桌面移动共用）；用户面文案统一从 COPY 读取，降级路径不向用户暴露 LLM 等内部术语 |
 | `SharedWorkspacePanel.tsx` | ~90 | 课后中间学习工作区分发：应用矩阵、独立应用结果，以及录课时已生成的课堂脉络复习工作区；脉络时间戳沿用统一 onSeek 回到课堂原话 |
 | `WaveformPlayer.tsx` | ~740 | 波形音频播放器；波形 / 进度 / 光标色走 v7 token 字面值（pine-light / pine / vermilion；wavesurfer 走 canvas 不能用 CSS var）；加载三级加速：云端 `/api/workspace/audio-peaks` 预生成 peaks → IndexedDB `waveformPeaks` 缓存（首次解码后 `exportPeaks` 写入，`peaksCacheKey`=sessionId）→ 整段解码兜底，命中 peaks 即跳过解码不再「卡在 100%」 |
 | `VoiceMicButton.tsx` | ~200 | 语音麦克风按钮 |
@@ -67,12 +67,13 @@ components/
 |------|------|------|
 | `AITutor.tsx` | 1940 | 旧 AI 家教 / legacy fallback（移动端文字和语音主链路已移出），子模块在 `tutor/` |
 | `AIChat.tsx` | 691 | AI 对话组件 |
-| `GlobalAskPanel.tsx` / `GlobalAskWelcome.tsx` / `GlobalAskContextDrawer.tsx` | ~650 | 全局 Ask MeetMind：基于 ChatBase 的多轮问答；空态把输入作为唯一主动作，在输入内轻量选择“直接回答 / 陪我学会”；参考范围按需从右侧打开，深度学习仅在答案会改变路线时逐题追问；管理员额外看到“查看本次 AI”轻入口，将当前真实上下文带到独立控制中心，普通用户完全不可见 |
+| `GlobalAskPanel.tsx` / `GlobalAskWelcome.tsx` / `GlobalAskContextDrawer.tsx` | ~495 | 全局 Ask MeetMind：基于 ChatBase 的多轮问答；空态把输入作为唯一主动作，在输入内轻量选择“直接回答 / 陪我学会”；参考范围按需从右侧打开，深度学习仅在答案会改变路线时逐题追问；管理员额外看到“查看本次 AI”轻入口，将当前真实上下文带到独立控制中心，普通用户完全不可见；活跃深度学习线索会绑定真实对话并优先恢复 |
+| `GlobalAskMessages.tsx` | 95 | 全局 Ask 的消息列表展示 adapter：渲染流式回答、回答动作、意图确认和错误重试；不持有对话或学习业务状态 |
 | `LearningIntentConfirmationCard.tsx` / `learning-intent-confirmation-model.ts` | ~210 | 深度学习的轻确认：若学习路径确有歧义，逐步显现模型动态生成的 1-3 个选择问题；学习理解在回答结束后静默整理，不把内部记忆标记塞进消息流 |
 | `LearningProgressMemoryCard.tsx` | ~50 | 旧学习进展 marker 的反馈卡，当前 `GlobalAskPanel` 不再使用；保留仅供迁移期兼容，勿在新链路继续扩展 |
-| `LearningMemoryPanel.tsx` / `CourseContextSection.tsx` / `CourseAssessmentCard.tsx` / `CourseCheatsheetWorkspace.tsx` / `ContextRecoveryCard.tsx` | ~1100 | 「我的上下文」采用消费级总览→具体内容层级：总览只展开模型对用户的长期理解，并以两条安静入口进入“课程与考试”或“最近学习现场”，不再把三类内容一次性纵向铺满；从复习页进入考试速查表时直接打开范围选择，返回时也直接回到原应用矩阵，不绕经上下文总览。范围选择支持跨课程与课次级多选；桌面为课程侧栏 + 课次画布，手机为横向课程选择带 + 仅展开已选课次，避免表单长页。课程支持可信名称、用户标签与边界纠正，再进入可打印速查表 |
+| `LearningMemoryPanel.tsx` / `LearningTaskSection.tsx` / `learning-task-section-model.ts` / `CourseContextSection.tsx` / `CourseAssessmentCard.tsx` / `CourseCheatsheetWorkspace.tsx` / `ContextRecoveryCard.tsx` | ~1350 | 「我的上下文」采用消费级总览→具体内容层级：总览展开模型对用户的长期理解，并以安静入口进入“学习任务 / 课程与考试 / 最近学习现场”。学习任务按进行中、已暂停、已完成排序，展示真实进展、下一步与课堂/练习证据数；暂停/完成不删除，恢复时把用户实际点击的 Task 直接交给全局深度对话，避免接回旧状态。证据入口只按 `relatedActivityIds` 展开最近学习现场；深度对话只有在 `global-ask:<conversationId>:` 与 Task 的 `conversationId` 精确匹配时才会作为该 Task 证据，本机没有对应 Event 时保留任务状态并明确提示，不按 session 猜正文。从复习页进入考试速查表时直接打开范围选择，返回时也直接回到原应用矩阵；范围选择支持跨课程与课次级多选 |
 | `AISearchPanel.tsx` | ~740 | 旧单轮 Workspace AI 搜索面板；主入口已由 `GlobalAskPanel` 替代，保留作迁移参考 |
-| `WordExplainer.tsx` | ~580 | 术语解释器；管理员透镜复用本次选区、附近语境和最近提问 |
+| `WordExplainer.tsx` | ~435 | 术语解释器；管理员透镜复用本次选区、附近语境和最近提问；浮窗始终约束在 `visualViewport`，支持触屏拖拽/缩放、Escape 关闭和保留附件上下文的失败重试 |
 | `StreamingMarkdown.tsx` | 391 | 统一流式 Markdown 渲染（GFM 表格 / 数学公式 / [MM:SS] 与 [t=MM:SS] 时间戳 / [资料N]） |
 | `ThinkingVisualizer.tsx` | ~300 | AI 思维过程可视化 |
 | `ThinkingGuideRenderer.tsx` | ~260 | 思维引导渲染 |
@@ -92,6 +93,9 @@ components/
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `WorkspaceCaptureList.tsx` | ~900 | 工作空间 capture 列表 |
+| `CollectionCard.tsx` / `mobile/MobileCollectionCard.tsx` | ~700 | 收集卡片；未分组场景显示相对时间，按日分组场景只显示组内时刻，日期由外层标题唯一承载 |
+| `CollectionFeedContent.tsx` | ~190 | 收集流可滚动画布：整理提示、实时录音预览、按日分组卡片、空态和回声入口；由主页面动态加载，卡片展示依赖不再进入 God File |
+| `chat/ChatAssistantActions.tsx` | ~60 | 六类 ChatBase adapter 的成功回答动作：富文本复制 + 消息反馈；历史标题只表达恢复状态，不重复正文里的首条问题 |
 | `DesktopVideoReviewLayout.tsx` | ~647 | 桌面端课后复习三栏布局：左=视频/音频证据 + 时间轴，中=转录/困惑点/学习工作区，右=同桌；接入可拖拽三栏并持有课后学习黑板。音频态默认让中间学习区最宽，视频态仍以可观看的原件为第一权重；矩阵和具体应用自带标题，不再叠加重复的“学习工作区”栏头；未解决困惑点用 vermilion-fog 语义底，波形条色走 pine token |
 | `ReviewThreePaneLayout.tsx` | ~156 | 课后复习可拖拽三栏容器：两条边界都可拖拽；音频默认比例 27/49/24，视频默认 46/34/20；学习区 / 同桌被挤到阈值后折叠成窄 rail，左证据栏不自动折叠；左证据栏用 paper-warm 底与中/右分层，拖拽缝 hover 用 pine |
 | `ReviewLearningWorkspace.tsx` | ~165 | 课后中间学习工作区：用 `AppRenderSurface` 承载完整应用；应用生成结果与闪卡/测验交互同时写入课后黑板和“最近学习现场”，但不自动升级为长期记忆；闪卡沉浸底统一 `var(--mm-immersive)` |
@@ -102,14 +106,15 @@ components/
 | `ClassroomView.model.ts` | ~10 | 课堂页纯交互模型（demo 录课态停止按钮应退出 demo，不走真实录音/stale DB 清理） |
 | `SharedWorkspacePanel.tsx` | ~78 | shared workspace 统一面板（仅 apps）；支持在中间工作区打开具体应用而不是只弹浮窗 |
 | `ReviewWorkspacePanel.tsx` | ~193 | desktop review 左侧证据面板（timeline / anchor detail；M15 起移除单课 feed tab，信息流改走侧栏全局入口） |
+| `ClassroomMomentRail.tsx` | ~50 | 课后时间轴上方的课堂标记带：只展示 `type='important'` 的课中主动标记，带时间和附近原文，点击进入锚点详情并回到原声；与待解决困惑点分开计数和着色 |
 | `ReviewTutorPanel.tsx` | ~268 | desktop review 右侧 Tutor 面板（历史对话、SafeAITutor / TutorAgentPanel 统一容器；音频波形已上移到左证据栏）；顶部只用“整节课 / 困惑点”表达当前对话范围，不再用重复说明文字挤压默认窄栏 |
 | `CollectionSelectionBar.tsx` | 94 | 收集上下文多选操作条（问 Tutor / 引用 / 批量归档删除） |
 | `CollectionComposerContextPreview.tsx` | 62 | composer 上方的引用与链接预览条 |
 | `CollectionComposerBar.tsx` | 168 | collection composer 输入区容器（预览 / textarea / 发送 / 听写 / 上传） |
 | `CollectionMessageActionSheet.tsx` | ~283 | 收集消息操作菜单（引用/问 Tutor/多选/复习/编辑/打开原件/归档/删除），从 page.tsx 提取 |
-| `mobile/MobileCollectionSheet.tsx` | ~400 | 收集菜单 / 历史收集 / 今日情报面板；移动端底部或侧边 sheet，桌面端以具备 dialog 语义的右侧上下文抽屉呈现；情报空态可返回收集补充上下文 |
-| `CrossCourseFeedPanel.tsx` | ~180 | 个人上下文与目标驱动的情报面板：合并“看见自己”与真实外部信息，对用户零配置；保留上次结果并在后台刷新，失败不清空旧内容 |
-| `FeedStream.tsx` / `feed-stream-model.ts` | ~420 | 今日情报列表渲染器与纯排序模型：外部发现和个人线索从首屏起交替出现，不再用两组标题把信息流切成两个报告；外部卡展示作者、出版时间、来源、个人推荐理由与不同视角；支持反馈及外链打开 |
+| `mobile/MobileCollectionSheet.tsx` | ~400 | 收集菜单 / 历史收集 / 今日情报面板；移动端底部或侧边 sheet，桌面端以具备 dialog 语义的右侧上下文抽屉呈现；情报空态可返回收集补充上下文，时间戳可携带毫秒位置打开对应复习现场，“问同学”会解析全部关联收集而非误用列表首项 |
+| `CrossCourseFeedPanel.tsx` | ~300 | 个人上下文与目标驱动的情报面板：合并“看见自己”与真实外部信息，对用户零配置；保留上次结果并在后台刷新，失败不清空旧内容；时间戳动作会带原始 capture 和毫秒位置回到课堂证据，“问同学”保留卡片原问题与去重后的来源 ID |
+| `FeedStream.tsx` / `feed-stream-model.ts` | ~430 | 今日情报列表渲染器与纯排序模型：外部发现和个人线索从首屏起交替出现，不再用两组标题把信息流切成两个报告；纯模型保留具体时间戳点击上下文及“问同学”的真实问题/来源，外部卡展示作者、出版时间、来源、个人推荐理由与不同视角；支持反馈及外链打开 |
 | `CollectionEmptyState.tsx` | ~50 | 收集为空时的空态（ui/EmptyState：心智一句 + 六种可收类型 chip + 微信次入口文案）；所有真实动作统一留在底部输入栏 |
 | `ImageUpload.tsx` | ~220 | 图片上传 |
 | `Citations.tsx` | ~140 | 引用标签 |
@@ -155,7 +160,6 @@ components/
 - `VideoReviewPlayer.tsx` (823) — 视频复习（点击画面控制 + visibilitychange 倍速恢复 + 键盘快捷键）
 - `AIChat.tsx` (691) — 对话
 - `WaveformPlayer.tsx` (638) — 波形播放器
-- `WordExplainer.tsx` (562) — 术语解释
 - `DesktopVideoReviewLayout.tsx` (537) — 桌面端复习布局
 - `desktop-video-review-layout-model.ts` — 桌面视频复习布局纯 helper（播放时间 ms → agent 秒级 context）
 

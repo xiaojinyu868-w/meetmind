@@ -43,11 +43,54 @@ model User {
   shareClaims          ShareClaim[]          @relation("ShareClaimer")
   shareInteractions    ShareInteraction[]    @relation("ShareInteractionVisitor")
   agentPacks           AgentPack[]           @relation("UserAgentPacks")
+  accountConversations AccountConversation[]
 
   @@index([username])
   @@index([email])
   @@index([phone])
   @@index([defaultWorkspaceId])
+}
+
+/// 账号级 AI 对话；与单课堂 WorkspaceCaptureArtifact 分离。
+/// 客户端时间 + mutationId 是跨设备版本，服务端 updatedAt 只用于运维。
+model AccountConversation {
+  id               String    @id
+  userId           String
+  scope            String    @default("global-ask")
+  type             String
+  title            String
+  sessionId        String
+  messageCount     Int       @default(0)
+  lastMessage      String?
+  model             String?
+  metadataJson     String?
+  status           String    @default("active")
+  sourceMutationId String
+  clientCreatedAt  DateTime
+  clientUpdatedAt  DateTime
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user     User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages AccountConversationMessage[]
+
+  @@index([userId, scope, clientUpdatedAt])
+  @@index([userId, status])
+}
+
+model AccountConversationMessage {
+  id               String   @id
+  conversationId   String
+  role             String
+  content          String
+  attachmentsJson  String?
+  sourceMutationId String
+  clientCreatedAt  DateTime
+  createdAt        DateTime @default(now())
+
+  conversation AccountConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, clientCreatedAt])
 }
 
 // 第三方登录关联表

@@ -37,6 +37,8 @@ export interface AudioSession {
 
 export interface Anchor {
   id?: number;
+  /** 跨设备稳定锚点 ID；不是 Dexie 主键，旧行可为空。 */
+  sourceAnchorId?: string;
   sessionId: string;
   timestamp: number;
   type: 'confusion' | 'important' | 'question';
@@ -45,6 +47,9 @@ export interface Anchor {
   aiExplanation?: string;
   createdAt: Date;
   resolvedAt?: Date;
+  updatedAt?: Date;
+  /** 最近一次已应用的云端 mutation，用于同毫秒冲突决胜。 */
+  sourceMutationId?: string;
 }
 
 /**
@@ -176,6 +181,8 @@ export interface Note {
   };
   createdAt: Date;
   updatedAt: Date;
+  /** 最近一次已应用的云端 mutation，用于同毫秒冲突决胜。 */
+  sourceMutationId?: string;
 }
 
 export interface TutorResponseCache {
@@ -203,6 +210,7 @@ export interface ConversationHistoryRecord {
   lastMessage?: string;
   model?: string;
   metadata?: string;
+  sourceMutationId?: string;
   createdAt: Date;
   updatedAt: Date;
 }

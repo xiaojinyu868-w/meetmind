@@ -57,6 +57,7 @@ export {
 } from './lexicon';
 export {
   saveHighlightTopics,
+  replaceSessionHighlightTopics,
   getSessionHighlightTopics,
   deleteSessionHighlightTopics,
   updateHighlightTopic,

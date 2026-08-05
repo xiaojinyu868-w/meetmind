@@ -34,6 +34,7 @@ export interface ConversationHistory {
   lastMessage?: string;                  // 最后一条消息预览
   model?: string;                        // 使用的 AI 模型
   metadata?: Record<string, unknown>;    // 扩展元数据
+  sourceMutationId?: string;             // 最近合入的云端版本（非用户数据）
   createdAt: Date;
   updatedAt: Date;
 }

@@ -23,7 +23,12 @@ interface LearningIntentResponse {
   plan?: LearningIntentPlan;
 }
 
-export function createLearningThread(plan: LearningIntentPlan, query: string): LearningThreadEntry {
+export function createLearningThread(
+  plan: LearningIntentPlan,
+  query: string,
+  conversationId?: string,
+  sessionId?: string,
+): LearningThreadEntry {
   const now = new Date().toISOString();
   return {
     id: `thread-${crypto.randomUUID()}`,
@@ -33,6 +38,9 @@ export function createLearningThread(plan: LearningIntentPlan, query: string): L
     depth: 'deep',
     status: 'active',
     nextStep: plan.checkpoints[0],
+    conversationId,
+    sessionId,
+    relatedSessionIds: sessionId ? [sessionId] : undefined,
     createdAt: now,
     updatedAt: now,
   };

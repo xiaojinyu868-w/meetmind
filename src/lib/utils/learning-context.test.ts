@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  advanceLearningThreadFromActivity,
+  advanceLearningThreadFromAppInteraction,
+  attachLearningThreadActivityEvidence,
   createEmptyLearningContext,
   formatLearningContextForTutor,
+  mergeLearningThreadHistory,
   mergeLearningActivity,
   mergeLearningMemory,
   summarizeLearningContext,
@@ -43,48 +47,52 @@ describe('learning context', () => {
     expect(state.recentActivities).toHaveLength(1);
   });
 
-  it('stores assistant activity previews without markdown artifacts', () => {
-    expect(toLearningActivityPreview('## 结论\n你还要检查 **反向因果**，再看 `样本量`。'))
-      .toBe('结论 你还要检查 反向因果，再看 样本量。');
-  });
-
-  it('only injects active memories and goals', () => {
-    const state = {
-      ...createEmptyLearningContext(),
-      memories: [
-        { id: 'm1', kind: 'topic' as const, title: '概率论', status: 'active' as const, source: 'user' as const, createdAt: '', updatedAt: '' },
-        { id: 'm2', kind: 'topic' as const, title: '已暂停', status: 'paused' as const, source: 'user' as const, createdAt: '', updatedAt: '' },
-      ],
-    };
-    const formatted = formatLearningContextForTutor(state, {
-      stage: 'unknown',
-      goals: [
-        { id: 'g1', title: '通过考试', status: 'active', createdAt: '', updatedAt: '' },
-        { id: 'g2', title: '以后再说', status: 'paused', createdAt: '', updatedAt: '' },
-      ],
-    });
-    expect(formatted.memories.map((item) => item.title)).toEqual(['概率论']);
-    expect(formatted.goals.map((item) => item.title)).toEqual(['通过考试']);
-  });
-
-  it('restores only an active learning thread into tutor context', () => {
-    const active = updateLearningThread(createEmptyLearningContext(), {
+  it('advances a thread only from a real app interaction in the same lesson', () => {
+    const state = updateLearningThread(createEmptyLearningContext(), {
       id: 'thread-1',
-      title: '继续理解机会成本',
-      intent: '能分析时间选择',
+      title: '分清相关与因果',
+      intent: '我想真正理解两者区别',
       depth: 'deep',
       status: 'active',
-      lastSummary: '已经能区分会计成本和机会成本',
-      createdAt: '2026-07-14T00:00:00.000Z',
-      updatedAt: '2026-07-14T01:00:00.000Z',
+      sessionId: 'lesson-1',
+      lastSummary: '已经讨论相关不等于因果',
+      nextStep: '用反例检验共同原因',
+      createdAt: '2026-08-05T08:00:00.000Z',
+      updatedAt: '2026-08-05T08:00:00.000Z',
     });
-    const completed = updateLearningThread(active, {
-      ...active.activeThread!,
-      status: 'completed',
-    });
+    const interaction = {
+      id: 'activity-1',
+      kind: 'app' as const,
+      title: '课堂测验',
+      detail: '课堂测验完成：5 题答对 4 题，正确率 80%。',
+      sessionId: 'lesson-1',
+      appKey: 'quiz',
+      sourceId: 'app-interaction:lesson-1:quiz:complete',
+      occurredAt: '2026-08-05T09:00:00.000Z',
+    };
 
-    expect(formatLearningContextForTutor(active).activeThread?.id).toBe('thread-1');
-    expect(summarizeLearningContext(active)).toContain('继续理解机会成本');
-    expect(formatLearningContextForTutor(completed).activeThread).toBeUndefined();
+    const advanced = advanceLearningThreadFromAppInteraction(state, interaction);
+    expect(advanced.activeThread).toMatchObject({
+      id: 'thread-1',
+      lastSummary: '已经讨论相关不等于因果；课堂测验完成：5 题答对 4 题，正确率 80%。',
+      nextStep: '用反例检验共同原因',
+      updatedAt: '2026-08-05T09:00:00.000Z',
+      relatedSessionIds: ['lesson-1'],
+      relatedActivityIds: ['activity-1'],
+    });
+    expect(advanced.memories).toEqual([]);
+
+    expect(advanceLearningThreadFromAppInteraction(state, {
+      ...interaction,
+      sessionId: 'lesson-2',
+    })).toBe(state);
+    expect(advanceLearningThreadFromAppInteraction(state, {
+      ...interaction,
+      sourceId: 'app-result:lesson-1:quiz:1',
+    })).toBe(state);
   });
-});
+
+  it('records distinct evidence even when two interactions have the same summary', () => {
+    const state = updateLearningThread(createEmptyLearningContext(), {
+      id: 'thread-1',
+      title: '分清�

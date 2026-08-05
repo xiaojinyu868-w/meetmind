@@ -173,6 +173,8 @@ interface LearnerProfileBase {
    * 避免把客观课堂复制进个人画像。
    */
   courseContextPreferences?: CourseContextPreference[];
+  /** 最近的学习线索 Task；包含 active / paused / completed，activeLearningThread 继续作为兼容指针。 */
+  learningThreads?: LearningThreadEntry[];
   /** 当前仍可继续的深度学习线索。 */
   activeLearningThread?: LearningThreadEntry;
 }
@@ -249,6 +251,10 @@ export interface LearningThreadEntry {
   status: 'active' | 'paused' | 'completed';
   conversationId?: string;
   sessionId?: string;
+  /** 这条线索真正触达过的课堂，供跨课 Task 先召回再下钻证据。 */
+  relatedSessionIds?: string[];
+  /** 已写入 recentLearningActivities 的轻量事件引用，不复制事件正文。 */
+  relatedActivityIds?: string[];
   lastSummary?: string;
   nextStep?: string;
   createdAt: string;
@@ -259,6 +265,7 @@ export interface LearningContextState {
   memories: LearningMemoryEntry[];
   recentActivities: LearningActivityEntry[];
   coursePreferences?: CourseContextPreference[];
+  learningThreads?: LearningThreadEntry[];
   activeThread?: LearningThreadEntry;
 }
 

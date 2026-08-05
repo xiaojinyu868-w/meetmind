@@ -10,6 +10,7 @@ import {
   Compass,
   FileText,
   Lightbulb,
+  ListTodo,
   MessageCircleMore,
   MoreHorizontal,
   Pause,
@@ -24,14 +25,21 @@ import {
 import { useLearningContext, type UseLearningContextReturn } from '@/hooks/useLearningContext';
 import { CourseContextSection } from '@/components/CourseContextSection';
 import { CourseCheatsheetWorkspace } from '@/components/CourseCheatsheetWorkspace';
+import { LearningTaskSection } from '@/components/LearningTaskSection';
+import { buildLearningTaskRows } from '@/components/learning-task-section-model';
 import { COPY } from '@/lib/ui/copy';
 import { cn } from '@/lib/utils';
-import type { LearningActivityEntry, LearningMemoryEntry, LearningMemoryKind } from '@/types/user';
+import type {
+  LearningActivityEntry,
+  LearningMemoryEntry,
+  LearningMemoryKind,
+  LearningThreadEntry,
+} from '@/types/user';
 import type { CourseContextGroup } from '@/lib/utils/course-context';
 
 interface LearningMemoryPanelProps {
   onBack: () => void;
-  onResumeThread?: () => void;
+  onResumeThread?: (thread: LearningThreadEntry) => void;
   onTalkToMeetMind?: () => void;
   initialFocus?: 'cheatsheet';
 }
@@ -202,7 +210,7 @@ function MemoryCard({
 
 export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, initialFocus }: LearningMemoryPanelProps) {
   const context = useLearningContext();
-  const [view, setView] = useState<'overview' | 'courses' | 'recent'>(() => initialFocus === 'cheatsheet' ? 'courses' : 'overview');
+  const [view, setView] = useState<'overview' | 'tasks' | 'courses' | 'recent'>(() => initialFocus === 'cheatsheet' ? 'courses' : 'overview');
   const [showAllRecent, setShowAllRecent] = useState(false);
   const [focusCheatsheet, setFocusCheatsheet] = useState(initialFocus === 'cheatsheet');
   const [cheatsheetScope, setCheatsheetScope] = useState<{
@@ -216,6 +224,10 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
   const recentActivities = useMemo(() => context.recentActivities
     .slice()
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)), [context.recentActivities]);
+  const taskRows = useMemo(() => buildLearningTaskRows(
+    context.learningThreads,
+    context.activeThread,
+  ), [context.activeThread, context.learningThreads]);
   const visibleActivities = showAllRecent ? recentActivities : recentActivities.slice(0, 3);
 
   if (cheatsheetScope) {
@@ -286,6 +298,15 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
 
           {view === 'overview' ? (
             <nav className="mt-9 border-t border-divider" aria-label={COPY.globalAsk.contextLibraryNavigation}>
+              <button type="button" onClick={() => setView('tasks')} className="group flex w-full items-center gap-4 border-b border-divider py-5 text-left sm:py-6">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-vermilion-fog text-vermilion"><ListTodo size={16} /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="font-mono text-[9px] font-semibold uppercase text-vermilion">{COPY.globalAsk.memoryTasksTab}</span>
+                  <span className="mt-1 block text-[15px] font-semibold text-ink">{COPY.globalAsk.contextTasksOverviewTitle}</span>
+                  <span className="mt-1 block truncate text-[11.5px] leading-5 text-ink-muted">{taskRows[0]?.thread.title || COPY.globalAsk.contextTasksOverviewEmpty}</span>
+                </span>
+                <ChevronRight size={15} className="shrink-0 text-ink-muted transition group-hover:translate-x-0.5 group-hover:text-pine" />
+              </button>
               <button type="button" onClick={() => setView('courses')} className="group flex w-full items-center gap-4 border-b border-divider py-5 text-left sm:py-6">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-pine-fog text-pine"><BookOpen size={16} /></span>
                 <span className="min-w-0 flex-1">
@@ -305,6 +326,16 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
                 <ChevronRight size={15} className="shrink-0 text-ink-muted transition group-hover:translate-x-0.5 group-hover:text-pine" />
               </button>
             </nav>
+          ) : null}
+
+          {view === 'tasks' ? (
+            <LearningTaskSection
+              tasks={taskRows}
+              recentActivities={context.recentActivities}
+              saving={context.saving}
+              onChangeThread={context.setActiveThread}
+              onResumeThread={onResumeThread}
+            />
           ) : null}
 
           {view === 'courses' ? (
@@ -331,28 +362,6 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
                 <span className="mb-1 text-[11px] tabular-nums text-ink-muted">{recentActivities.length}</span>
               ) : null}
             </div>
-
-            {context.activeThread?.status === 'active' ? (
-              <div className="mb-4 rounded-[22px] border border-pine/18 bg-pine-fog px-4 py-4 sm:px-5">
-                <p className="text-[11px] font-medium text-pine">{COPY.globalAsk.threadTitle}</p>
-                <p className="mt-2 text-[15px] font-semibold leading-6 text-ink">{context.activeThread.title}</p>
-                {context.activeThread.lastSummary ? <p className="mt-1.5 text-[12.5px] leading-6 text-ink-secondary">{context.activeThread.lastSummary}</p> : null}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {onResumeThread ? (
-                    <button type="button" onClick={onResumeThread} className="rounded-full bg-pine px-4 py-2 text-[11.5px] font-medium text-white">
-                      {COPY.globalAsk.threadResume}
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => void context.setActiveThread({ ...context.activeThread!, status: 'completed', updatedAt: new Date().toISOString() })}
-                    className="rounded-full border border-divider bg-white px-4 py-2 text-[11.5px] text-ink-secondary"
-                  >
-                    {COPY.globalAsk.threadComplete}
-                  </button>
-                </div>
-              </div>
-            ) : null}
 
             <div className="space-y-3">
               {recentActivities.length === 0 ? (

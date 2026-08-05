@@ -13,6 +13,7 @@ import type {
 } from '@/types/user';
 import {
   createEmptyLearningContext,
+  advanceLearningThreadFromActivity,
   learningContextFromProfile,
   mergeLearningActivity,
   mergeLearningMemory,
@@ -25,7 +26,9 @@ const CONTEXT_EVENT = 'meetmind:learning-context-change';
 type MemoryDraft = Pick<LearningMemoryEntry, 'kind' | 'title'> &
   Partial<Pick<LearningMemoryEntry, 'detail' | 'source' | 'sourceId'>>;
 type ActivityDraft = Pick<LearningActivityEntry, 'kind' | 'title'> &
-  Partial<Pick<LearningActivityEntry, 'detail' | 'sessionId' | 'appKey' | 'sourceId'>>;
+  Partial<Pick<LearningActivityEntry, 'detail' | 'sessionId' | 'appKey' | 'sourceId'>> & {
+    advanceActiveThread?: boolean;
+  };
 
 function createId(prefix: string): string {
   const random = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -41,7 +44,7 @@ export interface UseLearningContextReturn extends LearningContextState {
   addMemory: (draft: MemoryDraft) => Promise<void>;
   updateMemory: (id: string, patch: Partial<Pick<LearningMemoryEntry, 'kind' | 'title' | 'detail' | 'status'>>) => Promise<void>;
   removeMemory: (id: string) => Promise<void>;
-  recordActivity: (draft: ActivityDraft) => Promise<void>;
+  recordActivity: (draft: ActivityDraft) => Promise<LearningActivityEntry>;
   updateCoursePreference: (
     courseKey: string,
     patch: Partial<Pick<CourseContextPreference, 'displayName' | 'tags' | 'status' | 'confirmedByUser' | 'excludedSessionIds' | 'assessments'>>,
@@ -113,6 +116,7 @@ export function useLearningContext(): UseLearningContextReturn {
           recentLearningActivities: next.recentActivities,
           courseContextPreferences: next.coursePreferences || [],
           activeLearningThread: next.activeThread,
+          learningThreads: next.learningThreads || [],
         } as LearnerProfile;
         const ok = await saveLearnerProfile(profile);
         if (!ok) throw new Error('学习上下文暂时没有同步成功');
@@ -165,7 +169,7 @@ export function useLearningContext(): UseLearningContextReturn {
   }, [persist]);
 
   const recordActivity = useCallback(async (draft: ActivityDraft) => {
-    await persist(mergeLearningActivity(stateRef.current, {
+    const activity: LearningActivityEntry = {
       id: createId('activity'),
       kind: draft.kind,
       title: draft.title,
@@ -174,7 +178,12 @@ export function useLearningContext(): UseLearningContextReturn {
       appKey: draft.appKey,
       sourceId: draft.sourceId,
       occurredAt: new Date().toISOString(),
-    }));
+    };
+    const withActivity = mergeLearningActivity(stateRef.current, activity);
+    await persist(draft.advanceActiveThread
+      ? advanceLearningThreadFromActivity(withActivity, activity)
+      : withActivity);
+    return activity;
   }, [persist]);
 
   const updateCoursePreference = useCallback(async (
@@ -222,22 +231,4 @@ export function useLearningContext(): UseLearningContextReturn {
     });
   }, [persist]);
 
-  const setActiveThread = useCallback(async (thread?: LearningThreadEntry) => {
-    await persist(updateLearningThread(stateRef.current, thread));
-  }, [persist]);
-
-  return {
-    ...state,
-    hydrated,
-    saving,
-    error,
-    addMemory,
-    updateMemory,
-    removeMemory,
-    recordActivity,
-    updateCoursePreference,
-    setActiveThread,
-  };
-}
-
-export default useLearningContext;
+  const setActiveThread 

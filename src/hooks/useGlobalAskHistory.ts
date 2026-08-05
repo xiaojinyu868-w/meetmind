@@ -2,13 +2,25 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { UIMessage } from 'ai';
+import { useAccountConversationSync } from '@/hooks/useAccountConversationSync';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { createLogger } from '@/lib/logger';
+import { syncAccountConversationsNow } from '@/lib/services/account-conversation-sync-client';
 import { conversationService } from '@/lib/services/conversation-service';
+import {
+  mergeRestoredAndLiveMessages,
+  selectPreferredConversation,
+} from '@/lib/tutor/conversation-window';
+
+const logger = createLogger('global-ask-history');
 
 type AskDepth = 'quick' | 'deep';
 
 interface UseGlobalAskHistoryOptions {
   open: boolean;
   userId: string;
+  /** 首次打开时优先恢复仍在继续的学习线索，而不是盲选最新问答。 */
+  preferredConversationId?: string;
   depth: AskDepth;
   busy: boolean;
   messages: UIMessage[];
@@ -16,6 +28,7 @@ interface UseGlobalAskHistoryOptions {
   getMessageText: (message: UIMessage) => string;
   fallbackTitle: string;
   onDepthRestored: (depth: AskDepth) => void;
+  onConversationReady?: (conversationId: string) => Promise<void> | void;
   onAssistantPersisted: (input: {
     text: string;
     userText: string;
@@ -35,6 +48,7 @@ function toUIMessage(message: { messageId: string; role: string; content: string
 export function useGlobalAskHistory({
   open,
   userId,
+  preferredConversationId,
   depth,
   busy,
   messages,
@@ -42,14 +56,29 @@ export function useGlobalAskHistory({
   getMessageText,
   fallbackTitle,
   onDepthRestored,
+  onConversationReady,
   onAssistantPersisted,
 }: UseGlobalAskHistoryOptions) {
+  const { accessToken } = useAuth();
+  useAccountConversationSync(accessToken, userId);
   const [hydrated, setHydrated] = useState(false);
   const [restoredTitle, setRestoredTitle] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
   const persistedIdsRef = useRef<Set<string>>(new Set());
   const persistingIdsRef = useRef<Set<string>>(new Set());
+  const liveMessagesRef = useRef(messages);
+  const preferredConversationIdRef = useRef(preferredConversationId);
+  const wasOpenRef = useRef(false);
+  useEffect(() => { liveMessagesRef.current = messages; }, [messages]);
+  useEffect(() => {
+    // While the panel is open, keep selection stable. A newly created
+    // conversation is linked to the thread without restarting live chat.
+    if (open && !wasOpenRef.current) {
+      preferredConversationIdRef.current = preferredConversationId;
+    }
+    wasOpenRef.current = open;
+  }, [open, preferredConversationId]);
 
   useEffect(() => {
     if (!open) return;
@@ -60,16 +89,44 @@ export function useGlobalAskHistory({
     conversationIdRef.current = null;
     persistedIdsRef.current = new Set();
     persistingIdsRef.current = new Set();
+    liveMessagesRef.current = [];
     setMessages([]);
 
     const hydrate = async () => {
       try {
-        const conversations = await conversationService.listConversations(userId, {
+        await syncAccountConversationsNow(
+          accessToken,
+          userId,
+          preferredConversationIdRef.current,
+        );
+        const preferredId = preferredConversationIdRef.current;
+        const preferredConversation = preferredId
+          ? await conversationService.getConversation(preferredId)
+          : null;
+        const recentConversations = await conversationService.listConversations(userId, {
           type: 'global-chat',
+          sessionId: 'global-ask',
           limit: 20,
         });
-        const target = conversations.find((item) => item.metadata?.scope === 'global-ask');
+        const conversations = preferredConversation
+          ? [
+              preferredConversation,
+              ...recentConversations.filter((conversation) => (
+                conversation.conversationId !== preferredConversation.conversationId
+              )),
+            ]
+          : recentConversations;
+        const target = selectPreferredConversation(
+          conversations,
+          preferredId,
+          (conversation) => (
+            conversation.userId === userId
+            && conversation.type === 'global-chat'
+            && conversation.sessionId === 'global-ask'
+          ),
+        );
         if (!target || !alive) return;
+        void onConversationReady?.(target.conversationId);
         const history = await conversationService.getMessages(target.conversationId);
         if (!alive) return;
         const restoredDepth = target.metadata?.depth === 'deep' ? 'deep' : 'quick';
@@ -78,16 +135,20 @@ export function useGlobalAskHistory({
         setConversationId(target.conversationId);
         setRestoredTitle(target.title);
         onDepthRestored(restoredDepth);
-        setMessages(history.map(toUIMessage));
+        const restoredMessages = history.map(toUIMessage);
+        const liveMessages = liveMessagesRef.current;
+        // IndexedDB 恢复不能覆盖用户刚刚提交的乐观消息。聊天面板打开后立即可用，
+        // 历史稍后无缝接到前面，而不是用“正在恢复”锁住输入框。
+        setMessages(mergeRestoredAndLiveMessages(restoredMessages, liveMessages));
       } catch (error) {
-        console.error('[useGlobalAskHistory] failed to restore history', error);
+        logger.error('restore.failed', { error: String(error) });
       } finally {
         if (alive) setHydrated(true);
       }
     };
     void hydrate();
     return () => { alive = false; };
-  }, [onDepthRestored, open, setMessages, userId]);
+  }, [accessToken, onConversationReady, onDepthRestored, open, setMessages, userId]);
 
   useEffect(() => {
     if (!open || !hydrated || busy) return;
@@ -114,6 +175,7 @@ export function useGlobalAskHistory({
             model: 'tutor-agent',
             metadata: { scope: 'global-ask', depth },
           });
+          void onConversationReady?.(created.conversationId);
           conversationIdRef.current = created.conversationId;
           setConversationId(created.conversationId);
           setRestoredTitle(created.title);
@@ -138,13 +200,13 @@ export function useGlobalAskHistory({
         }
       } catch (error) {
         unsaved.forEach((message) => persistingIdsRef.current.delete(message.id));
-        console.error('[useGlobalAskHistory] failed to persist history', error);
+        logger.error('persist.failed', { error: String(error) });
       } finally {
         unsaved.forEach((message) => persistingIdsRef.current.delete(message.id));
       }
     };
     void persist();
-  }, [busy, depth, fallbackTitle, getMessageText, hydrated, messages, onAssistantPersisted, open, userId]);
+  }, [busy, depth, fallbackTitle, getMessageText, hydrated, messages, onAssistantPersisted, onConversationReady, open, userId]);
 
   const reset = useCallback(() => {
     conversationIdRef.current = null;

@@ -8,6 +8,8 @@ import type {
 
 export const MAX_LEARNING_MEMORIES = 24;
 export const MAX_RECENT_LEARNING_ACTIVITIES = 24;
+export const MAX_LEARNING_THREADS = 16;
+const MAX_THREAD_EVIDENCE_IDS = 24;
 
 function compact(value: string | undefined, max: number): string {
   const normalized = (value || '').replace(/\s+/g, ' ').trim();
@@ -29,20 +31,69 @@ export function toLearningActivityPreview(value: string, max = 220): string {
 }
 
 export function createEmptyLearningContext(): LearningContextState {
-  return { memories: [], recentActivities: [], coursePreferences: [] };
+  return { memories: [], recentActivities: [], coursePreferences: [], learningThreads: [] };
+}
+
+function compactIdList(values: string[] | undefined): string[] | undefined {
+  if (!values?.length) return undefined;
+  const ids = Array.from(new Set(values.map((value) => compact(value, 120)).filter(Boolean)))
+    .slice(-MAX_THREAD_EVIDENCE_IDS);
+  return ids.length > 0 ? ids : undefined;
+}
+
+function normalizeLearningThread(thread: LearningThreadEntry): LearningThreadEntry {
+  return {
+    ...thread,
+    title: compact(thread.title, 80),
+    intent: compact(thread.intent, 240),
+    outcome: compact(thread.outcome, 240) || undefined,
+    lastSummary: compact(thread.lastSummary, 240) || undefined,
+    nextStep: compact(thread.nextStep, 160) || undefined,
+    conversationId: compact(thread.conversationId, 120) || undefined,
+    sessionId: compact(thread.sessionId, 120) || undefined,
+    relatedSessionIds: compactIdList(thread.relatedSessionIds),
+    relatedActivityIds: compactIdList(thread.relatedActivityIds),
+  };
+}
+
+export function mergeLearningThreadHistory(
+  history: LearningThreadEntry[] | undefined,
+  thread?: LearningThreadEntry,
+): LearningThreadEntry[] {
+  const byId = new Map<string, LearningThreadEntry>();
+  for (const item of [...(history ?? []), ...(thread ? [thread] : [])]) {
+    if (!item?.id || !item.title || !item.intent) continue;
+    const normalized = normalizeLearningThread(item);
+    const existing = byId.get(normalized.id);
+    if (!existing || existing.updatedAt <= normalized.updatedAt) byId.set(normalized.id, normalized);
+  }
+  return [...byId.values()]
+    .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
+    .slice(-MAX_LEARNING_THREADS);
 }
 
 export function learningContextFromProfile(
   profile?: LearnerProfile | null,
 ): LearningContextState {
   if (!profile) return createEmptyLearningContext();
+  const mergedThreads = mergeLearningThreadHistory(
+    profile.learningThreads,
+    profile.activeLearningThread,
+  );
+  const latestActive = [...mergedThreads].reverse().find((thread) => thread.status === 'active');
+  const learningThreads = mergedThreads.map((thread) => (
+    thread.status === 'active' && thread.id !== latestActive?.id
+      ? { ...thread, status: 'paused' as const }
+      : thread
+  ));
   return {
     memories: (profile.memories || []).slice(-MAX_LEARNING_MEMORIES),
     recentActivities: (profile.recentLearningActivities || []).slice(
       -MAX_RECENT_LEARNING_ACTIVITIES,
     ),
     coursePreferences: (profile.courseContextPreferences || []).slice(-32),
-    activeThread: profile.activeLearningThread,
+    learningThreads,
+    activeThread: latestActive,
   };
 }
 
@@ -84,63 +135,8 @@ export function mergeLearningActivity(
   };
 }
 
-export function updateLearningThread(
-  state: LearningContextState,
-  thread?: LearningThreadEntry,
-): LearningContextState {
-  return { ...state, activeThread: thread };
-}
-
-export function formatLearningContextForTutor(
-  state: LearningContextState,
-  profile?: LearnerProfile | null,
-): {
-  memories: Array<{ title: string; detail?: string; kind: string }>;
-  recentActivities: Array<{ title: string; detail?: string; occurredAt: string }>;
-  activeThread?: LearningThreadEntry;
-  goals: Array<{ title: string; summary?: string }>;
-  bio?: { headline: string; detail?: string };
-} {
-  return {
-    memories: state.memories
-      .filter((memory) => memory.status === 'active')
-      .slice(-12)
-      .map(({ title, detail, kind }) => ({ title, detail, kind })),
-    recentActivities: state.recentActivities
-      .slice(-8)
-      .map(({ title, detail, occurredAt }) => ({ title, detail, occurredAt })),
-    activeThread: state.activeThread?.status === 'active' ? state.activeThread : undefined,
-    goals: (profile?.goals || [])
-      .filter((goal) => (goal.status || 'active') === 'active')
-      .slice(-8)
-      .map(({ title, summary }) => ({ title, summary })),
-    bio: profile?.bio
-      ? { headline: profile.bio.headline, detail: profile.bio.detail }
-      : undefined,
-  };
-}
-
-export function summarizeLearningContext(state: LearningContextState): string | undefined {
-  const lines: string[] = [];
-  const activeMemories = state.memories.filter((memory) => memory.status === 'active').slice(-6);
-  if (activeMemories.length > 0) {
-    lines.push('长期记忆：');
-    activeMemories.forEach((memory) => {
-      lines.push(`- ${memory.title}${memory.detail ? `：${memory.detail}` : ''}`);
-    });
-  }
-  const recent = state.recentActivities.slice(-5);
-  if (recent.length > 0) {
-    if (lines.length > 0) lines.push('');
-    lines.push('最近学习活动：');
-    recent.forEach((activity) => {
-      lines.push(`- ${activity.title}${activity.detail ? `：${activity.detail}` : ''}`);
-    });
-  }
-  if (state.activeThread?.status === 'active') {
-    if (lines.length > 0) lines.push('');
-    lines.push(`正在继续：${state.activeThread.title}`);
-    if (state.activeThread.lastSummary) lines.push(state.activeThread.lastSummary);
-  }
-  return lines.length > 0 ? lines.join('\n') : undefined;
-}
+export function attachLearningThreadActivityEvidence(
+  thread: LearningThreadEntry,
+  activity: LearningActivityEntry,
+): LearningThreadEntry | undefined {
+  if (thread.status !== 'active') return undefin

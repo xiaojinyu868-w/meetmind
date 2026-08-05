@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { COPY } from '@/lib/ui/copy';
 import { useLearningContext } from '@/hooks/useLearningContext';
 import { useGlobalAskHistory } from '@/hooks/useGlobalAskHistory';
+import { useGlobalAskThreadBinding } from '@/hooks/useGlobalAskThreadBinding';
 import { useLearningMemoryDistillation } from '@/hooks/useLearningMemoryDistillation';
 import {
   createLearningThread,
@@ -28,18 +29,13 @@ import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import type { LearningIntentAnswer, LearningIntentPlan } from '@/types/learning-intent';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
-import { LearningIntentConfirmationCard } from '@/components/LearningIntentConfirmationCard';
 import { LearningMemoryPanel } from '@/components/LearningMemoryPanel';
 import { GlobalAskContextDrawer } from '@/components/GlobalAskContextDrawer';
+import { GlobalAskMessages } from '@/components/GlobalAskMessages';
 import { GlobalAskWelcome } from '@/components/GlobalAskWelcome';
 import {
-  ChatBubble,
   ChatComposer,
   ChatMessageList,
-  ChatRenderer,
-  ChatReasoningBlock,
-  ChatThinkingStripBubble,
-  collectMessageReasoning,
   collectMessageText,
   useChatComposer,
   useChatFileUpload,
@@ -77,11 +73,13 @@ export function GlobalAskPanel({
   const [intentPlan, setIntentPlan] = React.useState<LearningIntentPlan | null>(null);
   const [activeIntent, setActiveIntent] = React.useState<LearningIntentPlan | null>(null);
   const [pendingQuery, setPendingQuery] = React.useState('');
-  const activeThreadRef = React.useRef(learning.activeThread);
   const previouslyOpenRef = React.useRef(false);
   const composerRef = React.useRef<HTMLFormElement>(null);
+  const { activeThreadRef, activateThread, bindConversation } = useGlobalAskThreadBinding({
+    activeThread: learning.activeThread,
+    setActiveThread: learning.setActiveThread,
+  });
 
-  React.useEffect(() => { activeThreadRef.current = learning.activeThread; }, [learning.activeThread]);
   React.useEffect(() => {
     if (open && (!previouslyOpenRef.current || initialView)) {
       setView(initialView ?? 'ask');
@@ -109,11 +107,11 @@ export function GlobalAskPanel({
   const currentMaterials = React.useMemo(() => {
     const materials = sourceItems
       .filter((item) => item.status !== 'failed')
-      .slice(-6)
+      .slice(-4)
       .reverse()
       .map((item) => ({
         title: item.title,
-        content: (item.fullText || item.preview || '').slice(0, 8_000),
+        content: (item.fullText || item.preview || '').slice(0, 3_200),
       }))
       .filter((item) => item.content.trim());
     if (currentTranscript) {
@@ -133,7 +131,8 @@ export function GlobalAskPanel({
 
   const agentContext = React.useMemo(() => {
     const attached = fileUpload.attachedFiles.map((file) => ({ title: file.title, content: file.text }));
-    const supportMaterials = [...(useCurrentContext ? currentMaterials : []), ...attached];
+    // 用户本轮主动附加的材料优先于自动接入的最近内容，避免在总上下文预算里被挤掉。
+    const supportMaterials = [...attached, ...(useCurrentContext ? currentMaterials : [])];
     return {
       ...(supportMaterials.length > 0 ? { supportMaterials } : {}),
       global: {
@@ -192,7 +191,7 @@ export function GlobalAskPanel({
       return;
     }
     setDepth(restoredDepth);
-  }, []);
+  }, [activeThreadRef]);
 
   const handleAssistantPersisted = React.useCallback(async ({
     text,
@@ -200,32 +199,37 @@ export function GlobalAskPanel({
     sourceId,
     depth: persistedDepth,
   }: { text: string; userText: string; sourceId: string; depth: AskDepth }) => {
-    const learningMemoryUpdate = userText.trim()
-      ? distillAndApplyLearningMemory({
-          userText,
-          assistantText: text,
-          sourceId,
-        })
-      : Promise.resolve();
-    await recordLearningActivity({
+    const activity = await recordLearningActivity({
       kind: 'conversation',
       title: persistedDepth === 'deep' ? COPY.globalAsk.recentDeepSession : COPY.globalAsk.recentConversation,
       detail: toLearningActivityPreview(text),
       sourceId,
+      advanceActiveThread: persistedDepth === 'deep',
     });
-    await learningMemoryUpdate;
+    if (userText.trim()) {
+      await distillAndApplyLearningMemory({
+        userText,
+        assistantText: text,
+        sourceId,
+        activity,
+      });
+    }
   }, [distillAndApplyLearningMemory, recordLearningActivity]);
 
   const history = useGlobalAskHistory({
     open,
     userId,
+    preferredConversationId: learning.activeThread?.status === 'active'
+      ? learning.activeThread.conversationId
+      : undefined,
     depth: effectiveDepth,
-    busy,
+    busy: busy || Boolean(error),
     messages,
     setMessages,
     getMessageText: collectMessageText,
     fallbackTitle: COPY.globalAsk.recentConversation,
     onDepthRestored: handleDepthRestored,
+    onConversationReady: bindConversation,
     onAssistantPersisted: handleAssistantPersisted,
   });
 
@@ -248,15 +252,21 @@ export function GlobalAskPanel({
   const beginDeepSession = React.useCallback(async (plan: LearningIntentPlan, query: string) => {
     const finalPlan = { ...plan, questions: undefined };
     const confirmedContext = withConfirmedLearningIntent(agentContext, finalPlan);
+    const learningThread = createLearningThread(
+      finalPlan,
+      query,
+      history.conversationId ?? undefined,
+      sessionId || undefined,
+    );
     setActiveIntent(finalPlan);
     setIntentPlan(null);
     setPendingQuery('');
-    await learning.setActiveThread(createLearningThread(finalPlan, query));
+    await activateThread(learningThread);
     sendMessage({ text: query }, {
       body: { mode: 'global', sessionId: sessionId || 'global-ask', context: confirmedContext, options: {} },
     });
     fileUpload.clear();
-  }, [agentContext, fileUpload, learning, sendMessage, sessionId]);
+  }, [activateThread, agentContext, fileUpload, history.conversationId, sendMessage, sessionId]);
 
   const prepareDeepIntent = React.useCallback(async (
     query: string,
@@ -337,6 +347,17 @@ export function GlobalAskPanel({
     }
   }, []);
 
+  const retryLastMessage = React.useCallback(() => {
+    if (busy) return;
+    const reverseIndex = [...messages].reverse().findIndex((message) => message.role === 'user');
+    if (reverseIndex < 0) return;
+    const lastUserIndex = messages.length - 1 - reverseIndex;
+    const text = collectMessageText(messages[lastUserIndex]).trim();
+    if (!text) return;
+    setMessages(messages.slice(0, lastUserIndex));
+    sendMessage({ text });
+  }, [busy, messages, sendMessage, setMessages]);
+
   const renderComposer = (embedded: boolean) => (
     <ChatComposer
       containerRef={composerRef}
@@ -371,13 +392,11 @@ export function GlobalAskPanel({
             composer.setValue(COPY.globalAsk.memoryTalkPrompt);
             window.setTimeout(() => composer.textareaRef.current?.focus(), 0);
           }}
-          onResumeThread={() => {
+          onResumeThread={(thread) => {
             setView('ask');
             setDepth('deep');
-            if (learning.activeThread) {
-              setActiveIntent(learningThreadToIntent(learning.activeThread));
-              composer.setValue(learning.activeThread.intent);
-            }
+            setActiveIntent(learningThreadToIntent(thread));
+            composer.setValue(thread.intent);
           }}
         />
       </div>
@@ -392,7 +411,7 @@ export function GlobalAskPanel({
             <OctoAvatar mood="listening" size="sm" />
             <div className="min-w-0">
               <h1 className="truncate text-[15px] font-semibold text-ink">{COPY.globalAsk.title}</h1>
-              <p className="hidden truncate text-[11.5px] text-ink-muted sm:block">{history.hydrated ? (history.restoredTitle ? `${COPY.globalAsk.historyRestored} · ${history.restoredTitle}` : COPY.globalAsk.subtitle) : COPY.globalAsk.historyLoading}</p>
+              <p className="hidden truncate text-[11.5px] text-ink-muted sm:block">{history.hydrated ? (history.restoredTitle ? COPY.globalAsk.historyRestored : COPY.globalAsk.subtitle) : COPY.globalAsk.historyLoading}</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
@@ -434,39 +453,20 @@ export function GlobalAskPanel({
                 />
               }
             >
-          {messages.map((message, index) => {
-            const text = collectMessageText(message);
-            const reasoning = collectMessageReasoning(message);
-            const isStreaming = busy && index === messages.length - 1 && message.role === 'assistant';
-            return (
-              <ChatBubble
-                key={message.id}
-                role={message.role === 'user' ? 'user' : 'assistant'}
-                avatar={message.role === 'assistant' ? <OctoAvatar mood={isStreaming ? 'thinking' : 'happy'} size="sm" /> : undefined}
-                messageId={message.id}
-              >
-                {message.role === 'assistant' ? (
-                  <>
-                    {reasoning ? <ChatReasoningBlock reasoning={reasoning} isStreaming={isStreaming} /> : null}
-                    <ChatRenderer content={text} isStreaming={isStreaming} messageId={message.id} />
-                  </>
-                ) : <span className="whitespace-pre-wrap">{text}</span>}
-              </ChatBubble>
-            );
-          })}
-          {pendingQuery && !activeIntent ? <ChatBubble role="user"><span className="whitespace-pre-wrap">{pendingQuery}</span></ChatBubble> : null}
-          {intentBusy ? <ChatThinkingStripBubble label={COPY.globalAsk.preparingIntent} avatar={<OctoAvatar mood="thinking" size="sm" aura />} /> : null}
-          {intentPlan ? (
-            <LearningIntentConfirmationCard
-              plan={intentPlan}
-              busy={busy || intentBusy}
-              onConfirm={(plan) => void confirmIntent(plan)}
-              onResolve={(answers) => void prepareDeepIntent(pendingQuery, answers, intentPlan)}
-              onCancel={cancelIntent}
-            />
-          ) : null}
-          {showThinking ? <ChatThinkingStripBubble label={COPY.globalAsk.thinking} avatar={<OctoAvatar mood="thinking" size="sm" aura />} /> : null}
-          {error ? <div className="rounded-xl border border-vermilion/15 bg-vermilion-fog px-4 py-3 text-[12.5px] text-vermilion">{COPY.globalAsk.responseError}</div> : null}
+          <GlobalAskMessages
+            messages={messages}
+            busy={busy}
+            userId={user?.id}
+            pendingQuery={pendingQuery && !activeIntent ? pendingQuery : ''}
+            intentBusy={intentBusy}
+            intentPlan={intentPlan}
+            showThinking={showThinking}
+            hasError={Boolean(error)}
+            onConfirmIntent={(plan) => void confirmIntent(plan)}
+            onResolveIntent={(plan, answers) => void prepareDeepIntent(pendingQuery, answers, plan)}
+            onCancelIntent={cancelIntent}
+            onRetry={retryLastMessage}
+          />
             </ChatMessageList>
 
             {!showWelcome ? renderComposer(false) : null}

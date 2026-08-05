@@ -8,22 +8,32 @@ Tutor 的唯一新主链路是 `POST /api/tutor/agent`，由 `buildTutorSystemPr
 
 - quick：直接回答，不做意图确认，也不在正文里生成记忆标记；回答持久化后仍由独立流程判断用户是否真实表现出值得长期保留的学习理解。
 - deep：先调用 `/api/tutor/intent` 得到 `LearningIntentPlan`。模型应先利用已有课堂和个人上下文；没有真实歧义时前端立即开始，不展示内部置信度或额外确认卡。只有答案会明显改变路径时才暂停，并通常只返回 1 个动态选择问题（两个问题彼此独立且都足以改变路径时最多 2 个）。前端回传包含问题与选项语义的 `answers[{questionId, question, optionIds, optionLabels}]` 后取得最终计划并自动开始。意图确认后的第一轮必须执行第一个检查点，先给解释、示例、对比或微型练习；禁止继续追问目标、难点、水平与偏好等元问题。若仍需诊断，应从一个当场可答的小任务里判断，而不是让用户再次自我归类。
-- 上下文整理不依赖 quick / deep 开关：任一全局学习问答持久化后，`/api/tutor/memory` 都依据本轮用户真实表达/作答静默判断是否形成最多 2 条新增或更新的学习理解。证据不足返回空数组，愿望、建议、人格与敏感推断不能进入长期理解；访客态与 Tutor 主链路一致可用，route 内限流。
+- 长期理解整理不依赖 quick / deep 开关：任一全局学习问答持久化后，`/api/tutor/memory` 都依据本轮用户真实表达/作答静默判断是否形成最多 2 条新增或更新的学习理解。证据不足返回空数组，愿望、建议、人格与敏感推断不能进入长期理解；访客态与 Tutor 主链路一致可用，route 内限流。
+- 活跃学习线只由 deep 会话推进，和长期理解是否形成完全解耦：客户端先用本轮真实回答保存可恢复摘要，模型成功时再返回独立 `threadProgress{summary,nextStep}` 精炼累计进度。快捷问答不携带 `activeThread`，不得把临时问题写进正在继续的学习线；学习活动先落库，再串行整理长期理解与线索，避免并发画像写入互相覆盖。
+- 深度线创建时绑定发起现场的 `sessionId`，实际持久化的深度回答会以 `global-ask:<conversationId>:` 稳定来源写入客观 Event，并且只有与 Task 的 `conversationId` 精确匹配时才追加为该 Task 证据；应用矩阵的生成结果只进入 `recentLearningActivities`，同一课堂里的闪卡自评、测验作答和讲给同桌听完成才会以 `app-interaction:` 证据原子更新线索摘要，跨课堂、跨会话或没有明确绑定的活动不会被强行归因。
+- `activeLearningThread` 只是当前 Task 的快速指针；`learningThreads` 按 ID 保留最多 16 条历史。创建新 Task 会把旧活跃 Task 转为暂停，完成只清指针不删历史；同课应用互动把 `relatedSessionIds` / `relatedActivityIds` 作为可追溯证据追加到同一 Task，每类最多 24 个。
+- “我的上下文 → 学习任务”是 Task 历史的用户控制面：进行中、暂停和完成状态都可见；用户可把活跃 Task 暂放或完成，也可重新打开任一历史 Task。恢复动作必须携带被点击的 `LearningThreadEntry` 直接初始化 deep 对话，不能依赖异步共享状态再猜当前 Task。
+- Task 行的证据下钻只接受 `relatedActivityIds` 命中的 `recentLearningActivities`，最多展示最近 6 条；跨设备尚未回温时只显示“任务进展已保留”的诚实状态，不使用同课堂 `sessionId` 推测一条未绑定的 Event。
+- 今日情报请求会继续携带课堂 provenance，并按“活跃 Task → 最近 8 条历史 Task → 长期理解 → 近期 Event”编排：历史 Task 只发送状态、摘要、后续、课堂数和练习数，不复制课堂正文；模型可以区分同课反馈、其他课堂和真正跨课互动，opaque ID 只做边界，不被展示为课程名称。
 - `LearnerProfile.memories` 是模型整理、用户可纠正/暂停/忘记的学习理解；`recentLearningActivities` 是课堂、提问、材料和应用等客观学习现场，始终保持独立，不被自动升级或改写成对用户的判断。
-- `GlobalAskPanel` 基于 ChatBase，`useGlobalAskHistory` 只恢复 `metadata.scope='global-ask'` 的 IndexedDB 对话，避免误接某节课的复习聊天。
+- `GlobalAskPanel` 基于 ChatBase。登录态 `useGlobalAskHistory` 会先通过 `/api/conversations/sync` 排空当前账号的独立 outbox、拉取云端，再按 active learning thread 的 `conversationId`（无绑定时才取最近一条）从 IndexedDB 恢复；服务端快照默认给最近 20 个会话，但会在查询参数中额外钉住当前线索对应的旧会话，并按 JWT 账号归属过滤。若当前线索来自更早的本地历史，客户端会用独立 pinned bootstrap marker 先补传本地父会话和消息，只有服务端明确接受后才停止重试；基础同步已在进行时，客户端等待后执行这一步再去重补拉该 ID。首次持久化会把实际会话 ID 回填到学习线索，打开期间刚发出的乐观消息与迟到历史合并，不会被水合覆盖。首次启用会分批补传现有本地全局问答；登录后的匿名全局问答由独立认领通道迁移，服务端确认后才改变本地归属，失败保留重试；课堂复习聊天仍只进入对应 Workspace evidence，两个同步域不混用。
 
-当前 prompt telemetry 版本：`2026-07-tutor-v10-start-with-value`。goal 首次会面和 global deep 都遵循“先帮助、后理解”：不做画像或目标访谈，意图确认后立即交付第一个有效学习动作，仅在真实需要用户决定时追问。
+当前 prompt telemetry 版本：`2026-08-tutor-v12-goal-marker-contract`。goal 首次会面和 global deep 都遵循“先帮助、后理解”：不做画像或目标访谈，意图确认后立即交付第一个有效学习动作，仅在真实需要用户决定时追问。用户明确同意沉淀后，goal 必须逐字输出 `---我了解到的你---` / `---我想要的---` 与 `---结束---`，不得改写成 Markdown 分隔线或近义标题。
+
+所有用户面对的 mode 都显式关闭 provider 原始思维链。深度学习仍由确认后的意图和检查点推进，但 UI 只展示可验证的任务状态与正式回答，不展示隐藏推理。长会话每轮最多重传最近 24 条 / 约 32k 序列化字符；课堂/附件材料最多 6 份、总计约 12k 字，且用户本轮主动附件优先于自动接入的最近内容。这样长期理解继续由独立 context 提供，历史长度不会线性拖慢 TTFT。
+
+课堂同桌前端由 `useClassroomCompanion` 组合 `useClassroomCompanionHistory` 与 `useClassroomInlineApps`。历史按 session key 水合和持久化，切换课堂先中止旧 stream，禁止上一节课的迟到回答落入新课堂；同一课堂连续提问时，新问题会使旧请求失效，旧请求的迟到回调不得覆盖新流，用户主动停止则保留已经读到的部分回答。录课结束保留当前内存会话并追加收尾，不再异步重新水合覆盖收尾消息。发给模型的历史只包含真实非空文本，不包含 UI-only 的空应用卡或自动在场消息；每次请求读取当前模型偏好与当前 learner profile。
 
 ### 管理员 AI 控制中心
 
-`/admin/ai-control` 提供 Tutor 六种 mode、Tutor 上下游的“学习意图确认 / 长期学习理解整理”，以及应用矩阵全部六条生成链路的可观测与安全调优界面：
+`/admin/ai-control` 提供 Tutor 六种 mode、Tutor 上下游的“学习意图确认 / 学习上下文整理”，以及应用矩阵全部六条生成链路的可观测与安全调优界面：
 
 - 展示每条链路的产品入口、会注入的上下文字段、示例或从产品现场带入的真实上下文。
 - 服务端预览基线 prompt、管理员追加指令、不可覆盖合同和最终系统输入；预览不调用模型。
 - 管理员主动试跑时，同一份上下文与测试问题会分别运行当前线上配置和正在编辑的配置，返回两版真实回答、实际使用模型与耗时。试跑不写入用户对话、不保存或发布配置，但会产生两次模型调用成本。
 - 支持 mode 级模型路由、草稿、发布与回滚。版本存储在 `AiControlRevision`，运行时读取最新已发布版本并做短缓存。
 - 管理员不能替换完整基线 prompt，只能追加行为指令。隐私、引用、时间戳和模式边界等合同始终在追加指令之后重新附加。
-- 意图确认与学习理解整理共用 `learning-understanding-prompts.ts` 的代码基线；真实 API 链路和控制中心预览/对比读取同一份 system prompt 与 user input 拼装，避免后台展示一套、线上实际运行另一套。意图链路额外锁住“当前表达优先、无真实歧义不追问”，记忆链路额外锁住“只以用户表现为证据、敏感推断与建议不入库”。
+- 意图确认与学习上下文整理共用 `learning-understanding-prompts.ts` 的代码基线；真实 API 链路和控制中心预览/对比读取同一份 system prompt 与 user input 拼装，避免后台展示一套、线上实际运行另一套。意图链路额外锁住“当前表达优先、无真实歧义不追问”，整理链路额外锁住“长期理解只以用户表现为证据”；活跃线索进度可以描述本轮讨论，却不能把助手讲过的内容冒充用户已掌握。
 - 六类应用共用 `ai-native/app-prompts.ts` 的版本化基线。闪卡、测验、考试速查表、信息图与播客计划按各自结构化 JSON 合同试跑；思维导图保留单课轻结构 Markdown。速查表复用跨课来源与考试范围拼装；信息图强制一个中心命题、手机可读和证据化视觉关系；播客将去时间戳的朗读语料与带时间戳的章节定位证据分开，避免模型猜回放位置或把时间读进音频。管理员不能绕过课堂证据回锚、认知动作、学习层级、输出格式和视觉 / 音频价值边界。
 - 没有已发布调整时，`/api/tutor/agent` 与代码内基线行为完全一致。
 
@@ -194,7 +204,7 @@ make eval-tutor-real         # 真实调 streamText + tools（优先当前模型
 | `OPENAI_API_KEY` 或 `DASHSCOPE_API_KEY` | — | 兼容凭证；Qwen-family 优先使用 `DASHSCOPE_API_KEY` 并指向百炼 OpenAI-compatible endpoint；首个 provider 繁忙/限流/超时且尚未输出内容时可自动切换备用通道 |
 | `TUTOR_MODEL` | env 驱动 | 深度学习、课堂同桌与复习默认模型；未声明时依可用凭证回落到 `step-3.7-flash` / `DeepSeek-V4-Flash` / `qwen3.7-plus` |
 | `TUTOR_QUICK_MODEL` | `TUTOR_MODEL` 同 provider 的 Flash | Ask MeetMind「直接问」专用低延迟模型；DashScope 默认 `qwen3.6-flash`，显式请求模型仍优先 |
-| `TUTOR_FIRST_TOKEN_TIMEOUT_MS` | `15000` | 单个 provider 的无首字熔断（范围 5000–45000ms）；超时切备用通道，已经开始输出的回答不截断 |
+| `TUTOR_FIRST_TOKEN_TIMEOUT_MS` | `8000` | 单个 provider 的无首字熔断（范围 5000–45000ms）；超时切备用通道，已经开始输出的回答不截断 |
 | `TUTOR_BASE_URL` | DashScope compatible endpoint | 非 DeepSeek/StepFun 模型的 Tutor OpenAI-compatible baseURL；StepFun 模型使用 `STEPFUN_BASE_URL`，DeepSeek 模型使用 `DEEPSEEK_BASE_URL` |
 
 ---

@@ -2,14 +2,23 @@
 
 import { useCallback } from 'react';
 import type { UseLearningContextReturn } from '@/hooks/useLearningContext';
-import type { DistilledLearningMemory, ExistingLearningMemory } from '@/lib/services/learning-memory-distillation-service';
+import type {
+  DistilledLearningMemory,
+  DistilledLearningThreadProgress,
+  ExistingLearningMemory,
+} from '@/lib/services/learning-memory-distillation-service';
+import {
+  attachLearningThreadActivityEvidence,
+  toLearningActivityPreview,
+} from '@/lib/utils/learning-context';
 import type { LearningIntentPlan } from '@/types/learning-intent';
-import type { LearningThreadEntry } from '@/types/user';
+import type { LearningActivityEntry, LearningThreadEntry } from '@/types/user';
 
 interface DistillLearningMemoryRequest {
   userText: string;
   assistantText: string;
   sourceId: string;
+  activity?: LearningActivityEntry;
 }
 
 interface UseLearningMemoryDistillationOptions {
@@ -20,6 +29,25 @@ interface UseLearningMemoryDistillationOptions {
   addMemory: UseLearningContextReturn['addMemory'];
   updateMemory: UseLearningContextReturn['updateMemory'];
   setActiveThread: UseLearningContextReturn['setActiveThread'];
+}
+
+export function updateLearningThreadFromTurn(
+  thread: LearningThreadEntry,
+  assistantText: string,
+  progress?: DistilledLearningThreadProgress,
+  updatedAt = new Date().toISOString(),
+): LearningThreadEntry {
+  const previous = toLearningActivityPreview(thread.lastSummary || '', 100);
+  const current = toLearningActivityPreview(assistantText, 120);
+  const fallbackSummary = previous && current
+    ? `${previous}；本轮：${current}`
+    : current || previous || thread.intent;
+  return {
+    ...thread,
+    lastSummary: progress?.summary || fallbackSummary,
+    nextStep: progress?.nextStep || thread.nextStep,
+    updatedAt,
+  };
 }
 
 export function useLearningMemoryDistillation({
@@ -34,7 +62,17 @@ export function useLearningMemoryDistillation({
   return useCallback(async (
     input: DistillLearningMemoryRequest,
   ): Promise<void> => {
+    const threadInScope = activeIntent && activeThread?.status === 'active'
+      ? input.activity
+        ? attachLearningThreadActivityEvidence(activeThread, input.activity)
+        : activeThread
+      : undefined;
+    const fallbackThread = threadInScope
+      ? updateLearningThreadFromTurn(threadInScope, input.assistantText)
+      : undefined;
+
     try {
+      if (fallbackThread) await setActiveThread(fallbackThread);
       const response = await fetch('/api/tutor/memory', {
         method: 'POST',
         headers: {
@@ -50,45 +88,10 @@ export function useLearningMemoryDistillation({
             title,
             detail,
           })),
-        }),
-      });
-      if (!response.ok) return;
-      const payload = await response.json() as { ok?: boolean; memories?: DistilledLearningMemory[] };
-      const distilled = payload.ok && Array.isArray(payload.memories) ? payload.memories : [];
-
-      for (let index = 0; index < distilled.length; index += 1) {
-        const memory = distilled[index];
-        const replacement = memory.replaceId
-          ? memories.find((item) => item.id === memory.replaceId)
-          : undefined;
-        if (replacement) {
-          await updateMemory(replacement.id, {
-            kind: memory.kind,
-            title: memory.title,
-            detail: memory.detail,
-            status: 'active',
-          });
-        } else {
-          await addMemory({
-            kind: memory.kind,
-            title: memory.title,
-            detail: memory.detail,
-            source: 'ai',
-            sourceId: `global-understanding:${input.sourceId}:${index}`,
-          });
-        }
-      }
-
-      if (distilled.length > 0 && activeThread) {
-        await setActiveThread({
-          ...activeThread,
-          lastSummary: distilled.map((memory) => memory.title).join('；'),
-          nextStep: activeIntent?.checkpoints[1] || activeIntent?.checkpoints[0],
-          updatedAt: new Date().toISOString(),
-        });
-      }
-    } catch {
-      // Context maintenance must never interrupt the user's main learning flow.
-    }
-  }, [accessToken, activeIntent, activeThread, addMemory, memories, setActiveThread, updateMemory]);
-}
+          ...(threadInScope ? {
+            activeThread: {
+              title: threadInScope.title,
+              intent: threadInScope.intent,
+              outcome: threadInScope.outcome,
+              lastSummary: threadInScope.lastSummary,
+  

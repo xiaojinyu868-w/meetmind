@@ -19,6 +19,15 @@ import {
   type ConversationHistoryRecord,
   type ConversationMessageRecord,
 } from '@/lib/db';
+import {
+  enqueueWorkspaceConversationMessageMutation,
+  enqueueWorkspaceConversationMutation,
+} from '@/lib/services/workspace-conversation-sync-client';
+import {
+  enqueueAccountConversationMessageMutation,
+  enqueueAccountConversationMutation,
+} from '@/lib/services/account-conversation-sync-client';
+import { COPY } from '@/lib/ui/copy';
 import type {
   ConversationHistory,
   ConversationMessage,
@@ -49,6 +58,7 @@ function recordToHistory(record: ConversationHistoryRecord): ConversationHistory
     lastMessage: record.lastMessage,
     model: record.model,
     metadata: record.metadata ? JSON.parse(record.metadata) : undefined,
+    sourceMutationId: record.sourceMutationId,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
@@ -80,6 +90,30 @@ export function getEffectiveUserId(userId?: string | null): string {
   return userId || ANONYMOUS_USER_ID;
 }
 
+function enqueueConversationMutation(
+  conversation: ConversationHistory,
+  options?: { status?: 'active' | 'deleted' },
+): void {
+  if (conversation.sessionId === 'global-ask') {
+    if (options) enqueueAccountConversationMutation(conversation, options);
+    else enqueueAccountConversationMutation(conversation);
+  } else {
+    if (options) enqueueWorkspaceConversationMutation(conversation, options);
+    else enqueueWorkspaceConversationMutation(conversation);
+  }
+}
+
+function enqueueConversationMessageMutation(
+  conversation: ConversationHistory,
+  message: ConversationMessage,
+): void {
+  if (conversation.sessionId === 'global-ask') {
+    enqueueAccountConversationMessageMutation(conversation.userId, message);
+  } else {
+    enqueueWorkspaceConversationMessageMutation(conversation.sessionId || '', message);
+  }
+}
+
 // ==================== 服务接口 ====================
 
 export const conversationService = {
@@ -89,8 +123,8 @@ export const conversationService = {
   async createConversation(params: CreateConversationParams): Promise<ConversationHistory> {
     const conversationId = crypto.randomUUID();
     const now = new Date();
-    
-    const record: Omit<ConversationHistoryRecord, 'id' | 'createdAt' | 'updatedAt'> = {
+
+    const record: Omit<ConversationHistoryRecord, 'id'> = {
       conversationId,
       userId: getEffectiveUserId(params.userId),
       type: params.type,
@@ -101,17 +135,14 @@ export const conversationService = {
       messageCount: 0,
       model: params.model,
       metadata: params.metadata ? JSON.stringify(params.metadata) : undefined,
-    };
-    
-    await createConversationHistory(record);
-    
-    return {
-      ...record,
-      conversationId,
-      metadata: params.metadata,
       createdAt: now,
       updatedAt: now,
     };
+
+    await createConversationHistory(record);
+    const conversation = recordToHistory(record);
+    enqueueConversationMutation(conversation);
+    return conversation;
   },
 
   /**
@@ -187,12 +218,13 @@ export const conversationService = {
     const messageId = crypto.randomUUID();
     const now = new Date();
     
-    const record: Omit<ConversationMessageRecord, 'id' | 'createdAt'> = {
+    const record: Omit<ConversationMessageRecord, 'id'> = {
       messageId,
       conversationId,
       role: params.role,
       content: params.content,
       attachments: params.attachments ? JSON.stringify(params.attachments) : undefined,
+      createdAt: now,
     };
     
     await addConversationMessage(record);
@@ -204,12 +236,19 @@ export const conversationService = {
       lastMessage: params.content.slice(0, 100), // 截取前 100 字符作为预览
     });
     
-    return {
+    const message: ConversationMessage = {
       ...record,
       messageId,
       attachments: params.attachments,
       createdAt: now,
     };
+    const conversation = await getConversationById(conversationId);
+    if (conversation) {
+      const history = recordToHistory(conversation);
+      enqueueConversationMutation(history);
+      enqueueConversationMessageMutation(history, message);
+    }
+    return message;
   },
 
   /**
@@ -222,12 +261,13 @@ export const conversationService = {
     if (messages.length === 0) return [];
     
     const now = new Date();
-    const records = messages.map(m => ({
+    const records: Omit<ConversationMessageRecord, 'id'>[] = messages.map(m => ({
       messageId: crypto.randomUUID(),
       conversationId,
       role: m.role,
       content: m.content,
       attachments: m.attachments ? JSON.stringify(m.attachments) : undefined,
+      createdAt: now,
     }));
     
     await addConversationMessages(records);
@@ -240,7 +280,7 @@ export const conversationService = {
       lastMessage: lastMessage.content.slice(0, 100),
     });
     
-    return records.map((r, i) => ({
+    const savedMessages = records.map((r, i): ConversationMessage => ({
       id: undefined,
       messageId: r.messageId,
       conversationId: r.conversationId,
@@ -249,6 +289,15 @@ export const conversationService = {
       attachments: messages[i].attachments,
       createdAt: now,
     }));
+    const conversation = await getConversationById(conversationId);
+    if (conversation) {
+      const history = recordToHistory(conversation);
+      enqueueConversationMutation(history);
+      savedMessages.forEach((message) => {
+        enqueueConversationMessageMutation(history, message);
+      });
+    }
+    return savedMessages;
   },
 
   /**
@@ -277,13 +326,22 @@ export const conversationService = {
     if (updates.metadata !== undefined) updateData.metadata = JSON.stringify(updates.metadata);
     
     await updateConversationHistory(conversationId, updateData);
+    const conversation = await getConversationById(conversationId);
+    if (conversation) enqueueConversationMutation(recordToHistory(conversation));
   },
 
   /**
    * 删除对话（包括所有消息）
    */
   async deleteConversation(conversationId: string): Promise<void> {
+    const existing = await getConversationById(conversationId);
     await deleteConversationHistory(conversationId);
+    if (existing) {
+      enqueueConversationMutation({
+        ...recordToHistory(existing),
+        updatedAt: new Date(),
+      }, { status: 'deleted' });
+    }
   },
 
   /**
@@ -297,7 +355,9 @@ export const conversationService = {
       hour: '2-digit',
       minute: '2-digit',
     });
-    return type === 'tutor' ? `困惑点辅导 ${dateStr}` : `AI 对话 ${dateStr}`;
+    return type === 'tutor'
+      ? COPY.conversationHistory.tutorTitle(dateStr)
+      : COPY.conversationHistory.chatTitle(dateStr);
   },
 
   /**
