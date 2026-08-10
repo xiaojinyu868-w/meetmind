@@ -29,6 +29,7 @@ components/
 ├── intent/DOMAIN.md   # M11：「聊聊你想要的」对话式目标共建（IntentDialog 沉浸式 + Container + SummaryCard）
 ├── realtime/DOMAIN.md # M11：实时语音通话视觉模板（RealtimeOrb 呼吸光晕 + IntentVoiceCallScreen）
 ├── admin/DOMAIN.md    # 管理员会话级管理视图、现场 AI 透镜与独立控制中心
+├── settings/DOMAIN.md # 设置页组件（行原子 / 桌面锚点导航 / 账户与关于你两个 section）
 ├── mobile/DOMAIN.md   # 移动端专用组件（18 个）
 ├── business/DOMAIN.md # 业务展示组件（6 个）
 ├── layout/DOMAIN.md   # 布局组件（3 个）

@@ -17,7 +17,7 @@ src/app/
 ├── (auth)/                    # 认证页面组
 │   ├── login/page.tsx         # 登录（邮箱或管理员用户名密码 / 邮箱验证码 + 微信内 OAuth + 桌面公众号扫码）
 │   ├── forgot-password/       # 忘记密码（347行）
-│   ├── settings/page.tsx      # 统一设置（含资料 / 微信绑定 / 模型 / 导入偏好）
+│   ├── settings/page.tsx      # 统一设置装配层（展示组件在 components/settings/，含桌面锚点导航）
 │   ├── profile/page.tsx       # 兼容入口，现重定向到 settings
 │   └── profile/password/      # 修改密码（267行）
 │
@@ -72,7 +72,7 @@ src/app/
 |------|------|------|
 | `login/page.tsx` | ~640 | 登录：密码模式接受邮箱或管理员用户名，验证码模式保持邮箱格式校验；微信内 OAuth；桌面端原地公众号扫码并自动进入目标页 |
 | `forgot-password/page.tsx` | 347 | 忘记密码流程 |
-| `settings/page.tsx` | — | 统一设置页：游客/登录态共用，包含个人资料、微信扫码绑定、默认模型与导入偏好 |
+| `settings/page.tsx` | ~430 | 统一设置页装配层：游客/登录态共用；展示拆到 `components/settings/`（行原子 / SettingsNav 桌面锚点导航 / AccountSection / AboutYouSection），文案收口 COPY.settings |
 | `profile/page.tsx` | — | 兼容重定向到 `settings#account` |
 | `profile/password/page.tsx` | 267 | 修改密码 |
 

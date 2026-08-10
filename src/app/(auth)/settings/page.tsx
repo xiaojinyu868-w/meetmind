@@ -1,14 +1,25 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
+/**
+ * /settings — 装配层。
+ *
+ * 2026-08 重设计（原 964 行 God File 拆分）：
+ * - 行/卡/section 原子组件 → src/components/settings/primitives.tsx
+ * - 桌面左侧锚点导航 → SettingsNav.tsx（md 以下隐藏，移动保持单列）
+ * - 账户区 → AccountSection.tsx（含游客登录卡）；关于你 → AboutYouSection.tsx
+ *   （学习档案 / 教练画像拆双卡）
+ * - 用户面字符串统一 COPY.settings（src/lib/ui/copy.ts）
+ * - 版本号从「更多」卡片移出，收口到页脚（设置页惯例，卡片只放可点条目）
+ */
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { getPreference, setPreference } from '@/lib/db';
 import { COPY } from '@/lib/ui/copy';
 import { useAdminLens } from '@/components/admin/AdminLensProvider';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { PointsSettingsSection } from '@/components/points/PointsSettingsSection';
 import {
   AI_MODEL_AUTO_VALUE,
   AI_MODEL_PREFERENCE_KEY,
@@ -20,7 +31,19 @@ import {
   parseTutorBooleanPreference,
   serializeTutorBooleanPreference,
 } from '@/lib/utils/tutor-preferences';
-import { LEARNER_STAGE_LABELS, type LearnerProfile, type LearnerStage } from '@/types/user';
+import type { LearnerProfile } from '@/types/user';
+import { SettingsNav, type SettingsNavItem } from '@/components/settings/SettingsNav';
+import { AccountSection } from '@/components/settings/AccountSection';
+import { AboutYouSection } from '@/components/settings/AboutYouSection';
+import {
+  ActionButtonRow,
+  ActionLinkRow,
+  GroupDivider,
+  SelectRow,
+  SettingGroup,
+  SettingSection,
+  ToggleRow,
+} from '@/components/settings/primitives';
 
 const LearnerOnboardingComponent = dynamic(() => import('@/components/LearnerOnboarding'), { ssr: false });
 const IntentDialogContainer = dynamic(
@@ -29,6 +52,9 @@ const IntentDialogContainer = dynamic(
 );
 const WechatQrAuthDialog = dynamic(() => import('@/components/WechatQrAuthDialog'), { ssr: false });
 const WECHAT_LOGIN_ENABLED = process.env.NEXT_PUBLIC_ENABLE_WECHAT_LOGIN === 'true';
+
+const S = COPY.settings;
+const APP_VERSION = '1.0.0';
 
 const SETTINGS_KEYS = {
   AUTO_SAVE: 'settings_auto_save',
@@ -80,13 +106,8 @@ const DEFAULT_PROFILE_FORM: ProfileForm = {
   phone: '',
 };
 
-const roleLabels: Record<string, string> = {
-  student: '学生',
-  admin: '管理员',
-};
-
 export default function SettingsPage() {
-  const { user, isAuthenticated, isCheckingAuth, updateProfile, logout, saveLearnerProfile, onboardingCompleted } = useAuth();
+  const { user, isAuthenticated, isCheckingAuth, updateProfile, logout, saveLearnerProfile } = useAuth();
   const { enabled: adminLensEnabled, setEnabled: setAdminLensEnabled } = useAdminLens();
   const router = useRouter();
   const [settings, setSettings] = useState<SettingsState>(DEFAULT_SETTINGS);
@@ -101,9 +122,8 @@ export default function SettingsPage() {
   const [showIntentDialog, setShowIntentDialog] = useState(false);
   const [showWechatQr, setShowWechatQr] = useState(false);
 
-  // R9-2 修返回 bug：之前用 canGoBack state 判断，初始 false 让首次渲染是 <Link href="/">,
-  // 即使 useEffect 后改成 true 也来不及——用户点击触发的仍是死链跳首页。
-  // 修法：永远渲染 button + onClick handleBack，state 内部判断 history.length 决定行为。
+  // R9-2 修返回 bug：永远渲染 button + onClick handleBack，内部按 history.length
+  // 决定 router.back() 还是 push('/')（曾用 canGoBack state 首渲染出死链）。
   const handleBack = useCallback(() => {
     if (typeof window !== 'undefined' && window.history.length > 1) {
       router.back();
@@ -212,16 +232,12 @@ export default function SettingsPage() {
     try {
       await setPreference(keyMap[key], persistedValue);
       setSettings((prev) => ({ ...prev, [key]: value }));
-      showMessage('success', '已保存');
+      showMessage('success', S.toastSaved);
     } catch {
-      showMessage('error', '保存失败');
+      showMessage('error', S.toastSaveFailed);
     } finally {
       setSavingSetting(false);
     }
-  };
-
-  const handleProfileFieldChange = (field: keyof ProfileForm, value: string) => {
-    setProfileForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleProfileSave = async () => {
@@ -235,9 +251,9 @@ export default function SettingsPage() {
         phone: profileForm.phone.trim(),
       });
 
-      showMessage(success ? 'success' : 'error', success ? '资料已更新' : '资料保存失败');
+      showMessage(success ? 'success' : 'error', success ? S.toastProfileSaved : S.toastProfileFailed);
     } catch {
-      showMessage('error', '资料保存失败');
+      showMessage('error', S.toastProfileFailed);
     } finally {
       setSavingProfile(false);
     }
@@ -245,8 +261,21 @@ export default function SettingsPage() {
 
   const handleLogout = async () => {
     await logout();
-    showMessage('success', '已退出登录');
+    showMessage('success', S.toastLoggedOut);
   };
+
+  const navItems = useMemo<SettingsNavItem[]>(() => {
+    const items: SettingsNavItem[] = [{ id: 'account', label: S.nav.account }];
+    if (isAuthenticated) {
+      items.push({ id: 'about', label: S.nav.about });
+    }
+    items.push({ id: 'prefs', label: S.nav.prefs });
+    if (isAuthenticated) {
+      items.push({ id: 'points', label: S.nav.points });
+    }
+    items.push({ id: 'import', label: S.nav.import }, { id: 'more', label: S.nav.more });
+    return items;
+  }, [isAuthenticated]);
 
   if (isCheckingAuth || loading) {
     return (
@@ -262,31 +291,30 @@ export default function SettingsPage() {
 
   const defaultModelName = modelOptions.find((model) => model.id === defaultModelId)?.name;
   const selectedModelLabel = settings.modelPreference === AI_MODEL_AUTO_VALUE
-    ? defaultModelName ? `自动选择（${defaultModelName}）` : '自动选择'
-    : (modelOptions.find((model) => model.id === settings.modelPreference)?.name || '自动选择');
+    ? defaultModelName ? S.prefs.modelAutoWithDefault(defaultModelName) : S.prefs.modelAuto
+    : (modelOptions.find((model) => model.id === settings.modelPreference)?.name || S.prefs.modelAuto);
 
   return (
     <div className="min-h-screen bg-paper">
       <header className="sticky top-0 z-10 border-b border-divider bg-paper/95 backdrop-blur">
-        <div className="mx-auto flex h-14 w-full max-w-2xl items-center px-5">
+        <div className="mx-auto flex h-14 w-full max-w-4xl items-center px-5">
           <button
             type="button"
             onClick={handleBack}
             className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-divider bg-card text-ink transition-all hover:border-pine hover:text-pine hover:bg-pine/5 active:scale-95"
-            aria-label="返回"
-            title="返回上一页"
+            aria-label={S.backAria}
+            title={S.backAria}
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <div className="flex-1 text-center text-[16px] font-semibold tracking-[-0.012em] text-ink">设置</div>
+          <div className="flex-1 text-center text-[16px] font-semibold tracking-[-0.012em] text-ink">{S.title}</div>
           <div className="w-9" />
         </div>
       </header>
 
-      {/* R9-2 toast 重做：从 top-center 大 banner → 右上角小 toast，
-          slide-in 动画，更克制更现代（macOS / Stripe 风）。 */}
+      {/* 右上角小 toast（slide-in，macOS / Stripe 风），不阻塞当前操作 */}
       {saveMessage ? (
         <div className="pointer-events-none fixed right-5 top-[68px] z-30 animate-in slide-in-from-top-2 fade-in duration-200">
           <div
@@ -310,640 +338,203 @@ export default function SettingsPage() {
         </div>
       ) : null}
 
-      <main className="mx-auto flex w-full max-w-2xl flex-col gap-7 px-5 pb-20 pt-7">
-        {/* R9-2 顶级 UX 升级：User Identity Hero
-            进设置页第一眼就知道"我是谁"。把账户 group 顶部的小 avatar 行
-            升级为 page hero，给设置页一个真正的产品入口感。 */}
-        {isAuthenticated && user ? (
-          <header className="flex items-center gap-4 px-1 pb-1">
-            <Avatar className="h-16 w-16 border border-divider bg-paper-warm shadow-soft">
-              {user.avatar ? <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" /> : null}
-              <AvatarFallback className="bg-paper-warm text-[22px] font-semibold text-ink">
-                {(user.nickname || user.username || 'U').slice(0, 1).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <h1 className="truncate text-[20px] font-semibold tracking-[-0.018em] text-ink">
-                  {user.nickname || user.username}
-                </h1>
-                <span className="inline-flex items-center rounded-full bg-pine/10 px-2 py-[2px] font-mono text-[10px] font-medium uppercase tracking-[0.06em] text-pine">
-                  {roleLabels[user.role] || user.role}
-                </span>
-              </div>
-              <p className="mt-1 truncate text-[13px] text-ink-secondary">
-                {user.email || user.phone || '尚未填写联系方式'}
-              </p>
-            </div>
-          </header>
-        ) : null}
+      <div className="mx-auto grid w-full max-w-4xl grid-cols-1 px-5 pb-16 pt-8 md:grid-cols-[168px_minmax(0,1fr)] md:gap-10">
+        <aside className="hidden md:block">
+          <SettingsNav items={navItems} />
+        </aside>
 
-        {/* 账户 — 标识身份 / 联系方式 / 安全 */}
-        <SettingSection
-          caption="账户"
-          description={isAuthenticated ? '修改你的展示信息和登录方式' : '登录后可同步学习数据'}
-        >
-          <SettingGroup id="account">
-            {isAuthenticated && user ? (
-              <>
-                <InputSettingRow
-                  label="昵称"
-                  type="text"
-                  value={profileForm.nickname}
-                  placeholder="未设置"
-                  onChange={(value) => handleProfileFieldChange('nickname', value)}
-                />
-                <GroupDivider />
-                <InputSettingRow
-                  label="邮箱"
-                  type="email"
-                  value={profileForm.email}
-                  placeholder="未设置"
-                  onChange={(value) => handleProfileFieldChange('email', value)}
-                />
-                <GroupDivider />
-                <InputSettingRow
-                  label="手机"
-                  type="tel"
-                  value={profileForm.phone}
-                  placeholder="未设置"
-                  onChange={(value) => handleProfileFieldChange('phone', value)}
-                />
-                <GroupDivider />
-                {/* R9-2：保存按钮从 ink 大按钮 → pine outline 克制 pill，右对齐次操作 */}
-                <div className="flex items-center justify-end px-4 py-3">
-                  <button
-                    onClick={handleProfileSave}
-                    disabled={savingProfile}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-full border border-pine/40 bg-card px-4 text-[13px] font-medium text-pine transition-all hover:border-pine hover:bg-pine/[0.06] active:scale-95 disabled:opacity-50"
-                  >
-                    {savingProfile ? '保存中…' : '保存资料'}
-                  </button>
-                </div>
-                <GroupDivider />
-                {WECHAT_LOGIN_ENABLED && (
-                  <>
-                    <ActionButtonRow
-                      label={COPY.wechatQr.bindAction}
-                      tone="default"
-                      onClick={() => setShowWechatQr(true)}
-                    />
-                    <GroupDivider />
-                  </>
-                )}
-                <ActionLinkRow href="/profile/password" label="修改密码" />
-                <GroupDivider />
-                <ActionButtonRow label="退出登录" tone="danger" onClick={handleLogout} />
-              </>
-            ) : (
-              <>
-                <StaticRow label="状态" value="未登录" />
-                <GroupDivider />
-                <ActionLinkRow href="/login" label="登录" />
-                <GroupDivider />
-                <ActionLinkRow href="/register" label="注册" />
-              </>
-            )}
-          </SettingGroup>
-        </SettingSection>
+        <main className="flex w-full max-w-2xl flex-col gap-9">
+          <AccountSection
+            user={user}
+            isAuthenticated={isAuthenticated}
+            profileForm={profileForm}
+            savingProfile={savingProfile}
+            wechatEnabled={WECHAT_LOGIN_ENABLED}
+            wechatBindLabel={COPY.wechatQr.bindAction}
+            onFieldChange={(field, value) => setProfileForm((prev) => ({ ...prev, [field]: value }))}
+            onSaveProfile={handleProfileSave}
+            onShowWechat={() => setShowWechatQr(true)}
+            onLogout={handleLogout}
+          />
 
-        {isAuthenticated && (() => {
-          const profile = user?.learnerProfile;
-          const bio = (profile as { bio?: { headline: string; detail?: string; updatedAt?: string } } | undefined)?.bio;
-          const goals = (profile as { goals?: Array<{ id: string; title: string; summary?: string; status?: string }> } | undefined)?.goals ?? [];
-          const hasBio = Boolean(bio?.headline);
-          const hasGoals = goals.length > 0;
-          const hasCoachSediment = hasBio || hasGoals;
+          {isAuthenticated ? (
+            <AboutYouSection
+              profile={user?.learnerProfile}
+              saveLearnerProfile={saveLearnerProfile}
+              onEditProfile={() => setShowLearnerEdit(true)}
+              onOpenCoach={() => setShowIntentDialog(true)}
+            />
+          ) : null}
 
-          const handleClearBio = async () => {
-            if (!confirm('确定要清除画像吗？以后回访时会重新认识你。')) return;
-            if (!profile) return;
-            const next = { ...(profile as object) } as Record<string, unknown>;
-            delete next.bio;
-            await saveLearnerProfile(next as unknown as typeof profile);
-          };
-
-          return (
+          {user?.role === 'admin' ? (
             <SettingSection
-              caption="关于你"
-              description="你是谁、想去哪——AI 接着这个陪你学"
+              caption={COPY.adminAi.settingsCaption}
+              description={COPY.adminAi.settingsDescription}
             >
               <SettingGroup>
-                {/* 学习档案（结构化身份） */}
-                {profile ? (
-                  <>
-                    <StaticRow
-                      label="身份"
-                      value={LEARNER_STAGE_LABELS[profile.stage as LearnerStage] || profile.stage}
-                    />
-                    {profile.stage === 'k12' && (
-                      <>
-                        <GroupDivider />
-                        <StaticRow label="年级" value={(profile as { gradeLevel?: string }).gradeLevel || '未设置'} />
-                      </>
-                    )}
-                    {profile.stage === 'university' && (
-                      <>
-                        <GroupDivider />
-                        <StaticRow label="专业" value={(profile as { major?: string }).major || '未设置'} />
-                        <GroupDivider />
-                        <StaticRow label="年级" value={(profile as { year?: string }).year || '未设置'} />
-                      </>
-                    )}
-                    {profile.stage === 'graduate' && (
-                      <>
-                        <GroupDivider />
-                        <StaticRow label="方向" value={(profile as { field?: string }).field || '未设置'} />
-                      </>
-                    )}
-                    {profile.stage === 'working' && (
-                      <>
-                        <GroupDivider />
-                        <StaticRow label="行业" value={(profile as { industry?: string }).industry || '未设置'} />
-                        <GroupDivider />
-                        <StaticRow label="目标" value={(profile as { learningGoal?: string }).learningGoal || '未设置'} />
-                      </>
-                    )}
-                    {(profile as { otherInterests?: string }).otherInterests && (
-                      <>
-                        <GroupDivider />
-                        <StaticRow label="也在学" value={(profile as { otherInterests?: string }).otherInterests!} />
-                      </>
-                    )}
-                    <GroupDivider />
-                    <ActionButtonRow label="重新填写学习档案" tone="default" onClick={() => setShowLearnerEdit(true)} />
-                  </>
-                ) : (
-                  <>
-                    <div className="px-5 py-4 text-[13.5px] leading-relaxed text-ink-secondary">
-                      告诉同学你的身份背景，让 AI 回答更贴你。
-                    </div>
-                    <GroupDivider />
-                    <ActionButtonRow label="填写学习档案" tone="default" onClick={() => setShowLearnerEdit(true)} />
-                  </>
-                )}
-
-                {/* 教练画像（bio + goals 自然语言沉淀，同一对话产出） */}
-                {hasCoachSediment ? (
-                  <>
-                    <GroupDivider />
-                    {hasBio && bio ? (
-                      <div className="px-5 py-4">
-                        <p className="font-mono text-[10.5px] font-semibold uppercase tracking-caps text-ink-muted">
-                          教练记下的你
-                        </p>
-                        <p className="mt-2 text-[15px] font-medium leading-7 text-ink">{bio.headline}</p>
-                        {bio.detail ? (
-                          <p className="mt-2 text-[13.5px] leading-relaxed text-ink-secondary">{bio.detail}</p>
-                        ) : null}
-                        {bio.updatedAt ? (
-                          <p className="mt-2 font-mono text-[10.5px] uppercase tracking-caps text-ink-muted">
-                            上次更新 · {new Date(bio.updatedAt).toLocaleDateString('zh-CN')}
-                          </p>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    {hasGoals ? (
-                      <>
-                        {hasBio ? <GroupDivider /> : null}
-                        <div className="px-5 py-4">
-                          <p className="font-mono text-[10.5px] font-semibold uppercase tracking-caps text-ink-muted">
-                            你想要的
-                          </p>
-                          <ul className="mt-2 space-y-2.5">
-                            {goals.map((g) => (
-                              <li key={g.id}>
-                                <p className="text-[14.5px] font-medium leading-6 text-ink">{g.title}</p>
-                                {g.summary ? (
-                                  <p className="mt-1 text-[13px] leading-relaxed text-ink-secondary">{g.summary}</p>
-                                ) : null}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      </>
-                    ) : null}
-                    <GroupDivider />
-                    <ActionButtonRow label="和教练再聊聊" tone="default" onClick={() => setShowIntentDialog(true)} />
-                    {hasBio ? (
-                      <>
-                        <GroupDivider />
-                        <ActionButtonRow label="清除画像" tone="danger" onClick={handleClearBio} />
-                      </>
-                    ) : null}
-                  </>
-                ) : (
-                  <>
-                    <GroupDivider />
-                    <div className="px-5 py-4 text-[13.5px] leading-relaxed text-ink-secondary">
-                      还没和教练聊过。你最近想做的事 / 想去的方向 / 还在纠结的选择，都可以慢慢说——也可以打电话语音聊。
-                    </div>
-                    <GroupDivider />
-                    <ActionButtonRow label="和教练聊一聊" tone="default" onClick={() => setShowIntentDialog(true)} />
-                  </>
-                )}
+                <ToggleRow
+                  label={COPY.adminAi.managementView}
+                  hint={COPY.adminAi.managementViewHint}
+                  checked={adminLensEnabled}
+                  onChange={setAdminLensEnabled}
+                />
+                <GroupDivider />
+                <ActionLinkRow href="/admin/ai-control" label={COPY.adminAi.openControlCenter} />
               </SettingGroup>
             </SettingSection>
-          );
-        })()}
+          ) : null}
 
-        {showIntentDialog && (
-          <IntentDialogContainer
-            open
-            onClose={() => setShowIntentDialog(false)}
-          />
-        )}
-
-        <WechatQrAuthDialog
-          open={showWechatQr}
-          mode="bind"
-          onClose={() => setShowWechatQr(false)}
-          onBound={() => showMessage('success', COPY.wechatQr.boundToast)}
-        />
-
-        {showLearnerEdit && (
-          <LearnerOnboardingModal
-            currentProfile={user?.learnerProfile ?? null}
-            onSave={async (profile) => {
-              const success = await saveLearnerProfile(profile);
-              if (success) {
-                setShowLearnerEdit(false);
-                showMessage('success', '学习档案已更新');
-              } else {
-                showMessage('error', '保存失败');
-              }
-            }}
-            onClose={() => setShowLearnerEdit(false)}
-          />
-        )}
-
-        {user?.role === 'admin' ? (
           <SettingSection
-            caption={COPY.adminAi.settingsCaption}
-            description={COPY.adminAi.settingsDescription}
+            id="prefs"
+            caption={S.prefs.caption}
+            description={S.prefs.description}
           >
             <SettingGroup>
-              <ToggleRow
-                label={COPY.adminAi.managementView}
-                hint={COPY.adminAi.managementViewHint}
-                checked={adminLensEnabled}
-                onChange={setAdminLensEnabled}
+              <SelectRow
+                label={S.prefs.modelLabel}
+                value={settings.modelPreference}
+                displayValue={selectedModelLabel}
+                disabled={savingSetting}
+                onChange={(value) => updateSetting('modelPreference', value)}
+                options={[
+                  { value: AI_MODEL_AUTO_VALUE, label: defaultModelName ? S.prefs.modelAutoWithDefault(defaultModelName) : S.prefs.modelAutoRecommended },
+                  ...modelOptions.map((model) => ({
+                    value: model.id,
+                    label: `${model.name}${model.recommended ? S.prefs.modelRecommendedSuffix : ''}`,
+                  })),
+                ]}
               />
               <GroupDivider />
-              <ActionLinkRow href="/admin/ai-control" label={COPY.adminAi.openControlCenter} />
+              <ToggleRow
+                label={S.prefs.timestampsLabel}
+                hint={S.prefs.timestampsHint}
+                checked={settings.tutorShowTimestamps}
+                disabled={savingSetting}
+                onChange={(checked) => updateSetting('tutorShowTimestamps', checked)}
+              />
+              <GroupDivider />
+              <ToggleRow
+                label={S.prefs.thinkingLabel}
+                hint={S.prefs.thinkingHint}
+                checked={settings.tutorThinkingGuide}
+                disabled={savingSetting}
+                onChange={(checked) => updateSetting('tutorThinkingGuide', checked)}
+              />
+              <GroupDivider />
+              <ToggleRow
+                label={S.prefs.autoSaveLabel}
+                hint={S.prefs.autoSaveHint}
+                checked={settings.autoSave}
+                disabled={savingSetting}
+                onChange={(checked) => updateSetting('autoSave', checked)}
+              />
+              <GroupDivider />
+              <ToggleRow
+                label={S.prefs.classCheckLabel}
+                hint={S.prefs.classCheckHint}
+                checked={settings.classCheckEnabled}
+                disabled={savingSetting}
+                onChange={(checked) => updateSetting('classCheckEnabled', checked)}
+              />
             </SettingGroup>
           </SettingSection>
-        ) : null}
 
-        <SettingSection
-          caption="学习偏好"
-          description="录课、复习和同桌回答的默认行为"
-        >
-          <SettingGroup id="ai">
-            <SelectRow
-              label="回答方式"
-              value={settings.modelPreference}
-              displayValue={selectedModelLabel}
-              disabled={savingSetting}
-              onChange={(value) => updateSetting('modelPreference', value)}
-              options={[
-                { value: AI_MODEL_AUTO_VALUE, label: defaultModelName ? `自动选择（${defaultModelName}）` : '自动选择（推荐）' },
-                ...modelOptions.map((model) => ({
-                  value: model.id,
-                  label: `${model.name}${model.recommended ? '（推荐）' : ''}`,
-                })),
-              ]}
-            />
-            <GroupDivider />
-            <ToggleRow
-              label="回答里附时间戳"
-              hint="AI 引用课堂内容时附 [MM:SS] 标签，点击跳回原片段"
-              checked={settings.tutorShowTimestamps}
-              disabled={savingSetting}
-              onChange={(checked) => updateSetting('tutorShowTimestamps', checked)}
-            />
-            <GroupDivider />
-            <ToggleRow
-              label="展示思考过程"
-              hint="开启后 AI 先展示推理过程再给最终答案；关闭由 AI 自己判断"
-              checked={settings.tutorThinkingGuide}
-              disabled={savingSetting}
-              onChange={(checked) => updateSetting('tutorThinkingGuide', checked)}
-            />
-            <GroupDivider />
-            <ToggleRow
-              label="自动保存"
-              hint="录音结束后自动保存到云端"
-              checked={settings.autoSave}
-              disabled={savingSetting}
-              onChange={(checked) => updateSetting('autoSave', checked)}
-            />
-            <GroupDivider />
-            <ToggleRow
-              label="随堂检验"
-              hint="播放视频或音频时 AI 会在合适的节点自动暂停并出题"
-              checked={settings.classCheckEnabled}
-              disabled={savingSetting}
-              onChange={(checked) => updateSetting('classCheckEnabled', checked)}
-            />
-          </SettingGroup>
-        </SettingSection>
+          {/* 积分区块：余额 / 免费录课进度 / 流水；未登录时组件内静默隐藏。
+              外层 div 提供锚点，内容隐藏时点击导航也只是停在空锚点，不报错。 */}
+          <div id="points" className="scroll-mt-24">
+            <PointsSettingsSection />
+          </div>
 
-        <SettingSection
-          caption="导入"
-          description="从 B 站等平台导入课程时需要的凭证"
-        >
-          <SettingGroup>
-            <div className="px-5 pb-4 pt-4">
-              <div className="pb-2.5 text-[14px] font-medium text-ink">B站 Cookie</div>
-              <textarea
-                value={settings.bilibiliCookie}
-                onChange={(event) => setSettings((prev) => ({ ...prev, bilibiliCookie: event.target.value }))}
-                onBlur={() => updateSetting('bilibiliCookie', settings.bilibiliCookie.trim())}
-                placeholder="粘贴 SESSDATA、bili_jct、DedeUserID"
-                rows={3}
-                disabled={savingSetting}
-                className="w-full resize-none rounded-xl border border-divider bg-paper px-3.5 py-3 font-mono text-[12.5px] leading-relaxed text-ink outline-none transition-all placeholder:text-ink-muted/60 focus:border-pine/50 focus:bg-card focus:ring-2 focus:ring-pine/15"
-              />
-              <div className="pt-2 text-[11.5px] text-ink-muted">仅保存在当前浏览器</div>
-            </div>
-
-            {settings.bilibiliCookie ? (
-              <>
-                <GroupDivider />
-                <ActionButtonRow
-                  label="清除 Cookie"
-                  tone="default"
-                  onClick={() => updateSetting('bilibiliCookie', '')}
+          <SettingSection
+            id="import"
+            caption={S.import.caption}
+            description={S.import.description}
+          >
+            <SettingGroup>
+              <div className="px-5 pb-4 pt-4">
+                <div className="pb-2.5 text-[14px] font-medium text-ink">{S.import.cookieLabel}</div>
+                <textarea
+                  value={settings.bilibiliCookie}
+                  onChange={(event) => setSettings((prev) => ({ ...prev, bilibiliCookie: event.target.value }))}
+                  onBlur={() => updateSetting('bilibiliCookie', settings.bilibiliCookie.trim())}
+                  placeholder={S.import.cookiePlaceholder}
+                  rows={3}
+                  disabled={savingSetting}
+                  className="w-full resize-none rounded-xl border border-divider bg-paper px-3.5 py-3 font-mono text-[12.5px] leading-relaxed text-ink outline-none transition-all placeholder:text-ink-muted/60 focus:border-pine/50 focus:bg-card focus:ring-2 focus:ring-pine/15"
                 />
-              </>
-            ) : null}
+                <div className="pt-2 text-[11.5px] text-ink-muted">{S.import.cookieNote}</div>
+              </div>
 
-            <GroupDivider />
-            <details className="group px-5 py-3.5">
-              <summary className="flex cursor-pointer items-center gap-2 text-[13.5px] text-ink-secondary transition-colors hover:text-pine">
-                <svg className="h-3 w-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M9 5l7 7-7 7" />
-                </svg>
-                如何获取导入凭证
-              </summary>
-              <ol className="mt-3 list-decimal space-y-1.5 pl-9 text-[12.5px] leading-relaxed text-ink-secondary marker:text-pine/60 marker:font-mono">
-                <li>登录 bilibili.com</li>
-                <li>按 F12 打开开发者工具</li>
-                <li>切到「应用 / Application」</li>
-                <li>找到 Cookie → https://www.bilibili.com</li>
-                <li>复制 SESSDATA、bili_jct、DedeUserID 并用分号拼接</li>
-              </ol>
-            </details>
-          </SettingGroup>
-        </SettingSection>
+              {settings.bilibiliCookie ? (
+                <>
+                  <GroupDivider />
+                  <ActionButtonRow
+                    label={S.import.clearCookie}
+                    tone="default"
+                    onClick={() => updateSetting('bilibiliCookie', '')}
+                  />
+                </>
+              ) : null}
 
-        <SettingSection caption="更多">
-          <SettingGroup>
-            <ActionLinkRow href="/help" label="帮助中心" />
-            <GroupDivider />
-            <ActionLinkRow href="/feedback" label="意见反馈" />
-            <GroupDivider />
-            <StaticRow label="版本" value="1.0.0" />
-          </SettingGroup>
-        </SettingSection>
-      </main>
-    </div>
-  );
-}
+              <GroupDivider />
+              <details className="group px-5 py-3.5">
+                <summary className="flex cursor-pointer items-center gap-2 text-[13.5px] text-ink-secondary transition-colors hover:text-pine">
+                  <svg className="h-3 w-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  {S.import.helpToggle}
+                </summary>
+                <ol className="mt-3 list-decimal space-y-1.5 pl-9 text-[12.5px] leading-relaxed text-ink-secondary marker:font-mono marker:text-pine/60">
+                  {S.import.helpSteps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              </details>
+            </SettingGroup>
+          </SettingSection>
 
-/**
- * SettingSection — caption + 可选 description 一行（顶级 UX 升级）
- *
- * 之前 SectionCaption 只有标题，每个 section 干嘛用户得猜。现在每段加一行
- * description（ink-muted 12px 解释意图），让信息层级真正清晰。
- *
- * 视觉规则：caption mono uppercase tracking 资产化 + description 普通字体收口。
- */
-function SettingSection({
-  caption,
-  description,
-  children,
-}: {
-  caption: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section>
-      <div className="px-2 pb-3">
-        <div className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
-          {caption}
-        </div>
-        {description ? (
-          <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted/85">{description}</p>
-        ) : null}
+          <SettingSection id="more" caption={S.more.caption}>
+            <SettingGroup>
+              <ActionLinkRow href="/help" label={S.more.help} />
+              <GroupDivider />
+              <ActionLinkRow href="/feedback" label={S.more.feedback} />
+            </SettingGroup>
+          </SettingSection>
+
+          <footer className="pt-1 text-center font-mono text-[10.5px] uppercase tracking-[0.06em] text-ink-muted/60">
+            {S.footerVersion(APP_VERSION)}
+          </footer>
+        </main>
       </div>
-      {children}
-    </section>
-  );
-}
 
-function SettingGroup({
-  children,
-  id,
-}: {
-  children: React.ReactNode;
-  id?: string;
-}) {
-  // R9：bg-white → bg-card / 加 shadow-soft 让 group 有轻盈边界
-  return (
-    <section id={id} className="overflow-hidden rounded-2xl border border-divider bg-card shadow-soft">
-      {children}
-    </section>
-  );
-}
-
-function GroupDivider() {
-  return <div className="h-px bg-divider" />;
-}
-
-function InputSettingRow({
-  label,
-  type,
-  value,
-  placeholder,
-  onChange,
-}: {
-  label: string;
-  type: 'text' | 'email' | 'tel';
-  value: string;
-  placeholder: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="flex min-h-[52px] items-center gap-4 px-5">
-      <span className="w-16 flex-shrink-0 text-[15px] text-ink">{label}</span>
-      <input
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="h-12 min-w-0 flex-1 appearance-none bg-transparent px-0 text-right text-[15px] text-ink outline-none placeholder:text-ink-muted/70"
-      />
-    </label>
-  );
-}
-
-function ToggleRow({
-  label,
-  hint,
-  checked,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  /** R9-2：可选 hint 内联到 label 下方（取代之前散落在 group 里的 px-4 pb-3 div）。
-      让 label + 解释作为一个原子单元，不被 GroupDivider 切开。 */
-  hint?: string;
-  checked: boolean;
-  disabled?: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <div className={`flex items-start gap-4 px-5 ${hint ? 'py-3.5' : 'min-h-[52px] items-center'}`}>
-      <div className="min-w-0 flex-1">
-        <div className={`text-[14.5px] text-ink ${hint ? 'leading-snug' : ''}`}>{label}</div>
-        {hint ? (
-          <p className="mt-1 text-[12px] leading-relaxed text-ink-muted/85">{hint}</p>
-        ) : null}
-      </div>
-      <button
-        onClick={() => onChange(!checked)}
-        disabled={disabled}
-        className={`relative inline-flex h-7 w-[46px] flex-shrink-0 rounded-full transition-colors ${
-          hint ? 'mt-[2px]' : ''
-        } ${checked ? 'bg-pine' : 'bg-divider'} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
-      >
-        <span
-          className={`mt-[2px] inline-block h-[22px] w-[22px] transform rounded-full bg-white shadow-sm transition-transform ${
-            checked ? 'translate-x-[22px]' : 'translate-x-[2px]'
-          }`}
+      {showIntentDialog && (
+        <IntentDialogContainer
+          open
+          onClose={() => setShowIntentDialog(false)}
         />
-      </button>
+      )}
+
+      <WechatQrAuthDialog
+        open={showWechatQr}
+        mode="bind"
+        onClose={() => setShowWechatQr(false)}
+        onBound={() => showMessage('success', COPY.wechatQr.boundToast)}
+      />
+
+      {showLearnerEdit && (
+        <LearnerOnboardingComponent
+          onComplete={async (profile: LearnerProfile) => {
+            const success = await saveLearnerProfile(profile);
+            if (success) {
+              setShowLearnerEdit(false);
+              showMessage('success', S.toastLearnerSaved);
+            } else {
+              showMessage('error', S.toastSaveFailed);
+            }
+          }}
+          onSkip={() => setShowLearnerEdit(false)}
+        />
+      )}
     </div>
-  );
-}
-
-function SelectRow({
-  label,
-  value,
-  displayValue,
-  disabled,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  displayValue: string;
-  disabled?: boolean;
-  onChange: (value: string) => void;
-  options: Array<{ value: string; label: string }>;
-}) {
-  return (
-    <label className="relative flex min-h-[52px] items-center gap-4 px-5">
-      <span className="w-20 flex-shrink-0 text-[15px] text-ink">{label}</span>
-      <div className="min-w-0 flex-1">
-        <select
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          disabled={disabled}
-          className="h-12 w-full appearance-none bg-transparent pr-6 text-right text-[15px] text-ink outline-none disabled:opacity-60"
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <span className="sr-only">{displayValue}</span>
-      </div>
-      <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-ink-muted">
-        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </span>
-    </label>
-  );
-}
-
-function ActionLinkRow({
-  href,
-  label,
-}: {
-  href: string;
-  label: string;
-}) {
-  // R9：hover 用 pine 微提示（"AI 在场"信号扩散到设置项交互），不是普通 paper bg
-  return (
-    <Link
-      href={href}
-      className="group flex min-h-[52px] items-center justify-between px-5 text-[14.5px] text-ink transition-all hover:bg-pine/[0.04]"
-    >
-      <span>{label}</span>
-      <svg className="h-4 w-4 text-ink-muted transition-all group-hover:text-pine group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-      </svg>
-    </Link>
-  );
-}
-
-function ActionButtonRow({
-  label,
-  tone,
-  onClick,
-}: {
-  label: string;
-  tone: 'default' | 'danger';
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex min-h-[52px] w-full items-center justify-between px-4 text-left text-[15px] transition-colors hover:bg-paper ${
-        tone === 'danger' ? 'text-vermilion' : 'text-ink'
-      }`}
-    >
-      <span>{label}</span>
-      <svg className="h-4 w-4 text-ink-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-      </svg>
-    </button>
-  );
-}
-
-function StaticRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex min-h-[52px] items-center justify-between px-5 text-[14.5px]">
-      <span className="text-ink">{label}</span>
-      <span className="text-ink-secondary">{value}</span>
-    </div>
-  );
-}
-
-function LearnerOnboardingModal({
-  onSave,
-  onClose,
-}: {
-  currentProfile: LearnerProfile | null;
-  onSave: (profile: LearnerProfile) => Promise<void>;
-  onClose: () => void;
-}) {
-  return (
-    <LearnerOnboardingComponent
-      onComplete={onSave}
-      onSkip={onClose}
-    />
   );
 }
