@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { applyRateLimit } from '@/lib/utils/rate-limit';
+import { applyRateLimit, getUserIdFromRequest } from '@/lib/utils/rate-limit';
+import { meterUserIdFromRequest, runWithMeterContext } from '@/lib/services/point-meter';
+import { getAppExecPrice } from '@/lib/config/pricing';
+import { checkCanSpend, checkGuestDailyCost, spendPoints } from '@/lib/services/point-account-service';
+import { getActiveMembership } from '@/lib/services/membership-service';
+import { createLogger, track } from '@/lib/logger';
 import {
   appPluginRegistry,
   buildExecutionContext,
@@ -13,6 +18,8 @@ import {
 } from '@/lib/ai-native';
 import { assessWorkshopReadiness } from '@/lib/services/workshop-readiness-service';
 import { buildControlledAppPrompt } from '@/lib/services/ai-control-service';
+
+const log = createLogger('apps/execute');
 
 const GOVERNED_APP_KEYS = ['flashcards', 'quiz', 'mindmap', 'cheatsheet', 'infographic', 'audio-overview', 'teach-back'] as const;
 type GovernedAppKey = typeof GOVERNED_APP_KEYS[number];
@@ -188,8 +195,40 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // 积分真扣费（Phase 2）：执行前按 appKey 价目预检（Max 会员 8 折），402 拦截。
+    // guest（无 Bearer）走日成本闸门（L1 堵漏）：超限 402 guest_daily_cap 引导登录。
+    // execId 每次请求生成：一次执行一次扣费（重试会重新执行 LLM，理应重新计费）。
+    const execUserId = getUserIdFromRequest(request);
+    const execTier = execUserId ? (await getActiveMembership(execUserId)).tier : 'free';
+    const execPrice = getAppExecPrice(appKey, execTier);
+    const execId = crypto.randomUUID();
+    if (execUserId && execPrice > 0) {
+      const check = await checkCanSpend(execUserId, execPrice);
+      if (!check.ok) {
+        return NextResponse.json(
+          { ok: false, error: check.error, balance: check.balance, required: check.required },
+          { status: 402 },
+        );
+      }
+    } else if (!execUserId && execPrice > 0) {
+      const allowance = await checkGuestDailyCost(meterUserIdFromRequest(request, null));
+      if (!allowance.ok) {
+        return NextResponse.json({ ok: false, error: 'guest_daily_cap' }, { status: 402 });
+      }
+    }
+
     const result = await withTimeout(
-      appPluginRegistry.execute(context, pluginId),
+      // 积分影子计量（Phase 1）：插件内部统一走 llm-service.chat()，
+      // 这里包一层计量上下文即可零侵入归属到具体应用。
+      runWithMeterContext(
+        {
+          feature: `apps:${appKey || 'legacy'}`,
+          userId: meterUserIdFromRequest(request, getUserIdFromRequest(request)),
+          refType: 'apps',
+          refId: appKey || undefined,
+        },
+        () => appPluginRegistry.execute(context, pluginId),
+      ),
       resolveExecuteTimeoutMs(appKey)
     );
 
@@ -201,6 +240,36 @@ export async function POST(request: NextRequest) {
         ...(!appKey ? ['legacy_appkey_fallback'] : []),
       ],
     };
+
+    // 执行成功后结算（Phase 2）。预检已过；若并发下余额被扣光导致结算失败，
+    // 产物已生成无法撤回——只 warn 留痕，不撤回用户已拿到的结果。
+    if (execUserId && execPrice > 0) {
+      const spend = await spendPoints({
+        userId: execUserId,
+        points: execPrice,
+        reason: `apps:${appKey || 'legacy'}`,
+        refType: 'apps',
+        refId: appKey || null,
+        // 真实成本已由影子流水（runWithMeterContext）计入熔断累计，这里记 0 防双算
+        costMilliYuan: 0,
+        idempotencyKey: `apps:${execUserId}:${execId}`,
+      });
+      if (!spend.ok) {
+        // L4 对账信号：产物已交付但扣费失败，需要补偿——升到 error + track 聚合
+        log.error('apps charge failed after precheck', {
+          appKey,
+          error: spend.error,
+          balance: spend.balance,
+          required: spend.required,
+        });
+        track({
+          kind: 'points.charge_failed',
+          feature: `apps:${appKey || 'legacy'}`,
+          userId: execUserId,
+          errorCode: spend.error,
+        });
+      }
+    }
 
     return NextResponse.json({
       ok: true,

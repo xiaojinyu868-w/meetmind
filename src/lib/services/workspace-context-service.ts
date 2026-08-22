@@ -66,6 +66,10 @@ export type {
 
 const log = createLogger('workspace-context');
 
+// 编辑器截断覆盖护栏阈值：新值比现有音视频全文短超过这个数才判定为"截断版回写"。
+// 列表 API 截断到 3200 字，真实全文动辄上万，1000 的落差足以区分"改了几个字"与"截断覆盖"。
+const TRUNCATION_OVERWRITE_MIN_DROP = 1000;
+
 function inferIngressChannel(sourceType: string): SourceIngressChannel {
   if (sourceType === 'wechat') return 'wechat';
   if (sourceType === 'shared-agent') return 'share';
@@ -128,16 +132,31 @@ async function upsertWorkspaceCaptureBySourceKey(params: {
     select: {
       id: true,
       status: true,
+      normalizedText: true,
+      tutorContext: true,
     },
   });
 
   const data = buildWorkspaceCaptureWriteData(params);
 
   if (existing) {
+    // 音视频的转写全文在服务端可能被 enrich 管线补全过（数万字），而客户端
+    // 持久化只带几千字的摘要片段甚至不带——绝不允许短覆盖长、null 覆盖有值。
+    const isMedia = params.contentType === 'audio' || params.contentType === 'video';
+    const keepColumn = (existingValue: string | null, incoming: string | null | undefined) => (
+      isMedia && typeof existingValue === 'string'
+        && (incoming == null || existingValue.length > incoming.length)
+    );
     return prisma.workspaceCapture.update({
       where: { id: existing.id },
       data: {
         ...data,
+        ...(keepColumn(existing.normalizedText, params.normalizedText)
+          ? { normalizedText: existing.normalizedText }
+          : {}),
+        ...(keepColumn(existing.tutorContext, params.tutorContext)
+          ? { tutorContext: existing.tutorContext }
+          : {}),
         status: normalizeCaptureStatus(existing.status),
       },
     });
@@ -808,6 +827,30 @@ export const workspaceContextService = {
       };
     }
 
+    // 与 upsert 路径 keepColumn 同源的单调护栏：编辑器打开音视频 capture 时拿到的
+    // normalizedText 可能是列表 API 的 3200 字截断版，直接 PATCH 会把服务端数万字全文
+    // 覆盖成截断版。但这是用户主动编辑场景，不能一律挡——全文上改几个字再保存时
+    // 新值长度 ≈ 旧值，放行；只有新值比旧值短了一大截（截断特征）才保留旧列。
+    const isMediaCapture = capture.contentType === 'audio' || capture.contentType === 'video';
+    const isTruncationOverwrite = (existingValue: string | null, incoming: string | null) => (
+      isMediaCapture
+      && typeof existingValue === 'string'
+      && typeof incoming === 'string'
+      && existingValue.length - incoming.length > TRUNCATION_OVERWRITE_MIN_DROP
+    );
+    const keepNormalizedText = isTruncationOverwrite(capture.normalizedText, nextNormalizedText ?? null);
+    const keepTutorContext = isTruncationOverwrite(capture.tutorContext, nextTutorContext ?? null);
+    if (keepNormalizedText || keepTutorContext) {
+      log.warn('blocked truncated editor overwrite on media capture', {
+        captureId: capture.id,
+        contentType: capture.contentType,
+        keepNormalizedText,
+        keepTutorContext,
+        existingNormalizedLength: capture.normalizedText?.length ?? 0,
+        incomingNormalizedLength: nextNormalizedText?.length ?? 0,
+      });
+    }
+
     const updatedCapture = await prisma.workspaceCapture.update({
       where: { id: capture.id },
       data: {
@@ -821,12 +864,12 @@ export const workspaceContextService = {
               previewText: nextPreviewText ? compactText(nextPreviewText, 500) : null,
             }
           : {}),
-        ...(nextNormalizedText !== undefined
+        ...(nextNormalizedText !== undefined && !keepNormalizedText
           ? {
               normalizedText: nextNormalizedText,
             }
           : {}),
-        ...(nextTutorContext !== undefined
+        ...(nextTutorContext !== undefined && !keepTutorContext
           ? {
               tutorContext: nextTutorContext,
             }

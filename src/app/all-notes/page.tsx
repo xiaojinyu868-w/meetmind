@@ -8,8 +8,12 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { Header } from '@/components/Header';
 import type { NoteSource, NoteWithSession } from '@/types';
+
+// Header 里的 PointsChip 付费直达按钮需要全局 PaywallDialog 挂载才能唤起
+const PaywallDialog = dynamic(() => import('@/components/points/PaywallDialog').then(m => ({ default: m.PaywallDialog })), { ssr: false });
 
 // Demo 笔记数据
 const DEMO_NOTES: NoteWithSession[] = [
@@ -249,6 +253,7 @@ export default function AllNotesPage() {
   return (
     <div className="min-h-screen bg-paper-warm">
       <Header lessonTitle="我的笔记" courseName="跨课程笔记管理" />
+      <PaywallDialog />
       
       <main className="max-w-4xl mx-auto px-4 py-6">
         {/* 统计卡片 */}

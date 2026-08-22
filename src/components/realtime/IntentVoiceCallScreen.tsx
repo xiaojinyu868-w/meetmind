@@ -3,6 +3,10 @@
 /**
  * IntentVoiceCallScreen — 「聊聊你想要的」打电话模式
  *
+ * @deprecated 2026-08 决策：实时语音通话下线（/api/tutor-call 已拆除），
+ * IntentDialogContainer 已移除「打电话聊」入口，意图录入只走文字 IntentDialog。
+ * 本组件保留一个周期作参考，之后物理删除。请勿在新代码中引用。
+ *
  * 用户点了 IntentDialog 顶部的"打电话聊"，进到这一屏：
  *   全屏暖色 → 中央 v7 呼吸光晕 → 底部三个控件（查看文字 / 麦克风 / 挂断）
  *

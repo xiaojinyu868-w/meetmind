@@ -80,7 +80,12 @@ export async function fetchUIMessageStream(
     const msg =
       (errorBody as { error?: string }).error ||
       `请求失败: ${response.status}`;
-    throw new Error(`${msg}${retryHint}`);
+    // 附带 status/body：积分扣费拦截（402）需要 balance/required 才能给出
+    // 「还剩多少、下月发放」的准确提示，调用方用 points-guard 识别。
+    const error = new Error(`${msg}${retryHint}`) as Error & { status?: number; body?: unknown };
+    error.status = response.status;
+    error.body = errorBody;
+    throw error;
   }
 
   const reader = response.body?.getReader();

@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @deprecated 2026-08 决策：实时语音通话下线（语音同桌模式移除）。
+ * 本组件保留一个周期作参考，之后物理删除。请勿在新代码中引用。
+ */
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PhoneCall, PhoneOff } from 'lucide-react';
 import { useVoiceInput, type VoiceInputStatus } from '@/hooks/useVoiceInput';

@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>方向 B · 呼吸森林 — 收集空态</title>
+<style>
+  @font-face { font-family: 'Inter'; src: url('../../public/fonts/inter-var-latin.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+  @font-face { font-family: 'Instrument Serif'; src: url('../../public/fonts/instrument-serif-400-italic.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+  @font-face { font-family: 'JetBrains Mono'; src: url('../../public/fonts/jetbrains-mono-var-latin.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+
+  :root {
+    --ink: #10160f;
+    --ink-2: #47544a;
+    --ink-3: #7f8b80;
+    --pine: #2f6b55;
+    --pine-bright: #3f8a6c;
+    --serif: 'Instrument Serif', Georgia, serif;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif;
+    background: #edf2ea;
+    color: var(--ink);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── 活的背景：三团极淡的光在慢慢呼吸 ── */
+  .aura { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
+  .blob { position: absolute; border-radius: 50%; filter: blur(90px); will-change: transform; }
+  .b1 {
+    width: 55vw; height: 55vw; left: -12vw; top: -18vw;
+    background: rgba(47, 107, 85, 0.16);
+    animation: drift1 22s ease-in-out infinite alternate;
+  }
+  .b2 {
+    width: 44vw; height: 44vw; right: -10vw; top: 6vh;
+    background: rgba(168, 205, 226, 0.28);
+    animation: drift2 26s ease-in-out infinite alternate;
+  }
+  .b3 {
+    width: 40vw; height: 40vw; left: 26vw; bottom: -22vw;
+    background: rgba(240, 214, 160, 0.22);
+    animation: drift3 30s ease-in-out infinite alternate;
+  }
+  @keyframes drift1 { from { transform: translate(0,0) scale(1); } to { transform: translate(6vw, 4vh) scale(1.12); } }
+  @keyframes drift2 { from { transform: translate(0,0) scale(1.05); } to { transform: translate(-5vw, 6vh) scale(0.94); } }
+  @keyframes drift3 { from { transform: translate(0,0) scale(0.96); } to { transform: translate(4vw, -5vh) scale(1.1); } }
+
+  .stage {
+    position: relative; z-index: 2;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 10vh 24px 160px;
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .rise { opacity: 0; animation: rise 1s var(--ease-out) forwards; }
+  .d1 { animation-delay: 0.1s; } .d2 { animation-delay: 0.26s; }
+  .d3 { animation-delay: 0.42s; } .d4 { animation-delay: 0.56s; }
+  .d5 { animation-delay: 0.66s; } .d6 { animation-delay: 0.74s; }
+  .d7 { animation-delay: 0.82s; } .d8 { animation-delay: 0.92s; }
+
+  /* Octo 主角：带两圈听课涟漪 */
+  .octo-wrap { position: relative; width: 148px; height: 148px; display: grid; place-items: center; }
+  .octo-wrap img { width: 108px; height: 108px; position: relative; z-index: 2;
+    filter: drop-shadow(0 18px 28px rgba(16,22,15,0.18)); }
+  .ring {
+    position: absolute; inset: 0; border-radius: 50%;
+    border: 1.5px solid rgba(47,107,85,0.35);
+    animation: ripple 3.8s ease-out infinite;
+  }
+  .ring.r2 { animation-delay: 1.9s; }
+  @keyframes ripple {
+    0% { transform: scale(0.72); opacity: 0; }
+    25% { opacity: 0.8; }
+    100% { transform: scale(1.35); opacity: 0; }
+  }
+
+  h1 {
+    margin-top: 30px;
+    font-size: clamp(32px, 4.2vw, 50px);
+    font-weight: 560; letter-spacing: 0; line-height: 1.3; text-align: center;
+  }
+  h1 .serif-line {
+    display: block; margin-top: 4px;
+    font-family: var(--serif); font-style: italic; font-weight: 400;
+    font-size: 0.62em; color: var(--pine); letter-spacing: 0.01em;
+  }
+
+  .sub {
+    margin-top: 18px; max-width: 38em;
+    font-size: 14px; line-height: 1.9; color: var(--ink-2); text-align: center;
+  }
+
+  /* ── 玻璃入口卡 ── */
+  .cards {
+    margin-top: 52px;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+    width: min(900px, 100%);
+  }
+  .card {
+    position: relative;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 12px;
+    padding: 22px 20px;
+    background: rgba(255, 255, 255, 0.52);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    border-radius: 20px;
+    cursor: pointer; text-align: left;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 8px 24px rgba(16,22,15,0.05);
+    transition: transform 0.4s var(--ease-out), background 0.4s, box-shadow 0.4s;
+  }
+  .card:hover {
+    transform: translateY(-5px);
+    background: rgba(255, 255, 255, 0.78);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 18px 40px rgba(16,22,15,0.1);
+  }
+  .card:active { transform: translateY(-1px) scale(0.985); transition-duration: 0.12s; }
+
+  .icon {
+    width: 40px; height: 40px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: rgba(47,107,85,0.1); color: var(--pine);
+    transition: background 0.3s, transform 0.4s var(--ease-out);
+  }
+  .card:hover .icon { background: rgba(47,107,85,0.16); transform: scale(1.08); }
+  .icon svg { width: 18px; height: 18px; }
+
+  .card b { font-size: 14.5px; font-weight: 620; }
+  .card span { font-size: 11.5px; line-height: 1.6; color: var(--ink-3); }
+
+  .wechat {
+    margin-top: 34px;
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-3);
+  }
+
+  /* composer：浮在光上的玻璃胶囊 */
+  .composer {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+    width: min(680px, calc(100% - 48px));
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 8px 8px 20px;
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255,255,255,0.8);
+    border-radius: 999px;
+    box-shadow: 0 4px 12px rgba(16,22,15,0.05), 0 20px 48px rgba(16,22,15,0.1);
+    transition: box-shadow 0.4s var(--ease-out), background 0.4s, transform 0.4s var(--ease-out);
+    z-index: 10;
+  }
+  .composer:focus-within {
+    background: rgba(255,255,255,0.85);
+    transform: translateX(-50%) translateY(-2px);
+    box-shadow: 0 0 0 4px rgba(47,107,85,0.1), 0 24px 56px rgba(16,22,15,0.12);
+  }
+  .composer input {
+    flex: 1; border: none; outline: none; background: transparent;
+    font-size: 14px; color: var(--ink); font-family: inherit;
+  }
+  .composer input::placeholder { color: var(--ink-3); }
+  .composer .round {
+    width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer;
+    display: grid; place-items: center;
+    background: rgba(47,107,85,0.08); color: var(--pine);
+    transition: background 0.25s, transform 0.25s var(--ease-out);
+  }
+  .composer .round:hover { background: rgba(47,107,85,0.16); transform: scale(1.06); }
+  .composer .send { background: var(--pine); color: #fff; }
+  .composer .send:hover { background: var(--pine-bright); }
+  .composer .round svg { width: 16px; height: 16px; }
+
+  @media (max-width: 720px) {
+    .cards { grid-template-columns: repeat(2, 1fr); }
+    .stage { padding-top: 7vh; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+<div class="aura">
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="blob b3"></div>
+</div>
+
+<main class="stage">
+  <div class="octo-wrap rise d1">
+    <span class="ring"></span>
+    <span class="ring r2"></span>
+    <img src="../../public/images/octo-buddy/excited.png" alt="Octo" />
+  </div>
+  <h1 class="rise d2">想到什么，就留在这里。<span class="serif-line">drop it here — I’ll weave it back.</span></h1>
+  <p class="sub rise d3">不用分类，不用打标签。同学会在后台把它接回相关的课堂、目标和问题。</p>
+
+  <div class="cards">
+    <button class="card rise d5">
+      <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+      <b>上传</b><span>文件、音频、视频、图片</span>
+    </button>
+    <button class="card rise d6">
+      <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+      <b>链接</b><span>贴个网页或视频链接</span>
+    </button>
+    <button class="card rise d7">
+      <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span>
+      <b>写一句</b><span>想法、困惑、随手记</span>
+    </button>
+    <button class="card rise d8">
+      <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span>
+      <b>录一段</b><span>语音直接留下来</span>
+    </button>
+  </div>
+
+  <p class="wechat rise d8">也可以从微信直接发给我</p>
+</main>
+
+<div class="composer">
+  <input placeholder="发一句想法，贴个链接，或者先把这节课丢进来" />
+  <button class="round" aria-label="附件"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+  <button class="round" aria-label="语音"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg></button>
+  <button class="round send" aria-label="发送"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></button>
+</div>
+</body>
+</html>

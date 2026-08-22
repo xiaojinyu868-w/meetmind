@@ -35,10 +35,13 @@ export function buildStoredVideoSource(
     const provider = session.videoProvider || 'bilibili';
     return {
       provider,
-      providerLabel: provider === 'bilibili' ? 'Bilibili' : provider,
+      providerLabel: provider === 'bilibili' ? 'Bilibili' : provider === 'xiaoyuzhou' ? '小宇宙播客' : provider,
       originalUrl: session.videoUrl,
       resolvedUrl: session.videoUrl,
       embedUrl: session.videoEmbedUrl,
+      // 播客等纯音频链接：导入时把音频副本地址存在 session.mediaUrl，
+      // 播放器拿到 audioUrl 后走「音频 + 封面」模式而不是视频失败兜底。
+      audioUrl: session.mediaUrl || undefined,
       thumbnailUrl: session.thumbnailUrl?.replace(/^http:\/\//i, 'https://'),
       title: session.topic,
       durationSec: session.duration ? session.duration / 1000 : undefined,

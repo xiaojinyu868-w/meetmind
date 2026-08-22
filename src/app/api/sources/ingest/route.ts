@@ -8,7 +8,12 @@ export const maxDuration = 300;
 
 const log = createLogger('sources-ingest');
 
-const MAX_FILE_BYTES = 20 * 1024 * 1024;
+// 下游 DashScope 单文件支持 150MB，本地闸门默认放宽到 100MB，可用 env 覆盖
+const MAX_FILE_MB = Number(process.env.INGEST_MAX_FILE_MB) || 100;
+const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
+// DashScope 对扫描件 PDF 会返回一句说明性文字（十几个字符）冒充提取结果，
+// 低于该阈值视为提取失败，走显式失败态而不是静默假成功
+const MIN_EXTRACTED_CHARS = Number(process.env.INGEST_MIN_EXTRACTED_CHARS) || 50;
 const DEFAULT_DASHSCOPE_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 const DEFAULT_DASHSCOPE_DOC_MODEL = 'qwen-doc-turbo';
 
@@ -605,6 +610,16 @@ function jsonSuccess(params: {
     });
     return jsonError('未提取到可用文本内容', 422, 'EMPTY_TEXT');
   }
+  if (params.kind === 'document' && normalized.length < MIN_EXTRACTED_CHARS) {
+    log.warn('ingest produced suspiciously little text', {
+      kind: params.kind,
+      fileType: params.fileType,
+      title: params.title,
+      extractedChars: normalized.length,
+      minChars: MIN_EXTRACTED_CHARS,
+    });
+    return jsonError('这份文档几乎没有可提取的文字，可能是扫描件，请换用文字版文件', 422, 'LOW_TEXT_YIELD');
+  }
 
   const segments = buildSegmentsFromText(normalized, `${params.kind}-${Date.now()}`);
   return NextResponse.json({
@@ -654,7 +669,7 @@ export async function POST(request: NextRequest) {
         limit: MAX_FILE_BYTES,
         elapsedMs: Date.now() - startedAt,
       });
-      return jsonError('文件过大，最大支持 20MB', 413, 'FILE_TOO_LARGE');
+      return jsonError(`文件过大，最大支持 ${MAX_FILE_MB}MB`, 413, 'FILE_TOO_LARGE');
     }
 
     const extension = getExtension(file.name);

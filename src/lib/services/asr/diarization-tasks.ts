@@ -1,12 +1,12 @@
 /**
- * 说话人分离（Speaker Diarization）— DashScope 非实时 Fun-ASR
+ * 说话人分离（Speaker Diarization）— DashScope 非实时 ASR
  *
- * 用 Fun-ASR 非实时 API + diarization_enabled: true，
- * 对已上传的录音做说话人分离，返回带 speaker_id 的句子列表。
+ * 默认模型 qwen-audio-3.0-asr-flash-filetrans（新一代，原生支持说话人分离），
+ * 可用 DASHSCOPE_DIARIZATION_MODEL 覆盖回 fun-asr 等旧模型。
  *
- * 与实时 ASR（qwen3-asr-flash-realtime）的关系：
+ * 与实时 ASR 的关系：
  *   - 实时 ASR 不动，继续负责录课中的流式转录
- *   - 录音结束后，把音频提交给 Fun-ASR 非实时 API 做说话人分离
+ *   - 录音结束后，把音频提交给非实时 API + diarization_enabled 做说话人分离
  *   - 拿到 speaker_id 后按时间戳合并到已有 TranscriptSegment
  *
  * DashScope 非实时 API 流程：
@@ -15,11 +15,15 @@
  *   GET  /api/v1/tasks/{task_id}  (轮询)
  *     → SUCCEEDED 后从 transcription_url 拉取完整结果
  *
- * 返回结构（Fun-ASR + diarization）：
+ * 返回结构：
  *   { transcripts: [{ sentences: [{ text, begin_time, end_time, speaker_id }] }] }
  */
 
 import { createLogger } from '@/lib/logger';
+import {
+  buildFiletransSubmitBody,
+  extractTranscriptionUrl,
+} from '@/lib/services/qwen-asr-tasks';
 
 const log = createLogger('diarization');
 
@@ -46,7 +50,7 @@ export interface DiarizationResult {
 /**
  * 提交说话人分离任务
  *
- * 模型选 fun-asr（阿里云官方推荐支持说话人分离 + 热词的模型）。
+ * 默认 qwen-audio-3.0-asr-flash-filetrans（新一代，原生说话人分离）。
  * 可通过环境变量 DASHSCOPE_DIARIZATION_MODEL 覆盖。
  */
 export async function submitDiarizationTask(
@@ -54,19 +58,10 @@ export async function submitDiarizationTask(
   apiKey: string,
   language: string = 'zh',
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
-  const model = process.env.DASHSCOPE_DIARIZATION_MODEL || 'fun-asr';
+  const model = process.env.DASHSCOPE_DIARIZATION_MODEL || 'qwen-audio-3.0-asr-flash-filetrans';
 
-  const requestBody = {
-    model,
-    input: {
-      file_urls: [fileUrl],
-    },
-    parameters: {
-      diarization_enabled: true,
-      language,
-      enable_itn: true,
-    },
-  };
+  const requestBody = buildFiletransSubmitBody(model, fileUrl, language);
+  (requestBody.parameters as Record<string, unknown>).diarization_enabled = true;
 
   log.info('Submitting diarization task', { model, language, fileUrl });
 
@@ -123,9 +118,16 @@ async function queryDiarizationTask(
   const taskStatus = data.output?.task_status || 'UNKNOWN';
 
   if (taskStatus === 'SUCCEEDED') {
+    const transcriptionUrl = extractTranscriptionUrl(data.output);
+    if (transcriptionUrl) {
+      return { status: 'SUCCEEDED', transcriptionUrl };
+    }
+    // 任务整体 SUCCEEDED 但没有结果 URL = 子任务失败（新族在 output.results[0].message）。
+    // 必须快速失败，否则旧逻辑会空转轮询 10 分钟才超时——这正是课后看不到说话人信息的根因之一。
+    const subtaskMessage = data.output?.results?.[0]?.message;
     return {
-      status: 'SUCCEEDED',
-      transcriptionUrl: data.output?.result?.transcription_url,
+      status: 'FAILED',
+      error: subtaskMessage || '转写子任务失败（无结果链接）',
     };
   }
 

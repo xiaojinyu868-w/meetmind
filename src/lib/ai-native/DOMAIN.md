@@ -30,7 +30,7 @@ page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → r
 | `context-builder.ts` | 83 | 从请求构建执行上下文 |
 | `registry.ts` | ~85 | 插件注册中心；区分运行故障与 `CONTENT_NOT_READY` 语义拒绝 |
 | `registry.test.ts` | — | 插件运行故障兜底与内容拒绝透传契约 |
-| `prompt-context.ts` | 101 | Prompt 上下文构建（转录 + 锚点 + 术语） |
+| `prompt-context.ts` | ~130 | Prompt 上下文构建（转录 + 锚点 + 术语）；超预算时逐段压缩但保留段号/时间戳，并在注入文本前声明"…处有内容缺失、残句非完整原话"（朗读语料可用 `truncationNotice: false` 关闭） |
 | `app-prompts.ts` | ~450 | 应用矩阵六类应用的版本化 System/User Prompt 基线；含速查表跨课来源拼装、播客去时间戳朗读语料与带时间戳章节证据的分离构建，真实插件、产品现场管理员透镜与控制中心共同复用 |
 | `app-prompts.test.ts` | ~150 | 六类应用 Prompt 的证据、认知动作、防泄题、打印 / 手机阅读、音频章节定位与输出格式合同测试 |
 | `tools.ts` | 48 | 插件工具注入 |
@@ -49,8 +49,9 @@ page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → r
 | `quiz.plugin.ts` | 275 | 测验 |
 | `class-check.plugin.ts` | 264 | 随堂检验（智能版，基于知识点结构；视频内触发，不在 catalog） |
 | `cheatsheet.plugin.ts` | — | unit/exam 考试速查表；课堂、大纲、真题分源回锚 |
+| `explainer.plugin.ts` | ~240 | 板书精讲（BoardScript 板书脚本，render mode `'board'`）；Prompt / 引用校验 / DSL 清洗拆为 explainer-prompts.ts / explainer-quotes.ts / board-script.ts |
 | `fallback.plugin.ts` | 43 | 兜底 |
-| `index.ts` | — | 插件注册（7 个插件） |
+| `index.ts` | — | 插件注册（9 个插件） |
 
 ## 新增插件步骤
 

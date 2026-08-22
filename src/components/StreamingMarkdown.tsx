@@ -4,6 +4,9 @@ import React, { useMemo, useCallback, useEffect, useState, useDeferredValue } fr
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
+// CJK 友好强调：CommonMark 侧翼规则会让 `的**"xxx"**这` 这类
+// 中文引号紧贴 ** 的加粗不解析（时灵时不灵的根因），统一放松
+import remarkCjkFriendly from 'remark-cjk-friendly';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import type { Components } from 'react-markdown';
@@ -411,7 +414,7 @@ export function StreamingMarkdown({
     <>
       <div className={`streaming-markdown ${className}`}>
         <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkMath]}
+          remarkPlugins={[remarkCjkFriendly, remarkGfm, remarkMath]}
           rehypePlugins={[rehypeKatex]}
           components={components}
         >

@@ -16,7 +16,7 @@ chat/
 ├── index.ts                        # barrel
 ├── ChatBubble.tsx                  # 单条消息壳（avatar / actions / footer slot）
 ├── ChatMessageList.tsx             # 消息流容器（自动跟随 + jump-to-latest）
-├── ChatComposer.tsx                # 输入条（mic / file / call / send / stop）
+├── ChatComposer.tsx                # 输入条（mic / file / call / send / stop；micDisabledHint=语音占位：capabilities.mic=true 但不给 onVoiceTranscript 时渲染 disabled 麦克风 + tooltip）
 ├── ChatRenderer.tsx                # 流式 markdown 渲染（marker pipeline）
 ├── ChatThinkingStrip.tsx           # 等待态气泡
 ├── ChatCodeBlock.tsx               # Shiki 代码高亮（M12）
@@ -31,6 +31,7 @@ chat/
     ├── copyMessageSmart.ts         # 智能复制（markdown / 纯文本双格式；stripTimestamps 时富文本走 DOM 克隆剔除时间戳按钮）
     ├── extractIntentSummary.ts     # ---我想要的---...---结束--- 解析
     ├── extractIntentBio.ts         # M11.4 bio（headline + detail）解析
+    ├── extractIntentOptions.ts     # M15 goal 模式 ---选项--- 快答解析 + 流式半截 marker 剃除（stripPartialIntentBlocks）
     └── extractLearningProgress.ts  # 旧 ---学习进展--- marker 解析；GlobalAsk 已改用后台 distillation，新 adapter 勿依赖
 ```
 

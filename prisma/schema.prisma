@@ -680,6 +680,24 @@ model AgentPack {
   @@index([createdAt])
 }
 
+/// codex app-server 教学会话线程（AI 家教「上课」线）。
+/// codexThreadId 是 codex app-server 侧的持久线程 id（首个 turn 拉起后回填，
+/// 用于进程回收/重启后的 thread/resume 续讲）；每 turn 的事件日志落盘在
+/// data/teach-events/<id>.jsonl（供重放/复习线），不进库。
+model TeachThread {
+  id            String   @id @default(cuid())
+  title         String
+  topic         String
+  model         String
+  codexThreadId String?
+  status        String   @default("active") // active | archived
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([updatedAt])
+  @@index([status, updatedAt])
+}
+
 /// AI 控制台的提示词 / 模型覆盖版本。
 /// 代码中的默认 prompt 永远保留为基线；这里只存管理员显式创建的 draft / published 叠加层。
 model AiControlRevision {
@@ -695,4 +713,75 @@ model AiControlRevision {
   @@unique([controlKey, version])
   @@index([controlKey, status, createdAt])
   @@index([publishedAt])
+}
+
+// ==================== 积分与成本计量模型 ====================
+
+/// 积分账户（Phase 1 影子计量只建表不写字段——余额扣减在 Phase 2 启用）
+model PointAccount {
+  id          String   @id @default(cuid())
+  userId      String   @unique // 用户ID（guest_xxx 表示访客）
+  balance     Int      @default(0) // 当前积分余额
+  totalEarned Int      @default(0) // 累计获得
+  totalSpent  Int      @default(0) // 累计消费
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+/// 积分流水 / LLM 成本影子流水。
+/// Phase 1（影子计量）：只记真实成本（costMilliYuan），delta=0 不动余额。
+/// Phase 2（真扣费）：spend/earn/adjust 都动 PointAccount 余额并记 balanceAfter；
+/// ASR 分钟用量记 quantity（免费额度内 delta=0 的量纲流水也落一条）。
+/// idempotencyKey 保证重试/重复回调不重复记账。
+model PointTransaction {
+  id               String   @id @default(cuid())
+  userId           String // 用户ID（guest_xxx / anonymous 表示未登录）
+  delta            Int      @default(0) // 积分变动（影子期恒为 0）
+  kind             String // earn | spend | adjust
+  reason           String? // 人类可读原因
+  refType          String? // 业务来源：tutor | apps | understanding | wechat | ocr | asr...
+  refId            String? // 业务对象ID（sessionId / captureId / appKey...）
+  points           Int      @default(0) // 折算积分（影子期恒为 0）
+  costMilliYuan    Int      @default(0) // 真实成本，毫元（1 元 = 1000 毫元）
+  modelId          String? // 计费模型
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  quantity         Int? // 量纲（Phase 2：ASR 转写分钟数；LLM 流水为 null）
+  balanceAfter     Int? // 本笔之后的账户余额（影子流水为 null）
+  idempotencyKey   String?  @unique // 幂等键，冲突则跳过
+  createdAt        DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([refType, createdAt])
+}
+
+/// 积分充值订单（微信 Native 扫码支付）。
+/// outTradeNo 是商户侧唯一单号（也作为积分到账幂等键 recharge:{outTradeNo}）；
+/// amountFen/points 是下单时快照，回调到账必须与之比对，防伪造金额。
+model RechargeOrder {
+  id              String    @id @default(cuid())
+  outTradeNo      String    @unique // 商户订单号（≤32 字符，微信支付要求）
+  userId          String
+  packKey         String // 充值包 key（pricing.ts RECHARGE_PACKS）或会员档 key（MEMBERSHIP_PLANS）
+  amountFen       Int // 应付金额快照（分）
+  points          Int // 到账积分快照（会员档订单为 0，权益写 Membership）
+  status          String    @default("pending") // pending|paid|expired|failed
+  wxTransactionId String? // 微信支付订单号（回调回填）
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+  expiredAt       DateTime // 下单 +30 分钟，超期 pending 惰性置 expired
+
+  @@index([userId, createdAt])
+}
+
+// 订阅会员：无记录或 expiresAt 已过 = 免费档（读时判断，无需定时任务）
+model Membership {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  tier             String // pro | max（pricing.ts MEMBERSHIP_PLANS）
+  expiresAt        DateTime
+  sourceOutTradeNo String? // 最近一笔到账订单号
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }

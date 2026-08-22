@@ -9,9 +9,12 @@ export interface RecorderCallbackMeta {
   sessionId?: string;
   isContinuation?: boolean;
   durationMs?: number;
-  /** 实时字幕已先交付，完整原声仍会在后台做一次高精度定稿。 */
+  /**
+   * @deprecated 2026-08 单遍化：realtime 结果即定稿，Recorder 不再发出该标记。
+   * 保留字段仅兼容 pending-audio 回放路径与将来的手动「重新精转」。
+   */
   finalPassPending?: boolean;
-  /** 这是已有 realtime 结果之上的非阻断定稿；失败时保留已有文字和原声。 */
+  /** 手动「重新精转」时的非阻断定稿标记；失败时保留已有文字和原声。 */
   finalPassOnly?: boolean;
 }
 
@@ -54,12 +57,6 @@ export interface RecorderProps {
    * 对话框，用户必须勾选"分享系统音频/标签页音频"，否则会降级回纯麦克风。
    */
   audioSource?: RecorderAudioSource;
-  /**
-   * 启用说话人分离——切换到腾讯云 16k_zh_en_speaker 引擎，
-   * 实时返回 speaker_id（0-9），支持最多 10 个说话人。
-   * 用户在录音前选择"多人会议"时开启。
-   */
-  speakerDiarization?: boolean;
 }
 
 export interface RecorderHandle {

@@ -19,10 +19,7 @@ import { anchorService, type Anchor } from '@/lib/services/anchor-service';
 import { uploadRecordingAudio } from '@/lib/services/upload-recording-audio';
 import { uploadRecordingKeyframes } from '@/lib/services/upload-recording-keyframes';
 import { requestLessonUnderstanding } from '@/lib/services/lesson-title-client';
-import {
-  runDiarizationForSession,
-  shouldRunPostBatchDiarization,
-} from '@/lib/services/asr/diarization-service';
+import { precheckAsrQuota } from '@/hooks/useAsrQuotaPrecheck';
 import { resolveLiveRecordingAppendOffset } from '@/lib/capture/live-recording';
 import {
   mergeWorkspaceCaptures,
@@ -204,6 +201,12 @@ export function useRecordingLifecycle(
     // "每节课一张卡"的产品承诺。
     const isContinuingCurrentSession = newSessionId === sessionIdRef.current;
 
+    // 积分 Phase 2：开新课前预检 ASR 免费额度。免费分钟用完时给一句安静
+    // 轻提示（继续录按积分计），不硬阻断；未登录 guest 无积分概念，跳过。
+    if (!isContinuingCurrentSession && isAuthenticated) {
+      precheckAsrQuota(accessToken);
+    }
+
     // Store actions (pure writers)
     const uiAct = useUIStore.getState().actions;
     const sessionAct = useSessionStore.getState().actions;
@@ -256,7 +259,7 @@ export function useRecordingLifecycle(
       duration: 0,
       createdBy: studentId,
     });
-  }, [studentId, clearTopics, clearSummary]);
+  }, [studentId, clearTopics, clearSummary, accessToken, isAuthenticated]);
 
   // ── handleRecordingStop ────────────────────────────────────────
 
@@ -426,8 +429,9 @@ export function useRecordingLifecycle(
             // 档位1（跨设备带走数据）：把完整转录段同步到服务端 capture metadata。
             // 之前只存 segmentCount，换设备登录拿不到转录文字——课堂 tab 看到卡片却点不出内容。
             // 现在塞 transcriptSegments（与视频导入/pending-audio 路径一致），登录回填即可重建。
-            // 上限 800 段：新版按句切分后单段更大（一句一段），800 段 ≈ 2-3 小时课，足够覆盖。
-            transcriptSegments: publishableSegments.slice(0, 800).map((s) => ({
+            // 上限 10000 段：与服务端证据表防呆上限一致。句级密度约 12 段/分钟，
+            // 10000 段 ≈ 13 小时课，实际不会触顶，只兜底异常数据。
+            transcriptSegments: publishableSegments.slice(0, 10000).map((s) => ({
               id: s.id,
               text: s.text,
               startMs: s.startMs,
@@ -502,28 +506,8 @@ export function useRecordingLifecycle(
         }).catch(() => undefined);
       }
 
-      // 说话人分离：直接把 blob 传给 /api/asr/diarize，不依赖上传链路和登录状态。
-      // 静默执行，失败不打扰。
-      // 如果实时多人模式（腾讯云）已经产出 speakerId，跳过课后 diarization——
-      // 课后 diarization 走 DashScope Fun-ASR 非实时接口，声纹模型独立，
-      // 两套引擎的 speakerId 编号无对应关系，混用会导致说话人标签错乱。
-      // 完整原声定稿开启时，不能让 diarization 和 batch final pass 并发。
-      // 否则较晚返回的说话人结果会拿 realtime 草稿覆盖更准确的定稿文本。
-      // final pass 完成后由 useTranscriptHandlers 基于定稿 segments 再做说话人整理。
-      if (
-        shouldRunPostBatchDiarization(finalSegments, pendingBaseOffsetMs)
-        && !meta?.finalPassPending
-      ) {
-        void runDiarizationForSession(
-          blob,
-          effectiveSessionId,
-          finalSegments,
-          (updatedSegments) => {
-            // 刷新内存中的 transcript（如果当前 session 正在显示）
-            editorAct.setSegments(updatedSegments);
-          },
-        ).catch(() => undefined);
-      }
+      // 2026-08 决策：课后不再自动触发说话人分离（课堂≈单说话人，realtime 单遍即定稿）。
+      // /api/asr/diarize 与 runDiarizationForSession 保留，供将来的手动「重新精转」。
 
       if (publishableSegments.length === 0 || meta?.finalPassPending) {
         pendingRecordedAudiosRef.current.set(recordingId, {

@@ -1,0 +1,19 @@
+{
+  "script": {
+    "title": "单字渲染验证",
+    "pages": [
+      {
+        "segments": [
+          {
+            "narration": "看这个表达，relocate to the U.S.，下个月搬过去。",
+            "actions": [
+              { "type": "write", "text": "relocate to the U.S.（下月）", "role": "term" },
+              { "type": "write", "text": "听力填空：搬家咨询", "role": "title" }
+            ]
+          }
+        ]
+      }
+    ],
+    "quotes": []
+  }
+}

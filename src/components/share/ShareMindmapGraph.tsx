@@ -9,7 +9,7 @@
  */
 
 import * as React from 'react';
-import { markdownToTree, type MindmapNode } from '@/lib/ai-native/plugins/mindmap.plugin';
+import { markdownToTree, type MindmapNode } from '@/lib/ai-native/plugins/mindmap-tree';
 import {
   assignPositions,
   boundingBox,

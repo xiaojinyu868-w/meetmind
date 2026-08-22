@@ -116,26 +116,60 @@ describe('postEditSegments', () => {
     expect(r[0].text).toBe('corrected');
   });
 
-  it('respects batch size — only sends first N low-confidence segments', async () => {
+  it('respects batch size — splits low-confidence segments into batches of N', async () => {
     const segs = Array.from({ length: 15 }, (_, i) => ({
       id: `s${i}`,
       text: `低置信 ${i}`,
       confidence: 0.4,
     }));
-    let capturedBody: unknown;
+    const capturedBodies: string[] = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
-      capturedBody = init?.body;
+      capturedBodies.push(String(init?.body));
       return {
         ok: true,
         json: async () => ({ choices: [{ message: { content: '[]' } }] }),
       } as unknown as Response;
     });
     await postEditSegments(segs, { apiKey: 'x', batchSize: 5 });
-    const body = typeof capturedBody === 'string' ? JSON.parse(capturedBody) : null;
-    const userMsg = body?.messages?.find((m: { role: string }) => m.role === 'user');
-    expect(userMsg.content).toContain('"s0"');
-    expect(userMsg.content).toContain('"s4"');
-    expect(userMsg.content).not.toContain('"s5"');
+    // 15 条 / 每批 5 条 = 3 批，全部复核（不再截断丢弃）
+    expect(capturedBodies).toHaveLength(3);
+    const firstUserMsg = JSON.parse(capturedBodies[0])?.messages?.find(
+      (m: { role: string }) => m.role === 'user',
+    );
+    expect(firstUserMsg.content).toContain('"s0"');
+    expect(firstUserMsg.content).toContain('"s4"');
+    expect(firstUserMsg.content).not.toContain('"s5"');
+  });
+
+  it('caps total batches via maxBatches — overflow segments pass through unmodified', async () => {
+    const segs = Array.from({ length: 15 }, (_, i) => ({
+      id: `s${i}`,
+      text: `低置信 ${i}`,
+      confidence: 0.4,
+    }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '[]' } }] }),
+    } as unknown as Response);
+    const r = await postEditSegments(segs, { apiKey: 'x', batchSize: 5, maxBatches: 1 });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(r).toHaveLength(15);
+    expect(r.every((seg) => !seg.modified)).toBe(true);
+  });
+
+  it('splits batches by character limit even when under batch size', async () => {
+    const segs = Array.from({ length: 4 }, (_, i) => ({
+      id: `c${i}`,
+      text: '长'.repeat(100),
+      confidence: 0.4,
+    }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '[]' } }] }),
+    } as unknown as Response);
+    // 单批字符上限 250：每条 100 字 → 每批最多 2 条，4 条 = 2 批
+    await postEditSegments(segs, { apiKey: 'x', batchSize: 10, batchCharLimit: 250 });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
   it('flags repeated filler text as needing review even with high confidence', async () => {

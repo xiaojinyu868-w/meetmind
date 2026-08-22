@@ -15,6 +15,8 @@ const PUBLIC_ROUTES = [
   '/api/auth/wechat/callback',
   '/api/auth/wechat/qr',
   '/api/wechat/mp',
+  // 微信支付结果回调：微信服务器无 Bearer，APIv3 平台证书验签是唯一防线
+  '/api/wechat/pay-notify',
   '/api/wechat/bind',
   '/api/wechat/bind/callback',
   '/api/wechat/capture/*',
@@ -27,8 +29,23 @@ const PUBLIC_ROUTES = [
   '/api/llm/models',
   '/api/asr-config',
   '/api/asr-stream',
+  // 积分 Phase 2：server.js 内部回调的 ASR 分钟结算口，靠 x-internal-secret 鉴权（无 Bearer）
+  '/api/points/settle-asr',
+  // 录课前服务端额度预检，同上内部接口
+  '/api/points/precheck-asr',
+  // 充值套餐列表：静态非敏感数据，PaywallDialog 客户端拉取（guest 也可能触发 paywall）
+  '/api/pay/packs',
   '/api/asr/oneshot',
-  '/api/tutor-call',
+  // 板书精讲 narration TTS（音频产物非敏感；有 500 字上限 + LRU）
+  '/api/board/tts',
+  // 板演批改（入图 ≤4.5MB + 文本 ≤2000 字；输出仅勾叉网格坐标与一句话点评，非敏感）
+  '/api/board/grade-ink',
+  // 拍题开讲（入图 ≤4.5MB；输出为生成的板书脚本，非敏感。DEMO 期匿名可用，上线前补限流）
+  '/api/board/photo-explain',
+  // 拍题开讲·流式版（SSE 逐单元下发，同上限同理由）
+  '/api/board/photo-explain-stream',
+  // hanzi-writer 笔画数据自托管（静态只读数据，替代 jsDelivr CDN）
+  '/api/board/hanzi/*',
   '/api/transcribe',
   '/api/transcribe-fast',
   '/api/transcribe-turbo',
@@ -57,6 +74,9 @@ const PUBLIC_ROUTES = [
   '/api/translate/en-zh',
   '/api/translate/zh-en',
   '/api/classroom/*',
+  // AI 家教「上课」线（codex app-server 底座）：EventSource 无法带 Bearer，
+  // 与 /api/classroom/* 同级别公开；internal 子路由靠 x-teach-internal 共享令牌自验
+  '/api/teach/*',
   '/api/analytics',
   '/api/analytics/stats',
   '/api/feedback',
@@ -78,6 +98,9 @@ const PUBLIC_ROUTES = [
   '/api/share/*',
   // 桌面端小窗：Electron 壳内加载的紧凑面板，浏览器直接打开也可用
   '/companion',
+  // 清小搭广场接入：平台网关带的是 XIAODA_API_KEY（非 MeetMind JWT），
+  // 由 compat 路由内 checkXiaodaAuth 自验 Bearer，无效返回 401。
+  '/api/compat/*',
 ] as const;
 
 function matchPath(pathname: string, patterns: readonly string[]): boolean {

@@ -29,6 +29,7 @@ components/
 ├── intent/DOMAIN.md   # M11：「聊聊你想要的」对话式目标共建（IntentDialog 沉浸式 + Container + SummaryCard）
 ├── realtime/DOMAIN.md # M11：实时语音通话视觉模板（RealtimeOrb 呼吸光晕 + IntentVoiceCallScreen）
 ├── admin/DOMAIN.md    # 管理员会话级管理视图、现场 AI 透镜与独立控制中心
+├── points/DOMAIN.md   # 积分系统前端（Phase 2）：头部 PointsChip + 设置页积分区块；402 拦截见 hooks/points-guard
 ├── settings/DOMAIN.md # 设置页组件（行原子 / 桌面锚点导航 / 账户与关于你两个 section）
 ├── mobile/DOMAIN.md   # 移动端专用组件（18 个）
 ├── business/DOMAIN.md # 业务展示组件（6 个）
@@ -68,7 +69,7 @@ components/
 |------|------|------|
 | `AITutor.tsx` | 1940 | 旧 AI 家教 / legacy fallback（移动端文字和语音主链路已移出），子模块在 `tutor/` |
 | `AIChat.tsx` | 691 | AI 对话组件 |
-| `GlobalAskPanel.tsx` / `GlobalAskWelcome.tsx` / `GlobalAskContextDrawer.tsx` | ~650 | 全局 Ask MeetMind：基于 ChatBase 的多轮问答；空态把输入作为唯一主动作，在输入内轻量选择“直接回答 / 陪我学会”；参考范围按需从右侧打开，深度学习仅在答案会改变路线时逐题追问；管理员额外看到“查看本次 AI”轻入口，将当前真实上下文带到独立控制中心，普通用户完全不可见 |
+| `GlobalAskPanel.tsx` / `GlobalAskWelcome.tsx` / `GlobalAskContextDrawer.tsx` | ~660 | 全局 Ask MeetMind：基于 ChatBase 的多轮问答；空态（v9 呼吸森林：光场 + 涟漪 Octo + 毛玻璃 hero composer + 玻璃建议卡，基元在 globals.css `v9-*`）把输入作为唯一主动作，在输入内轻量选择"直接回答 / 陪我学会"（免费档"陪我学会"带 Pro 标识，提交直接唤起会员页，服务端 402 membership_required 兜底）；参考范围按需从右侧打开，深度学习仅在答案会改变路线时逐题追问；管理员额外看到"查看本次 AI"轻入口，将当前真实上下文带到独立控制中心，普通用户完全不可见 |
 | `LearningIntentConfirmationCard.tsx` / `learning-intent-confirmation-model.ts` | ~210 | 深度学习的轻确认：若学习路径确有歧义，逐步显现模型动态生成的 1-3 个选择问题；学习理解在回答结束后静默整理，不把内部记忆标记塞进消息流 |
 | `LearningProgressMemoryCard.tsx` | ~50 | 旧学习进展 marker 的反馈卡，当前 `GlobalAskPanel` 不再使用；保留仅供迁移期兼容，勿在新链路继续扩展 |
 | `LearningMemoryPanel.tsx` / `CourseContextSection.tsx` / `CourseAssessmentCard.tsx` / `CourseCheatsheetWorkspace.tsx` / `ContextRecoveryCard.tsx` | ~1100 | 「我的上下文」采用消费级总览→具体内容层级：总览只展开模型对用户的长期理解，并以两条安静入口进入“课程与考试”或“最近学习现场”，不再把三类内容一次性纵向铺满；从复习页进入考试速查表时直接打开范围选择，返回时也直接回到原应用矩阵，不绕经上下文总览。范围选择支持跨课程与课次级多选；桌面为课程侧栏 + 课次画布，手机为横向课程选择带 + 仅展开已选课次，避免表单长页。课程支持可信名称、用户标签与边界纠正，再进入可打印速查表 |
@@ -111,7 +112,7 @@ components/
 | `mobile/MobileCollectionSheet.tsx` | ~400 | 收集菜单 / 历史收集 / 今日情报面板；移动端底部或侧边 sheet，桌面端以具备 dialog 语义的右侧上下文抽屉呈现；情报空态可返回收集补充上下文 |
 | `CrossCourseFeedPanel.tsx` | ~180 | 个人上下文与目标驱动的情报面板：合并“看见自己”与真实外部信息，对用户零配置；保留上次结果并在后台刷新，失败不清空旧内容 |
 | `FeedStream.tsx` / `feed-stream-model.ts` | ~420 | 今日情报列表渲染器与纯排序模型：外部发现和个人线索从首屏起交替出现，不再用两组标题把信息流切成两个报告；外部卡展示作者、出版时间、来源、个人推荐理由与不同视角；支持反馈及外链打开 |
-| `CollectionEmptyState.tsx` | ~50 | 收集为空时的空态（ui/EmptyState：心智一句 + 六种可收类型 chip + 微信次入口文案）；所有真实动作统一留在底部输入栏 |
+| `CollectionEmptyState.tsx` | ~95 | 收集为空时的空态：问候 + 四张自解释入口卡（上传/链接/写一句/录一段），直接触发底部 composer 的真实动作（文件选择器/聚焦输入/语音录制）+ 微信次入口文案 |
 | `ImageUpload.tsx` | ~220 | 图片上传 |
 | `Citations.tsx` | ~140 | 引用标签 |
 | `CitationReferenceSheet.tsx` | ~260 | 引用参考弹窗 |
@@ -121,7 +122,7 @@ components/
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `Header.tsx` | ~280 | 顶部导航栏 |
-| `DesktopSidebar.tsx` | ~374 | 桌面侧栏（默认 168px，折叠 52px；录课专注态强制 52px）；「今日情报」是常驻一级入口，可从任意工作区打开个人上下文与目标驱动的情报抽屉 |
+| `DesktopSidebar.tsx` | ~440 | 桌面侧栏（默认 168px，折叠 52px；录课专注态强制 52px）；「今日情报」是常驻一级入口，可从任意工作区打开个人上下文与目标驱动的情报抽屉；免费用户底部有安静的「开通会员」入口、用户菜单首行是会员项（按档位显示 开通/升级/续费），均直达 PaywallDialog——付费入口不藏在设置页 |
 | `AppLoading.tsx` | ~120 | 进入学习现场时的品牌过渡；只表达恢复状态和真实进度，不展示初始化、服务连接等工程阶段 |
 | `ModelSelector.tsx` | ~260 | AI 模型选择器 |
 | `WechatQrAuthDialog.tsx` | ~170 | 登录/设置复用的公众号原地扫码弹窗；状态由 `useWechatQrAuth` 驱动 |

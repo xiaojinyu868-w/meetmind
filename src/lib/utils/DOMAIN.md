@@ -18,7 +18,7 @@
 | `transcript-utils.ts` | 166 | 转录工具（格式化/合并/分块/相似度） | `formatTranscriptWithTimestamps`, `mergeTranscriptText`, `chunkTranscript` |
 | `time-utils.ts` | 132 | 时间格式化/解析 | `formatTimestamp`, `parseTimestamp`, `formatDurationMs` |
 | `rate-limit.ts` | 59 | API 速率限制中间件封装 | `applyRateLimit`, `withRateLimit` |
-| `public-routes.ts` | — | middleware 公共路由白名单与匹配函数；`/api/feed`、Tutor 对话/意图/学习理解与应用执行允许匿名请求，生成额度仍由 route 内 rate limit 控制 | `isPublicRoute` |
+| `public-routes.ts` | — | middleware 公共路由白名单与匹配函数；`/api/feed`、Tutor 对话/意图/学习理解与应用执行允许匿名请求，生成额度仍由 route 内 rate limit 控制；`/api/wechat/pay-notify` 无 Bearer，靠平台证书验签 | `isPublicRoute` |
 | `inline-app-retry.ts` | 23 | 内联应用执行的瞬时失败重试策略 | `shouldRetryInlineAppExecute`, `getInlineAppRetryDelayMs` |
 | `tutor-agent-provider.ts` | ~180 | Tutor Agent OpenAI-compatible provider 配置解析（按请求模型 / env 选择 StepFun、DeepSeek、DashScope 或 OpenAI；强制 Chat Completions；提供 provider fallback、15 秒首字熔断配置、可恢复错误分类与用户错误文案格式化） | `resolveTutorAgentProviderConfig`, `resolveTutorAgentProviderFallbacks`, `resolveTutorFirstTokenTimeoutMs`, `shouldFallbackTutorAgentError`, `formatTutorAgentUserError` |
 | `ai-model-preference.ts` | 19 | 设置页 AI 模型偏好 key 与 `auto` 解析 | `AI_MODEL_PREFERENCE_KEY`, `resolveExplicitAiModelPreference` |

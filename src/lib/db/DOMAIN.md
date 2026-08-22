@@ -12,7 +12,7 @@ hooks/services → lib/db → types
 - ✅ `hooks/` 和 `services/` 可以调用 `lib/db/`
 - ❌ `lib/db/` 不能 import `components/`, `hooks/`, `stores/`
 
-## Schema（12 张表）
+## Schema（14 张表）
 
 定义在 `schema.ts`：
 
@@ -29,6 +29,7 @@ hooks/services → lib/db → types
 | `preferences` | `key` | KV 偏好存储 |
 | `transcriptLexicon` | `term` | 转录专用词库 |
 | `tutorResponseCache` | `cacheKey` | Tutor 响应缓存 |
+| `lessonDigests` | `sessionId` | 课堂笔记缓存（v9 新表，signature = 段数+末段 endMs+图片 id 集合，签名一致时复用不打 LLM） |
 
 ## 文件索引
 
@@ -36,7 +37,7 @@ hooks/services → lib/db → types
 |------|------|------|
 | `schema.ts` | 312 | Dexie DB 定义 + 表类型 + 版本迁移 |
 | `sessions.ts` | 136 | 会话 CRUD |
-| `conversations.ts` | 208 | 对话历史 CRUD |
+| `conversations.ts` | 240 | 对话历史 CRUD + `reassignConversationOwner`（anonymous → 登录用户的归属迁移） |
 | `lexicon.ts` | 209 | 转录词库管理（种子/CRUD/编辑差分→自动晋升） |
 | `notes.ts` | 87 | 笔记 CRUD |
 | `tutor-cache.ts` | 69 | Tutor 响应缓存 |
@@ -47,4 +48,5 @@ hooks/services → lib/db → types
 | `keyframes.ts` | ~50 | 课中「截取这一页」关键帧 CRUD（v8 新表，timestampMs 与转录同轴，上传后回写 mediaUrl） |
 | `preferences.ts` | 24 | 偏好 KV 存储 |
 | `classroom-flows.ts` | ~40 | 按 sessionId 保存录课中已生成的课堂脉络，供课后应用矩阵直接复用，不在下课后重复生成 |
+| `lesson-digests.ts` | ~45 | 课堂笔记缓存 CRUD：按 sessionId 一份，内容签名变化时覆盖；随 deleteSession 级联删除 |
 | `index.ts` | 98 | barrel 导出 |

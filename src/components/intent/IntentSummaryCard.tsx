@@ -10,23 +10,33 @@
  */
 
 import { useState } from 'react';
-import { Check, X, RotateCcw } from 'lucide-react';
+import { Check, X } from 'lucide-react';
+import { COPY } from '@/lib/ui/copy';
 
 interface IntentSummaryCardProps {
   /** AI 提炼出的观察点列表 */
   points: string[];
+  /** 时间尺度角标（M15）：near 短期 / term 中期 / long 长期 */
+  horizon?: 'near' | 'term' | 'long';
   /** 已保存 */
   saved?: boolean;
   /** 保存接受的目标点 */
-  onAccept: (params: { title: string; summary?: string; acceptedPoints: string[]; rejectedPoints: string[] }) => Promise<void> | void;
+  onAccept: (params: { title: string; summary?: string; horizon?: 'near' | 'term' | 'long'; acceptedPoints: string[]; rejectedPoints: string[] }) => Promise<void> | void;
   /** 用户点"先放放" */
   onDismiss: () => void;
 }
 
 type PointState = 'pending' | 'accepted' | 'rejected';
 
+const HORIZON_LABEL: Record<'near' | 'term' | 'long', string> = {
+  near: COPY.intent.horizonNear,
+  term: COPY.intent.horizonTerm,
+  long: COPY.intent.horizonLong,
+};
+
 export function IntentSummaryCard({
   points,
+  horizon,
   saved = false,
   onAccept,
   onDismiss,
@@ -35,7 +45,6 @@ export function IntentSummaryCard({
   const [busy, setBusy] = useState(false);
 
   const acceptedCount = states.filter((s) => s === 'accepted').length;
-  const allResolved = states.every((s) => s !== 'pending');
 
   const togglePoint = (idx: number, state: PointState) => {
     setStates((prev) => prev.map((s, i) => (i === idx ? (s === state ? 'pending' : state) : s)));
@@ -54,7 +63,7 @@ export function IntentSummaryCard({
       // 合并接受的点为 title + summary
       const title = acceptedPoints[0].slice(0, 80);
       const summary = acceptedPoints.length > 1 ? acceptedPoints.slice(1).join('\n') : undefined;
-      await onAccept({ title, summary, acceptedPoints, rejectedPoints });
+      await onAccept({ title, summary, horizon, acceptedPoints, rejectedPoints });
     } finally {
       setBusy(false);
     }
@@ -81,9 +90,16 @@ export function IntentSummaryCard({
 
   return (
     <div className="rounded-2xl border border-divider bg-paper px-5 py-4 shadow-card">
-      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-muted mb-3">
-        我听到的 · 逐条确认
-      </p>
+      <div className="mb-3 flex items-center gap-2">
+        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-muted">
+          我听到的 · 逐条确认
+        </p>
+        {horizon ? (
+          <span className="inline-flex items-center rounded-full bg-pine-mist/50 px-2 py-0.5 text-[10.5px] font-medium text-pine">
+            {HORIZON_LABEL[horizon]}
+          </span>
+        ) : null}
+      </div>
 
       <div className="space-y-2">
         {points.map((point, idx) => {

@@ -440,6 +440,17 @@ export function useCollectionComposer(
       textarea.focus();
       const length = textarea.value.length;
       textarea.setSelectionRange(length, length);
+      // 可见反馈：触发点在屏幕中部（空态入口卡/菜单），输入卡在底部——
+      // 光聚焦太安静，给输入卡一圈 pine 脉冲把视线引过去。
+      textarea.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      const bar = textarea.closest('[data-composer-bar]');
+      if (bar) {
+        // 强制重排，让连续触发也能重播动画
+        bar.classList.remove('composer-attention');
+        void (bar as HTMLElement).offsetWidth;
+        bar.classList.add('composer-attention');
+        bar.addEventListener('animationend', () => bar.classList.remove('composer-attention'), { once: true });
+      }
     });
   }, [collectionComposerRef]);
 

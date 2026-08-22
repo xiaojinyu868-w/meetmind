@@ -177,8 +177,7 @@ async function main() {
   // 2. WebSocket
   console.log('\n--- WebSocket ---');
   await wsCheck('/api/asr-stream');
-  await wsCheck('/api/asr-stream-speaker');
-  await wsCheck('/api/tutor-call');
+  // 2026-08 下线：/api/asr-stream-speaker（腾讯实时分人实验）与 /api/tutor-call（实时语音通话）
 
   // 3. API：访客试听所需能力公开；用户数据写入仍需鉴权。
   console.log('\n--- API ---');

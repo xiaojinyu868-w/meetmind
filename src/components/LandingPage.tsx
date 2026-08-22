@@ -226,6 +226,7 @@ export function LandingPage() {
               </a>
             </div>
             <span className={styles.desktopMeta}>{copy.desktop.hotkeyHint} · v{DESKTOP_DOWNLOAD.version}</span>
+            <Link href="/help" className={`${styles.desktopSubLink} ${styles.desktopGuide}`}>{copy.desktop.guideAction}</Link>
             <span className={styles.desktopUnsigned}>{copy.desktop.unsignedNote}</span>
           </div>
         </section>

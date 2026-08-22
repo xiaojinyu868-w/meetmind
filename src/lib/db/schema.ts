@@ -207,6 +207,22 @@ export interface ConversationHistoryRecord {
   updatedAt: Date;
 }
 
+/**
+ * 课堂笔记（LessonDigest）缓存：按 sessionId 一份。
+ * signature 是内容签名（转录段数 + 末段 endMs + 图片 id 集合），
+ * 签名一致时直接复用缓存，不再请求 LLM。
+ * digest 的结构见 lib/services/lesson-digest-service 的 LessonDigest，
+ * db 层只做透明存储，不依赖 services 类型。
+ */
+export interface LessonDigestRecord {
+  id?: number;
+  sessionId: string;
+  signature: string;
+  digest: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface ConversationMessageRecord {
   id?: number;
   messageId: string;
@@ -229,6 +245,7 @@ export class MeetMindDB extends Dexie {
   classSummaries!: Table<ClassSummary>;
   notes!: Table<Note>;
   tutorResponseCache!: Table<TutorResponseCache>;
+  lessonDigests!: Table<LessonDigestRecord>;
   conversationHistory!: Table<ConversationHistoryRecord>;
   conversationMessages!: Table<ConversationMessageRecord>;
 
@@ -342,6 +359,23 @@ export class MeetMindDB extends Dexie {
       classSummaries: '++id, summaryId, sessionId, createdAt',
       notes: '++id, noteId, sessionId, studentId, source, createdAt',
       tutorResponseCache: '++id, anchorId, sessionId, timestamp, createdAt',
+      conversationHistory: '++id, conversationId, userId, type, sessionId, anchorId, [userId+type], updatedAt',
+      conversationMessages: '++id, messageId, conversationId, createdAt',
+    });
+
+    this.version(9).stores({
+      audioSessions: '++id, sessionId, userId, status, createdAt, [userId+createdAt]',
+      anchors: '++id, sessionId, timestamp, status, type',
+      keyframes: '++id, sessionId, timestampMs',
+      transcripts: '++id, sessionId, userId, startMs, isFinal',
+      transcriptLexicon: '++id, term, canonical, scope, status, hitCount, updatedAt, [scope+status], [scope+term]',
+      transcriptEditDiffs: '++id, originalText, correctedText, scope, hitCount, promoted, updatedAt, [scope+promoted], [scope+originalText+correctedText]',
+      preferences: 'key',
+      highlightTopics: '++id, topicId, sessionId, importance, createdAt',
+      classSummaries: '++id, summaryId, sessionId, createdAt',
+      notes: '++id, noteId, sessionId, studentId, source, createdAt',
+      tutorResponseCache: '++id, anchorId, sessionId, timestamp, createdAt',
+      lessonDigests: '++id, sessionId, updatedAt',
       conversationHistory: '++id, conversationId, userId, type, sessionId, anchorId, [userId+type], updatedAt',
       conversationMessages: '++id, messageId, conversationId, createdAt',
     });

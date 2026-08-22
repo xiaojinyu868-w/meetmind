@@ -3,7 +3,7 @@
  *
  * Pure functions, no React dependency.
  */
-import type { MindmapNode } from '@/lib/ai-native/plugins/mindmap.plugin';
+import type { MindmapNode } from '@/lib/ai-native/plugins/mindmap-tree';
 
 // ── Types ──────────────────────────────────────────────────────────
 

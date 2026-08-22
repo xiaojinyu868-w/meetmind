@@ -13,6 +13,7 @@ import {
   applyLessonUnderstanding,
   generateLessonUnderstanding,
 } from '@/lib/services/lesson-understanding-service';
+import { runWithMeterContext } from '@/lib/services/point-meter';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('classroom/understanding');
@@ -57,10 +58,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: '未找到课堂' }, { status: 404 });
     }
 
-    const understanding = await generateLessonUnderstanding({
-      transcriptSample: body.transcriptSample,
-      courseTitle: body.courseTitle,
-    });
+    const transcriptSample = body.transcriptSample;
+    const understanding = await runWithMeterContext(
+      { feature: 'understanding', userId: auth.sub, refType: 'understanding', refId: body.captureId },
+      () => generateLessonUnderstanding({
+        transcriptSample,
+        courseTitle: body.courseTitle,
+      }),
+    );
     if (!understanding) {
       // 宁缺毋滥：本次理解不达标，什么都不写，客户端保留现状
       return NextResponse.json({ success: true, skipped: true });

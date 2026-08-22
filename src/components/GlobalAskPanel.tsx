@@ -10,6 +10,9 @@ import { cn } from '@/lib/utils';
 import { COPY } from '@/lib/ui/copy';
 import { useLearningContext } from '@/hooks/useLearningContext';
 import { useGlobalAskHistory } from '@/hooks/useGlobalAskHistory';
+import { usePointsSummary } from '@/hooks/usePointsSummary';
+import { openPaywallForChatError, openPaywallGlobal, parseChatErrorPointsBlock } from '@/hooks/usePaywall';
+import { describePointsBlock } from '@/hooks/points-guard';
 import { useLearningMemoryDistillation } from '@/hooks/useLearningMemoryDistillation';
 import {
   createLearningThread,
@@ -64,10 +67,13 @@ export function GlobalAskPanel({
   initialView,
   memoryFocus,
 }: GlobalAskPanelProps) {
-  const { user, accessToken } = useAuth();
+  const { user, accessToken, isCheckingAuth } = useAuth();
   const userId = user?.id || 'anonymous';
   const learning = useLearningContext();
   const recordLearningActivity = learning.recordActivity;
+  // 免费档的深度模式（陪我学会）是 Pro/Max 专属：入口带 Pro 标识，提交时直接唤起会员页
+  const { summary: pointsSummary } = usePointsSummary();
+  const deepLocked = pointsSummary?.membership.tier === 'free';
   const sessionId = useSessionStore((state) => state.sessionId);
   const segments = useCaptureEditorStore((state) => state.segments);
   const sourceItems = useCollectionStore((state) => state.sourceItems);
@@ -166,7 +172,10 @@ export function GlobalAskPanel({
 
   const { messages, setMessages, sendMessage, status, stop, error } = useChat({
     transport,
+    // 402 积分/会员拦截（兜底：免费档深度模式在提交前已拦，这里防 quick 撞月熔断等）
+    onError: (chatError) => openPaywallForChatError(chatError),
   });
+  const pointsBlock = React.useMemo(() => parseChatErrorPointsBlock(error), [error]);
   const busy = status === 'submitted' || status === 'streaming';
   const latestMessage = messages[messages.length - 1];
   const latestText = latestMessage ? collectMessageText(latestMessage) : '';
@@ -218,6 +227,8 @@ export function GlobalAskPanel({
 
   const history = useGlobalAskHistory({
     open,
+    // auth 初始化完成前不恢复/不持久化：避免先以 anonymous 落库、auth 解析后 userId 变化触发重跑把对话清空
+    authReady: !isCheckingAuth,
     userId,
     depth: effectiveDepth,
     busy,
@@ -293,13 +304,18 @@ export function GlobalAskPanel({
 
   const submitText = React.useCallback((text: string) => {
     if (busy || intentBusy) return;
+    if (effectiveDepth === 'deep' && deepLocked) {
+      // 免费档点深度模式：不打请求（服务端 402 membership_required 兜底），直接唤起会员页
+      openPaywallGlobal({ reason: 'membership_required', requiredTier: 'pro' });
+      return;
+    }
     if (effectiveDepth === 'deep' && !activeIntent) {
       void prepareDeepIntent(text);
       return;
     }
     sendMessage({ text });
     fileUpload.clear();
-  }, [activeIntent, busy, effectiveDepth, fileUpload, intentBusy, prepareDeepIntent, sendMessage]);
+  }, [activeIntent, busy, deepLocked, effectiveDepth, fileUpload, intentBusy, prepareDeepIntent, sendMessage]);
 
   const composer = useChatComposer({
     draftKey: 'global-ask',
@@ -416,6 +432,7 @@ export function GlobalAskPanel({
               emptyState={
                 <GlobalAskWelcome
                   depth={effectiveDepth}
+                  deepLocked={deepLocked}
                   activeThread={learning.activeThread}
                   composer={renderComposer(true)}
                   contextSummary={contextSummary}
@@ -466,7 +483,7 @@ export function GlobalAskPanel({
             />
           ) : null}
           {showThinking ? <ChatThinkingStripBubble label={COPY.globalAsk.thinking} avatar={<OctoAvatar mood="thinking" size="sm" aura />} /> : null}
-          {error ? <div className="rounded-xl border border-vermilion/15 bg-vermilion-fog px-4 py-3 text-[12.5px] text-vermilion">{COPY.globalAsk.responseError}</div> : null}
+          {error ? <div className="rounded-xl border border-vermilion/15 bg-vermilion-fog px-4 py-3 text-[12.5px] text-vermilion">{pointsBlock ? describePointsBlock(pointsBlock) : COPY.globalAsk.responseError}</div> : null}
             </ChatMessageList>
 
             {!showWelcome ? renderComposer(false) : null}

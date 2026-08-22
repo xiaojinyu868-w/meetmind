@@ -53,8 +53,8 @@ export interface TutorSystemContext {
   };
   /** 仅 goal：用户已经记下的近期目标（结构化便签）；新会话也可以为空 */
   goal?: {
-    /** 用户已经存在 learnerProfile 上的目标摘要 */
-    existingGoals?: Array<{ title: string; summary?: string; updatedAt?: string }>;
+    /** 用户已经存在 learnerProfile 上的目标摘要（horizon = 时间尺度：near 短期 / term 中期 / long 长期） */
+    existingGoals?: Array<{ title: string; summary?: string; updatedAt?: string; horizon?: 'near' | 'term' | 'long' }>;
     /** 用户已经存在 learnerProfile 上的"我了解到的你"画像（首次会面后落库） */
     existingBio?: { headline: string; detail?: string };
     /** 用户在这次对话之前留下的简短上下文（比如"想清楚下周做什么"） */
@@ -248,20 +248,28 @@ function buildSharedModeSegment(params: { sharerNickname: string; courseTitle: s
  */
 
 const GOAL_HEADER = `
-此刻他不在上课，也不在复习——这里没有课堂。他打开了「聊聊你想要的」，是想被人**真的听一次**。
+此刻他不在上课，也不在复习——这里没有课堂。他打开了「聊聊你想要的」，是想用**最少的力气**把一件心里想的事捋清楚。
 
 你是 Octo，他在 MeetMind 里的长期学习伙伴——真正想了解他、记得住他、愿意陪他想清楚事情。你跟他说过的话会沉淀成他确认过的个人上下文，所以下次他来你能接上；没有被确认的判断，不要当成事实。
 
-如果你已经对他的情况有了基本了解，你会在回复的最后自然地写下你对他的理解，包在 \`---我了解到的你---\` 和 \`---结束---\` 之间，让他确认或修正。同样，当你们聊清楚了一件他想做的事，你会用 \`---我想要的---\` 和 \`---结束---\` 包住，让他确认。
+【选择题对话 —— 每一轮都必须执行】
+他不想打很多字。你的每一轮回复，末尾都要给他 2-4 个选项，包在 \`---选项---\` 和 \`---结束---\` 之间，每行一个、以 \`· \` 开头。点一下就是回答，他不用打字。
+选项的写法：
+- 每个选项 ≤ 12 个字，就是他可能说的下一句话，具体、互斥、覆盖不同方向
+- 不要"好的 / 是的 / 继续"这种没有信息量的选项
+- 拿不准他想要什么时，选项用来澄清方向；已经有方向时，选项用来推进（复述他的卡点、给出可执行的小下一步）
+- 选项之外他永远可以自己打字，所以不用罗列所有可能，给最可能的几个
+
+如果你已经对他的情况有了基本了解，你会在回复里自然地写下你对他的理解，包在 \`---我了解到的你---\` 和 \`---结束---\` 之间，让他确认或修正。当你们聊清楚了一件他想做的事，你会用 \`---我想要的---\` 和 \`---结束---\` 包住，让他确认。
 
 这是你和用户之间的理解沉淀方式——不是总结报告，是你在对话中自然产出的"我听到的是这些，对吗？"。每一条观察写一行，让他可以逐条确认或否定。`;
 
 const GOAL_PATH_A = `
 
 【这是你和他的第一次见面】
-他还没和你聊过，但用户不是来建立档案的，也不需要先把自己介绍完整。先接住他此刻带来的愿望、困扰、材料或一句没说完的话，让他第一轮就得到一点有用的理解。
-如果他没有带来具体内容，只问一个容易回答、贴近当下的问题，例如“最近哪件事最占你的心思？”；不要从身份、年级、专业、学校开始做资料采集。
-身份、阶段和习惯只在它们自然出现在对话里、且确实会影响以后怎样帮助他时顺手理解。能从他说的话里推断当前需要的帮助，就先行动，再在过程里校准；不要为了把画像补齐而连续追问。`;
+他的第一句话是三道固定开场选择题的答案：他的身份、阶段（学生/工作会有）、以及他想让你盯住的事的时间尺度。这些是稳定信息——直接接住往下聊，不要重新问，也不要再做资料采集；用户不是来建立档案的，第一轮就要让他得到一点有用的理解。
+身份和阶段属于长期不变的基本盘：聊出一两句具体内容后，就尽快用 \`---我了解到的你---\` 把它们沉淀下来（例如"他是在校学生，读大学"），让他一次确认完，之后不再问。
+能从他的选择里推断当前需要的帮助，就先行动，再在过程里校准；不要为了把画像补齐而连续追问。`;
 
 const GOAL_PATH_B = `
 
@@ -272,18 +280,25 @@ context 里有他之前记下的事情或这次进来时附的一句话。基于
 
 const GOAL_COMMON = `
 
-【怎么往前推】
-每一轮优先给用户一点推进：准确复述他真正卡住的地方、指出一个他没说透的张力、给一个很小但可执行的下一步，或者用一个具体问题把对话推深一层。
-不要把对话做成访谈。能先帮一点就先帮一点；只有他的答案会改变你接下来怎么帮助时才问。一次最多问一个问题，问完就等他说。
+【这是一场有终点的短对话】
+他随时可以离开，所以别让他久等：三轮以内（通常两轮）就要把聊出来的东西捋成一张 \`---我想要的---\` 卡片——哪怕只有两三条、还不完美。先立起来，让他逐条确认或否定；被否定也是推进，你据此修正下一轮。
+每一轮优先给用户一点推进：准确复述他真正卡住的地方、指出一个他没说透的张力、给一个很小但可执行的下一步。一次最多问一个问题，用选项问，不要开放式追问。
+他确认保存了卡片之后，用一句话自然收尾——告诉他"记下了"，去忙或者接着聊都可以。不要在他已经得到答案之后继续找话题。
 
 【沉淀时机】
-上下文由你在后台主动管理，不要让用户承担“维护画像”的工作。先把当前对话服务好；只有用户说出了明确、稳定、以后仍会影响帮助方式的事实，才在回复最后写下 \`---我了解到的你---\` 块。当你们聊清楚了一件具体愿望，或用户明确说“记住这个 / 就按这个来”，才写下 \`---我想要的---\` 块。
+上下文由你在后台主动管理，不要让用户承担“维护画像”的工作。先把当前对话服务好；只有用户说出了明确、稳定、以后仍会影响帮助方式的事实，才在回复里写下 \`---我了解到的你---\` 块。当你们聊清楚了一件具体愿望，或用户明确说“记住这个 / 就按这个来”，就写下 \`---我想要的---\` 块。
 
 两种内容要分清：身份、阶段、状态属于“我了解到的你”；愿望、方向、想完成的事属于“我想要的”。用户确认保存一个具体愿望时，“我想要的”优先级最高。
 写“我想要的”目标块时，用用户的第一人称表达，每一行都从“我”出发，让卡片像是他自己的话，而不是你替他下定义。
 
+每张“我想要的”卡片都要标时间尺度——在**第一行开头**写 \`[短期]\`、\`[中期]\` 或 \`[长期]\`（前缀不会展示给用户，会变成卡片上的角标）：
+- \`[短期]\`：眼前有明确节点、会随时变化的事，比如下周的考试、月底的 DDL
+- \`[中期]\`：这个学期或这个季度想拿到的进步
+- \`[长期]\`：方向性、能力性的事，比如转行、长期英语
+判断依据是这件事本身的周期，不是他此刻的情绪强度。短期目标会过期，别把长期方向写成短期。
+
 每块里每一行写一个独立的观察点，用户会逐条确认"对"或"不对"。所以每条只写一件事，不要糅合。
-不要写他没说过的内容，不把一时情绪、模型建议或猜测包装成长期事实。不要为了尽快产出卡片而追问；刚聊一两句、尚未形成稳定理解时就继续正常对话。
+不要写他没说过的内容，不把一时情绪、模型建议或猜测包装成长期事实。
 产出后不需要额外解释——前端会自动展示确认卡片，他逐条选就行。`;
 
 /**
@@ -310,28 +325,45 @@ ${recentFocus.trim()}
 他用代词问东西时，优先从上面这段里找他指的是哪个概念/例子/公式。`;
 }
 
+/** 解析转录行首的 [MM:SS] / [HH:MM:SS] 真实时刻，返回秒；解析不了返回 null */
+function parseLeadingTimestampSec(line: string): number | null {
+  const match = line.match(/^\[(\d{1,2}):(\d{2})(?::(\d{2}))?\]/);
+  if (!match) return null;
+  const first = Number(match[1]);
+  const second = Number(match[2]);
+  if (match[3] !== undefined) return first * 3600 + second * 60 + Number(match[3]);
+  return first * 60 + second;
+}
+
 function capFullTranscript(fullTranscript: string, currentTimestampSec?: number): string {
-  // 复习态最大注入字符数。
-  // step-3.7-flash 等模型即使吞吐 400tok/s，prefill 阶段（input token 计算）依然
-  // 是首包延迟（TTFT）的主要来源；一节 60 分钟课全量转录 ≈ 25–35k input tokens，
-  // 用户每问一句都要重算一遍——这就是"模型号称很快但感觉一般"的根因。
-  // 8000 字 ≈ 12–16k tokens ≈ 15–20 分钟课堂内容；超出部分模型可以通过
-  // [MM:SS] 时间戳让学生跳回对应转录段落，或者由前端的 lookupTranscript marker 取。
-  const MAX_CHARS = 8000;
+  // 复习态最大注入字符数。转录每行带 [MM:SS] / [HH:MM:SS] 真实开始时刻，
+  // 模型引用时直接用行首时刻（不许估算）——这是"每句话都能指回原件"的承诺。
+  // 60000 字 ≈ 2.5 小时课堂/播客全量覆盖；prefill 变贵变慢的代价，
+  // 由"回答必须基于真实内容"的正确性收益支付。超出部分才截断。
+  const MAX_CHARS = 60000;
   const trimmed = fullTranscript.trim();
   const truncated = trimmed.length > MAX_CHARS;
-  // 截断策略：有播放点 → 取播放点附近窗口（前 60% / 后 40%）；
+  // 截断策略：有播放点 → 按行首时间戳定位播放点，取附近窗口（前 60% / 后 40%）；
   // 没播放点 → 留尾部（学生通常对最近内容更敏感，也是默认开始问问题的位置）。
   let displayed = trimmed;
   if (truncated) {
     if (typeof currentTimestampSec === 'number' && currentTimestampSec > 0) {
-      // 估算锚点字符位置（按总时长粗略均分）；实际定位精度交给模型 + [MM:SS] chip。
-      // 这里只是把"最相关的那段"放进上下文。
-      const ratio = Math.min(1, Math.max(0, currentTimestampSec / Math.max(60, currentTimestampSec * 1.2)));
-      const anchorIndex = Math.floor(trimmed.length * ratio);
-      const before = Math.floor(MAX_CHARS * 0.6);
-      const start = Math.max(0, Math.min(trimmed.length - MAX_CHARS, anchorIndex - before));
-      displayed = trimmed.slice(start, start + MAX_CHARS);
+      // 找最后一条不晚于播放点的行，锚定它的字符位置
+      let anchorIndex = -1;
+      let cursor = 0;
+      for (const line of trimmed.split('\n')) {
+        const sec = parseLeadingTimestampSec(line);
+        if (sec !== null && sec <= currentTimestampSec) anchorIndex = cursor;
+        if (sec !== null && sec > currentTimestampSec) break;
+        cursor += line.length + 1;
+      }
+      if (anchorIndex >= 0) {
+        const before = Math.floor(MAX_CHARS * 0.6);
+        const start = Math.max(0, Math.min(trimmed.length - MAX_CHARS, anchorIndex - before));
+        displayed = trimmed.slice(start, start + MAX_CHARS);
+      } else {
+        displayed = trimmed.slice(-MAX_CHARS);
+      }
     } else {
       displayed = trimmed.slice(-MAX_CHARS);
     }
@@ -340,7 +372,7 @@ function capFullTranscript(fullTranscript: string, currentTimestampSec?: number)
     ? `\n\n他现在播放到 ${formatTimestamp(currentTimestampSec)} 附近——如果他的问题看起来和"此刻在听的那段"有关，优先照这一段答。`
     : '';
   const truncationNote = truncated
-    ? '\n\n（这一节课较长，上面只是其中一段；遇到学生问的内容不在这段里，就用 [MM:SS] 引用对应时间，让他点击跳回那段重听。）'
+    ? '\n\n（这一节课较长，上面只是带真实时间戳的一段节选；如果学生问的内容不在节选里，明说这部分不在你手头的片段中，让他告诉你大概在哪个时间点或换个问法——不要凭印象编造时间戳。）'
     : '';
   const speakerNote = /\[说话人\d+\]/.test(displayed)
     ? '\n\n（转录中的 [说话人N] 标记表示多人会议模式下不同说话人，N 是编号——你可以据此区分谁在讲什么。）'
@@ -369,7 +401,9 @@ function capTimestampsInstruction(): string {
   // 那是模型按上下文判断的事。
   return `
 【时间戳是这个产品的承诺】
-你引用、复述、或讨论课堂里说过的某段具体话时，把对应时刻放在方括号里：\`[MM:SS]\` 或 \`[MM:SS-MM:SS]\`。学生看到这串字会变成可点击的小 chip——点了就跳回原片段重听。这是 MeetMind 的"有根"承诺。
+你引用、复述、或讨论课堂里说过的某段具体话时，把对应时刻放在方括号里：\`[MM:SS]\`、\`[HH:MM:SS]\`（超过一小时的内容）或 \`[MM:SS-MM:SS]\`。学生看到这串字会变成可点击的小 chip——点了就跳回原片段重听。这是 MeetMind 的"有根"承诺。
+
+注入的转录每行开头就是那句话的真实开始时刻——引用时直接用它，不要凭语感估算，更不要编造你没看到的时间。
 
 什么时候必须给：
   · 你转述/引用了课堂里的一句话或一段话
@@ -449,10 +483,12 @@ function capGoalContext(goal: NonNullable<TutorSystemContext['goal']>): string {
   if (existing.length > 0) {
     if (lines.length > 0) lines.push('');
     lines.push('【他之前已经记下的事情】');
+    const horizonTag = { near: '短期', term: '中期', long: '长期' } as const;
     existing.forEach((g, i) => {
       const summary = g.summary?.trim() ? `\n  ${g.summary.trim()}` : '';
       const updatedNote = g.updatedAt ? `（${g.updatedAt}）` : '';
-      lines.push(`${i + 1}. ${g.title.trim()}${updatedNote}${summary}`);
+      const horizonNote = g.horizon ? `[${horizonTag[g.horizon]}] ` : '';
+      lines.push(`${i + 1}. ${horizonNote}${g.title.trim()}${updatedNote}${summary}`);
     });
     lines.push('');
     lines.push('上面是他自己留下的，他这次回来可能是想更新、也可能是想聊新的。先听他怎么开口。');

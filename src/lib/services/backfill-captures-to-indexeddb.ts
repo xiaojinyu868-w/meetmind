@@ -81,6 +81,8 @@ export interface BackfillNote {
 export interface BackfillCandidate {
   sessionId: string;
   title: string;
+  /** 服务端 metadata.titleSource === 'user'：用户手动改过的标题，回填不得覆盖 */
+  titleLocked?: boolean;
   mediaUrl?: string;
   sourceType: 'recording' | 'video-link' | 'video-file';
   mimeType: string;
@@ -256,9 +258,16 @@ export function extractBackfillCandidate(
       : typeof meta.durationSec === 'number' ? meta.durationSec * 1000
         : segments[segments.length - 1]?.endMs || 0;
 
+  // 服务端已有正规化证据（WorkspaceTranscriptSegment 表）时，绝不用列表里的
+  // normalizedText 造「单段兜底」——列表 API 会把 normalizedText 截断加省略号，
+  // 固化进 IndexedDB 后路径 A 永远命中这份降级数据，真实分段永远拉不回来。
+  // 候选带空 segments 继续走：课堂占位/锚点/笔记仍回填，转录等用户打开时
+  // 由 evidence endpoint 懒拉真实分段（page.tsx 的降级检测会强制走路径 B）。
+  const evidenceAvailable = meta.evidenceAvailable === true;
+
   // 兼容已经同步到服务端、但来自旧 migration-v1 的课堂：至少把汇总转录恢复成一段，
   // 用户换设备后仍能阅读和追问，不显示空课堂。
-  if (segments.length === 0 && capture.normalizedText?.trim()) {
+  if (segments.length === 0 && !evidenceAvailable && capture.normalizedText?.trim()) {
     segments.push({
       text: capture.normalizedText.trim(),
       startMs: 0,
@@ -267,7 +276,7 @@ export function extractBackfillCandidate(
       isFinal: true,
     });
   }
-  if (segments.length === 0) return null;
+  if (segments.length === 0 && !evidenceAvailable) return null;
 
   const isVideo = capture.contentType === 'video';
   const rawSourceMode = optionalString(meta.sourceMode) || optionalString(meta.importSourceMode);
@@ -281,7 +290,8 @@ export function extractBackfillCandidate(
   return {
     sessionId,
     title: capture.title || '课堂录音',
-    mediaUrl: capture.mediaUrl || undefined,
+    titleLocked: meta.titleSource === 'user',
+    mediaUrl: capture.mediaUrl || optionalString(meta.audioUrl),
     sourceType: isVideo ? (capture.sourceUrl ? 'video-link' : 'video-file') : 'recording',
     mimeType: isVideo ? (capture.sourceUrl ? 'video/link' : 'video/mp4') : 'audio/webm',
     videoUrl: isVideo ? capture.sourceUrl || optionalString(meta.originalUrl) : undefined,
@@ -338,6 +348,7 @@ export async function backfillCapturesToIndexedDB(
 
   // 预取本地已有数据的 sessionId，逐类补缺，不覆盖这台设备上更近的编辑。
   let localTranscriptSessionIds: Set<string>;
+  let localTranscriptCounts: Map<string, number>;
   let localAnchorSessionIds: Set<string>;
   let localSummarySessionIds: Set<string>;
   let localHighlightSessionIds: Set<string>;
@@ -351,12 +362,17 @@ export async function backfillCapturesToIndexedDB(
       db.notes.toArray(),
     ]);
     localTranscriptSessionIds = new Set(transcripts.map((row) => row.sessionId));
+    localTranscriptCounts = new Map();
+    for (const row of transcripts) {
+      localTranscriptCounts.set(row.sessionId, (localTranscriptCounts.get(row.sessionId) || 0) + 1);
+    }
     localAnchorSessionIds = new Set(anchors.map((row) => row.sessionId));
     localSummarySessionIds = new Set(summaries.map((row) => row.sessionId));
     localHighlightSessionIds = new Set(highlights.map((row) => row.sessionId));
     localNoteSessionIds = new Set(notes.map((row) => row.sessionId));
   } catch {
     localTranscriptSessionIds = new Set();
+    localTranscriptCounts = new Map();
     localAnchorSessionIds = new Set();
     localSummarySessionIds = new Set();
     localHighlightSessionIds = new Set();
@@ -395,8 +411,11 @@ export async function backfillCapturesToIndexedDB(
       } else if (existing.id && (
         (!existing.mediaUrl && cand.mediaUrl)
         || (cand.sourceType !== 'recording' && existing.sourceType !== cand.sourceType)
+        || (!cand.titleLocked && cand.title && existing.topic !== cand.title)
       )) {
         // 修复旧版回填留下的普通录音占位：视频必须恢复视频身份，否则会误进音频复习态。
+        // 服务端标题更新（如播客转写完成后的「播客名 - 单集名」）同步到本地课堂列表；
+        // 用户手动改过的标题（titleSource='user'）不覆盖。
         await db.audioSessions.update(existing.id, {
           mediaUrl: existing.mediaUrl || cand.mediaUrl,
           sourceType: cand.sourceType,
@@ -406,10 +425,18 @@ export async function backfillCapturesToIndexedDB(
           videoProvider: cand.videoProvider,
           thumbnailUrl: cand.thumbnailUrl,
           importSourceMode: cand.importSourceMode,
+          ...(!cand.titleLocked && cand.title ? { topic: cand.title } : {}),
           updatedAt: new Date(),
         });
       }
-      if (!localTranscriptSessionIds.has(cand.sessionId)) {
+      const localSegmentCount = localTranscriptCounts.get(cand.sessionId) || 0;
+      // 自愈：本地只有 ≤1 段（早期版本把截断的 normalizedText 固化成的「单段兜底」），
+      // 而候选带来真实多段时，清掉降级数据重写。用户真实编辑过的课堂（多段）不覆盖。
+      const localTranscriptDegraded = localSegmentCount <= 1 && cand.segments.length > 1;
+      if (cand.segments.length > 0 && (!localTranscriptSessionIds.has(cand.sessionId) || localTranscriptDegraded)) {
+        if (localTranscriptDegraded) {
+          await db.transcripts.where('sessionId').equals(cand.sessionId).delete();
+        }
         // addTranscripts 内部会把 session.transcriptionStatus 设为 completed
         await addTranscripts(
           cand.sessionId,
@@ -424,6 +451,7 @@ export async function backfillCapturesToIndexedDB(
           })),
         );
         localTranscriptSessionIds.add(cand.sessionId);
+        localTranscriptCounts.set(cand.sessionId, cand.segments.length);
         wroteAnything = true;
       }
 
@@ -506,6 +534,20 @@ export async function backfillCapturesToIndexedDB(
 /** 仅供测试：重置幂等标记 */
 export function __resetBackfillGuard() {
   processedSessionIds.clear();
+}
+
+/**
+ * 本地转录是否只是「单段兜底」的降级数据（早期版本把列表截断的 normalizedText
+ * 固化成 1 个覆盖全时段的 segment）。是的话应改走 evidence 懒拉替换，
+ * 而不是直接恢复这份没有时间戳、结尾带省略号的数据。
+ */
+export async function isDegradedLocalTranscript(sessionId: string): Promise<boolean> {
+  try {
+    const count = await db.transcripts.where('sessionId').equals(sessionId).count();
+    return count <= 1;
+  } catch {
+    return false;
+  }
 }
 
 function parsePortableDate(value: string | undefined, fallback: string): Date {

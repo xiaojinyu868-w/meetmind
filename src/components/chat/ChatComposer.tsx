@@ -4,8 +4,7 @@
  * 职责（Presentational + 极少状态）：
  *   - 渲染附件 chip 行
  *   - 渲染 textarea（接 useChatComposer 的 textareaProps）
- *   - 渲染发送 / 停止 / 麦克风 / 上传 / 切通话 5 个按钮
- *   - 渲染拖拽时的 overlay（isDragging）
+ *   - 渲染发送 / 停止 / 麦克风 / 上传 / 切通话 5 个按钮 + 拖拽 overlay（isDragging）
  *
  * 不做的事（交给 caller）：
  *   - 不持有 textarea 状态（来自 useChatComposer）
@@ -20,7 +19,7 @@
 'use client';
 
 import * as React from 'react';
-import { Send, Paperclip, Phone, Trash2, FileText, Image as ImageIcon, Music, Video, RefreshCw, WifiOff } from 'lucide-react';
+import { Send, Paperclip, Phone, Trash2, FileText, Image as ImageIcon, Music, Video, RefreshCw, WifiOff, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VoiceMicButton } from '@/components/VoiceMicButton';
 import type { AttachedFile } from './hooks/useChatFileUpload';
@@ -78,6 +77,9 @@ export interface ChatComposerProps {
 
   /** 麦克风识别后回填到 textarea —— 由 caller 处理（拼接到 useChatComposer.value 里） */
   onVoiceTranscript?: (text: string) => void;
+
+  /** 语音占位 tooltip：capabilities.mic=true 但不给 onVoiceTranscript 时渲染 disabled 麦克风按钮 */
+  micDisabledHint?: string;
 
   /** 能力开关 */
   capabilities?: ChatComposerCapabilities;
@@ -142,6 +144,7 @@ export function ChatComposer({
   isDragging,
   onCallStart,
   onVoiceTranscript,
+  micDisabledHint,
   capabilities,
   placeholder = '说点什么…',
   busyPlaceholder = '同学在想…',
@@ -154,8 +157,8 @@ export function ChatComposer({
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const caps: ChatComposerCapabilities = capabilities ?? {};
   const showFile = Boolean(caps.file && onAddFiles);
-  const showMic = Boolean(caps.mic && onVoiceTranscript);
   const showCall = Boolean(caps.call && onCallStart);
+  const showMic = Boolean(caps.mic && onVoiceTranscript);
 
   // M14.5: 全局快捷键（⌘K / Ctrl+K / "/" 聚焦 textarea）
   // 课堂同桌特有；其他面板默认关闭以免和编辑器/快捷键冲突
@@ -443,6 +446,13 @@ export function ChatComposer({
               size="sm"
               dark={variant === 'glass'}
             />
+          ) : null}
+          {/* 语音占位：mic 能力开了但没给回调 = 决策延后，禁用按钮 + tooltip */}
+          {!showMic && caps.mic ? (
+            <button type="button" disabled title={micDisabledHint} aria-label={micDisabledHint ?? '语音输入'}
+              className="inline-flex h-8 w-8 shrink-0 cursor-not-allowed items-center justify-center self-center rounded-full text-ink-muted opacity-45">
+              <Mic size={16} strokeWidth={1.8} />
+            </button>
           ) : null}
         </div>
 

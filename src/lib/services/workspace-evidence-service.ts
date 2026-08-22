@@ -82,8 +82,10 @@ function normalizeSegments(
   metadata: Record<string, unknown>,
   normalizedText?: string | null,
 ): NormalizedEvidenceSegment[] {
+  // 句级分段密度约 12 段/分钟：6 小时长音频约 4300 段，上限留足余量防呆即可，
+  // 不能再出现 100 分钟播客被砍掉最后几分钟的情况。
   const rawSegments = Array.isArray(metadata.transcriptSegments)
-    ? metadata.transcriptSegments.slice(0, 1200)
+    ? metadata.transcriptSegments.slice(0, 10000)
     : [];
   const segments = rawSegments.flatMap((item, position) => {
     const segment = asRecord(item);
@@ -171,8 +173,26 @@ export async function syncWorkspaceCaptureEvidence(params: {
   const owns = (key: typeof WORKSPACE_EVIDENCE_METADATA_KEYS[number]) => (
     Object.prototype.hasOwnProperty.call(params.metadata, key)
   );
-  const replaceSegments = owns('transcriptSegments') || params.metadata.evidenceAvailable !== true;
+  const ownsSegments = owns('transcriptSegments');
   const segments = normalizeSegments(params.metadata, params.normalizedText);
+
+  // 证据单调递增护栏：分段表只许「补全」，不许「回退」。
+  // 客户端持久化只带 500 段快照 + normalizedText 摘要片段，而服务端可能已有
+  // enrich 管线写入的全量分段——没有这道护栏，一次轻量回刷就会把全量证据
+  // 删成 1 条整段兜底（真实案例：100 分钟播客 752 段被回刷成 1 段）。
+  let replaceSegments = ownsSegments || params.metadata.evidenceAvailable !== true;
+  if (replaceSegments) {
+    const existingCount = await prisma.workspaceTranscriptSegment.count({
+      where: { captureId: params.captureId },
+    });
+    if (ownsSegments) {
+      // 显式带分段：只允许同等或更完整的覆盖（重导入补全场景放行）
+      if (existingCount > 1 && segments.length < existingCount) replaceSegments = false;
+    } else if (existingCount > 0) {
+      // 没带分段 = normalizedText 兜底单段：只允许补空表，永不覆盖已有分段
+      replaceSegments = false;
+    }
+  }
   const artifacts = collectArtifacts(params.metadata, sessionId);
   const artifactKindsToReplace = [
     owns('anchors') ? 'anchor' : null,

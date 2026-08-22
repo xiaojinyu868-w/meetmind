@@ -117,6 +117,9 @@ import {
   INLINE_APP_MAX_ATTEMPTS,
   shouldRetryInlineAppExecute,
 } from '@/lib/utils/inline-app-retry';
+import { parsePointsBlock, describePointsBlock } from '@/hooks/points-guard';
+import { openPaywallGlobal } from '@/hooks/usePaywall';
+import { notifyPointsChanged } from '@/hooks/usePointsSummary';
 import {
   buildQuestionWithQuizContext,
   upsertQuizAttempt,
@@ -420,6 +423,29 @@ export function useClassroomCompanion(
                   : m,
               ),
             );
+            // 应用生成会扣积分，让头部 chip / 设置页静默刷新余额
+            notifyPointsChanged();
+            return;
+          }
+
+          // 402 积分拦截：余额不足 / 本月成本到顶。不重试，气泡给一句
+          // 安静的说明（含当前余额与下月发放），并刷新余额展示。
+          const pointsBlock = parsePointsBlock(response.status, data);
+          if (pointsBlock) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === messageId
+                  ? { ...m, inlineApp: { appKey, status: 'error' as const, error: describePointsBlock(pointsBlock) } }
+                  : m,
+              ),
+            );
+            notifyPointsChanged();
+            // 高意向截断：余额不足（登录用户）同步唤起付费页；会员闸门弹会员 Tab；guest 限额/月熔断不弹
+            if (pointsBlock.kind === 'insufficient_points') {
+              openPaywallGlobal({ reason: 'insufficient_points', balance: pointsBlock.balance, required: pointsBlock.required });
+            } else if (pointsBlock.kind === 'membership_required') {
+              openPaywallGlobal({ reason: 'membership_required', requiredTier: pointsBlock.requiredTier });
+            }
             return;
           }
 
@@ -769,6 +795,30 @@ export function useClassroomCompanion(
         return;
       }
       const rawErrMsg = err instanceof Error ? err.message : '我这边网络好像不太好';
+      // 402 积分拦截：fetchUIMessageStream 会把 status/body 附在 Error 上。
+      // 按 Taste 约束不弹 toast，把说明揉进一句同学的话里（含余额与下月发放）。
+      const streamErr = err as (Error & { status?: number; body?: unknown }) | null;
+      const pointsBlock = streamErr ? parsePointsBlock(streamErr.status ?? 0, streamErr.body) : null;
+      if (pointsBlock) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: streamId,
+            role: 'companion',
+            content: describePointsBlock(pointsBlock),
+            createdAt: Date.now(),
+          },
+        ]);
+        setStreamingMessage(null);
+        notifyPointsChanged();
+        // 高意向截断：余额不足（登录用户）同步唤起付费页；会员闸门弹会员 Tab；guest 限额/月熔断不弹
+        if (pointsBlock.kind === 'insufficient_points') {
+          openPaywallGlobal({ reason: 'insufficient_points', balance: pointsBlock.balance, required: pointsBlock.required });
+        } else if (pointsBlock.kind === 'membership_required') {
+          openPaywallGlobal({ reason: 'membership_required', requiredTier: pointsBlock.requiredTier });
+        }
+        return;
+      }
       // M14.5.3: 错误清洁——nginx 500 HTML / 长 stack 不能直接渲染进气泡
       const errMsg = (() => {
         const trimmed = String(rawErrMsg).trim();

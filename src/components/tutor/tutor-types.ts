@@ -1,5 +1,9 @@
-import { AVAILABLE_MODELS, DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
+import { LLMConfig } from '@/lib/config/app.config';
 import type { GuidanceQuestion as GuidanceQuestionType, Citation } from '@/types/dify';
+
+// 直接从配置层取模型注册表，避免经 llm-service 把服务端依赖（prisma 计量等）拉进客户端 bundle
+const AVAILABLE_MODELS = LLMConfig.models;
+const DEFAULT_WORKSHOP_MODEL_ID = LLMConfig.workshopModel;
 
 // 持久化状态的 key
 export const TUTOR_STATE_KEY = 'tutor_last_state';

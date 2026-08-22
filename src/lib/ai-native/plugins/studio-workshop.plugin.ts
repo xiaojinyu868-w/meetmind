@@ -127,7 +127,7 @@ export const studioWorkshopPlugin: AppPlugin = {
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
     const mode = detectMode(context.goal.intent, context.goal.appKey);
     const promptContext = buildPromptTranscriptContext(context.input.transcript, {
-      maxChars: 8_000,
+      maxChars: 48_000,
       includeIndex: true,
       includeTimestamp: false,
       minCharsPerSegment: 56,

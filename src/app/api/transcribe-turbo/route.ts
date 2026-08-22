@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import * as fs from 'fs';
 import * as path from 'path';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
@@ -11,6 +11,7 @@ import {
   safeUnlink,
 } from '@/lib/services/media-tooling';
 import { createLogger } from '@/lib/logger';
+import { isNextGenAsrModel } from '@/lib/services/qwen-asr-tasks';
 const log = createLogger('transcribe-turbo');
 
 
@@ -266,6 +267,15 @@ function extractTextFromSyncResponse(payload: unknown): string {
     return directText.trim();
   }
 
+  // 新族 qwen-audio-3.0-asr-flash 的同步响应非标准多模态结构：
+  // 文本还可能在 output.output.sentence.text
+  const nestedOutput = output?.output as Record<string, unknown> | undefined;
+  const nestedSentence = nestedOutput?.sentence as Record<string, unknown> | undefined;
+  const nestedText = nestedSentence?.text;
+  if (typeof nestedText === 'string' && nestedText.trim()) {
+    return nestedText.trim();
+  }
+
   const choices = output?.choices;
   if (Array.isArray(choices) && choices.length > 0) {
     const firstChoice = choices[0] as Record<string, unknown>;
@@ -312,34 +322,71 @@ async function syncTranscribeSegment(
   segmentIndex: number,
   contextHint: string
 ): Promise<SegmentResult> {
-  const messages: Array<{ role: 'system' | 'user'; content: Array<{ audio?: string; text?: string }> }> = [];
-  if (contextHint) {
-    messages.push({
-      role: 'system',
-      content: [
-        {
-          text: `你正在转写课堂音频。以下是课程背景与术语表，请优先按该上下文识别专业词汇：${contextHint}`,
-        },
-      ],
-    });
-  }
-  messages.push({
-    role: 'user',
-    content: [{ audio: fileUrl }],
-  });
+  const model = process.env.DASHSCOPE_ASR_BATCH_MODEL || 'qwen-audio-3.0-asr-flash';
+  let requestBody: Record<string, unknown>;
 
-  // M7.6: 'auto' 时省略 language 参数让 Qwen 自动识别中英夹杂
-  const asrOptions: Record<string, unknown> = { enable_itn: true };
-  if (language !== 'auto') asrOptions.language = language;
-  const requestBody = {
-    model: process.env.DASHSCOPE_ASR_BATCH_MODEL || 'qwen3-asr-flash-2026-02-10',
-    input: {
-      messages,
-    },
-    parameters: {
-      asr_options: asrOptions,
-    },
-  };
+  if (isNextGenAsrModel(model)) {
+    // 新族 qwen-audio-3.0-asr-flash：multimodal 消息式 input_audio 节点。
+    // 上下文增强用 input_text 消息（官方约束：含音频的消息必须排在最后）。
+    // 官方未公开该端点的语种参数，language 只记日志不下发。
+    if (language !== 'auto') {
+      log.info('[transcribe-turbo] next-gen batch model: language hint ignored (unsupported by sync API)', { model, language });
+    }
+    const nextGenMessages: Array<Record<string, unknown>> = [];
+    if (contextHint) {
+      nextGenMessages.push({
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: `课堂背景与术语表（请优先按该上下文识别专业词汇）：${contextHint}`,
+          },
+        ],
+      });
+    }
+    nextGenMessages.push({
+      role: 'user',
+      content: [{ type: 'input_audio', input_audio: { data: fileUrl } }],
+    });
+    requestBody = {
+      model,
+      input: { messages: nextGenMessages },
+      parameters: {
+        format: 'mp3',
+        // 官方 curl 示例中 sample_rate 为字符串，保持与文档一致
+        sample_rate: '16000',
+      },
+    };
+  } else {
+    const messages: Array<{ role: 'system' | 'user'; content: Array<{ audio?: string; text?: string }> }> = [];
+    if (contextHint) {
+      messages.push({
+        role: 'system',
+        content: [
+          {
+            text: `你正在转写课堂音频。以下是课程背景与术语表，请优先按该上下文识别专业词汇：${contextHint}`,
+          },
+        ],
+      });
+    }
+    messages.push({
+      role: 'user',
+      content: [{ audio: fileUrl }],
+    });
+
+    // M7.6: 'auto' 时省略 language 参数让 Qwen 自动识别中英夹杂
+    const asrOptions: Record<string, unknown> = { enable_itn: true };
+    if (language !== 'auto') asrOptions.language = language;
+    requestBody = {
+      model,
+      input: {
+        messages,
+      },
+      parameters: {
+        asr_options: asrOptions,
+      },
+    };
+  }
 
   let lastError = 'unknown error';
 
@@ -355,6 +402,8 @@ async function syncTranscribeSegment(
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
+          // 新族官方示例显式关闭 SSE（非流式），旧族行为保持不变
+          ...(isNextGenAsrModel(model) ? { 'X-DashScope-SSE': 'disable' } : {}),
         },
         body: JSON.stringify(requestBody),
       });

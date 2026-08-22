@@ -1,11 +1,12 @@
 /**
- * ASR LLM 后校对（M5 T5.2）
+ * ASR LLM 后校对（M5 T5.2；2026-08 单遍化后接管文本纠错）
  *
- * 策略：对"低置信片段"才调 qwen3.7-plus 复核（性价比 + 效果平衡，max 按需切）。
+ * 策略：对"低置信片段"才调 DeepSeek V4 Flash 复核（性价比 + 效果平衡）。
  *   1. 按 confidence 阈值筛选；confidence 缺失时按文本特征启发式判断
- *   2. 单次调用只复核 ≤ 10 条，避免 prompt 超长
+ *   2. 输入护栏：按节分批——单批 ≤ batchSize 条 且 ≤ batchCharLimit 字符，
+ *      逐批串行调用，单批失败/超时只降级该批，其余批次与原文不受影响
  *   3. 返回的"高置信纠正"才接受（LLM 给出 {original, corrected, confidence}）
- *   4. 失败静默降级——不返回原始，返回已校对 + 未校对混合
+ *   4. 失败静默降级为原文——绝不阻塞定稿
  *
  * 不要对整段转写都做——成本和延迟都不值。
  *
@@ -42,13 +43,17 @@ export interface PostEditOptions {
   model?: string;
   /** confidence 低于此值的才复核。默认 0.85 */
   confidenceThreshold?: number;
-  /** 单次复核最多 N 条。默认 10 */
+  /** 单批最多 N 条。默认 10 */
   batchSize?: number;
+  /** 单批输入字符上限（含上下文），超出即另起一批。默认 6000 */
+  batchCharLimit?: number;
+  /** 最多处理的批次数，超出部分直接放行原文（防长尾课阻塞定稿）。默认 5 */
+  maxBatches?: number;
   /** 可选：课堂热词/术语，作为复核参考 */
   hotwords?: string[];
   /** 可选：课程主题 */
   courseTitle?: string;
-  /** LLM 请求超时（ms）。默认 20s */
+  /** LLM 请求超时（ms，单批）。默认 20s */
   timeoutMs?: number;
 }
 
@@ -102,30 +107,48 @@ function buildUserPrompt(
   return parts.join('\n');
 }
 
-export async function postEditSegments(
-  segments: PostEditSegment[],
+/** DeepSeek 官方与百炼托管（compatible-mode）的模型 id 均为小写，统一转小写发送。 */
+function resolveApiModelName(baseURL: string, model: string): string {
+  return model.toLowerCase();
+}
+
+/** 按节分批：单批 ≤ batchSize 条 且 ≤ batchCharLimit 字符（含上下文）。 */
+function buildBatches(
+  segs: PostEditSegment[],
+  batchSize: number,
+  batchCharLimit: number,
+): PostEditSegment[][] {
+  const batches: PostEditSegment[][] = [];
+  let current: PostEditSegment[] = [];
+  let currentChars = 0;
+  for (const seg of segs) {
+    const segChars =
+      seg.text.length + (seg.contextBefore?.length ?? 0) + (seg.contextAfter?.length ?? 0);
+    if (
+      current.length > 0
+      && (current.length >= batchSize || currentChars + segChars > batchCharLimit)
+    ) {
+      batches.push(current);
+      current = [];
+      currentChars = 0;
+    }
+    current.push(seg);
+    currentChars += segChars;
+  }
+  if (current.length > 0) batches.push(current);
+  return batches;
+}
+
+/** 复核单批；任何失败都静默降级为该批原文。 */
+async function postEditBatch(
+  batch: PostEditSegment[],
   opts: PostEditOptions,
+  hotwords: string[],
 ): Promise<PostEditResult[]> {
-  if (segments.length === 0) return [];
-  const threshold = opts.confidenceThreshold ?? 0.85;
-  const batchSize = opts.batchSize ?? 10;
-  const hotwords = opts.hotwords ?? [];
+  const fallback = () => batch.map((s) => ({ id: s.id, text: s.text, modified: false }));
 
-  // 按 shouldReview 分层：needs review / passthrough
-  const needsReview = segments.filter((s) => shouldReview(s, threshold)).slice(0, batchSize);
-  const reviewIds = new Set(needsReview.map((s) => s.id));
-  const passthrough = segments.filter((s) => !reviewIds.has(s.id));
-
-  const baseResult: PostEditResult[] = passthrough.map((s) => ({
-    id: s.id,
-    text: s.text,
-    modified: false,
-  }));
-
-  if (needsReview.length === 0) return baseResult;
-
-  const baseURL = opts.baseURL ?? 'https://dashscope.aliyuncs.com/compatible-mode/v1';
-  const model = opts.model ?? 'qwen3.7-plus';
+  const baseURL = opts.baseURL ?? process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com';
+  const model = resolveApiModelName(baseURL, opts.model ?? 'DeepSeek-V4-Flash');
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 20000);
@@ -141,7 +164,7 @@ export async function postEditSegments(
         model,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: buildUserPrompt(needsReview, hotwords, opts.courseTitle) },
+          { role: 'user', content: buildUserPrompt(batch, hotwords, opts.courseTitle) },
         ],
         temperature: 0,
         response_format: { type: 'json_object' },
@@ -151,12 +174,12 @@ export async function postEditSegments(
 
     if (!resp.ok) {
       log.warn('post-edit API failed, falling back to original', { status: resp.status });
-      return [...baseResult, ...needsReview.map((s) => ({ id: s.id, text: s.text, modified: false }))];
+      return fallback();
     }
 
     const json = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const content = json.choices?.[0]?.message?.content ?? '';
-    // qwen3.7-plus with response_format=json_object 返回的是一个 object，
+    // response_format=json_object 返回的是一个 object，
     // 里面的 array 通常在某个字段下；我们尝试几种形态
     let arr: unknown = null;
     try {
@@ -170,7 +193,7 @@ export async function postEditSegments(
     }
 
     if (!arr || !Array.isArray(arr)) {
-      return [...baseResult, ...needsReview.map((s) => ({ id: s.id, text: s.text, modified: false }))];
+      return fallback();
     }
 
     const byId = new Map<string, { text: string; modified: boolean }>();
@@ -181,7 +204,7 @@ export async function postEditSegments(
       }
     }
 
-    const reviewed: PostEditResult[] = needsReview.map((s) => {
+    return batch.map((s) => {
       const r = byId.get(s.id);
       if (!r) return { id: s.id, text: s.text, modified: false };
       const changed = r.modified && r.text !== s.text && r.text.length > 0;
@@ -192,12 +215,52 @@ export async function postEditSegments(
         originalText: changed ? s.text : undefined,
       };
     });
-
-    return [...baseResult, ...reviewed];
   } catch (err) {
     log.warn('post-edit fetch failed', { err: (err as Error).message });
-    return [...baseResult, ...needsReview.map((s) => ({ id: s.id, text: s.text, modified: false }))];
+    return fallback();
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function postEditSegments(
+  segments: PostEditSegment[],
+  opts: PostEditOptions,
+): Promise<PostEditResult[]> {
+  if (segments.length === 0) return [];
+  const threshold = opts.confidenceThreshold ?? 0.85;
+  const batchSize = opts.batchSize ?? 10;
+  const batchCharLimit =
+    opts.batchCharLimit ?? (Number(process.env.ASR_POST_EDIT_BATCH_CHAR_LIMIT) || 6000);
+  const maxBatches = Math.max(1, opts.maxBatches ?? 5);
+  const hotwords = opts.hotwords ?? [];
+
+  // 按 shouldReview 分层：needs review / passthrough
+  const needsReview = segments.filter((s) => shouldReview(s, threshold));
+  const reviewIds = new Set(needsReview.map((s) => s.id));
+  const passthrough = segments.filter((s) => !reviewIds.has(s.id));
+
+  const baseResult: PostEditResult[] = passthrough.map((s) => ({
+    id: s.id,
+    text: s.text,
+    modified: false,
+  }));
+
+  if (needsReview.length === 0) return baseResult;
+
+  // 输入护栏：按节分批（条数 + 字符双上限），超出 maxBatches 的长尾直接放行原文，
+  // 单批失败只降级该批——纠错绝不阻塞定稿。
+  const batches = buildBatches(needsReview, batchSize, batchCharLimit);
+  const processed = batches.slice(0, maxBatches);
+  const overflow = batches.slice(maxBatches).flat();
+
+  const reviewed: PostEditResult[] = [];
+  for (const batch of processed) {
+    reviewed.push(...await postEditBatch(batch, opts, hotwords));
+  }
+  for (const seg of overflow) {
+    reviewed.push({ id: seg.id, text: seg.text, modified: false });
+  }
+
+  return [...baseResult, ...reviewed];
 }

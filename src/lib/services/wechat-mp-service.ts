@@ -1,5 +1,11 @@
 import { createHash } from 'crypto';
 import { detectReachFromText, type ContextReachDetection } from '@/lib/context-reach';
+import { COPY } from '@/lib/ui/copy';
+
+/** 小宇宙播客的即时回执区别于泛视频链接（providerLabel 由 video-link.ts 给出） */
+function buildVideoLinkReply(reach: ContextReachDetection, genericReply: string): string {
+  return reach.providerLabel === '小宇宙播客' ? COPY.wechatPodcast.receipt : genericReply;
+}
 
 const WECHAT_MP_TOKEN = process.env.WECHAT_MP_TOKEN || '';
 
@@ -132,7 +138,7 @@ function normalizeTextMessage(payload: WechatMpPayload): NormalizedWechatMessage
     reach,
     replyText:
       reach.channel === 'video-link'
-        ? '这条链接我已经接住了，稍后会把它接进你的收集流。'
+        ? buildVideoLinkReply(reach, '这条链接我已经接住了，稍后会把它接进你的收集流。')
         : '收到，这条内容已经先记进你的收集流了。',
   };
 }
@@ -189,7 +195,7 @@ function normalizeLinkMessage(payload: WechatMpPayload): NormalizedWechatMessage
     reach,
     replyText:
       reach.channel === 'video-link'
-        ? '视频链接收到，稍后会把它接进你的收集流。'
+        ? buildVideoLinkReply(reach, '视频链接收到，稍后会把它接进你的收集流。')
         : url
           ? '链接收到，我会把它当作这次学习的外部线索记下来。'
           : '这条链接消息我已经接住了。',

@@ -89,7 +89,8 @@ export function buildSourceProvenance(params: {
     canonicalUrl,
     publishedAt: params.publishedAt,
     extractionMethod: params.extractionMethod,
-    contentState: inferContentState(params),
+    // 显式传入的 contentState 必须优先生效（params 上的键名是 contentState，不是 explicit）
+    contentState: inferContentState({ ...params, explicit: params.contentState }),
     completeness,
   };
 }

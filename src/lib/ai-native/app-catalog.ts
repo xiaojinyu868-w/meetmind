@@ -173,6 +173,25 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     supportedTiers: ['class'],
     primaryTier: 'class',
   },
+  {
+    key: 'explainer',
+    name: COPY.apps.matrix.catalogMeta.explainer.name,
+    category: '理解精讲',
+    headline: COPY.apps.matrix.catalogMeta.explainer.headline,
+    description: COPY.apps.matrix.catalogMeta.explainer.description,
+    tags: ['板书', '边写边讲', '老师原话', '圈点勾画'],
+    coverImage: '/images/apps/study-report-cover.svg',
+    pluginId: 'explainer',
+    intent: '把这节课的转录变成一段黑板板书精讲：边写边讲、圈点勾画、老师原话逐字引用。',
+    outputType: '板书精讲',
+    learningAction: COPY.apps.matrix.catalogMeta.explainer.action,
+    bestFor: COPY.apps.matrix.catalogMeta.explainer.bestFor,
+    timeLabel: COPY.apps.matrix.catalogMeta.explainer.time,
+    renderMode: 'board',
+    status: 'ready',
+    supportedTiers: ['class'],
+    primaryTier: 'class',
+  },
 ];
 
 export function isWorkshopAppKey(value: string): value is WorkshopAppKey {

@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { COPY } from '@/lib/ui/copy';
 import type { AiControlComparison, AiControlItem, AiControlKey, AiPromptOverride, AiPromptPreview } from '@/types/ai-control';
 import { AI_CONTROL_CAPTURE_KEY } from './AdminAiInspectorLink';
+import { CostPanel } from './CostPanel';
 
 type ModelOption = { id: string; name: string; provider: string; description: string; recommended: boolean };
 type Capture = { controlKey: AiControlKey; context: Record<string, unknown>; options?: Record<string, unknown>; query?: string; capturedAt: string };
@@ -197,6 +198,8 @@ export function AiControlWorkbench() {
       </header>
 
       {notice ? <div className={cn('fixed right-5 top-20 z-50 rounded-xl border bg-white px-4 py-2.5 text-xs shadow-float', notice.tone === 'success' ? 'border-pine/25 text-pine' : 'border-vermilion/25 text-vermilion')}>{notice.text}</div> : null}
+
+      <CostPanel accessToken={accessToken} />
 
       <div className="grid min-h-[calc(100vh-4rem)] lg:grid-cols-[250px_minmax(420px,1fr)_minmax(330px,420px)]">
         <aside className="border-b border-divider bg-paper-warm/45 p-4 lg:border-b-0 lg:border-r">

@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import * as fs from 'fs';
 import * as path from 'path';
 import pRetry, { AbortError } from 'p-retry';
@@ -15,6 +15,7 @@ import {
 import { createLogger, track } from '@/lib/logger';
 import { stitchSegments, stitchSegmentsWithOverlap, fullJitterDelay } from '@/lib/services/asr/text-utils';
 import { postEditSegments } from '@/lib/services/asr/post-edit';
+import { buildFiletransSubmitBody, extractTranscriptionUrl } from '@/lib/services/qwen-asr-tasks';
 const log = createLogger('transcribe-fast');
 
 
@@ -170,17 +171,9 @@ async function submitAsyncTask(
   language: string = 'auto',
   _contextHint: string = ''
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
-  // Qwen 官方：混合语种或不确定时省略 language 参数（M7.6 修复课堂中英夹杂）
-  const langParam = language === 'auto' ? {} : { language };
-  const requestBody = {
-    model: process.env.DASHSCOPE_ASR_FILE_MODEL || 'qwen3-asr-flash-filetrans-2025-11-17',
-    input: { file_url: fileUrl },
-    parameters: {
-      channel_id: [0],
-      ...langParam,
-      enable_itn: true,
-    },
-  };
+  // 按模型族分派请求形状（qwen-audio-3.0-* 用 file_urls + language_hints，qwen3-asr-* 用 file_url + language）
+  const model = process.env.DASHSCOPE_ASR_FILE_MODEL || 'qwen-audio-3.0-asr-flash-filetrans';
+  const requestBody = buildFiletransSubmitBody(model, fileUrl, language);
 
   const response = await fetch(ASR_TRANSCRIPTION_URL, {
     method: 'POST',
@@ -228,7 +221,7 @@ async function queryTaskStatus(taskId: string, apiKey: string): Promise<TaskResu
   if (status === 'SUCCEEDED') {
     return {
       status: 'SUCCEEDED',
-      transcription_url: data.output?.result?.transcription_url,
+      transcription_url: extractTranscriptionUrl(data.output),
     };
   }
 
@@ -498,16 +491,18 @@ export async function POST(request: NextRequest) {
       isFinal: true,
     }));
 
-    // LLM 后校对（M5 T5.2 → M6 上线）：只对低置信 / 启发式可疑片段跑，默认关
-    // 走 feature flag，稳定后切为默认 on。
-    const postEditEnabled = String(process.env.ASR_POST_EDIT_ENABLED || 'false').toLowerCase() === 'true';
+    // LLM 后校对（2026-08 单遍化后接管文本纠错）：默认开启，ASR_POST_EDIT_ENABLED=false 可关。
+    // 模型默认 DeepSeek V4 Flash（DEEPSEEK_API_KEY / DEEPSEEK_BASE_URL）；
+    // 只对低置信 / 启发式可疑片段跑，按节分批 + 单批字符上限，失败静默降级原文，不阻塞定稿。
+    const postEditEnabled = String(process.env.ASR_POST_EDIT_ENABLED || 'true').toLowerCase() !== 'false';
+    const postEditApiKey = process.env.DEEPSEEK_API_KEY;
     let postEditApplied = 0;
-    if (postEditEnabled && outputSegments.length > 0) {
+    if (postEditEnabled && postEditApiKey && outputSegments.length > 0) {
       try {
         const edited = await postEditSegments(
           outputSegments.map((s) => ({ id: s.id, text: s.text, confidence: s.confidence })),
           {
-            apiKey,
+            apiKey: postEditApiKey,
             hotwords: contextHint ? [contextHint].slice(0, 1) : undefined,
             batchSize: 10,
             timeoutMs: 12000,

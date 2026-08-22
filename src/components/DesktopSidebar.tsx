@@ -18,6 +18,8 @@ import Image from 'next/image';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { COPY } from '@/lib/ui/copy';
 import { useAdminLens } from '@/components/admin/AdminLensProvider';
+import { usePointsSummary } from '@/hooks/usePointsSummary';
+import { openPaywallGlobal } from '@/hooks/usePaywall';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Mic,
@@ -93,6 +95,9 @@ export function DesktopSidebar({
   const [showUserMenu, setShowUserMenu] = useState(false);
   const { user, isAuthenticated, isCheckingAuth, logout } = useAuth();
   const { enabled: adminLensEnabled, toggle: toggleAdminLens } = useAdminLens();
+  // 会员档位：免费用户在一级页面看到安静的升级入口（付费不藏在设置里）
+  const { summary: pointsSummary } = usePointsSummary();
+  const membershipTier = pointsSummary?.membership.tier ?? null;
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
@@ -297,6 +302,28 @@ export function DesktopSidebar({
           </div>
         ) : isAuthenticated && user ? (
           <>
+            {/* 免费用户的一级页面升级入口（对齐 ChatGPT 侧栏底部 Upgrade 卡：
+                短标题 + 一行放得下的短副标题，永不截断） */}
+            {membershipTier === 'free' ? (
+              <button
+                type="button"
+                onClick={() => openPaywallGlobal({ reason: 'upgrade', tab: 'membership' })}
+                className={
+                  effectiveCollapsed
+                    ? 'mx-auto mb-1.5 flex h-9 w-9 items-center justify-center rounded-lg text-pine transition-all hover:bg-pine-fog'
+                    : 'mb-1.5 flex w-full items-center gap-2.5 rounded-lg border border-pine/20 bg-pine-fog px-2.5 py-2 text-left transition-all hover:border-pine/40 hover:bg-pine-fog/70'
+                }
+                title={COPY.membership.freeTierCta}
+              >
+                <Sparkles size={effectiveCollapsed ? 16 : 15} strokeWidth={1.7} className="flex-shrink-0 text-pine" />
+                {!effectiveCollapsed ? (
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13px] font-medium leading-tight text-pine">{COPY.membership.freeTierCta}</span>
+                    <span className="mt-0.5 block whitespace-nowrap text-[11px] leading-tight text-ink-muted">{COPY.membership.upgradeEntryHint}</span>
+                  </span>
+                ) : null}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => setShowUserMenu(!showUserMenu)}
@@ -340,6 +367,21 @@ export function DesktopSidebar({
                     <p className="text-[13px] font-medium text-ink">{user.nickname}</p>
                     <p className="text-[12px] text-ink-muted">{roleLabels[user.role] || user.role}账号</p>
                   </div>
+                  {/* 会员入口：一级页面直达 Paywall，不用进设置找 */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      openPaywallGlobal({ reason: 'upgrade', tab: 'membership' });
+                    }}
+                    className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] text-ink-secondary transition-colors hover:bg-paper hover:text-ink"
+                  >
+                    <Sparkles size={ICON_SM} strokeWidth={ICON_STROKE} className="text-pine" />
+                    <span className="flex-1">{COPY.membership.menuCta[membershipTier ?? 'free']}</span>
+                    {membershipTier ? (
+                      <span className="text-[11px] text-ink-muted">{COPY.membership.tierName[membershipTier]}</span>
+                    ) : null}
+                  </button>
                   {[
                     { href: '/profile', icon: UserCircle, label: '个人资料' },
                     { href: '/settings', icon: Settings, label: '设置' },

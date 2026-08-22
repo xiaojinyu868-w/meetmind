@@ -5,7 +5,7 @@
  * 1. { audioUrl: string } — 已上传的音频公网 URL
  * 2. multipart/form-data — 直接上传音频 blob（不需要预先登录鉴权上传）
  *
- * 调用 DashScope Fun-ASR 非实时 API + diarization_enabled，
+ * 调用 DashScope 非实时 ASR（默认 qwen-audio-3.0-asr-flash-filetrans）+ diarization_enabled，
  * 返回带 speaker_id 的句子列表。
  *
  * 注意：此路由 maxDuration = 300（5 分钟），因为非实时 ASR 需要轮询。

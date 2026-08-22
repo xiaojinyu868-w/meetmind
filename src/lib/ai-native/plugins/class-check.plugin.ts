@@ -165,7 +165,7 @@ export const classCheckPlugin: AppPlugin = {
     const meta: ClassCheckMeta = (context.goal as unknown as Record<string, unknown>).classCheckMeta as ClassCheckMeta || {};
 
     const promptContext = buildPromptTranscriptContext(context.input.transcript, {
-      maxChars: 8_000,
+      maxChars: 48_000,
       includeIndex: false,
       includeTimestamp: true,
       minCharsPerSegment: 40,

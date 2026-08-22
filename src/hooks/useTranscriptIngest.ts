@@ -234,7 +234,7 @@ export function useTranscriptIngest(
       sourceMode: params.videoSource?.sourceMode,
       embedUrl: params.videoSource?.embedUrl,
       videoImported: true as const,
-      serverTranscriptSegments: normalizedSegments.slice(0, 500).map((seg) => ({
+      serverTranscriptSegments: normalizedSegments.slice(0, 2000).map((seg) => ({
         id: seg.id,
         text: seg.text,
         startMs: seg.startMs,
@@ -324,8 +324,8 @@ export function useTranscriptIngest(
         audioUrl: params.videoSource?.audioUrl,
         videoImported: true,
         provenance,
-        // 存储转录片段供跨端恢复（限制大小，只存前 500 段）
-        transcriptSegments: normalizedSegments.slice(0, 500).map((seg) => ({
+        // 存储转录片段供跨端恢复（上限 2000 段；服务端证据护栏保证只补全不回退）
+        transcriptSegments: normalizedSegments.slice(0, 2000).map((seg) => ({
           id: seg.id,
           text: seg.text,
           startMs: seg.startMs,

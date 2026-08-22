@@ -56,7 +56,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   contextHint = '',
   languageMode = 'auto',
   audioSource = 'mic',
-  speakerDiarization = false,
 }: RecorderProps, ref) {
   const [status, setStatus] = useState<RecorderStatus>('idle');
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -136,6 +135,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   const processedSentenceIdsRef = useRef<Set<string>>(new Set());
   const noiseFloorRef = useRef(0.02);
   const [asrReconnecting, setAsrReconnecting] = useState(false);
+  const [droppedAudioMs, setDroppedAudioMs] = useState(0);
   const pauseTimestampRef = useRef<number>(0);
   
   const enhanceManagerRef = useRef<TranscriptEnhanceManager | null>(null);
@@ -251,13 +251,14 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       }
     },
     onError: (err) => setError(err),
+    onAudioDropped: ({ droppedMsTotal }) => setDroppedAudioMs(droppedMsTotal),
     onStatusChange: (newStatus) => {
       if (newStatus === 'transcribing') setServiceStatus('available');
     },
   }), [getCallbackMeta, onTranscriptUpdate]);
 
-  // ASR options 工厂——三处共用。speakerDiarization 参数允许切换时传入新值。
-  const buildAsrOptions = useCallback((speakerDiarizationEnabled: boolean): DashScopeASROptions => ({
+  // ASR options 工厂——三处共用。
+  const buildAsrOptions = useCallback((): DashScopeASROptions => ({
     model: wsModel,
     sampleRate: wsSampleRate,
     format: 'pcm',
@@ -266,7 +267,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     maxReconnectAttempts: 8,
     reconnectBaseMs: 800,
     reconnectCapMs: 15_000,
-    speakerDiarization: speakerDiarizationEnabled,
   }), [wsModel, wsSampleRate, contextHint, languageMode]);
 
   useEffect(() => {
@@ -611,7 +611,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       // apiKey 状态只是可用性探测结果；若首点录音早于该请求完成，旧逻辑会让
       // 整节录音永远不创建实时 ASR client，只能等停录后的 batch 定稿。
       if (effectiveTranscribeMode === 'streaming' && streamingAvailable && audioContext && source) {
-        const asrClient = new DashScopeASRClient(apiKey, createAsrCallbacks(), buildAsrOptions(speakerDiarization));
+        const asrClient = new DashScopeASRClient(apiKey, createAsrCallbacks(), buildAsrOptions());
         asrClientRef.current = asrClient;
 
         // 先挂 PCM pipeline：DashScopeASRClient 在 !ready 时会将 chunk 有界排队，
@@ -705,7 +705,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     onTranscriptEnhanced,
     onTranscriptUpdate,
     sendPcmToAsrClients,
-    speakerDiarization,
     status,
     stopMediaRecorderSafely,
     streamingAvailable,
@@ -768,65 +767,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     });
   }, [sendPcmToAsrClients, wsSampleRate]);
 
-  // 录音中切换说话人分离引擎。
-  //
-  // 旧连接持续收音，新连接在 ready 前同步缓冲同一份 PCM；ready 后才原子交接。
-  // 这样切换 Qwen ↔ 腾讯时既不留下 1-3 秒空窗，也不会让失败的新连接截断旧引擎。
-  const prevSpeakerDiarizationRef = useRef(speakerDiarization);
-  useEffect(() => {
-    if (prevSpeakerDiarizationRef.current === speakerDiarization) return;
-    prevSpeakerDiarizationRef.current = speakerDiarization;
-    if (status !== 'recording') return;
-
-    const oldClient = asrClientRef.current;
-    if (!oldClient || !apiKey) return;
-
-    setAsrReconnecting(true);
-    setError(null);
-
-    const newClient = new DashScopeASRClient(apiKey, createAsrCallbacks(), buildAsrOptions(speakerDiarization));
-    const switchGeneration = ++asrSwitchGenerationRef.current;
-    const previousPending = pendingAsrClientRef.current;
-    pendingAsrClientRef.current = newClient;
-    if (previousPending && previousPending !== oldClient) {
-      void previousPending.stop().catch(() => { /* ignore stale switch */ });
-    }
-
-    void (async () => {
-      try {
-        const ok = await newClient.start();
-        const isCurrentSwitch =
-          asrSwitchGenerationRef.current === switchGeneration
-          && pendingAsrClientRef.current === newClient;
-        if (!ok || !isCurrentSwitch) {
-          if (pendingAsrClientRef.current === newClient) {
-            pendingAsrClientRef.current = null;
-          }
-          try { await newClient.stop(); } catch { /* ignore */ }
-          if (isCurrentSwitch) setAsrReconnecting(false);
-          return;
-        }
-
-        asrClientRef.current = newClient;
-        pendingAsrClientRef.current = null;
-
-        void oldClient.stop().catch(() => { /* ignore */ });
-
-        setAsrReconnecting(false);
-      } catch (err) {
-        if (pendingAsrClientRef.current === newClient) {
-          pendingAsrClientRef.current = null;
-        }
-        try { await newClient.stop(); } catch { /* ignore */ }
-        if (asrSwitchGenerationRef.current === switchGeneration) {
-          setAsrReconnecting(false);
-          setError(err instanceof Error ? err.message : '多人识别切换失败，已继续使用原转写模式');
-        }
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [speakerDiarization, status]);
-
   const resumeRecording = useCallback(async () => {
     if (mediaRecorderRef.current?.state !== 'paused') return;
 
@@ -848,7 +788,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       }
 
       // Create new ASR client with same callbacks
-      asrClientRef.current = new DashScopeASRClient(apiKey, createAsrCallbacks(), buildAsrOptions(speakerDiarization));
+      asrClientRef.current = new DashScopeASRClient(apiKey, createAsrCallbacks(), buildAsrOptions());
 
       const started = await asrClientRef.current.start();
       if (started) {
@@ -892,7 +832,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     languageMode,
     onTranscriptUpdate,
     rebuildPcmPipeline,
-    speakerDiarization,
     streamingAvailable,
     wsModel,
     wsSampleRate,
@@ -1248,31 +1187,16 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       && blobIsUsable
       && audioBlob
     ) {
-      // 两段式 ASR：课中用 realtime 换低延迟，课后始终用完整原声定稿。
-      // 旧逻辑只在 realtime 一句都没有时才跑 batch，少量噪声幻觉反而
-      // 会阻止整段校准。先交付 realtime 结果和原声，随后用同一
-      // recordingId 回填完整原声的高精度结果。
+      // 2026-08 决策：ASR 单遍化。realtime 质量已够好，课中 realtime 结果即定稿，
+      // 课后不再自动跑完整原声 batch 定稿（/api/transcribe* 与 /api/asr/diarize
+      // 保留可用，供将来的手动「重新精转」）。realtime 一句没接住的兜底批量转写
+      // 仍保留（上面的 streamingProducedNothing 分支）——那是唯一的转录来源。
       const enhancedCount = enhanceStats.enhanced;
       const totalCount = transcriptRef.current.length;
-      setTranscribeProgress(COPY.recording.finalizingTranscript(totalCount, enhancedCount));
+      setTranscribeProgress(`文字已整理，共 ${totalCount} 段${enhancedCount > 0 ? `，已优化 ${enhancedCount} 段` : ''}`);
       onTranscriptUpdate?.(transcriptRef.current, recordingMeta);
-      onRecordingStop?.(audioBlob, {
-        ...recordingMeta,
-        finalPassPending: true,
-      });
+      onRecordingStop?.(audioBlob, recordingMeta);
       setStatus('idle');
-      void transcribeWithQwenASR(audioBlob, {
-        // batch ASR 自己重听声学证据；不再叠加逐段 LLM 改写，
-        // 避免在没有原声依据时把专有名词「修顺」。
-        skipEnhancement: true,
-        emitStopCallback: false,
-        finalPassOnly: true,
-        detached: true,
-        callbackMeta: recordingMeta,
-      }).catch((err) => {
-        // 原声已保存；外层会把定稿失败标为可重试失败，不发布 realtime 草稿。
-        console.error('[Recorder] detached streaming final-pass error:', err);
-      });
     } else {
       if (effectiveTranscribeMode === 'streaming' && transcriptRef.current.length > 0) {
         const enhancedCount = enhanceStats.enhanced;
@@ -1355,8 +1279,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     audioChunksRef.current = [];
     setError(null);
     setAsrReconnecting(false);
-
-    // 3. Go to idle, then immediately trigger new recording
+    setDroppedAudioMs(0);
     setStatus('idle');
     // Use microtask to let React flush the idle state, then start
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -1863,6 +1786,16 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 border-2 border-[#1C1B19] border-t-transparent rounded-full animate-spin" />
             <span>正在重新接上文字...</span>
+          </div>
+        </div>
+      )}
+
+      {/* 断连丢音频提示：单遍化后丢帧=这节课永久少一段，必须让用户知道 */}
+      {droppedAudioMs > 0 && !compactMode && (
+        <div className="flex-shrink-0 rounded-xl border border-[#FADEC9] bg-[#FADEC9]/30 text-[#1C1B19] animate-slide-up mx-4 mt-2 p-2.5 text-xs">
+          <div className="flex items-center gap-2">
+            <span>⚠</span>
+            <span>{COPY.recording.audioGapWarning(Math.max(1, Math.round(droppedAudioMs / 1000)))}</span>
           </div>
         </div>
       )}

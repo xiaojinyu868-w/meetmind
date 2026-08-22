@@ -19,7 +19,8 @@ describe('tutor agent adapter', () => {
       preferSupportContext: true,
     });
 
-    expect(context.fullTranscript).toBe('第一段内容 第二段内容');
+    // 带真实行首时间戳：复习态 AI 引用原话时用 [MM:SS] 指回原件，不允许幻觉时间
+    expect(context.fullTranscript).toBe('[00:00] 第一段内容\n[00:01] 第二段内容');
     expect(context.currentTimestampSec).toBe(42);
     expect(context.supportMaterials).toEqual([
       { title: '当前选中的内容', content: '用户刚圈出的资料' },

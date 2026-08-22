@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import * as fs from 'fs';
 import * as path from 'path';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
@@ -9,6 +9,7 @@ import {
   resolvePublicBaseUrl,
   transcodeToMp3,
 } from '@/lib/services/media-tooling';
+import { buildFiletransSubmitBody, extractTranscriptionUrl } from '@/lib/services/qwen-asr-tasks';
 
 const log = createLogger('transcribe');
 
@@ -108,19 +109,9 @@ async function submitAsyncTask(
   language: string,
   _contextHint: string
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
-  // Qwen 官方：混合语种或不确定时省略 language 参数（M7.6 修复中英夹杂）
-  const langParam = language === 'auto' ? {} : { language };
-  const requestBody = {
-    model: process.env.DASHSCOPE_ASR_FILE_MODEL || 'qwen3-asr-flash-filetrans-2025-11-17',
-    input: {
-      file_url: fileUrl,
-    },
-    parameters: {
-      channel_id: [0],
-      ...langParam,
-      enable_itn: true,
-    },
-  };
+  // 按模型族分派请求形状（qwen-audio-3.0-* 用 file_urls + language_hints，qwen3-asr-* 用 file_url + language）
+  const model = process.env.DASHSCOPE_ASR_FILE_MODEL || 'qwen-audio-3.0-asr-flash-filetrans';
+  const requestBody = buildFiletransSubmitBody(model, fileUrl, language);
 
   const response = await fetch(ASR_TRANSCRIPTION_URL, {
     method: 'POST',
@@ -178,7 +169,7 @@ async function queryTaskStatus(taskId: string, apiKey: string): Promise<TaskResu
     if (status === 'SUCCEEDED') {
       return {
         status,
-        transcription_url: data.output?.result?.transcription_url,
+        transcription_url: extractTranscriptionUrl(data.output),
         result: data.output?.result,
       };
     }

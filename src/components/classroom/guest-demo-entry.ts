@@ -5,6 +5,30 @@ import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 export const GUEST_DEMO_APP_KEY: WorkshopAppKey = 'flashcards';
 export const GUEST_DEMO_LESSON_TITLE = "Australia's Moving Experience · IELTS 听力练习";
 
+/**
+ * 试听入口是"一次性"的：从 landing 带 entry=demo 进入后，一旦用户看完试听进入复习页、
+ * 或主动点课堂/收集 tab 离开试听现场，就把入口标记为已消费（sessionStorage）。
+ * 否则 URL 上的 entry=demo 会让每次切回课堂 tab 都重新灌入试听课——用户被困在示例课里。
+ * 刷新仍在同 tab 内保持已消费；新 tab 从 landing 重新进入则是一次新旅程。
+ */
+const DEMO_ENTRY_CONSUMED_KEY = 'mm-demo-entry-consumed';
+
+export function isDemoEntryConsumed(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.sessionStorage.getItem(DEMO_ENTRY_CONSUMED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function markDemoEntryConsumed(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(DEMO_ENTRY_CONSUMED_KEY, '1');
+  } catch { /* storage 不可用时静默 */ }
+}
+
 export function resolveGuestDemoEntry({
   isGuestFastEntry,
   entry,
@@ -15,7 +39,7 @@ export function resolveGuestDemoEntry({
   autoLoadDemo: boolean;
   autoOpenAppKey?: WorkshopAppKey;
 } {
-  if (!isGuestFastEntry || entry !== 'demo') {
+  if (!isGuestFastEntry || entry !== 'demo' || isDemoEntryConsumed()) {
     return { autoLoadDemo: false, autoOpenAppKey: undefined };
   }
 

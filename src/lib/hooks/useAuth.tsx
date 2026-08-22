@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext, ReactNode } from 'react';
 import { db, ANONYMOUS_USER_ID } from '@/lib/db';
 import { runMemoryMigration } from '@/lib/services/memory-migration';
+import { scheduleTokenRefresh } from '@/lib/hooks/token-refresh-scheduler';
 import type { User, Permission, AuthResponse, LoginRequest, RegisterRequest, LearnerProfile } from '@/types/user';
 import type { LocalWorkspaceMigrationPayload } from '@/lib/services/workspace-context-types';
 
@@ -295,8 +296,10 @@ async function buildLocalWorkspaceMigrationPayload(userId: string): Promise<Loca
           importSourceMode: session.importSourceMode,
           thumbnailUrl: session.thumbnailUrl,
           // 跨设备可恢复包：保留课堂证据的结构，不再只上传 8000 字拼接文本。
-          // local-migration 已按批次 + 8MB 限制保护；超限会自动缩小批次重试。
-          transcriptSegments: transcripts.slice(0, 1200).map((item) => ({
+          // 上送按 session 分批（20/批，413 自动降级到 5/批，服务端上限 8MB/50 sessions），
+          // 单 session 内不再硬截断证据：transcriptSegments 上限 10000（与服务端证据表
+          // 防呆上限一致，句级密度约 12 段/分钟 ≈ 13 小时课，实际不会触顶）。
+          transcriptSegments: transcripts.slice(0, 10000).map((item) => ({
             text: item.text,
             startMs: item.startMs,
             endMs: item.endMs,
@@ -304,7 +307,7 @@ async function buildLocalWorkspaceMigrationPayload(userId: string): Promise<Loca
             confidence: item.confidence,
             isFinal: item.isFinal,
           })),
-          anchors: anchors.slice(0, 200).map((item) => ({
+          anchors: anchors.slice(0, 1000).map((item) => ({
             timestamp: item.timestamp,
             type: item.type,
             status: item.status,
@@ -322,7 +325,7 @@ async function buildLocalWorkspaceMigrationPayload(userId: string): Promise<Loca
             createdAt: summary.createdAt.toISOString(),
             updatedAt: summary.updatedAt.toISOString(),
           } : undefined,
-          highlightTopics: highlights.slice(0, 100).map((item) => ({
+          highlightTopics: highlights.slice(0, 500).map((item) => ({
             topicId: item.topicId,
             title: item.title,
             description: item.description,
@@ -574,7 +577,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [state.accessToken, state.isAuthenticated, state.user?.id]);
 
   // 刷新令牌
-  const refreshTokenInternal = async (): Promise<boolean> => {
+  const refreshTokenInternal = useCallback(async (): Promise<boolean> => {
     try {
       const legacyRefreshToken = typeof window === 'undefined'
         ? null
@@ -586,11 +589,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: legacyRefreshToken ? { 'Content-Type': 'application/json' } : undefined,
         body: legacyRefreshToken ? JSON.stringify({ refreshToken: legacyRefreshToken }) : undefined,
       });
-      
+
       if (!response.ok) return false;
-      
+
       const data: AuthResponse = await response.json();
-      
+
       if (data.success && data.accessToken && data.user) {
         setStoredToken(data.accessToken);
         setState({
@@ -602,12 +605,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         return true;
       }
-      
+
       return false;
     } catch {
       return false;
     }
-  };
+  }, []);
+
+  // 访问令牌主动续期：按 JWT exp 提前 5 分钟刷新（此前只在页面初始化时 refresh，
+  // 会话中途过期后积分/会员接口 401、tutor 把付费用户当免费档——"付了费 Pro 不可用"）。
+  // 刷新成功后 accessToken 变更，本 effect 自动按新 token 重排下次调度。
+  useEffect(() => {
+    if (!state.isAuthenticated || !state.accessToken) return;
+    return scheduleTokenRefresh(state.accessToken, refreshTokenInternal);
+  }, [state.isAuthenticated, state.accessToken, refreshTokenInternal]);
 
   // 登录
   const login = useCallback(async (request: LoginRequest): Promise<AuthResponse> => {
@@ -718,10 +729,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // 刷新令牌
-  const refreshToken = useCallback(async (): Promise<boolean> => {
-    return refreshTokenInternal();
-  }, []);
+  // 刷新令牌（直接暴露内部实现，本身已是 useCallback 稳定引用）
+  const refreshToken = refreshTokenInternal;
 
   // 更新资料
   const updateProfile = useCallback(async (data: Partial<User>): Promise<boolean> => {

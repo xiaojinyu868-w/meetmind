@@ -44,7 +44,7 @@ describe('workshop readiness', () => {
 
     expect(assessment.status).toBe('ready');
     expect(assessment.recommendedAppKey).toBeNull();
-    expect(assessment.allowedAppKeys).toHaveLength(6);
+    expect(assessment.allowedAppKeys).toHaveLength(7);
     expect(assessment.allowedAppKeys).not.toContain('cheatsheet');
   });
 
@@ -62,7 +62,7 @@ describe('workshop readiness', () => {
       recommendedAppKey: null,
       reason: 'partial_learning',
     });
-    expect(assessment.allowedAppKeys).toHaveLength(6);
+    expect(assessment.allowedAppKeys).toHaveLength(7);
   });
 
   it('turns learner marks into a recommendation without restricting capabilities', () => {
@@ -78,7 +78,7 @@ describe('workshop readiness', () => {
       status: 'limited',
       recommendedAppKey: 'quiz',
     });
-    expect(assessment.allowedAppKeys).toHaveLength(6);
+    expect(assessment.allowedAppKeys).toHaveLength(7);
   });
 
   it('keeps every single-lesson capability visible for the curated guest demo', () => {
@@ -95,7 +95,7 @@ describe('workshop readiness', () => {
       recommendedAppKey: 'flashcards',
       confidence: 'high',
     });
-    expect(assessment.allowedAppKeys).toHaveLength(6);
+    expect(assessment.allowedAppKeys).toHaveLength(7);
     expect(assessment.allowedAppKeys).not.toContain('cheatsheet');
   });
 
@@ -166,7 +166,7 @@ describe('workshop readiness', () => {
     }, { transcript });
 
     expect(assessment.evidence.durationMs).toBe(783_000);
-    expect(assessment.allowedAppKeys).toHaveLength(6);
+    expect(assessment.allowedAppKeys).toHaveLength(7);
     expect(assessment.status).toBe('ready');
   });
 
@@ -185,7 +185,7 @@ describe('workshop readiness', () => {
     }, { transcript });
 
     expect(assessment.status).toBe('limited');
-    expect(assessment.allowedAppKeys).toHaveLength(6);
+    expect(assessment.allowedAppKeys).toHaveLength(7);
     expect(assessment.recommendedAppKey).toBe('flashcards');
     expect(assessment.reason).toBe('partial_learning');
   });
@@ -205,7 +205,7 @@ describe('workshop readiness', () => {
     }, { transcript });
 
     expect(assessment.status).toBe('ready');
-    expect(assessment.allowedAppKeys).toHaveLength(6);
+    expect(assessment.allowedAppKeys).toHaveLength(7);
     expect(assessment.allowedAppKeys).not.toContain('cheatsheet');
   });
 
@@ -223,7 +223,7 @@ describe('workshop readiness', () => {
       confidence: 'high',
     }, { transcript });
 
-    expect(assessment.allowedAppKeys).toHaveLength(6);
+    expect(assessment.allowedAppKeys).toHaveLength(7);
     expect(assessment.allowedAppKeys).toEqual(expect.arrayContaining([
       'flashcards',
       'quiz',

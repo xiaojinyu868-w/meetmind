@@ -1,5 +1,11 @@
 'use client';
 
+/**
+ * @deprecated 2026-08 决策：实时语音通话下线（/api/tutor-call 已拆除），
+ * 移动端「语音同桌」入口已移除。本组件保留一个周期作参考，之后物理删除。
+ * 请勿在新代码中引用。
+ */
+
 import { useMemo } from 'react';
 import { useRealtimeTutorConversationBridge } from '@/hooks/useRealtimeTutorConversationBridge';
 import { TutorRealtimeCallScreen } from './TutorRealtimeCallScreen';

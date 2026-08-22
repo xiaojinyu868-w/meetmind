@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
+import { openPaywallGlobal } from '@/hooks/usePaywall';
 import { useSessionStore } from '@/stores/session-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useCollectionStore } from '@/stores/collection-store';
@@ -30,10 +31,6 @@ import type {
 } from '@/types/page-types';
 import type { VideoInsightItem } from '@/components/VideoInsightTimeline';
 import { shouldApplyTranscriptToActiveSession } from '@/lib/services/asr/session-isolation';
-import {
-  runDiarizationForSession,
-  shouldRunPostBatchDiarization,
-} from '@/lib/services/asr/diarization-service';
 import { readStoredAccessToken } from '@/lib/hooks/useAuth';
 import { requestLessonUnderstanding } from '@/lib/services/lesson-title-client';
 import { uploadRecordingKeyframes } from '@/lib/services/upload-recording-keyframes';
@@ -142,10 +139,6 @@ export function useTranscriptHandlers(
         pendingAudio.sessionId,
         useSessionStore.getState().sessionId,
       );
-      const shouldDiarizeFinalSegments = shouldRunPostBatchDiarization(
-        appendedSegments,
-        pendingAudio.baseOffsetMs,
-      );
       void (async () => {
         if (pendingAudio.replaceExistingTranscript) {
           await db.transcripts.where('sessionId').equals(pendingAudio.sessionId).delete();
@@ -157,26 +150,7 @@ export function useTranscriptHandlers(
           confidence: seg.confidence || 1.0,
           isFinal: true,
         })));
-
-        // 顺序必须是：完整原声定稿落盘 → 说话人整理。
-        // 这样说话人增强只附着在最终文本上，不可能用 realtime 草稿反向覆盖定稿。
-        if (shouldDiarizeFinalSegments) {
-          await runDiarizationForSession(
-            pendingAudio.blob,
-            pendingAudio.sessionId,
-            appendedSegments,
-            (updatedSegments) => {
-              if (!shouldApplyTranscriptToActiveSession(
-                pendingAudio.sessionId,
-                useSessionStore.getState().sessionId,
-              )) return;
-
-              liveSegmentsRef.current = updatedSegments;
-              segmentsRef.current = updatedSegments;
-              useCaptureEditorStore.getState().actions.setSegments(updatedSegments);
-            },
-          );
-        }
+        // 2026-08 决策：不再自动跑课后说话人分离；/api/asr/diarize 保留供手动精转。
       })().catch((err) => console.error('Failed to persist batch transcript to IndexedDB:', err));
 
       // Store actions (pure writers)
@@ -221,7 +195,7 @@ export function useTranscriptHandlers(
           duration: pendingAudio.durationMs,
           durationSec: Math.round(pendingAudio.durationMs / 1000),
           segmentCount: appendedSegments.length,
-          transcriptSegments: appendedSegments.slice(0, 500).map((s) => ({
+          transcriptSegments: appendedSegments.slice(0, 10000).map((s) => ({
             text: s.text,
             startMs: s.startMs,
             endMs: s.endMs,
@@ -310,6 +284,10 @@ export function useTranscriptHandlers(
   // ── handleRecordingTranscriptionError ──────────────────────────
 
   const handleRecordingTranscriptionError = useCallback((message: string, meta?: { recordingId?: string; finalPassOnly?: boolean }) => {
+    // 服务端 ASR 额度预检拒绝（免费分钟用尽且余额不足）：高意向截断，唤起付费页
+    if (message.includes('ASR_QUOTA_EXCEEDED')) {
+      openPaywallGlobal({ reason: 'asr_quota' });
+    }
     const pendingAudio = resolvePendingRecordedAudio(meta?.recordingId);
     if (!pendingAudio) return;
 

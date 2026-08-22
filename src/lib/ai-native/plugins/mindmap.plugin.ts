@@ -1,4 +1,8 @@
 import type { TranscriptSegment } from '@/types';
+// 纯树结构/Markdown 互转已拆到 mindmap-tree（客户端安全）；此处 re-export 保持兼容
+import { markdownToTree, stripInlineMarkdown, treeToMarkdown, type MindmapNode } from './mindmap-tree';
+
+export { markdownToTree, stripInlineMarkdown, treeToMarkdown, type MindmapNode } from './mindmap-tree';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
 import { buildMindmapSystemPrompt, buildMindmapUserPrompt } from '../app-prompts';
@@ -8,13 +12,6 @@ import { resolveGroundedEvidence } from '../evidence-grounding';
 /* ------------------------------------------------------------------ */
 /*  多层嵌套树形结构                                                    */
 /* ------------------------------------------------------------------ */
-
-export interface MindmapNode {
-  title: string;
-  children?: MindmapNode[];
-  startMs?: number;
-  endMs?: number;
-}
 
 interface MindmapLLMOutput {
   rootTitle?: string;
@@ -57,81 +54,6 @@ function pickEvidenceSegments(transcript: TranscriptSegment[], count: number): T
     picked.push(transcript[Math.round(index * step)]);
   }
   return picked;
-}
-
-/* ------------------------------------------------------------------ */
-/*  Markdown ↔ 树形结构 互转                                           */
-/* ------------------------------------------------------------------ */
-
-/** 将嵌套树结构递归转为 Markdown 大纲（markmap 直接消费） */
-export function treeToMarkdown(root: string, children: MindmapNode[], depth: number = 1): string {
-  const lines: string[] = [`# ${root}`];
-  const walk = (nodes: MindmapNode[], level: number) => {
-    for (const node of nodes) {
-      const indent = '  '.repeat(level - 1);
-      lines.push(`${indent}- ${node.title}`);
-      if (Array.isArray(node.children) && node.children.length > 0) {
-        walk(node.children, level + 1);
-      }
-    }
-  };
-  walk(children, depth);
-  return lines.join('\n');
-}
-
-/**
- * 去掉节点文本里的 inline markdown 标记（**粗体** / *斜体* / `代码` / [链接](url) / 前导 # - 等）。
- * SVG <text> 不渲染 markdown，节点标题必须是干净纯文本，否则会显示成字面量 `**xxx**`。
- */
-export function stripInlineMarkdown(text: string): string {
-  return text
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '$1')
-    .replace(/__([^_]+)__/g, '$1')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/^#{1,6}\s*/, '')
-    .replace(/\*+/g, '')
-    .trim();
-}
-
-/** 从 Markdown 层级大纲解析出树形结构（兼容 LLM 直接输出 Markdown） */
-export function markdownToTree(markdown: string): { root: string; children: MindmapNode[] } {
-  const lines = markdown.split('\n').filter((line) => line.trim());
-  let root = '课堂知识结构';
-
-  const rootMatch = lines[0]?.match(/^#{1,2}\s+(.+)/);
-  if (rootMatch) {
-    root = stripInlineMarkdown(rootMatch[1]);
-    lines.shift();
-  }
-
-  const stack: { node: MindmapNode; depth: number }[] = [];
-  const topChildren: MindmapNode[] = [];
-
-  for (const line of lines) {
-    const match = line.match(/^(\s*)-\s+(.+)/);
-    if (!match) continue;
-    const depth = Math.floor(match[1].length / 2);
-    const title = stripInlineMarkdown(match[2]);
-    if (!title) continue;
-    const node: MindmapNode = { title, children: [] };
-
-    while (stack.length > 0 && stack[stack.length - 1].depth >= depth) {
-      stack.pop();
-    }
-
-    if (stack.length === 0) {
-      topChildren.push(node);
-    } else {
-      const parent = stack[stack.length - 1].node;
-      if (!parent.children) parent.children = [];
-      parent.children.push(node);
-    }
-    stack.push({ node, depth });
-  }
-
-  return { root, children: topChildren };
 }
 
 /** 将 LLM 输出的嵌套 JSON draft 标准化为 MindmapNode[] */
@@ -310,7 +232,7 @@ export const mindmapPlugin: AppPlugin = {
 
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
     const promptContext = buildPromptTranscriptContext(context.input.transcript, {
-      maxChars: 8_000,
+      maxChars: 48_000,
       includeIndex: false,
       includeTimestamp: false,
       minCharsPerSegment: 52,

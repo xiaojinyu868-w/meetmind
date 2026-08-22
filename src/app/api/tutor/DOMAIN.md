@@ -67,7 +67,6 @@
 - `@/lib/services/conversation-service` — 对话持久化
 - `@/lib/services/auth-service` — 认证
 
-## 语音同桌（不走本 endpoint）
+## 语音同桌（2026-08 已下线）
 
-- `useOmniRealtimeCall` 走独立 WebSocket（Qwen Omni realtime），**不打** `/api/tutor/agent`。
-- 移动端语音同桌由 `RealtimeTutorPanel → TutorRealtimeCallScreen` 承接，语音最终转写写入 `conversationService` 的 `global-chat` 并把 conversationId 接回文字 agent。
+- 实时语音通话整体下线：`useOmniRealtimeCall` 原本走独立 WebSocket（Qwen Omni realtime via `/api/tutor-call`），**不打** `/api/tutor/agent`；该 WS 代理已从 server.js 拆除，相关组件全部 deprecated（保留一个周期后物理删除）。

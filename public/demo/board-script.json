@@ -1,0 +1,409 @@
+{
+  "script": {
+    "title": "听力 Section 1 精讲",
+    "pages": [
+      {
+        "segments": [
+          {
+            "type": "narration",
+            "narration": "同学们好，先写课题[a0]：听力 Section 1 精讲，写完顺手在下面画一道线[a1]。",
+            "narrationDisplay": "同学们好，先写课题：听力 Section 1 精讲，写完顺手在下面画一道线。",
+            "cues": [
+              {
+                "charIndex": 9,
+                "actionIndex": 0
+              },
+              {
+                "charIndex": 37,
+                "actionIndex": 1
+              }
+            ],
+            "breathMs": 800,
+            "actions": [
+              {
+                "type": "write",
+                "text": "听力 Section 1 精讲",
+                "role": "title"
+              },
+              {
+                "type": "underline",
+                "target": "w1"
+              }
+            ]
+          },
+          {
+            "type": "narration",
+            "narration": "放录音之前，播音员先立了条规矩。这句话，就是今天整节课的灵魂。",
+            "narrationDisplay": "放录音之前，播音员先立了条规矩。这句话，就是今天整节课的灵魂。",
+            "cues": [],
+            "breathMs": 1000,
+            "actions": []
+          },
+          {
+            "type": "narration",
+            "narration": "「You should answer the questions as you listen, because you will not hear the recording a second time.」",
+            "narrationDisplay": "「You should answer the questions as you listen, because you will not hear the recording a second time.」",
+            "cues": [],
+            "breathMs": 1200,
+            "actions": []
+          },
+          {
+            "type": "narration",
+            "narration": "翻成中文就八个字[a0]：边听边答，只放一遍。这是铁律，给它圈起来[a1]。",
+            "narrationDisplay": "翻成中文就八个字：边听边答，只放一遍。这是铁律，给它圈起来。",
+            "cues": [
+              {
+                "charIndex": 8,
+                "actionIndex": 0
+              },
+              {
+                "charIndex": 29,
+                "actionIndex": 1
+              }
+            ],
+            "breathMs": 900,
+            "actions": [
+              {
+                "type": "write",
+                "text": "边听边答：录音只放一遍",
+                "role": "term"
+              },
+              {
+                "type": "circle",
+                "target": "w2"
+              }
+            ]
+          },
+          {
+            "type": "narration",
+            "narration": "什么意思？耳朵到哪儿，笔就得跟到哪儿；想听完再回头补，没这个机会。",
+            "narrationDisplay": "什么意思？耳朵到哪儿，笔就得跟到哪儿；想听完再回头补，没这个机会。",
+            "cues": [],
+            "breathMs": 900,
+            "actions": []
+          },
+          {
+            "type": "narration",
+            "narration": "「The woman says that her full name is Jane Bond, so Jane Bond has been written in the space.」",
+            "narrationDisplay": "「The woman says that her full name is Jane Bond, so Jane Bond has been written in the space.」",
+            "cues": [],
+            "breathMs": 1100,
+            "actions": []
+          }
+        ]
+      },
+      {
+        "segments": [
+          {
+            "type": "narration",
+            "narration": "这一页先起个题[a0]：开场白里的信号。",
+            "narrationDisplay": "这一页先起个题：开场白里的信号。",
+            "cues": [
+              {
+                "charIndex": 7,
+                "actionIndex": 0
+              }
+            ],
+            "breathMs": 600,
+            "actions": [
+              {
+                "type": "write",
+                "text": "开场白里的信号",
+                "role": "title"
+              }
+            ]
+          },
+          {
+            "type": "narration",
+            "narration": "客人一开口就是地道口语：「I'm so up in the air right now.」",
+            "narrationDisplay": "客人一开口就是地道口语：「I'm so up in the air right now.」",
+            "cues": [],
+            "breathMs": 1000,
+            "actions": []
+          },
+          {
+            "type": "checkpoint",
+            "narration": "问题来了：up in the air 是什么意思？先别翻词典，结合店员接下来的反应，猜一猜。",
+            "narrationDisplay": "问题来了：up in the air 是什么意思？先别翻词典，结合店员接下来的反应，猜一猜。",
+            "cues": [],
+            "question": {
+              "text": "up in the air = ?",
+              "role": "term"
+            },
+            "hints": [
+              "店员下一句马上让她 calm down——人处在什么状态？",
+              "店员紧跟着说她 confused，被搬家这事搞糊涂了",
+              "字面想：东西悬在半空、还没落地，是什么感觉？"
+            ],
+            "answer": "up in the air 就是心里没底、七上八下，事情悬着没定下来。客人其实是在说：我现在整个人慌慌的、没着落。以后听到这个表达，直接反应成悬着、没定。",
+            "answerDisplay": "up in the air 就是心里没底、七上八下，事情悬着没定下来。客人其实是在说：我现在整个人慌慌的、没着落。以后听到这个表达，直接反应成悬着、没定。",
+            "answerCues": [],
+            "demoActions": [
+              {
+                "type": "write",
+                "text": "up in the air = 心里没底、悬着没定",
+                "role": "term"
+              }
+            ]
+          },
+          {
+            "type": "narration",
+            "narration": "店员接着猜：「Let me guess, you're moving and it has you a little confused.」",
+            "narrationDisplay": "店员接着猜：「Let me guess, you're moving and it has you a little confused.」",
+            "cues": [],
+            "breathMs": 800,
+            "actions": []
+          },
+          {
+            "type": "narration",
+            "narration": "客人全认了：「I'm relocating to the United States next month and I'm having a hard time getting organised.」",
+            "narrationDisplay": "客人全认了：「I'm relocating to the United States next month and I'm having a hard time getting organised.」",
+            "cues": [],
+            "breathMs": 1000,
+            "actions": []
+          },
+          {
+            "type": "narration",
+            "narration": "这句里有两个词必须收下。relocating[a0]，就是 move 的正式说法，迁居。",
+            "narrationDisplay": "这句里有两个词必须收下。relocating，就是 move 的正式说法，迁居。",
+            "cues": [
+              {
+                "charIndex": 22,
+                "actionIndex": 0
+              }
+            ],
+            "breathMs": 700,
+            "actions": [
+              {
+                "type": "write",
+                "text": "relocate = move 迁居、搬迁",
+                "role": "term"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "segments": [
+          {
+            "type": "narration",
+            "narration": "寒暄结束，正戏开场，这页就写这四个字[a0]。",
+            "narrationDisplay": "寒暄结束，正戏开场，这页就写这四个字。",
+            "cues": [
+              {
+                "charIndex": 18,
+                "actionIndex": 0
+              }
+            ],
+            "breathMs": 600,
+            "actions": [
+              {
+                "type": "write",
+                "text": "正戏开场",
+                "role": "title"
+              }
+            ]
+          },
+          {
+            "type": "narration",
+            "narration": "「OK Jane, first of all, what's your work phone number?」",
+            "narrationDisplay": "「OK Jane, first of all, what's your work phone number?」",
+            "cues": [],
+            "breathMs": 1000,
+            "actions": []
+          },
+          {
+            "type": "narration",
+            "narration": "盯住这个路标词[a0]：first of all 一响，第一题就正式开始了。",
+            "narrationDisplay": "盯住这个路标词：first of all 一响，第一题就正式开始了。",
+            "cues": [
+              {
+                "charIndex": 7,
+                "actionIndex": 0
+              }
+            ],
+            "breathMs": 800,
+            "actions": [
+              {
+                "type": "write",
+                "text": "first of all → 第 1 题开始",
+                "role": "term"
+              }
+            ]
+          },
+          {
+            "type": "checkpoint",
+            "narration": "那考你一下：人家问工作电话号码，录音只放一遍——你竖起耳朵，重点抓什么？",
+            "narrationDisplay": "那考你一下：人家问工作电话号码，录音只放一遍——你竖起耳朵，重点抓什么？",
+            "cues": [],
+            "question": {
+              "text": "Q1 work phone number：抓什么？",
+              "role": "step"
+            },
+            "hints": [
+              "电话号码不是单词，是一串数字",
+              "留心 double、oh、zero 这些读法",
+              "想想第一页那条铁律：手要跟着耳朵走"
+            ],
+            "answer": "抓的是数字串本身，边听边把数字写下来。特别注意 double 表示两个相同数字连着读，oh 和 zero 都是零。这正是铁律的用法：耳朵到，笔就到。",
+            "answerDisplay": "抓的是数字串本身，边听边把数字写下来。特别注意 double 表示两个相同数字连着读，oh 和 zero 都是零。这正是铁律的用法：耳朵到，笔就到。",
+            "answerCues": [],
+            "demoActions": [
+              {
+                "type": "write",
+                "text": "抓数字串：double / oh / zero",
+                "role": "step"
+              }
+            ]
+          },
+          {
+            "type": "narration",
+            "narration": "所以信号词不是装饰，它是发令枪：一响，你就进入抓信息的状态。",
+            "narrationDisplay": "所以信号词不是装饰，它是发令枪：一响，你就进入抓信息的状态。",
+            "cues": [],
+            "breathMs": 900,
+            "actions": []
+          }
+        ]
+      },
+      {
+        "segments": [
+          {
+            "type": "narration",
+            "narration": "最后一页，把这节课浓缩成三句话，先写题[a0]。",
+            "narrationDisplay": "最后一页，把这节课浓缩成三句话，先写题。",
+            "cues": [
+              {
+                "charIndex": 19,
+                "actionIndex": 0
+              }
+            ],
+            "breathMs": 600,
+            "actions": [
+              {
+                "type": "write",
+                "text": "带走三句话",
+                "role": "title"
+              }
+            ]
+          },
+          {
+            "type": "narration",
+            "narration": "第一[a0]，边听边答，手不离笔。",
+            "narrationDisplay": "第一，边听边答，手不离笔。",
+            "cues": [
+              {
+                "charIndex": 2,
+                "actionIndex": 0
+              }
+            ],
+            "breathMs": 700,
+            "actions": [
+              {
+                "type": "write",
+                "text": "1. 边听边答，手不离笔",
+                "role": "step"
+              }
+            ]
+          },
+          {
+            "type": "narration",
+            "narration": "第二[a0]，例题不是摆设，用它定格式、找起点。",
+            "narrationDisplay": "第二，例题不是摆设，用它定格式、找起点。",
+            "cues": [
+              {
+                "charIndex": 2,
+                "actionIndex": 0
+              }
+            ],
+            "breathMs": 700,
+            "actions": [
+              {
+                "type": "write",
+                "text": "2. 用例题定格式、找起点",
+                "role": "step"
+              }
+            ]
+          },
+          {
+            "type": "narration",
+            "narration": "第三[a0]，跟信号词走，first of all 一响就进状态。",
+            "narrationDisplay": "第三，跟信号词走，first of all 一响就进状态。",
+            "cues": [
+              {
+                "charIndex": 2,
+                "actionIndex": 0
+              }
+            ],
+            "breathMs": 700,
+            "actions": [
+              {
+                "type": "write",
+                "text": "3. 跟信号词走：first of all",
+                "role": "step"
+              }
+            ]
+          },
+          {
+            "type": "narration",
+            "narration": "三句话的根，还是第一页那条铁律[a0]，咱们回头看一眼。",
+            "narrationDisplay": "三句话的根，还是第一页那条铁律，咱们回头看一眼。",
+            "cues": [
+              {
+                "charIndex": 15,
+                "actionIndex": 0
+              }
+            ],
+            "breathMs": 1500,
+            "actions": [
+              {
+                "type": "ref",
+                "page": 1,
+                "target": "w2"
+              }
+            ]
+          },
+          {
+            "type": "narration",
+            "narration": "好，今天就讲到这儿，下节课咱们真刀真枪做题。",
+            "narrationDisplay": "好，今天就讲到这儿，下节课咱们真刀真枪做题。",
+            "cues": [],
+            "breathMs": 700,
+            "actions": []
+          }
+        ]
+      }
+    ],
+    "quotes": [
+      {
+        "text": "You should answer the questions as you listen, because you will not hear the recording a second time.",
+        "startMs": 42000
+      },
+      {
+        "text": "The woman says that her full name is Jane Bond, so Jane Bond has been written in the space.",
+        "startMs": 34000
+      },
+      {
+        "text": "I'm so up in the air right now.",
+        "startMs": 6000
+      },
+      {
+        "text": "Let me guess, you're moving and it has you a little confused.",
+        "startMs": 11000
+      },
+      {
+        "text": "I'm relocating to the United States next month and I'm having a hard time getting organised.",
+        "startMs": 17000
+      },
+      {
+        "text": "OK Jane, first of all, what's your work phone number?",
+        "startMs": 88000
+      }
+    ]
+  },
+  "quoteStats": {
+    "total": 6,
+    "verified": 6,
+    "downgraded": 0
+  }
+}

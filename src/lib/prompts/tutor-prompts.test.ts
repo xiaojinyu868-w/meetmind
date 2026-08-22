@@ -234,14 +234,30 @@ describe('buildTutorSystemPrompt — learnerProfile 注入', () => {
 });
 
 describe('buildTutorSystemPrompt — goal 模式沉淀边界', () => {
-  it('首次会面先接住当下需要，不把用户带进画像访谈', () => {
+  it('首次会面先接住开场选择题的答案，稳定属性尽快沉淀进 bio', () => {
     const prompt = buildTutorSystemPrompt('goal');
+    expect(prompt).toMatch(/三道固定开场选择题的答案/);
     expect(prompt).toMatch(/用户不是来建立档案的/);
-    expect(prompt).toMatch(/第一轮就得到一点有用的理解/);
-    expect(prompt).toMatch(/不要从身份、年级、专业、学校开始/);
+    expect(prompt).toMatch(/尽快用 `---我了解到的你---` 把它们沉淀下来/);
     expect(prompt).toMatch(/先行动，再在过程里校准/);
     expect(prompt).not.toMatch(/把这个人聊完整/);
     expect(prompt).not.toMatch(/身份和阶段是最容易开口的/);
+  });
+
+  it('目标卡必须带时间尺度前缀（horizon 框架）', () => {
+    const prompt = buildTutorSystemPrompt('goal');
+    expect(prompt).toMatch(/\[短期\]/);
+    expect(prompt).toMatch(/\[中期\]/);
+    expect(prompt).toMatch(/\[长期\]/);
+    expect(prompt).toMatch(/短期目标会过期，别把长期方向写成短期/);
+  });
+
+  it('每一轮都必须给用户选择题，且对话有收敛义务', () => {
+    const prompt = buildTutorSystemPrompt('goal');
+    expect(prompt).toMatch(/每一轮回复，末尾都要给他 2-4 个选项/);
+    expect(prompt).toMatch(/---选项---/);
+    expect(prompt).toMatch(/三轮以内/);
+    expect(prompt).toMatch(/用一句话自然收尾/);
   });
 
   it('让模型静默维护上下文，但不把短期状态和猜测写成长期事实', () => {

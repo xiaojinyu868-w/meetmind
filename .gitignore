@@ -32,6 +32,14 @@ notebook_data/
 surreal_data/
 temp-audio/
 public/temp-audio/
+# 清小搭讲稿产物（24h TTL 临时文件）
+data/xiaoda-files/
+# teach 上课线运行时产物（codex 每线程 CODEX_HOME + 事件日志）
+data/teach-codex/
+data/teach-events/
+# teach/board TTS 合成缓存（可再生的音频产物）
+data/teach-tts-cache/
+data/board-tts-cache/
 
 # 临时文件
 *.tmp
@@ -85,9 +93,6 @@ scripts/fix_aitutor.py
 
 # Git 隔离工作区
 .worktrees/
-
-# OpenClaw 运行时状态（敏感数据 + 会话）
-openclaw/.state/
 
 # Eval harness runs（每次评测产出不入库，只保留 datasets / graders / fixtures）
 tests/eval/**/runs/*.jsonl

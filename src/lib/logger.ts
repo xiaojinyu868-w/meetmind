@@ -223,7 +223,9 @@ export type TrackEvent =
   // v3.0 SharedAgent —— 分享 Agent 链路（roadmap/v3.0-virality-agent.md）
   | { kind: 'share.create'; shareId: string; ownerId: string | null; artifactKind: string }
   | { kind: 'share.interaction'; shareId: string; eventType: 'view' | 'chat' | 'claim' | 'reshare'; visitorUserId: string | null }
-  | { kind: 'share.fail'; shareId?: string; errorCode?: string; errorMsg?: string };
+  | { kind: 'share.fail'; shareId?: string; errorCode?: string; errorMsg?: string }
+  // 积分 —— 结算失败对账信号（产物已交付但扣费失败，需人工/任务补偿）
+  | { kind: 'points.charge_failed'; feature: string; userId?: string; errorCode?: string; errorMsg?: string };
 
 const trackLog = createLogger('track');
 

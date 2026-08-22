@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>知识图谱让多跳问答更可靠</title>
+<style>
+:root{
+--paper:#FBFAFC;--ink:#16101C;--accent:#660874;--accent-on:#FFF;
+--grey-1:#F3EEF7;--grey-2:#DDD3E4;--grey-3:#7A7285;--border-subtle:#E8E2EE;
+--sans:"Inter",-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Noto Sans SC","Microsoft YaHei",sans-serif;
+--mono:ui-monospace,"SF Mono","Cascadia Code","Consolas",monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:var(--paper);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+em{font-style:italic}
+#stage{width:100vw;height:100vh;overflow:hidden}
+#deck{display:flex;height:100vh;transition:transform .6s cubic-bezier(.25,.46,.45,.94)}
+.slide{position:relative;flex:0 0 100vw;width:100vw;height:100vh;display:flex;flex-direction:column;overflow:hidden;background:var(--paper)}
+.body{flex:1;display:flex;flex-direction:column;padding:5.5vh 5vw 7vh;min-height:0}
+
+/* 顶部 chrome 与底部发丝线页脚 */
+.chrome{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;padding:2.4vh 5vw 0;font-family:var(--mono);font-size:max(13px,.8vw);letter-spacing:.15em;text-transform:uppercase;color:var(--grey-3);pointer-events:none}
+.foot{position:absolute;left:0;right:0;bottom:0;padding:0 5vw 2.4vh;pointer-events:none}
+.foot-rule{height:1px;background:var(--border-subtle)}
+.foot-row{display:flex;justify-content:space-between;padding-top:1vh;font-family:var(--mono);font-size:max(13px,.8vw);letter-spacing:.15em;text-transform:uppercase;color:var(--grey-3)}
+
+/* 深色页（封面/章节/强调）：满屏清华紫，chrome 反白 */
+.slide[data-layout=COVER],.slide[data-layout=SECTION],.slide[data-layout=STATEMENT]{background:var(--accent);color:var(--accent-on)}
+.slide[data-layout=SECTION] .chrome,.slide[data-layout=STATEMENT] .chrome{color:rgba(255,255,255,.55)}
+.slide[data-layout=SECTION] .foot-rule,.slide[data-layout=STATEMENT] .foot-rule{background:rgba(255,255,255,.22)}
+.slide[data-layout=SECTION] .foot-row,.slide[data-layout=STATEMENT] .foot-row{color:rgba(255,255,255,.55)}
+.slide[data-layout=COVER] .chrome,.slide[data-layout=COVER] .foot,
+.slide[data-layout=CLOSING] .chrome,.slide[data-layout=CLOSING] .foot{display:none}
+
+/* COVER */
+.cover-kicker{font-family:var(--mono);font-size:max(13px,.8vw);letter-spacing:.15em;text-transform:uppercase;color:rgba(255,255,255,.6)}
+.cover-mid{flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0}
+.cover-title{font-size:min(7vw,12vh);font-weight:200;letter-spacing:-.02em;line-height:1.18;max-width:88%;text-wrap:balance}
+.cover-sub{margin-top:3vh;font-size:max(20px,1.4vw);font-weight:300;color:rgba(255,255,255,.7);letter-spacing:.02em}
+.cover-rule{height:1px;background:rgba(255,255,255,.22)}
+.cover-meta{padding-top:1.6vh;font-family:var(--mono);font-size:max(13px,.8vw);letter-spacing:.15em;text-transform:uppercase;color:rgba(255,255,255,.6)}
+
+/* SECTION */
+.sec{justify-content:center}
+.sec-num{font-family:var(--mono);font-size:min(9vw,15vh);font-weight:400;letter-spacing:.1em;color:rgba(255,255,255,.25);line-height:1}
+.sec-title{margin-top:2.5vh;font-size:min(4.6vw,8vh);font-weight:200;letter-spacing:-.02em;line-height:1.2}
+
+/* STATEMENT */
+.stmt{justify-content:center}
+.stmt-text{font-size:min(6vw,10.5vh);font-weight:200;letter-spacing:-.01em;line-height:1.3;max-width:84%;text-wrap:balance}
+
+/* CONTENT 标题块（DATA / COMPARE 共用） */
+.kicker{font-family:var(--mono);font-size:max(13px,.8vw);letter-spacing:.15em;text-transform:uppercase;color:var(--accent)}
+.c-title{margin-top:1vh;font-size:min(2.5vw,4.4vh);font-weight:400;letter-spacing:-.01em;line-height:1.4;max-width:86%}
+.c-rule{height:1px;background:var(--border-subtle);margin:2.4vh 0 3.6vh}
+
+/* CONTENT 要点：不对称网格，要点区 max-width 62%，右侧留白 */
+.c-list{list-style:none;max-width:62%}
+.c-list li{position:relative;line-height:1.65}
+.c-list .l1{padding-left:24px;margin-bottom:1.5vh;font-size:max(18px,1.15vw);font-weight:400}
+.c-list .l1::before{content:'';position:absolute;left:0;top:.58em;width:8px;height:8px;background:var(--accent)}
+.c-list .l2{padding-left:48px;margin-bottom:1vh;font-size:max(16px,1vw);color:var(--grey-3)}
+.c-list .l2::before{content:'\2013';position:absolute;left:26px;color:var(--grey-2)}
+
+/* DATA：2-4 stat 列，列顶 2px 紫线，焦点列紫底反白 */
+.stats{flex:1;display:flex;gap:2.5vw;align-items:flex-start;min-height:0}
+.stat{flex:1;display:flex;flex-direction:column;border-top:2px solid var(--accent);padding-top:2.4vh;min-width:0}
+.stat-label{font-family:var(--mono);font-size:max(13px,.8vw);letter-spacing:.15em;text-transform:uppercase;color:var(--grey-3);margin-bottom:3vh}
+.stat-num{font-size:min(6vw,10vh);font-weight:200;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1.05;margin-bottom:2.2vh}
+.stat-note{font-size:max(16px,1vw);line-height:1.5;color:var(--grey-3)}
+.stat.focus{background:var(--accent);padding:2.4vh 2vw 2.5vh;color:var(--accent-on)}
+.stat.focus .stat-label,.stat.focus .stat-note{color:rgba(255,255,255,.72)}
+.stat.focus .stat-num{color:var(--accent-on)}
+
+/* COMPARE：左右两半 + 中缝 1px 竖线，左半 opacity .62 */
+.cmp{position:relative;flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0}
+.cmp::before{content:'';position:absolute;left:50%;top:2%;bottom:2%;width:1px;background:var(--grey-2)}
+.cmp-row{display:grid;grid-template-columns:1fr 1fr;column-gap:6vw;padding:1.7vh 0}
+.cmp-l,.cmp-r{font-size:max(18px,1.1vw);line-height:1.6;font-weight:400}
+.cmp-l{text-align:right;opacity:.62}
+
+/* CLOSING：左紫右白 split（无要点时整页紫） */
+.closing{flex-direction:row;padding:0}
+.cl-left{width:44%;background:var(--accent);color:var(--accent-on);display:flex;flex-direction:column;justify-content:center;padding:0 4.5vw}
+.cl-tag{font-family:var(--mono);font-size:max(13px,.8vw);letter-spacing:.15em;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:3vh}
+.cl-title{font-size:min(5vw,8.5vh);font-weight:200;letter-spacing:-.02em;line-height:1.15}
+.cl-right{flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 5vw;min-width:0}
+.cl-kicker{font-family:var(--mono);font-size:max(13px,.8vw);letter-spacing:.15em;text-transform:uppercase;color:var(--grey-3);margin-bottom:2.5vh}
+.cl-list{list-style:none}
+.cl-list li{padding:1.8vh 0;border-top:1px solid var(--border-subtle);font-size:max(18px,1.15vw);line-height:1.55}
+.cl-list li.hl{color:var(--accent)}
+.closing.full .cl-left{width:100%;padding:0 10vw}
+
+/* 导航点：6×6px 直角方块，active 紫、宽 18px */
+#dots{position:fixed;bottom:1.2vh;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:40}
+.dot{width:6px;height:6px;background:var(--grey-2);border:0;padding:0;cursor:pointer}
+.dot.active{width:18px;background:var(--accent)}
+body.on-dark .dot{background:rgba(255,255,255,.35)}
+body.on-dark .dot.active{background:#fff}
+#keyhint{position:fixed;right:5vw;bottom:1.2vh;font-family:var(--mono);font-size:max(13px,.8vw);letter-spacing:.15em;text-transform:uppercase;color:var(--grey-3);z-index:40;pointer-events:none}
+body.on-dark #keyhint{color:rgba(255,255,255,.5)}
+body.audience #dots,body.audience #keyhint,body.speaker #dots,body.speaker #keyhint{display:none}
+
+/* ESC 总览：网格缩略图 */
+#overview{position:fixed;inset:0;z-index:60;background:var(--paper);display:none;overflow:auto;padding:5vh 5vw}
+#overview.open{display:block}
+.ov-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:2.5vw}
+.ov-item{position:relative;aspect-ratio:16/9;overflow:hidden;border:1px solid var(--border-subtle);background:#fff;cursor:pointer}
+.ov-item.cur{border:2px solid var(--accent)}
+.ov-item .slide{position:absolute;top:0;left:0;flex:none;pointer-events:none}
+.ov-item [data-anim]{opacity:1!important;transform:none!important;transition:none!important}
+.ov-num{position:absolute;left:8px;bottom:6px;z-index:2;font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--grey-3);background:rgba(255,255,255,.75);padding:1px 4px}
+
+/* 演讲者控制台（按 P）：深色 #101216 */
+#console{display:none}
+body.speaker #console{position:fixed;inset:0;z-index:70;background:#101216;color:#E8E9ED;display:flex;flex-direction:column}
+.c-main{flex:1;display:grid;grid-template-columns:minmax(0,11fr) minmax(0,9fr);gap:3vw;padding:4vh 3vw 2.5vh;min-height:0}
+.c-prev{position:relative;align-self:center;width:100%;aspect-ratio:16/9;max-height:100%;overflow:hidden;background:#000;margin:0 auto}
+body.speaker #stage{position:absolute;top:0;left:0}
+.c-side{min-height:0;overflow:auto;padding-right:1vw}
+.c-tag{font-family:var(--mono);font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:#8A8F9C}
+.c-title{margin-top:1.2vh;font-size:clamp(18px,1.6vw,26px);font-weight:400;line-height:1.4}
+.c-intent{margin-top:1.2vh;font-size:13px;line-height:1.6;color:#9AA0AE}
+.c-talk{margin-top:2.4vh;border-top:1px solid #262A33;padding-top:2.4vh}
+.c-talk p{margin-bottom:1.4vh;font-size:16px;line-height:1.75;color:#E8E9ED}
+.c-talk p.c-empty{color:#6B7180}
+.c-next{margin-top:2.4vh;border-top:1px solid #262A33;padding-top:1.6vh;font-family:var(--mono);font-size:12px;letter-spacing:.12em;color:#8A8F9C}
+.c-bar{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #262A33;padding:1.8vh 3vw;font-family:var(--mono);font-size:13px;letter-spacing:.1em;color:#C6CAD4}
+.c-timer{display:flex;align-items:center;gap:16px}
+.c-timer button{background:none;border:1px solid #3A3F4B;color:#E8E9ED;font-family:var(--mono);font-size:12px;letter-spacing:.12em;padding:6px 16px;cursor:pointer}
+.c-timer button:hover{border-color:#B14FC0;color:#fff}
+#tRemain.over{color:#FF9DB0}
+.c-meta{display:flex;gap:24px;align-items:center}
+#cSync{color:#8A8F9C}
+
+/* 观众屏结束页 */
+#ended{display:none;position:fixed;inset:0;z-index:100;background:var(--ink);color:#fff;align-items:center;justify-content:center;font-size:min(3vw,5vh);font-weight:200;letter-spacing:.04em}
+
+/* 入场动效：stagger fade + translateY(12px)，尊重 prefers-reduced-motion，B 键静态模式 */
+[data-anim]{opacity:0;transform:translateY(12px);transition:opacity .5s ease,transform .5s ease}
+[data-anim].in{opacity:1;transform:none}
+html.static [data-anim]{opacity:1;transform:none;transition:none}
+@media (prefers-reduced-motion:reduce){
+[data-anim]{opacity:1!important;transform:none!important;transition:none!important}
+#deck{transition:none}
+}
+</style>
+</head>
+<body>
+<div id="stage"><div id="deck"><section class="slide" data-layout="COVER" data-slide-id="s01"><div class="body"><div class="cover-kicker" data-anim>GROUP MEETING · 2026-08</div><div class="cover-mid"><h1 class="cover-title" data-anim>知识图谱让多跳问答更可靠</h1><p class="cover-sub" data-anim>2025-2026 秋季学期组会汇报</p></div><div data-anim><div class="cover-rule"></div><div class="cover-meta">张三 · 知识工程实验室 · 2026-08</div></div></div></section><section class="slide" data-layout="CONTENT" data-slide-id="s02"><header class="chrome"><span>2025-2026 秋季学期组会汇报</span><span>02 / 12</span></header><div class="body"><div class="kicker" data-anim>论点 01</div><h2 class="c-title" data-anim>纯向量检索在多跳问题上准确率不足 60%</h2><div class="c-rule" data-anim></div><ul class="c-list"><li class="l1" data-anim>基线：大模型 + 向量检索（RAG）</li><li class="l1" data-anim>多跳问题：需串联 2 个以上事实</li><li class="l1" data-anim>症结：检索碎片化，推理链断裂</li></ul></div><footer class="foot"><div class="foot-rule"></div><div class="foot-row"><span>清华大学</span><span>02</span></div></footer></section><section class="slide" data-layout="SECTION" data-slide-id="s03"><header class="chrome"><span>SECTION 01</span><span>03 / 12</span></header><div class="body sec"><div class="sec-num" data-anim>01</div><h1 class="sec-title" data-anim>我们的方法</h1></div><footer class="foot"><div class="foot-rule"></div><div class="foot-row"><span>清华大学</span><span>03</span></div></footer></section><section class="slide" data-layout="CONTENT" data-slide-id="s04"><header class="chrome"><span>我们的方法</span><span>04 / 12</span></header><div class="body"><div class="kicker" data-anim>论点 02</div><h2 class="c-title" data-anim>知识图谱把推理链变成图上的一条路径</h2><div class="c-rule" data-anim></div><ul class="c-list"><li class="l1" data-anim>问题 → 实体链接 → 图查询</li><li class="l1" data-anim>路径即推理过程，可追溯</li><li class="l2" data-anim>每一步对应一条三元组</li></ul></div><footer class="foot"><div class="foot-rule"></div><div class="foot-row"><span>清华大学</span><span>04</span></div></footer></section><section class="slide" data-layout="COMPARE" data-slide-id="s05"><header class="chrome"><span>我们的方法</span><span>05 / 12</span></header><div class="body"><div class="kicker" data-anim>论点 03</div><h2 class="c-title" data-anim>从&quot;匹配文本&quot;到&quot;走路径&quot;，检索范式换了一代</h2><div class="c-rule" data-anim></div><div class="cmp"><div class="cmp-row" data-anim><div class="cmp-l">检索到的是碎文本片段</div><div class="cmp-r">检索出的是完整推理路径</div></div><div class="cmp-row" data-anim><div class="cmp-l">推理过程不可追溯</div><div class="cmp-r">每一步对应一条三元组</div></div><div class="cmp-row" data-anim><div class="cmp-l">答案错了无从定位</div><div class="cmp-r">错了能定位到具体哪一跳</div></div></div></div><footer class="foot"><div class="foot-rule"></div><div class="foot-row"><span>清华大学</span><span>05</span></div></footer></section><section class="slide" data-layout="SECTION" data-slide-id="s06"><header class="chrome"><span>SECTION 02</span><span>06 / 12</span></header><div class="body sec"><div class="sec-num" data-anim>02</div><h1 class="sec-title" data-anim>实验结果</h1></div><footer class="foot"><div class="foot-rule"></div><div class="foot-row"><span>清华大学</span><span>06</span></div></footer></section><section class="slide" data-layout="DATA" data-slide-id="s07"><header class="chrome"><span>实验结果</span><span>07 / 12</span></header><div class="body"><div class="kicker" data-anim>论点 04</div><h2 class="c-title" data-anim>多跳问答准确率从 58% 提升到 78.5%</h2><div class="c-rule" data-anim></div><div class="stats"><div class="stat focus" data-anim><div class="stat-label">多跳问答准确率</div><div class="stat-num">78.5%</div><div class="stat-note">较基线 +20.5pt</div></div><div class="stat" data-anim><div class="stat-label">纯向量检索基线</div><div class="stat-num">58.0%</div><div class="stat-note">CCKS2022 KGQA 评测</div></div><div class="stat" data-anim><div class="stat-label">单跳问题准确率</div><div class="stat-num">90.2%</div><div class="stat-note">多跳才是拉开差距的战场</div></div></div></div><footer class="foot"><div class="foot-rule"></div><div class="foot-row"><span>清华大学</span><span>07</span></div></footer></section><section class="slide" data-layout="STATEMENT" data-slide-id="s08"><header class="chrome"><span>实验结果</span><span>08 / 12</span></header><div class="body stmt"><p class="stmt-text" data-anim>推理路径是可解释的</p></div><footer class="foot"><div class="foot-rule"></div><div class="foot-row"><span>清华大学</span><span>08</span></div></footer></section><section class="slide" data-layout="CONTENT" data-slide-id="s09"><header class="chrome"><span>实验结果</span><span>09 / 12</span></header><div class="body"><div class="kicker" data-anim>论点 05</div><h2 class="c-title" data-anim>错误主要来自实体链接歧义，占 40%</h2><div class="c-rule" data-anim></div><ul class="c-list"><li class="l1" data-anim>同名实体：地名 vs 人名</li><li class="l1" data-anim>计划：引入上下文消歧模块</li></ul></div><footer class="foot"><div class="foot-rule"></div><div class="foot-row"><span>清华大学</span><span>09</span></div></footer></section><section class="slide" data-layout="SECTION" data-slide-id="s10"><header class="chrome"><span>SECTION 03</span><span>10 / 12</span></header><div class="body sec"><div class="sec-num" data-anim>03</div><h1 class="sec-title" data-anim>下一步工作</h1></div><footer class="foot"><div class="foot-rule"></div><div class="foot-row"><span>清华大学</span><span>10</span></div></footer></section><section class="slide" data-layout="CONTENT" data-slide-id="s11"><header class="chrome"><span>下一步工作</span><span>11 / 12</span></header><div class="body"><div class="kicker" data-anim>论点 06</div><h2 class="c-title" data-anim>下一步：大模型辅助查询改写，目标 AAAI 2027</h2><div class="c-rule" data-anim></div><ul class="c-list"><li class="l1" data-anim>查询改写：自然语言 → 图查询</li><li class="l1" data-anim>扩展：时序图谱、多模态知识</li></ul></div><footer class="foot"><div class="foot-rule"></div><div class="foot-row"><span>清华大学</span><span>11</span></div></footer></section><section class="slide" data-layout="CLOSING" data-slide-id="s12"><div class="body closing"><div class="cl-left"><div class="cl-tag" data-anim>THANKS</div><h1 class="cl-title" data-anim>谢谢聆听</h1></div><div class="cl-right"><div class="cl-kicker" data-anim>要点回顾</div><ul class="cl-list"><li data-anim>知识图谱让多跳问答可追溯</li><li data-anim>多跳准确率 78.5%，较基线 +20.5pt</li><li class="hl" data-anim>下一步：查询改写，目标 AAAI 2027</li></ul></div></div></section></div></div>
+<nav id="dots" aria-label="页面导航"></nav>
+<div id="keyhint">← → 翻页 · ESC 总览 · P 演讲模式</div>
+
+<div id="console">
+<div class="c-main">
+<div class="c-prev" id="cPrev"></div>
+<div class="c-side">
+<div class="c-tag" id="cTag"></div>
+<div class="c-title" id="cTitle"></div>
+<div class="c-intent" id="cIntent"></div>
+<div class="c-talk" id="cTalk"></div>
+<div class="c-next" id="cNext"></div>
+</div>
+</div>
+<div class="c-bar">
+<div class="c-timer">
+<button id="tToggle">开始</button><button id="tReset">重置</button>
+<span id="tElapsed">已进行 00:00</span><span id="tRemain"></span>
+</div>
+<div class="c-meta"><span id="cPage"></span><span id="cSync"></span></div>
+</div>
+</div>
+<div id="overview"></div>
+<div id="ended">演示已结束</div>
+<script>
+var SPEAKER_NOTES = /*SN-BEGIN*/[{"id": "s01", "title": "知识图谱让多跳问答更可靠", "intent": null, "talk": [], "min": 0.8}, {"id": "s02", "title": "纯向量检索在多跳问题上准确率不足 60%", "intent": "观众离开这页时应该相信：纯向量检索撑不起多跳问题", "talk": ["开场先抛痛点：大家以为 RAG 万能，但多跳问题一上就不行。", "举一个真实例子：\"A 的导师的博士生是谁\"——向量检索只能拿到一跳。"], "min": 0.8}, {"id": "s03", "title": "我们的方法", "intent": null, "talk": [], "min": 0.8}, {"id": "s04", "title": "知识图谱把推理链变成图上的一条路径", "intent": "观众从\"检索就是向量匹配\"转到\"推理可以是图上可追溯的一条路径\"", "talk": ["这一页讲方法核心：把\"检索\"换成\"走路径\"。", "强调可追溯性——答案错了能定位到哪一步错，这是 RAG 做不到的。"], "min": 0.8}, {"id": "s05", "title": "从\"匹配文本\"到\"走路径\"，检索范式换了一代", "intent": "观众一眼看清新旧范式的差异，承认路径检索是代际升级", "talk": ["对比页不要逐行念，让中缝两边的差异自己说话。", "只点一句：左边是\"像\"，右边是\"对\"——匹配像的文本，和走出对的路径，是两回事。"], "min": 0.8}, {"id": "s06", "title": "实验结果", "intent": null, "talk": [], "min": 0.8}, {"id": "s07", "title": "多跳问答准确率从 58% 提升到 78.5%", "intent": "观众从怀疑方法转到承认提升真实、实验公平", "talk": ["先抛结果再解释公平性：同样的大模型、同样的语料，唯一变量是检索方式。", "预料会被问\"为什么基线这么低\"——回答方向：多跳问题本身就是 RAG 的已知短板。"], "min": 0.8}, {"id": "s08", "title": "推理路径是可解释的", "intent": null, "talk": ["强调页不停留，说完就走：这是我们和所有黑箱方案的本质区别。", "用一个具体 case 演示路径长什么样，30 秒讲完翻页。"], "min": 0.8}, {"id": "s09", "title": "错误主要来自实体链接歧义，占 40%", "intent": "观众看到我们知道短板在哪，并且短板可被修复", "talk": ["主动暴露弱点是组会的本分，别等被问。", "下一步计划顺带引出，自然过渡到最后一张内容页。"], "min": 0.8}, {"id": "s10", "title": "下一步工作", "intent": null, "talk": [], "min": 0.8}, {"id": "s11", "title": "下一步：大模型辅助查询改写，目标 AAAI 2027", "intent": "观众带着\"这个工作值得支持\"离开，导师记住里程碑", "talk": ["收尾给导师一个明确的里程碑：明年 2 月投稿 AAAI。", "需要的支持：标注人力 20 小时——组会上直接提需求。"], "min": 0.8}, {"id": "s12", "title": "谢谢聆听", "intent": null, "talk": ["结尾页三条 takeaway 复述一遍主线，然后停住，把时间让给提问。"], "min": 0.8}]/*SN-END*/;
+var DECK_MINUTES = 10.0;
+</script>
+<script>
+(function(){
+"use strict";
+var deck=document.getElementById('deck');
+var slides=[].slice.call(deck.querySelectorAll('.slide'));
+var N=slides.length;
+var NOTES=SPEAKER_NOTES;
+var body=document.body, html=document.documentElement;
+var params=new URLSearchParams(location.search);
+var isAudience=params.get('audience')==='1';
+var session=params.get('session')||'';
+var popup=null, chan=null, lastAck=0, lastSend=0, pendingSync=false;
+var idx=0, lock=false;
+var DARK={COVER:1,SECTION:1,STATEMENT:1};
+var dotsBox=document.getElementById('dots');
+var dots=[];
+slides.forEach(function(s,i){
+  var b=document.createElement('button');
+  b.className='dot';
+  b.setAttribute('aria-label','\u7b2c '+(i+1)+' \u9875');
+  b.addEventListener('click',function(){go(i)});
+  dotsBox.appendChild(b);dots.push(b);
+});
+try{if(localStorage.getItem('thu-deck-static')==='1')html.classList.add('static')}catch(e){}
+if(isAudience)body.classList.add('audience');
+
+function anim(slide){
+  var els=slide.querySelectorAll('[data-anim]');
+  var i;
+  for(i=0;i<els.length;i++){els[i].classList.remove('in');els[i].style.transitionDelay='0ms'}
+  if(html.classList.contains('static'))return;
+  void slide.offsetWidth;
+  for(i=0;i<els.length;i++){
+    (function(el,k){el.style.transitionDelay=(k*80)+'ms';el.classList.add('in')})(els[i],i);
+  }
+}
+function go(n,fromSync){
+  n=Math.max(0,Math.min(N-1,n));
+  if(n===idx&&deck.style.transform)return;
+  idx=n;
+  deck.style.transform='translateX('+(-100*n)+'vw)';
+  for(var i=0;i<N;i++){
+    dots[i].className='dot'+(i===n?' active':'');
+    slides[i].classList.toggle('active',i===n);
+  }
+  body.classList.toggle('on-dark',!!DARK[slides[idx].getAttribute('data-layout')]);
+  try{history.replaceState(null,'','#'+(n+1))}catch(e){}
+  anim(slides[n]);
+  if(!fromSync)syncGoto();
+  if(body.classList.contains('speaker'))renderConsole();
+}
+function step(d){
+  if(lock)return;
+  lock=true;setTimeout(function(){lock=false},600);
+  go(idx+d);
+}
+
+/* 键盘 / 滚轮 / 触屏 */
+document.addEventListener('keydown',function(e){
+  if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){e.preventDefault();step(1)}
+  else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();step(-1)}
+  else if(e.key==='Home'){e.preventDefault();go(0)}
+  else if(e.key==='End'){e.preventDefault();go(N-1)}
+  else if(e.key==='Escape'){
+    if(body.classList.contains('speaker'))speaker(false);else toggleOverview();
+  }
+  else if(e.key==='p'||e.key==='P'){if(!isAudience)speaker(!body.classList.contains('speaker'))}
+  else if(e.key==='b'||e.key==='B'){
+    html.classList.toggle('static');
+    try{localStorage.setItem('thu-deck-static',html.classList.contains('static')?'1':'0')}catch(err){}
+    anim(slides[idx]);
+  }
+});
+var wheelLock=false;
+window.addEventListener('wheel',function(e){
+  if(overviewOpen()||body.classList.contains('speaker'))return;
+  if(wheelLock)return;
+  if(Math.abs(e.deltaY)<12&&Math.abs(e.deltaX)<12)return;
+  wheelLock=true;setTimeout(function(){wheelLock=false},600);
+  step((e.deltaY>0||e.deltaX>0)?1:-1);
+},{passive:true});
+var tx=0,ty=0;
+window.addEventListener('touchstart',function(e){tx=e.touches[0].clientX;ty=e.touches[0].clientY},{passive:true});
+window.addEventListener('touchend',function(e){
+  var dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;
+  if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy))step(dx<0?1:-1);
+},{passive:true});
+
+/* ESC 总览 */
+var ov=document.getElementById('overview'),ovBuilt=false;
+function overviewOpen(){return ov.classList.contains('open')}
+function toggleOverview(){
+  if(overviewOpen()){ov.classList.remove('open');return}
+  if(!ovBuilt)buildOverview();
+  ov.classList.add('open');fitOverview();
+}
+function buildOverview(){
+  ovBuilt=true;
+  var grid=document.createElement('div');grid.className='ov-grid';
+  slides.forEach(function(s,i){
+    var item=document.createElement('div');item.className='ov-item'+(i===idx?' cur':'');
+    var cl=s.cloneNode(true);cl.removeAttribute('id');
+    item.appendChild(cl);
+    var num=document.createElement('span');num.className='ov-num';num.textContent=(i+1)+' / '+N;
+    item.appendChild(num);
+    item.addEventListener('click',function(){ov.classList.remove('open');go(i)});
+    grid.appendChild(item);
+  });
+  ov.appendChild(grid);
+}
+function fitOverview(){
+  var items=ov.querySelectorAll('.ov-item');
+  for(var i=0;i<items.length;i++){
+    var w=items[i].clientWidth;if(!w)continue;
+    var cl=items[i].querySelector('.slide');
+    cl.style.width='100vw';cl.style.height='100vh';
+    cl.style.transformOrigin='0 0';
+    cl.style.transform='scale('+(w/window.innerWidth)+')';
+  }
+}
+
+/* 双通道同步：BroadcastChannel（thu-deck:<session>）+ postMessage 兜底 */
+function openChan(){
+  if(chan||!('BroadcastChannel' in window))return;
+  try{
+    chan=new BroadcastChannel('thu-deck:'+(session||'default'));
+    chan.onmessage=function(e){onMsg(e.data)};
+  }catch(e){}
+}
+function send(d){
+  if(d&&d.t==='goto')lastSend=Date.now();
+  if(chan){try{chan.postMessage(d)}catch(e){}}
+  if(popup&&!popup.closed){try{popup.postMessage(d,'*')}catch(e){}}
+}
+function ackTo(){
+  var d={t:'ack'};
+  if(chan){try{chan.postMessage(d)}catch(e){}}
+  try{if(window.opener)window.opener.postMessage(d,'*')}catch(e){}
+}
+function syncGoto(){
+  if(!body.classList.contains('speaker'))return;
+  send({t:'goto',i:idx});
+}
+function onMsg(d){
+  if(!d||!d.t)return;
+  if(isAudience){
+    if(d.t==='goto'){go(d.i,true);ackTo()}
+    else if(d.t==='end'){document.getElementById('ended').style.display='flex'}
+  }else if(d.t==='ack'){
+    lastAck=Date.now();
+    var cs=document.getElementById('cSync');
+    if(cs)cs.textContent='\u89c2\u4f17\u5c4f\u5df2\u540c\u6b65';
+    if(pendingSync){pendingSync=false;syncGoto()}  // 只在等首次同步时回发，避免 goto-ack 乒乓
+  }
+}
+window.addEventListener('message',function(e){onMsg(e.data)});
+if(isAudience){openChan();setTimeout(ackTo,300)}
+
+/* 演讲者控制台 */
+var cPrev=document.getElementById('cPrev');
+var stage=document.getElementById('stage');
+var stageHome=stage.parentNode, stageNext=stage.nextSibling;
+function speaker(on){
+  if(on){
+    body.classList.add('speaker');
+    if(!session)session=String(Date.now());
+    openChan();
+    cPrev.appendChild(stage);fitPreview();
+    openAudience();
+    renderConsole();syncGoto();
+  }else{
+    body.classList.remove('speaker');
+    stage.style.transform='';
+    stageHome.insertBefore(stage,stageNext);
+    send({t:'end'});
+  }
+}
+function openAudience(){
+  if(popup&&!popup.closed)return;
+  var url=location.pathname+'?audience=1&session='+session;
+  popup=window.open(url,'thu-deck-audience');
+  pendingSync=true;
+  var el=document.getElementById('cSync');
+  if(!popup)el.textContent='\u89c2\u4f17\u5c4f\u5f39\u7a97\u88ab\u62e6\u622a\u2014\u2014\u8bf7\u5141\u8bb8\u5f39\u7a97\u540e\u91cd\u65b0\u6309 P';
+  else el.textContent='\u89c2\u4f17\u5c4f\u672a\u8fde\u63a5';
+}
+function fitPreview(){
+  if(!body.classList.contains('speaker'))return;
+  var w=cPrev.clientWidth,h=cPrev.clientHeight;
+  if(!w||!h)return;
+  var k=Math.min(w/window.innerWidth,h/window.innerHeight);
+  var ox=(w-window.innerWidth*k)/2,oy=(h-window.innerHeight*k)/2;
+  stage.style.transformOrigin='0 0';
+  stage.style.transform='translate('+ox+'px,'+oy+'px) scale('+k+')';
+}
+window.addEventListener('resize',function(){fitPreview();if(overviewOpen())fitOverview()});
+
+function renderConsole(){
+  var note=NOTES[idx],next=NOTES[idx+1];
+  document.getElementById('cTag').textContent=
+    '\u5f53\u524d\u9875 \u00b7 '+(idx+1)+' / '+N+(note.min?(' \u00b7 \u9884\u7b97 '+note.min+' \u5206\u949f'):'');
+  document.getElementById('cTitle').textContent=note.title;
+  var it=document.getElementById('cIntent');
+  it.textContent=note.intent?('\u610f\u56fe \u00b7 '+note.intent):'';
+  it.style.display=note.intent?'':'none';
+  var tk=document.getElementById('cTalk');
+  tk.textContent='';
+  if(note.talk.length){
+    note.talk.forEach(function(line){
+      var p=document.createElement('p');p.textContent=line;tk.appendChild(p);
+    });
+  }else{
+    var p=document.createElement('p');p.className='c-empty';
+    p.textContent='\uff08\u672c\u9875\u65e0\u53e3\u64ad\u7a3f\uff09';tk.appendChild(p);
+  }
+  document.getElementById('cNext').textContent=
+    next?('\u4e0b\u4e00\u9875 \u00b7 '+next.title):'\u4e0b\u4e00\u9875 \u00b7 \u5df2\u662f\u6700\u540e\u4e00\u9875';
+  document.getElementById('cPage').textContent='\u7b2c '+(idx+1)+' \u9875 / \u5171 '+N+' \u9875';
+}
+
+/* 计时器：开始/暂停(继续)/重置，按 %duration 预算显示剩余 */
+var T={run:false,acc:0,t0:0};
+var BUDGET=DECK_MINUTES||0;
+document.getElementById('tToggle').addEventListener('click',function(){
+  if(T.run){T.acc+=Date.now()-T.t0;T.run=false;this.textContent='\u7ee7\u7eed'}
+  else{T.t0=Date.now();T.run=true;this.textContent='\u6682\u505c'}
+});
+document.getElementById('tReset').addEventListener('click',function(){
+  T.run=false;T.acc=0;document.getElementById('tToggle').textContent='\u5f00\u59cb';
+});
+function fmt(ms){
+  var s=Math.floor(Math.abs(ms)/1000),m=Math.floor(s/60);s=s%60;
+  return (m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+}
+setInterval(function(){
+  if(!body.classList.contains('speaker'))return;
+  var el=T.acc+(T.run?Date.now()-T.t0:0);
+  document.getElementById('tElapsed').textContent='\u5df2\u8fdb\u884c '+fmt(el);
+  var r=document.getElementById('tRemain');
+  if(BUDGET>0){
+    var rem=BUDGET*60000-el;
+    r.textContent=rem>=0?('\u5269\u4f59 '+fmt(rem)):('\u8d85\u65f6 '+fmt(rem));
+    r.className=rem>=0?'':'over';
+  }else r.textContent='';
+  var cs=document.getElementById('cSync');
+  if(popup&&popup.closed&&cs.textContent.indexOf('\u62e6\u622a')<0)
+    cs.textContent='\u89c2\u4f17\u5c4f\u672a\u8fde\u63a5';
+  else if(popup&&!popup.closed&&lastSend>lastAck&&Date.now()-lastSend>3500)
+    cs.textContent='\u89c2\u4f17\u5c4f\u672a\u8fde\u63a5\uff08ack \u8d85\u65f6\uff09';
+},500);
+
+/* 入口：支持 location.hash 跳页（#3） */
+var m=(location.hash||'').match(/^#(\d+)$/);
+go(m?parseInt(m[1],10)-1:0,true);
+})();
+</script>
+</body>
+</html>

@@ -27,6 +27,7 @@ src/app/
 │   └── loading.tsx            # 加载态
 │
 ├── feedback/page.tsx          # 反馈页（215行）
+├── teach/page.tsx             # v32 AI 家教 demo：左备课本画布 + 右 Agent 对话栏 + 课程历史（组件在 components/teach/，mock 事件流收口 teach-client.ts）
 ├── companion/page.tsx         # 桌面端小窗（随手记/随口问/壳内快捷动作；Electron quick-panel 加载，浏览器也可用）
 ├── admin/ai-control/page.tsx  # 管理员 AI 控制中心（上下文 / prompt / 模型 / 版本）
 ├── help/page.tsx             # 帮助页（317行）

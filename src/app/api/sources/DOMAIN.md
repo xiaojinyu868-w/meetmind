@@ -14,7 +14,7 @@ sources route.ts → lib/utils/page-utils.ts（formatTime 等工具）
 | 路由 | 方法 | 职责 |
 |------|------|------|
 | `/api/sources/ingest` | POST | 通用数据源接入（文档/文本/音频/视频） |
-| `/api/sources/ingest-image` | POST | 图片接入（OCR + 多模态 LLM 解析） |
+| `/api/sources/ingest-image` | POST | 图片接入：Qwen-OCR（qwen-vl-ocr）提取的结构化文本直接作为上下文；低产出/失败回退多模态 vision |
 
 ## 文件清单
 
@@ -30,10 +30,18 @@ src/app/api/sources/
 2. 识别内容类型（audio/video/document/image/text）
 3. 调用对应解析器：
    - 音频/视频 → 转录服务（ASR）
-   - 文档 → 文本提取
+   - 文档 → DashScope 文件提取（qwen-doc-turbo；docx 失败时本地 mammoth 兜底）
    - 图片 → OCR
    - 纯文本 → 直接入库
 4. 生成 `SourceIngestItem`，写入 Workspace
+
+## 关键闸门（ingest/route.ts）
+
+- 文件大小上限 `INGEST_MAX_FILE_MB`（默认 100MB，下游 DashScope 单文件支持 150MB）
+- 文档提取低于 `INGEST_MIN_EXTRACTED_CHARS`（默认 50 字）返回 422 `LOW_TEXT_YIELD`，防止扫描件 PDF 只返回一句说明被当作成功
+- `ingest-image` 主链路为 `qwen-ocr-service`（`DASHSCOPE_OCR_MODEL`，默认 qwen-vl-ocr，DashScope multimodal-generation 同步接口，自定义 prompt 输出 Markdown + LaTeX + 图表数据）；OCR 结构化文本即为最终上下文，不再过 LLM 整理（2026-08 决策：qwen-vl-ocr 产出已是干净 Markdown，整理步骤是多余成本）
+- `ingest-image` OCR 有效字符低于 `IMAGE_OCR_MIN_CHARS`（默认 20，去空白计数）或 OCR 调用失败时，自动回退原多模态 vision 链路（`LLMConfig.defaultVisionModel`）；响应契约不变
+- `ingest-image` 对纯数字文件名（Android 相机 epoch 毫秒命名）回退标题为「图片材料」
 
 ## 类型参考
 

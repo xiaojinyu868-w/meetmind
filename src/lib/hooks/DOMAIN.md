@@ -6,7 +6,8 @@
 
 | 文件 | 职责 |
 |------|------|
-| `useAuth.tsx` | 认证 Provider + hook（JWT + 刷新）；导出统一 access token 读写供扫码登录复用 |
+| `useAuth.tsx` | 认证 Provider + hook（JWT + 刷新）；导出统一 access token 读写供扫码登录复用；按 JWT exp 提前 5 分钟主动续期（调度逻辑在 token-refresh-scheduler） |
+| `token-refresh-scheduler.ts` | 访问令牌主动续期调度（纯函数可单测）：解析 JWT exp 计算刷新时点，到点调 refresh，失败退避 30s 重试一次 |
 | `useWechatQrAuth.ts` | 公众号二维码创建、轮询、登录落盘与绑定完成状态机 |
 | `useSSEStream.ts` | 通用 SSE 流式请求 hook |
 | `useClassroomData.ts` | 课堂数据加载 hook |

@@ -18,7 +18,7 @@ import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import { toast } from 'sonner';
-import { Mic, Camera, Paperclip, ArrowUp, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Sparkles, MapPin, ExternalLink, Headphones, Newspaper, Image as ImageIcon, Pause, Play, UserRound } from 'lucide-react';
+import { Mic, Camera, Paperclip, ArrowUp, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Sparkles, MapPin, ExternalLink, Headphones, Newspaper, Image as ImageIcon, Pause, Play, UserRound, BookOpen } from 'lucide-react';
 import type { SourceIngestItem } from '@/types/page-types';
 import type { TranscriptSegment } from '@/types';
 import { getSpeakerLabel, getSpeakerColorClass } from '@/lib/services/asr/diarization-service';
@@ -70,7 +70,7 @@ export interface MobileAppShellProps {
   onPlayPause: () => void;
   isRecording: boolean;
   onStopRecording: () => void;
-  onPhotoCaptured: (file: File, capturedAtMs: number) => void;
+  onPhotoCaptured: (file: File, capturedAtMs: number | null) => void;
   reviewSheetContent?: React.ReactNode;
   reviewSheetPreview?: string;
   classmateContent?: React.ReactNode;
@@ -104,12 +104,12 @@ function fmtSec(sec: number) { return fmtMs(sec * 1000); }
 // ── 拍照 input ──
 
 function useCameraCapture(
-  onCaptured: (file: File, capturedAtMs: number) => void,
+  onCaptured: (file: File, capturedAtMs: number | null) => void,
   resolveCapturedAtMs?: (file: File, requestedAtMs: number) => number,
 ) {
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const capturedAtMsRef = useRef<number>(0);
-  const trigger = useCallback((capturedAtMs: number) => {
+  const capturedAtMsRef = useRef<number | null>(null);
+  const trigger = useCallback((capturedAtMs: number | null) => {
     capturedAtMsRef.current = capturedAtMs;
     inputRef.current?.click();
   }, []);
@@ -119,7 +119,11 @@ function useCameraCapture(
         const files = e.target.files;
         if (files && files.length > 0) {
           const file = files[0];
-          onCaptured(file, resolveCapturedAtMs?.(file, capturedAtMsRef.current) ?? capturedAtMsRef.current);
+          const requestedAtMs = capturedAtMsRef.current;
+          // 课外随手拍传 null（无锚点），不参与课中段落匹配
+          onCaptured(file, requestedAtMs != null && resolveCapturedAtMs
+            ? resolveCapturedAtMs(file, requestedAtMs)
+            : requestedAtMs);
         }
         if (inputRef.current) inputRef.current.value = '';
       }}
@@ -252,7 +256,7 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
             });
           }}
           onAddMaterial={() => p.onOpenFilePicker('all')}
-          onCapturePhoto={() => triggerCamera(0)}
+          onCapturePhoto={() => triggerCamera(null)}
           onSearch={() => p.onOpenSearch?.()}
         />
 
@@ -338,6 +342,8 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
                     <MobileCollectionCard item={item} onClick={() => {
                       const canOpen = item.reviewable || item.type === 'document' || item.type === 'text' || item.type === 'image';
                       if (canOpen) {
+                        // 同步清空上一节课的转录，避免恢复异步完成前由陈旧 segments 驱动复习页门槛
+                        useCaptureEditorStore.getState().actions.setSegments([]);
                         p.onOpenReview(item);
                         push('review',{
                           sessionId:item.sessionId||'',
@@ -508,7 +514,7 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
       // flash 动画
       setFlash(true);
       setTimeout(() => setFlash(false), 150);
-      toast.success(COPY.mobileJourney.photoCapturedAt(fmtMs(capturedAtMs)), { duration: 2200 });
+      toast.success(COPY.mobileJourney.photoCapturedAt(fmtMs(capturedAtMs ?? 0)), { duration: 2200 });
     },
     (file, requestedAtMs) => resolveClassroomPhotoTimestamp({
       requestedAtMs,
@@ -610,7 +616,7 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
         className={`${recordingPane === 'transcript' ? 'flex' : 'hidden'} flex-1 min-h-0 flex-col overflow-y-auto px-4 py-3 mm-mobile-scroll`}
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
-        {segments.length === 0 ? (
+        {segments.length === 0 && sessionPhotos.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full">
             <div className="h-16 w-16 rounded-full bg-pine-mist flex items-center justify-center mb-4 overflow-hidden m-octo-breath">
               <img src="/images/octo-buddy/thinking.png" alt="" className="h-full w-full object-cover" />
@@ -782,7 +788,7 @@ function ProcessingScreen({ p }: { p: MobileAppShellProps }) {
   const segments = useCaptureEditorStore(s => s.segments);
   const sessionId = useSessionStore(s => s.sessionId);
   const sourceItems = useCollectionStore(s => s.sourceItems);
-  const digestImages = sourceItems.filter(i => i.type==='image'&&i.role==='support').map(i => ({ imageId:i.id, capturedAtMs:i.capturedAtMs??null, title:i.title, ocrText: i.fullText }));
+  const digestImages = sourceItems.filter(i => i.type==='image'&&i.role==='support'&&i.sessionId===sessionId).map(i => ({ imageId:i.id, capturedAtMs:i.capturedAtMs??null, title:i.title, ocrText: i.fullText }));
 
   // 等待 segments 到来：录课停止后 handleRecordingStop 异步写入 segments，
   // 可能比 ProcessingScreen 渲染晚几百毫秒。超时 15s 后放弃。
@@ -894,7 +900,7 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
   const segments = useCaptureEditorStore(s => s.segments);
   const sessionId = useSessionStore(s => s.sessionId);
   const sourceItems = useCollectionStore(s => s.sourceItems);
-  const digestImages = sourceItems.filter(i => i.type==='image'&&i.role==='support').map(i => ({ imageId:i.id, capturedAtMs:i.capturedAtMs??null, title:i.title, ocrText: i.fullText }));
+  const digestImages = sourceItems.filter(i => i.type==='image'&&i.role==='support'&&i.sessionId===sessionId).map(i => ({ imageId:i.id, capturedAtMs:i.capturedAtMs??null, title:i.title, ocrText: i.fullText }));
   const { digest, loading: digestLoading } = useLessonDigest({ sessionId, segments, images: digestImages, lessonTitle: reviewContext?.title||p.selectedReviewItem?.title, enabled: digestView && segments.length>0 });
   const getImageUrl = useCallback((id:string) => { const i = sourceItems.find(s=>s.id===id); return i?.previewUrl||i?.attachmentUrl; }, [sourceItems]);
   const getOrig = useCallback((sMs:number,eMs:number) => { const c = segments.filter(s=>s.startMs>=sMs&&s.startMs<=eMs).map(s=>s.text).join(' '); return c||undefined; }, [segments]);
@@ -1139,8 +1145,8 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
         )}
       </div>
 
-      {/* 应用矩阵入口 */}
-      {segments.length > 0 && workshopReadiness?.status !== 'not_ready' && allowedWorkshopApps.size > 0 && (
+      {/* 应用矩阵入口：只要有复习上下文就渲染，segments 异步恢复期间入口不消失（AppsScreen 内部自处理数据就绪） */}
+      {Boolean(reviewContext?.sessionId || sessionId) && workshopReadiness?.status !== 'not_ready' && allowedWorkshopApps.size > 0 && (
         <div className="absolute left-0 right-0 z-30 flex items-center gap-2 px-4 py-2 bg-paper/95 backdrop-blur-sm border-t border-divider/60"
           style={{ bottom: sheetHeight === 'collapsed' ? '52px' : sheetHeight === 'half' ? '55vh' : '92vh', transition: 'bottom 0.3s cubic-bezier(0.32, 0.72, 0, 1)' }}>
           {allowedWorkshopApps.has('flashcards') ? <button onClick={() => push('flashcards')} className="flex items-center gap-1.5 rounded-full bg-pine-mist px-3 py-1.5 text-[11px] font-medium text-pine active:scale-95 transition">
@@ -1193,6 +1199,7 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
     'audio-overview': <Headphones size={18} strokeWidth={2} />,
     infographic: <ImageIcon size={18} strokeWidth={2} />,
     'teach-back': <Mic size={18} strokeWidth={2} />,
+    explainer: <BookOpen size={18} strokeWidth={2} />,
   };
   const recommendation = recommendWorkshopApp({
     activeAnchorCount: 0,
@@ -1486,6 +1493,7 @@ function ScreenRouter({ p }: { p: MobileAppShellProps }) {
     case 'audio-overview': return <CatalogAppScreen p={p} appKey="audio-overview" />;
     case 'infographic': return <CatalogAppScreen p={p} appKey="infographic" />;
     case 'teach-back': return <CatalogAppScreen p={p} appKey="teach-back" />;
+    case 'explainer': return <CatalogAppScreen p={p} appKey="explainer" />;
     case 'apps': return <AppsScreen p={p} />;
     case 'classmate': return <ClassmateScreen p={p} />;
     case 'echo': return <EchoScreen p={p} />;

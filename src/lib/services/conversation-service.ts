@@ -11,6 +11,7 @@ import {
   getUserConversations,
   searchUserConversations,
   updateConversationHistory,
+  reassignConversationOwner,
   deleteConversationHistory,
   addConversationMessage,
   addConversationMessages,
@@ -277,6 +278,14 @@ export const conversationService = {
     if (updates.metadata !== undefined) updateData.metadata = JSON.stringify(updates.metadata);
     
     await updateConversationHistory(conversationId, updateData);
+  },
+
+  /**
+   * 认领匿名对话（anonymous → 登录用户）：
+   * 旧版 auth 竞态可能把全局对话落到匿名名下，登录后回退捞取时迁移归属
+   */
+  async claimConversation(conversationId: string, userId: string): Promise<void> {
+    await reassignConversationOwner(conversationId, getEffectiveUserId(userId));
   },
 
   /**

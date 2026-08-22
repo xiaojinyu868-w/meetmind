@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DEMO_SESSION_ID } from '@/fixtures/demo-data';
 import {
   buildGuestDemoFlashcardsResult,
+  isDemoEntryConsumed,
   isGuestDemoFlashcardsResult,
+  markDemoEntryConsumed,
   resolveGuestDemoEntry,
 } from './guest-demo-entry';
 
@@ -20,6 +22,27 @@ describe('guest demo entry', () => {
       autoLoadDemo: false,
       autoOpenAppKey: undefined,
     });
+  });
+
+  it('stops auto-loading the demo once the entry has been consumed', () => {
+    // node 环境没有 window/sessionStorage：标记是 no-op，入口保持有效
+    expect(isDemoEntryConsumed()).toBe(false);
+    markDemoEntryConsumed();
+    expect(isDemoEntryConsumed()).toBe(false);
+
+    // 有 sessionStorage 的环境：消费后 entry=demo 不再自动灌入示例课
+    const store = new Map<string, string>();
+    vi.stubGlobal('window', {
+      sessionStorage: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => { store.set(key, value); },
+      },
+    });
+    expect(resolveGuestDemoEntry({ isGuestFastEntry: true, entry: 'demo' }).autoLoadDemo).toBe(true);
+    markDemoEntryConsumed();
+    expect(isDemoEntryConsumed()).toBe(true);
+    expect(resolveGuestDemoEntry({ isGuestFastEntry: true, entry: 'demo' }).autoLoadDemo).toBe(false);
+    vi.unstubAllGlobals();
   });
 
   it('builds a static flashcards result so first demo does not depend on network', () => {

@@ -283,6 +283,13 @@ export interface GoalEntry {
   conversationId?: string;
   /** 用户标记的状态：active = 正在追求 / paused = 先放放 / done = 已达成 */
   status?: 'active' | 'paused' | 'done';
+  /**
+   * 时间尺度（M15）：near = 眼前有明确节点（考试/DDL，随时会变）/
+   * term = 这学期或这个季度 / long = 长期方向和能力。
+   * 稳定属性（身份、阶段）不进 goals，进 bio；goals 只装"想做的事"，
+   * 靠 horizon 区分该什么时候推、什么时候提醒。
+   */
+  horizon?: 'near' | 'term' | 'long';
 }
 
 /**

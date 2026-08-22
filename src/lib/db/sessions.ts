@@ -476,6 +476,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
     db.classSummaries.where('sessionId').equals(sessionId).delete(),
     db.notes.where('sessionId').equals(sessionId).delete(),
     db.tutorResponseCache.where('sessionId').equals(sessionId).delete(),
+    db.lessonDigests.where('sessionId').equals(sessionId).delete(),
     db.conversationHistory.where('sessionId').equals(sessionId).delete(),
   ]);
   await db.audioSessions.where('sessionId').equals(sessionId).delete();

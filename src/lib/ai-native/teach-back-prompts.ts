@@ -46,7 +46,10 @@ ${context.transcriptContext}
 }
 
 /**
- * 实时语音会话（也供打字降级复用同一 persona）的 system instructions。
+ * @deprecated 2026-08：实时语音通话下线后「讲给同桌听」只走文字模式，
+ * 安静学生语音 persona 暂无调用方；保留一个周期，之后随语音链路物理删除。
+ *
+ * 实时语音会话的 system instructions。
  * 安静学生：大部分时候只听；只有跟不上、或有目标没被讲到时才开口。
  */
 export function buildTeachBackStudentInstructions(input: {

@@ -13,6 +13,7 @@ import type { WorkspaceCaptureListItem } from '@/components/WorkspaceCaptureList
 import { getCollectionContextDisplayTitle } from '@/lib/capture/collection-context';
 import { parseVideoLink } from '@/lib/utils/video-link';
 import { compactText, compactMultilineText } from './text-and-constants';
+import { COPY } from '@/lib/ui/copy';
 import { markdownToPlainText } from '@/lib/services/web-article-extract-service';
 import {
   buildSourceProvenance,
@@ -54,6 +55,9 @@ export function mergeWorkspaceCaptures(
 export function resolvePendingAudioFailureStatus(message: string): string {
   const text = (message || '').trim();
   if (!text) return '原声已保留';
+  // ASR 额度预检（服务端强制）：免费分钟/试用分钟用尽
+  if (text.includes('ASR_QUOTA_EXCEEDED')) return COPY.points.freeMinutesUsedUp;
+  if (text.includes('GUEST_DAILY_ASR_CAP')) return COPY.points.blockedGuestDailyCap;
   if (/公网地址|PUBLIC_DOMAIN|PUBLIC_HOST|可访问的公网地址/i.test(text)) {
     return '本地暂不转写';
   }

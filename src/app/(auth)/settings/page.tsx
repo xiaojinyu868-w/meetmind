@@ -46,6 +46,8 @@ import {
 } from '@/components/settings/primitives';
 
 const LearnerOnboardingComponent = dynamic(() => import('@/components/LearnerOnboarding'), { ssr: false });
+// 设置页会员/充积分入口也要能唤起付费拦截页（usePaywall 全局状态）
+const PaywallDialog = dynamic(() => import('@/components/points/PaywallDialog').then(m => ({ default: m.PaywallDialog })), { ssr: false });
 const IntentDialogContainer = dynamic(
   () => import('@/components/intent/IntentDialogContainer').then((m) => ({ default: m.IntentDialogContainer })),
   { ssr: false },
@@ -520,6 +522,9 @@ export default function SettingsPage() {
         onClose={() => setShowWechatQr(false)}
         onBound={() => showMessage('success', COPY.wechatQr.boundToast)}
       />
+
+      {/* 会员/充积分入口唤起的付费拦截页 */}
+      <PaywallDialog />
 
       {showLearnerEdit && (
         <LearnerOnboardingComponent

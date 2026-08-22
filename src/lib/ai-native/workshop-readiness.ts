@@ -15,6 +15,7 @@ export const ALL_WORKSHOP_APP_KEYS: WorkshopAppKey[] = [
   'infographic',
   'audio-overview',
   'teach-back',
+  'explainer',
 ];
 
 const CONTENT_KINDS = new Set<WorkshopContentKind>([

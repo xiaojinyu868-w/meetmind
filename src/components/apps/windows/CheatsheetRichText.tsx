@@ -4,6 +4,7 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
+import remarkCjkFriendly from 'remark-cjk-friendly';
 import rehypeKatex from 'rehype-katex';
 import type { Components } from 'react-markdown';
 import { ChatMermaidBlock } from '@/components/chat/ChatMermaidBlock';
@@ -63,7 +64,7 @@ export function CheatsheetRichText({ content, formulaOnly = false }: CheatsheetR
     <div
       className={formulaOnly ? 'cheatsheet-richtext cheatsheet-richtext-formula' : 'cheatsheet-richtext cheatsheet-item-body'}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkCjkFriendly, remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={components}>
         {content}
       </ReactMarkdown>
     </div>

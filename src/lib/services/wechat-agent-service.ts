@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma';
 import { chat } from '@/lib/services/llm-service';
+import { runWithMeterContext } from '@/lib/services/point-meter';
 import { ModelDefaults } from '@/lib/config/app.config';
 import { getWechatAccessToken } from '@/lib/services/wechat-media-service';
 import type { NormalizedWechatMessage } from '@/lib/services/wechat-mp-service';
@@ -156,7 +157,8 @@ async function sendChunk(openId: string, chunk: string, allowRefresh: boolean): 
   return false;
 }
 
-async function pushWechatCustomerText(openId: string, text: string): Promise<boolean> {
+/** 客服消息推送（自动切多条）；视频/播客导入完成通知也复用它。48h 窗口外（45015）静默放弃 */
+export async function pushWechatCustomerText(openId: string, text: string): Promise<boolean> {
   const chunks = splitWechatText(text);
   for (const chunk of chunks) {
     const ok = await sendChunk(openId, chunk, true);
@@ -208,7 +210,9 @@ export async function runWechatAgentTurn(input: WechatAgentTurnInput): Promise<v
         openId: input.openId,
         userId: input.userId ?? null,
         role: 'user',
-        text: text.slice(0, 1500),
+        // 收件侧防呆上限：微信单条 2048 字节限制在发件侧，用户粘贴/分段合并的长文
+        // 可能更长，20000 字足够覆盖真实场景又防呆（之前 1500 会截断用户长输入）。
+        text: text.slice(0, 20000),
         messageId: input.messageId ?? null,
       },
     });
@@ -263,7 +267,15 @@ export async function runWechatAgentTurn(input: WechatAgentTurnInput): Promise<v
       text,
     });
 
-    const response = await chat(messages, ModelDefaults.workshop, { temperature: 0.5, maxTokens: 450 });
+    const response = await runWithMeterContext(
+      {
+        feature: 'wechat-agent',
+        userId: input.userId ?? `guest_wechat_${input.openId.slice(0, 12)}`,
+        refType: 'wechat',
+        refId: input.openId,
+      },
+      () => chat(messages, ModelDefaults.workshop, { temperature: 0.5, maxTokens: 450 }),
+    );
     const reply = response.content.replace(/\*\*/g, '').trim();
     if (!reply) throw new Error('WECHAT_AGENT_EMPTY_REPLY');
 

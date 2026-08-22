@@ -11,6 +11,7 @@ import { MindmapWindow } from './MindmapWindow';
 import { InfographicWindow } from './InfographicWindow';
 import { CheatsheetWindow } from './CheatsheetWindow';
 import { TeachBackWindow } from './TeachBackWindow';
+import { ExplainerWindow } from './ExplainerWindow';
 
 export interface AppRenderSurfaceProps {
   appKey: WorkshopAppKey;
@@ -86,6 +87,10 @@ export function AppRenderSurface({
         onLearningActivity={onLearningActivity}
       />
     );
+  }
+
+  if (appKey === 'explainer') {
+    return <ExplainerWindow result={result} />;
   }
 
   return null;

@@ -427,6 +427,7 @@
 .desktopCard strong { color: var(--ink); font-size: 15px; font-weight: 600; }
 .desktopCard small { color: var(--ink-muted); font-size: 12px; }
 .desktopSubLink { color: var(--pine); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.desktopGuide { display: inline-block; margin-top: 10px; font-size: 12px; }
 .desktopMeta { margin-top: 22px; color: var(--ink-muted); font-size: 12px; letter-spacing: 0.02em; }
 .desktopUnsigned { max-width: 40em; margin-top: 8px; color: var(--ink-muted); font-size: 11px; line-height: 1.7; opacity: 0.8; }
 

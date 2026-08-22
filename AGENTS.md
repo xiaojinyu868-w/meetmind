@@ -72,7 +72,7 @@ make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
 2. **收→酿→应**：输入经 context-reach 分流 → API 薄壳 → services → IndexedDB 回写；后台静默理解（"酿"）→ `src/DOMAIN.md`
 3. **Tutor 六模式单一入口**：`POST /api/tutor/agent`（in-class / review / shared / goal / word / global），纯对话无 native tools → `src/app/api/tutor/DOMAIN.md` + `docs/TUTOR_AGENT.md`
 4. **应用矩阵 M14.6**：结构化产物不走 LLM marker，前端 SkillChip 直调 `/api/apps/execute` → `src/lib/ai-native/DOMAIN.md` + `docs/APPLICATION_MATRIX_PRD.md`
-5. **ASR 两段式**：课中 realtime 保延迟，课后完整原声 batch 定稿替换 → `docs/ASR_PIPELINE.md` + `src/lib/services/asr/DOMAIN.md`
+5. **ASR 单遍化（2026-08）**：课中 realtime 即定稿，课后不再自动跑 batch 定稿与说话人分离（/api/transcribe*、/api/asr/diarize 保留供手动精转）；realtime 零产出时兜底批量转写仍保留；文本纠错由 post-edit（DeepSeek V4 Flash，默认开）接管 → `docs/ASR_PIPELINE.md` + `src/lib/services/asr/DOMAIN.md`
 6. **跨设备证据**：服务端正规化（TranscriptSegment + CaptureArtifact），按课堂懒拉回填 IndexedDB，不覆盖本机编辑 → `roadmap/v2.1-cross-browser-sync-gap.md`
 7. **v4.0 全端采集层**：桌面壳（Electron：参数化桌宠 Octo Buddy + 内嵌网页 + loopback 系统音频 + 全局热键截图/小窗热键 + 双击旁听）+ 课中主动截图关键帧 + 移动端 Capacitor（方向已定未动工）→ `roadmap/v4.0-everywhere-capture.md` + `desktop/DOMAIN.md`
 8. **标题与课后理解**：`主题 · 课程 · M-D` 契约 + 用户改名双锁；定稿后一次 LLM 调用出标题/摘要/精选 → `src/lib/services/lesson-understanding-service.ts` + `src/app/api/DOMAIN.md`
@@ -80,6 +80,8 @@ make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
 10. **微信链路**：公众号收集 + 绑定用户文字走微信 Agent（客服消息推送）+ 桌面扫码登录 → `src/app/api/DOMAIN.md` 微信段
 11. **God File**：`src/app/(main)/app/page.tsx` 按域分 6 阶段提取为 hooks；顺手提取 ≥50 行独立模块立即 `make check` → `src/app/DOMAIN.md`
 12. **ChatBase 底座**：6 个对话面板收口于薄底座 + adapter，底座不引入业务逻辑 → `src/components/chat/DOMAIN.md`
+13. **清小搭接入（2026-08）**：`src/app/api/compat/` OpenAI 兼容适配层（「上场前」智能体：语音试讲 → 追问诊断 → 讲稿 docx / 上场包 HTML），Bearer 自验（`XIAODA_API_KEY`，非 MeetMind JWT）+ 每日成本闸，纯增量不改主链路 → `src/app/api/compat/DOMAIN.md`
+14. **AI 家教「上课」线（2026-08，codex app-server 底座）**：`/api/teach/*`（SSE 事件契约 + 历史课程 TeachThread）→ `src/lib/services/teach-codex/` 编排 codex app-server（每线程一进程，CODEX_HOME 隔离 data/teach-codex/）←MCP stdio→ `server/teach/teach-mcp-server.mjs`（内部回调进事件总线）；模型经进程内 shim（Responses→Chat）调上游，`TEACH_PROVIDER` 一行切换（默认 gemini-commonstack）；工具 schema 单一事实源 `teach-agent/tools.ts`（11 个，无 ask 阻塞）→ `src/app/api/teach/DOMAIN.md` + `src/lib/services/teach-codex/DOMAIN.md`
 
 ---
 
@@ -94,10 +96,12 @@ make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
 | **改 Workshop 应用窗口** | `src/components/apps/windows/DOMAIN.md` → 对应窗口 |
 | **改页面路由** | `src/app/DOMAIN.md` → 对应 page.tsx（God File 先读 §3-11） |
 | **改 API 接口** | `src/app/api/DOMAIN.md` → 对应子目录 DOMAIN.md → route.ts |
+| **改清小搭接入 / 「上场前」** | `src/app/api/compat/DOMAIN.md` → 对应 route / `src/lib/prompts/rehearsal-prompts.ts` |
+| **改 AI 家教上课线（codex 底座）** | `src/app/api/teach/DOMAIN.md`（事件契约）→ `src/lib/services/teach-codex/DOMAIN.md` → 对应模块；工具 schema 改 `teach-agent/tools.ts` |
 | **改 Tutor 后端 / prompt** | `src/app/api/tutor/DOMAIN.md` + `src/lib/prompts/tutor-prompts.ts` + `项目开发文档/提示词设计哲学.md` |
 | **改管理员 AI 控制中心** | `src/components/admin/DOMAIN.md` → `src/lib/services/ai-control-service.ts` → `src/app/api/admin/ai-control/route.ts` |
 | **改目标共建 / 教练对话** | `src/components/intent/DOMAIN.md`（IntentDialog 系列 + `buildGoalSegment`） |
-| **改实时语音通话** | `src/components/realtime/DOMAIN.md` → RealtimeOrb + 两个 CallScreen；WS 在 `server.js` `/api/tutor-call` |
+| **改实时语音通话** | 2026-08 已下线（/api/tutor-call 已拆除，组件 deprecated）；历史参考：`src/components/realtime/DOMAIN.md` |
 | **改业务逻辑（service）** | `src/lib/services/DOMAIN.md` → 对应 service 文件 |
 | **改 ASR / 说话人分离** | `docs/ASR_PIPELINE.md` + `src/lib/services/asr/DOMAIN.md` + `diarization-service.ts` |
 | **改 AI-Native 插件** | `src/lib/ai-native/plugins/DOMAIN.md` → 对应 plugin |

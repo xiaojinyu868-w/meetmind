@@ -35,8 +35,9 @@ import {
   type UIMessageChunk,
 } from 'ai';
 import { NextRequest } from 'next/server';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { applyRateLimit } from '@/lib/utils/rate-limit';
+import { applyRateLimit, getUserIdFromRequest } from '@/lib/utils/rate-limit';
 import {
   PROMPT_VERSIONS,
   type TutorMode,
@@ -59,6 +60,10 @@ import {
   type SharedAgentSnapshot,
 } from '@/lib/services/share-agent-service';
 import { buildControlledTutorPrompt } from '@/lib/services/ai-control-service';
+import { meterLLMUsage, meterUserIdFromRequest } from '@/lib/services/point-meter';
+import { getMembershipPlan, getTutorModePrice, type MembershipTier } from '@/lib/config/pricing';
+import { checkCanSpend, checkGuestDailyCost, spendPoints } from '@/lib/services/point-account-service';
+import { getActiveMembership } from '@/lib/services/membership-service';
 
 const log = createLogger('tutor-agent');
 
@@ -295,16 +300,55 @@ function hasDeliveredAssistantOutput(chunk: UIMessageChunk): boolean {
   ].includes(chunk.type);
 }
 
+interface TutorCharge {
+  userId: string;
+  points: number;
+  /** 幂等键的轮次区分段（同一 session 多轮对话各自计费） */
+  turnKey: string;
+}
+
+/** 从 UIMessage 形态的 messages 里提取纯文本（parts 优先，兼容 content string/array） */
+function extractMessageText(message: { content?: unknown; parts?: unknown }): string {
+  const fromParts = (parts: unknown[]): string =>
+    parts
+      .map((part) => {
+        if (part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string') {
+          return (part as { text: string }).text;
+        }
+        return '';
+      })
+      .join('');
+  if (Array.isArray(message.parts)) return fromParts(message.parts);
+  if (typeof message.content === 'string') return message.content;
+  if (Array.isArray(message.content)) return fromParts(message.content);
+  return '';
+}
+
+/**
+ * L2 堵漏：轮次键不再用客户端消息 id（客户端可以同一 id 换内容重发 → 幂等跳过 → 免费）。
+ * 改用消息内容哈希：同内容重试 = 同键幂等跳过（防双击重复扣），新内容 = 新键正常计费。
+ * 已知取舍：同一 session 里逐字重发同一问题只扣一次（边缘场景，可接受）。
+ */
+function tutorTurnKey(message: { content?: unknown; parts?: unknown } | undefined, fallbackIndex: number): string {
+  const text = message ? extractMessageText(message).trim() : '';
+  if (!text) return `n${fallbackIndex}`;
+  return createHash('sha1').update(text).digest('hex').slice(0, 16);
+}
+
 function createTutorAttemptStream({
   providers,
   body,
   systemPrompt,
   modelMessages,
+  userId,
+  charge,
 }: {
   providers: TutorAgentProviderConfig[];
   body: ParsedTutorAgentBody;
   systemPrompt: string;
   modelMessages: Awaited<ReturnType<typeof convertToModelMessages>>;
+  userId: string | null;
+  charge: TutorCharge | null;
 }) {
   return createUIMessageStream<UIMessage>({
     onError: (error) => formatTutorAgentUserError(error),
@@ -408,6 +452,61 @@ function createTutorAttemptStream({
               tools: toolCalls.map((t) => t.toolName),
               tokens: step.usage,
             });
+            // 积分影子计量（Phase 1）：AI SDK 这条链不走 llm-service.chat()，
+            // 在 step 回调里顺手记账；失败只 warn，不影响流式响应。
+            if (step.usage) {
+              meterLLMUsage({
+                userId,
+                feature: `tutor:${body.mode}`,
+                modelId,
+                usage: {
+                  promptTokens: step.usage.inputTokens ?? 0,
+                  completionTokens: step.usage.outputTokens ?? 0,
+                },
+                refType: 'tutor',
+                refId: body.sessionId,
+                idempotencyKey: `tutor:${body.sessionId}:${attemptIndex}:${toolCalls.length}`,
+              });
+            }
+            // 积分真扣费（Phase 2）：预检已在流开始前完成，这里在首个计费 step
+            // 成功后结算。幂等键按 轮次+provider attempt 区分：
+            // - 同一轮内多个 step（stopWhen 余量）靠 P2002 去重 → 一轮只扣一次
+            // - provider fallback 时失败的 attempt 没有 onStepFinish，不扣
+            // - 客户端整轮重发（同内容 → 同 turnKey）幂等跳过；新一轮对话 turnKey 不同
+            if (charge && step.usage) {
+              const chargeUserId = charge.userId;
+              void spendPoints({
+                userId: chargeUserId,
+                points: charge.points,
+                reason: `tutor:${body.mode}`,
+                refType: 'tutor',
+                refId: body.sessionId,
+                // 真实成本已由影子流水（meterLLMUsage）计入熔断累计，这里记 0 防双算
+                costMilliYuan: 0,
+                idempotencyKey: `tutor-charge:${body.sessionId}:${charge.turnKey}:${attemptIndex}`,
+              }).then((spend) => {
+                if (!spend.ok) {
+                  // L4 对账信号：产物已交付但扣费失败，需要补偿——升到 error + track 聚合
+                  log.error('tutor charge failed after precheck', {
+                    sessionId: body.sessionId,
+                    mode: body.mode,
+                    error: spend.error,
+                    balance: spend.balance,
+                  });
+                  track({
+                    kind: 'points.charge_failed',
+                    feature: `tutor:${body.mode}`,
+                    userId: chargeUserId,
+                    errorCode: spend.error,
+                  });
+                }
+              }).catch((error) => {
+                log.warn('tutor charge unexpected failure', {
+                  sessionId: body.sessionId,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              });
+            }
           },
           onError({ error }) {
             const msg = error instanceof Error ? error.message : String(error);
@@ -512,9 +611,61 @@ export async function POST(request: NextRequest) {
       sharedShareId = resolved.shareId;
     }
 
+    // 积分真扣费（Phase 2）：review 与 global deep 档按 getTutorModePrice 计，其余模式免费。
+    // 预检在流开始前完成，402 直接返回。
+    const userId = getUserIdFromRequest(request);
+    const meteringUserId = meterUserIdFromRequest(request, userId);
+
+    // L1 堵漏：guest（无 Bearer）不再零成本——按当日影子成本限额，
+    // 超限返回 402 guest_daily_cap，前端引导登录（rate-limit 之外的第二道闸）。
+    if (!userId) {
+      const allowance = await checkGuestDailyCost(meteringUserId);
+      if (!allowance.ok) {
+        track({ kind: 'tutor.fail', sessionId, errorCode: 'TUTOR_GUEST_DAILY_CAP' });
+        return new Response(JSON.stringify({ error: 'guest_daily_cap' }), {
+          status: 402,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+    }
+
+    const tutorPrice = getTutorModePrice(mode, context.global?.depth ?? null);
+
+    // 会员闸门与权益：global 模式查一次档位——deep 档是 Pro/Max 专属（免费档
+    // 402 membership_required，前端弹会员 Tab）；Max 档 quick 路由到主模型（优先模型权益）。
+    let globalTier: MembershipTier = 'free';
+    if (mode === 'global') {
+      globalTier = userId ? (await getActiveMembership(userId)).tier : 'free';
+      if (context.global?.depth === 'deep' && !getMembershipPlan(globalTier)?.deepUnlock) {
+        track({ kind: 'tutor.fail', sessionId, errorCode: 'TUTOR_MEMBERSHIP_REQUIRED' });
+        return new Response(
+          JSON.stringify({ error: 'membership_required', requiredTier: 'pro' }),
+          { status: 402, headers: { 'content-type': 'application/json' } },
+        );
+      }
+    }
+
+    let charge: TutorCharge | null = null;
+    if (userId && tutorPrice > 0) {
+      const check = await checkCanSpend(userId, tutorPrice);
+      if (!check.ok) {
+        track({ kind: 'tutor.fail', sessionId, errorCode: 'TUTOR_PAYMENT_REQUIRED', errorMsg: check.error });
+        return new Response(
+          JSON.stringify({ error: check.error, balance: check.balance, required: check.required }),
+          { status: 402, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      const lastUserMessage = [...messages].reverse().find((message) => message.role === 'user');
+      charge = {
+        userId,
+        points: tutorPrice,
+        turnKey: tutorTurnKey(lastUserMessage, messages.length),
+      };
+    }
+
     const controlled = await buildControlledTutorPrompt(mode as TutorMode, context, options);
     const requestModel = controlled.modelId || parsed.data.model || (
-      mode === 'global' && context.global?.depth === 'quick'
+      mode === 'global' && context.global?.depth === 'quick' && globalTier !== 'max'
         ? ModelDefaults.tutorQuick
         : undefined
     );
@@ -527,11 +678,25 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // 老客户端/旧缓存页面可能发 content-string 形态（zod schema 允许），
+    // convertToModelMessages 只吃 UIMessage parts —— 缺 parts 时先规整，防 500。
+    const uiMessages = messages.map((message, index) => {
+      if (Array.isArray(message.parts)) return message as UIMessage;
+      const text = extractMessageText(message);
+      return {
+        id: message.id ?? `m${index}`,
+        role: message.role,
+        parts: [{ type: 'text', text }],
+      } as UIMessage;
+    });
+
     const stream = createTutorAttemptStream({
       providers,
       body: parsed.data,
       systemPrompt: controlled.systemPrompt,
-      modelMessages: await convertToModelMessages(messages as UIMessage[]),
+      modelMessages: await convertToModelMessages(uiMessages),
+      userId: meteringUserId,
+      charge,
     });
 
     // 异步：分享态记一次 chat 互动

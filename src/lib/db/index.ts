@@ -15,6 +15,7 @@ export {
   type TutorResponseCache,
   type ConversationHistoryRecord,
   type ConversationMessageRecord,
+  type LessonDigestRecord,
 } from './schema';
 export {
   ANONYMOUS_USER_ID,
@@ -84,6 +85,7 @@ export {
   getUserConversations,
   searchUserConversations,
   updateConversationHistory,
+  reassignConversationOwner,
   deleteConversationHistory,
   deleteSessionConversations,
   deleteUserConversations,
@@ -101,6 +103,11 @@ export {
   deleteTutorResponseCache,
   deleteSessionTutorCaches,
 } from './tutor-cache';
+export {
+  getSessionLessonDigest,
+  saveSessionLessonDigest,
+  deleteSessionLessonDigest,
+} from './lesson-digests';
 export {
   getPreference,
   setPreference,

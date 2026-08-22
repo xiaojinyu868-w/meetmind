@@ -9,6 +9,7 @@ import {
   applyLessonUnderstanding,
   generateLessonUnderstanding,
 } from '@/lib/services/lesson-understanding-service';
+import { runWithMeterContext } from '@/lib/services/point-meter';
 import { createLogger } from '@/lib/logger';
 const log = createLogger('workspace/captures');
 
@@ -92,7 +93,10 @@ export async function POST(request: NextRequest) {
             select: { title: true },
           });
           if (!current || !isGenericLessonTitle(current.title)) return;
-          const understanding = await generateLessonUnderstanding({ transcriptSample: sample });
+          const understanding = await runWithMeterContext(
+            { feature: 'understanding', userId: payload.sub, refType: 'understanding', refId: captureId },
+            () => generateLessonUnderstanding({ transcriptSample: sample }),
+          );
           if (!understanding) return;
           // 这份样本没有时间锚点：精选片段留给客户端锚点版去写，这里只补标题和摘要
           await applyLessonUnderstanding({

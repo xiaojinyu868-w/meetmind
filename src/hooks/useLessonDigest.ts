@@ -3,12 +3,17 @@
 /**
  * useLessonDigest — 调用 /api/classroom/lesson-digest 获取结构化分段总结
  *
- * 缓存策略：同一 sessionId 只请求一次，结果存 ref。
+ * 缓存策略：
+ * - 组件内存：同一 requestKey 只请求一次（fetchedKeyRef）。
+ * - IndexedDB（lessonDigests 表，按 sessionId 一份）：挂载时先读缓存，
+ *   内容签名（转录段数 + 末段 endMs + 图片 id 集合）一致就直接复用，不打 LLM；
+ *   签名变化才重新请求并覆盖缓存。
  * 失败时返回 error 状态，UI 层可展示降级文案。
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { LessonDigest, DigestImageRef } from '@/lib/services/lesson-digest-service';
+import { getSessionLessonDigest, saveSessionLessonDigest } from '@/lib/db';
 import type { TranscriptSegment } from '@/types';
 
 interface UseLessonDigestParams {
@@ -55,8 +60,16 @@ export function useLessonDigest({
         lessonTitle || '',
       ].join('|')
     : null;
+  // 内容签名：转录段数 + 末段 endMs + 图片 id 集合。用于判断缓存是否仍然有效。
+  const contentSignature = sessionId && segments.length > 0
+    ? [
+        segments.length,
+        segments.at(-1)?.endMs ?? 0,
+        images.map((image) => image.imageId).sort().join(','),
+      ].join('|')
+    : null;
   const fetchDigest = useCallback(async () => {
-    if (!sessionId || !enabled || !requestKey) return;
+    if (!sessionId || !enabled || !requestKey || !contentSignature) return;
     if (fetchedKeyRef.current === requestKey) return;
     fetchedKeyRef.current = requestKey;
     const input = inputRef.current;
@@ -82,6 +95,8 @@ export function useLessonDigest({
       const data = await response.json();
       if (data.digest) {
         setResolvedDigest({ requestKey, digest: data.digest });
+        // 持久化到 IndexedDB，下次打开同内容直接复用，不再请求 LLM。
+        void saveSessionLessonDigest(sessionId, contentSignature, data.digest).catch(() => {});
       } else {
         throw new Error('No digest in response');
       }
@@ -91,13 +106,29 @@ export function useLessonDigest({
     } finally {
       setLoading(false);
     }
-  }, [sessionId, enabled, requestKey]);
+  }, [sessionId, enabled, requestKey, contentSignature]);
 
   useEffect(() => {
-    if (enabled && sessionId && segments.length > 0) {
-      void fetchDigest();
-    }
-  }, [fetchDigest, enabled, sessionId, segments.length]);
+    if (!enabled || !sessionId || segments.length === 0 || !requestKey || !contentSignature) return;
+    if (fetchedKeyRef.current === requestKey) return;
+    let cancelled = false;
+    void (async () => {
+      // 先查 IndexedDB 缓存：签名一致直接复用，不发请求。
+      try {
+        const cached = await getSessionLessonDigest(sessionId);
+        if (cancelled) return;
+        if (cached && cached.signature === contentSignature) {
+          fetchedKeyRef.current = requestKey;
+          setResolvedDigest({ requestKey, digest: cached.digest as LessonDigest });
+          return;
+        }
+      } catch {
+        // IndexedDB 不可用时静默回退到网络请求
+      }
+      if (!cancelled) void fetchDigest();
+    })();
+    return () => { cancelled = true; };
+  }, [enabled, sessionId, segments.length, requestKey, contentSignature, fetchDigest]);
 
   const refetch = useCallback(() => {
     fetchedKeyRef.current = null;

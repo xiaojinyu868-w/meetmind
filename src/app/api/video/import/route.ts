@@ -4,6 +4,12 @@ import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { WebSocket } from 'undici';
 import { parseVideoLink, isLikelyDirectMediaUrl } from '@/lib/utils/video-link';
+import { getUserIdFromRequest } from '@/lib/utils/rate-limit';
+import {
+  getOrCreateWithGrants,
+  recordAnonymousAsrMinutes,
+  settleAsrMinutes,
+} from '@/lib/services/point-account-service';
 import {
   type TranscribeMode,
   type VideoSourceMode,
@@ -15,15 +21,13 @@ import {
   type StageFailure,
   type WsResultSentence,
   type NormalizedSegment,
+  type TranscribedResult,
   ImportPipelineError,
   TIMELINE_SCALE_RATIO_MIN,
   TIMELINE_SCALE_RATIO_MAX,
   PCM_BYTES_PER_SEC,
-  MIN_DURATION_FOR_COMPLETENESS_CHECK_SEC,
   MIN_TEXT_CHARS_PER_SEC,
   MIN_TEXT_COVERAGE_RATIO,
-  MIN_TIMELINE_COVERAGE_SHORT,
-  MIN_TIMELINE_COVERAGE_LONG,
   normalizeMode,
   normalizeLanguage,
   isPipelineError,
@@ -34,14 +38,14 @@ import {
   parseErrorCode,
   parseErrorMessage,
   parseErrorDetail,
-  toFiniteNumber,
-  readSegmentEndMs,
-  summarizeAsrResult,
   isUnsafeVideoUrl,
   buildStageOrder,
   pickMostInformativeStageError,
-  estimatePcmDurationMs,
 } from './video-import-types';
+import {
+  assessAsrCoverage,
+  estimatePcmDurationMs,
+} from './video-import-asr-check';
 import {
   normalizePossibleMojibake,
   normalizeVideoMeta,
@@ -76,6 +80,7 @@ import {
   safeUnlink,
   transcodeToMp3,
 } from '@/lib/services/media-tooling';
+import { buildFiletransSubmitBody, extractTranscriptionUrl } from '@/lib/services/qwen-asr-tasks';
 import { createLogger } from '@/lib/logger';
 const log = createLogger('video/import');
 
@@ -111,6 +116,15 @@ async function cleanupOldFiles() {
 
     await Promise.all(
       files.map(async (fileName) => {
+        // 导入完成的成品音频（video_import_*，排除 _raw 中间件和 _ws.pcm 分块）
+        // 是用户收集的内容本体，复习页播放依赖它——不随 6h 临时清理删除。
+        if (
+          fileName.startsWith('video_import_')
+          && !fileName.includes('_raw')
+          && !fileName.endsWith('.pcm')
+        ) {
+          return;
+        }
         const fullPath = path.join(UPLOAD_DIR, fileName);
         try {
           const stat = await fsp.stat(fullPath);
@@ -174,18 +188,19 @@ async function transcribeLongAudioDirect(
   language: string,
   trace: ImportTraceEntry[],
   expectedDurationSec?: number
-): Promise<{ data: Record<string, unknown>; usedMode: TranscribeMode } | null> {
+): Promise<TranscribedResult | null> {
   const apiKey = process.env.DASHSCOPE_API_KEY;
   if (!apiKey) {
     log.warn('[video-import] transcribeLongAudioDirect: DASHSCOPE_API_KEY not configured');
     return null;
   }
 
-  // DashScope filetrans（paraformer-v2 / qwen3-asr-flash-filetrans）对单文件时长有上限（约 30 分钟），
-  // 超过会立即返回 CONTENT_LENGTH_CHECK_FAILED。这里检测到长音频直接跳过，
-  // 让 transcribeWithFallback 走 fast mode 切片逻辑（每 180s 一段异步并行）。
-  // 保守用 28 分钟作为阈值（留 2 分钟余量）。
-  const FILETRANS_MAX_DURATION_SEC = 28 * 60;
+  // DashScope filetrans 单文件时长上限按模型族分派：
+  // 新族 qwen-audio-3.0-asr-flash-filetrans 官方支持 12 小时单文件（整文件提交可避免切片丢段）；
+  // 旧族（paraformer / qwen3-asr-flash-filetrans）约 30 分钟上限，超过立即返回
+  // CONTENT_LENGTH_CHECK_FAILED，保守用 28 分钟阈值走 fast mode 切片 fallback。
+  const fileModel = process.env.DASHSCOPE_ASR_FILE_MODEL || 'qwen-audio-3.0-asr-flash-filetrans';
+  const FILETRANS_MAX_DURATION_SEC = fileModel.startsWith('qwen-audio') ? 12 * 3600 : 28 * 60;
   if (expectedDurationSec && expectedDurationSec > FILETRANS_MAX_DURATION_SEC) {
     log.warn(
       `[video-import] transcribeLongAudioDirect: 跳过直接 filetrans（音频时长 ${Math.round(expectedDurationSec)}s 超过单文件上限 ${FILETRANS_MAX_DURATION_SEC}s，走 fast mode 切片 fallback）`
@@ -208,16 +223,8 @@ async function transcribeLongAudioDirect(
   const fileName = path.basename(audioFilePath);
   const fileUrl = `${publicBase.baseUrl}/temp-audio/${encodeURIComponent(fileName)}`;
 
-  // 1. 提交异步任务
-  const submitBody = {
-    model: process.env.DASHSCOPE_ASR_FILE_MODEL || 'qwen3-asr-flash-filetrans-2025-11-17',
-    input: { file_url: fileUrl },
-    parameters: {
-      channel_id: [0],
-      language,
-      enable_itn: true,
-    },
-  };
+  // 1. 提交异步任务（按模型族分派请求形状）
+  const submitBody = buildFiletransSubmitBody(fileModel, fileUrl, language);
 
   let taskId: string;
   try {
@@ -286,7 +293,7 @@ async function transcribeLongAudioDirect(
 
       const status = queryData.output?.task_status;
       if (status === 'SUCCEEDED') {
-        const transcriptionUrl = queryData.output?.result?.transcription_url;
+        const transcriptionUrl = extractTranscriptionUrl(queryData.output);
         if (!transcriptionUrl) {
           trace.push({ stage: 'asr-direct-poll', ok: false, code: 'ASR_DIRECT_NO_URL', detail: 'SUCCEEDED but no transcription_url' });
           return null;
@@ -378,7 +385,7 @@ async function transcribeWithFallback(
   language: string,
   trace: ImportTraceEntry[],
   expectedDurationSec?: number
-): Promise<{ data: Record<string, unknown>; usedMode: TranscribeMode }> {
+): Promise<TranscribedResult> {
   const origin = getOriginFromRequest(request);
   const fileName = path.basename(audioFilePath);
 
@@ -391,7 +398,7 @@ async function transcribeWithFallback(
     : new Blob([await fsp.readFile(audioFilePath)], { type: 'audio/mpeg' });
 
   let lastFailure = 'unknown';
-  let bestPartialResult: { data: Record<string, unknown>; usedMode: TranscribeMode } | null = null;
+  let bestPartialResult: TranscribedResult | null = null;
 
   for (const mode of buildModeOrder(requestedMode)) {
     const endpoint = `${origin}${getTranscribeApiPath(mode)}`;
@@ -417,35 +424,11 @@ async function transcribeWithFallback(
     const isSuccess = response.ok && data?.success === true;
 
     if (isSuccess && data) {
-      const { segCount, textLen, lastEndMs } = summarizeAsrResult(data);
-      const expectedDurationMs =
-        Number.isFinite(expectedDurationSec) && (expectedDurationSec || 0) > 0
-          ? Math.round((expectedDurationSec as number) * 1000)
-          : 0;
-      const timelineCoverage = expectedDurationMs > 0 && lastEndMs > 0 ? lastEndMs / expectedDurationMs : null;
+      const coverage = assessAsrCoverage(data, expectedDurationSec);
+      const { segCount, textLen, timelineCoverage, timelineDetail } = coverage;
 
-      const minTimelineCoverage =
-        expectedDurationSec && expectedDurationSec > 120
-          ? MIN_TIMELINE_COVERAGE_LONG
-          : MIN_TIMELINE_COVERAGE_SHORT;
-      const isTextInsufficient =
-        expectedDurationSec &&
-        expectedDurationSec > MIN_DURATION_FOR_COMPLETENESS_CHECK_SEC &&
-        textLen > 0 &&
-        textLen < expectedDurationSec * MIN_TEXT_CHARS_PER_SEC * MIN_TEXT_COVERAGE_RATIO;
-      const isTimelineInsufficient =
-        expectedDurationSec &&
-        expectedDurationSec > MIN_DURATION_FOR_COMPLETENESS_CHECK_SEC &&
-        timelineCoverage !== null &&
-        timelineCoverage < minTimelineCoverage;
-      const isResultInsufficient = Boolean(isTextInsufficient || isTimelineInsufficient);
-
-      if (isResultInsufficient) {
+      if (coverage.insufficient) {
         const expectedMin = Math.round((expectedDurationSec || 0) * MIN_TEXT_CHARS_PER_SEC * MIN_TEXT_COVERAGE_RATIO);
-        const timelineDetail =
-          timelineCoverage === null
-            ? 'timelineCoverage=n/a'
-            : `timelineCoverage=${timelineCoverage.toFixed(2)} (need >=${minTimelineCoverage})`;
         log.warn(
           `[video-import] ASR mode=${mode} result insufficient: ${textLen} chars for ${expectedDurationSec}s video (expected >=${expectedMin} chars), ${timelineDetail}; trying next mode`
         );
@@ -456,7 +439,7 @@ async function transcribeWithFallback(
           detail: `${segCount} segments, ${textLen} chars, ${timelineDetail}`,
         });
         if (!bestPartialResult || textLen > (typeof bestPartialResult.data.text === 'string' ? (bestPartialResult.data.text as string).length : 0)) {
-          bestPartialResult = { data, usedMode: mode };
+          bestPartialResult = { data, usedMode: mode, coverageRatio: timelineCoverage ?? undefined };
         }
         lastFailure = `ASR_RESULT_INSUFFICIENT: ${textLen} chars, ${timelineDetail} for ${expectedDurationSec}s video`;
         continue;
@@ -585,11 +568,17 @@ async function executeBiliNativeStage(videoUrl: string, baseName: string, userCo
     const mp3Size = await getFileSizeBytes(mp3Path);
     const mp3Duration = await getAudioDurationSec(mp3Path);
 
+    let partialDownload: { coverageRatio: number } | undefined;
     if (viewMeta.durationSec && viewMeta.durationSec > 30 && mp3Duration > 0) {
       const ratio = mp3Duration / viewMeta.durationSec;
       if (ratio < BILI_MIN_AUDIO_DURATION_RATIO) {
-        // 长视频部分下载：如果已下载音频 >= 60s，则允许部分转录而不报错
+        // 长视频部分下载：如果已下载音频 >= 60s，则允许部分转录而不报错，
+        // 但必须显式标记 partial + 真实覆盖率，不得伪装成完整转录
         if (mp3Duration >= BILI_MIN_PARTIAL_AUDIO_SEC) {
+          log.warn(
+            `[video-import] bili audio partial download: mp3 ${mp3Duration.toFixed(1)}s is only ${(ratio * 100).toFixed(0)}% of video ${viewMeta.durationSec}s; continuing with partial transcript`
+          );
+          partialDownload = { coverageRatio: ratio };
         } else {
           throw new ImportPipelineError(
             'BILI_AUDIO_INCOMPLETE',
@@ -603,6 +592,7 @@ async function executeBiliNativeStage(videoUrl: string, baseName: string, userCo
     return {
       sourceMode: 'bili-native',
       audioFilePath: mp3Path,
+      ...(partialDownload ? { partialDownload } : {}),
       meta: {
         title: viewMeta.title,
         durationSec: viewMeta.durationSec,
@@ -689,6 +679,7 @@ async function executeXiaoyuzhouStage(videoUrl: string, baseName: string): Promi
         durationSec: episode.durationSec || mp3Duration || undefined,
         thumbnailUrl: episode.coverUrl,
         resolvedUrl: episode.episodeUrl,
+        originAudioUrl: episode.audioUrl,
       },
     };
   } catch (error) {
@@ -897,16 +888,37 @@ async function transcribeWithWsProxy(
   const safeChunkBytes = Number.isFinite(WS_CHUNK_PCM_BYTES)
     ? Math.max(1 * 1024 * 1024, Math.min(24 * 1024 * 1024, WS_CHUNK_PCM_BYTES))
     : 10 * 1024 * 1024;
+  // 硬切片会在边界截断句子：每片前导 2s 重叠（同 transcribe-fast 的 SEGMENT_OVERLAP_SEC 做法），
+  // 合并时丢掉完全落在重叠区里的句子（由前一片负责），避免片缝重复。
+  const WS_OVERLAP_MS = 2000;
+  const overlapBytes = Math.min(WS_OVERLAP_MS * (PCM_BYTES_PER_SEC / 1000), Math.floor(safeChunkBytes / 4));
+  const stepBytes = safeChunkBytes - overlapBytes;
   const wsSentences: WsResultSentence[] = [];
   let offsetBytes = 0;
+  let chunkIndex = 0;
 
   while (offsetBytes < pcmBuffer.length) {
     const end = Math.min(offsetBytes + safeChunkBytes, pcmBuffer.length);
     const chunk = pcmBuffer.subarray(offsetBytes, end);
     const chunkOffsetMs = estimatePcmDurationMs(offsetBytes);
     const partSentences = await transcribeWsChunk(wsUrl, chunk, chunkOffsetMs);
-    wsSentences.push(...partSentences);
-    offsetBytes = end;
+    for (const sentence of partSentences) {
+      if (chunkIndex > 0) {
+        // 句子时间戳已被 transcribeWsChunk 加上 chunkOffsetMs，换算回片内本地时间判断重叠区
+        const localEnd = Number.isFinite(sentence.endTime)
+          ? Number(sentence.endTime) - chunkOffsetMs
+          : Number.isFinite(sentence.beginTime)
+            ? Number(sentence.beginTime) - chunkOffsetMs
+            : Number.POSITIVE_INFINITY;
+        if (localEnd <= WS_OVERLAP_MS) continue; // 完全落在重叠区，前一片已收录
+      }
+      wsSentences.push(sentence);
+    }
+    if (end >= pcmBuffer.length) break;
+    // 剩余数据不超过一个重叠区时，内容已完全被上一片覆盖，无需再发
+    if (pcmBuffer.length - (offsetBytes + stepBytes) <= overlapBytes) break;
+    offsetBytes += stepBytes;
+    chunkIndex += 1;
   }
 
   const segments = normalizeWsSegments(wsSentences);
@@ -1024,6 +1036,14 @@ export async function POST(request: NextRequest) {
     }
 
     stageResult.meta = normalizeVideoMeta(stageResult.meta);
+    if (stageResult.partialDownload) {
+      trace.push({
+        stage: 'bili-partial-download',
+        ok: true,
+        code: 'BILI_PARTIAL_DOWNLOAD',
+        detail: `audio covers ${(stageResult.partialDownload.coverageRatio * 100).toFixed(0)}% of declared duration; transcript will be marked partial`,
+      });
+    }
     if (
       (!stageResult.meta.durationSec || stageResult.meta.durationSec <= 0) &&
       stageResult.audioFilePath
@@ -1051,6 +1071,7 @@ export async function POST(request: NextRequest) {
       thumbnailUrl: stageResult.meta.thumbnailUrl,
       bvid: stageResult.meta.bvid,
       cid: stageResult.meta.cid,
+      originAudioUrl: stageResult.meta.originAudioUrl,
       sourceMode: stageResult.sourceMode,
     };
 
@@ -1084,7 +1105,9 @@ export async function POST(request: NextRequest) {
       throw new ImportPipelineError('VIDEO_IMPORT_FAILED', '未生成可用音频文件');
     }
 
-    let transcribed: { data: Record<string, unknown>; usedMode: TranscribeMode } | undefined;
+    let transcribed: TranscribedResult | undefined;
+    // 采用了不完整结果（ASR 部分结果或 B 站部分下载）时，响应必须显式标记 partial
+    let usedPartialResult = false;
 
     // 长音频智能模式选择：
     // turbo 每 30s 切一段同步处理，165 分钟 = 330 段，10 分钟 route 超时大概率不够。
@@ -1109,7 +1132,21 @@ export async function POST(request: NextRequest) {
         stageResult.meta.durationSec
       );
       if (directResult) {
-        transcribed = directResult;
+        // direct 通道与 HTTP 链共用同一套完整性校验，不达标视为失败继续走 HTTP fallback
+        const coverage = assessAsrCoverage(directResult.data, stageResult.meta.durationSec);
+        if (coverage.insufficient) {
+          log.warn(
+            `[video-import] direct filetrans result insufficient: ${coverage.textLen} chars for ${stageResult.meta.durationSec}s video, ${coverage.timelineDetail}; falling back to HTTP chain`
+          );
+          trace.push({
+            stage: 'asr-direct-insufficient',
+            ok: false,
+            code: 'ASR_RESULT_INSUFFICIENT',
+            detail: `${coverage.segCount} segments, ${coverage.textLen} chars, ${coverage.timelineDetail}`,
+          });
+        } else {
+          transcribed = directResult;
+        }
       }
     }
 
@@ -1118,7 +1155,7 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       const importError = toPipelineError(error);
       // 从异常中提取 partialResult（transcribeWithFallback 在结果不足时附带）
-      const partialResult = (error as { partialResult?: { data: Record<string, unknown>; usedMode: TranscribeMode } })?.partialResult;
+      const partialResult = (error as { partialResult?: TranscribedResult })?.partialResult;
       const enableWsFallback = process.env.VIDEO_IMPORT_ENABLE_WS_FALLBACK !== 'false';
       const shouldTryWsFallback = enableWsFallback && importError.code === 'ASR_TRANSCRIBE_FAILED';
       const allowPartialResult = process.env.VIDEO_IMPORT_ALLOW_PARTIAL_RESULT === 'true';
@@ -1128,6 +1165,7 @@ export async function POST(request: NextRequest) {
           log.warn(`[video-import] cannot try WS fallback, using partial result due to VIDEO_IMPORT_ALLOW_PARTIAL_RESULT=true (mode=${partialResult.usedMode})`);
           trace.push({ stage: `asr-${partialResult.usedMode}-partial`, ok: true, detail: 'using partial result (no ws fallback, explicitly allowed)' });
           transcribed = partialResult;
+          usedPartialResult = true;
         } else {
           if (partialResult) {
             trace.push({
@@ -1142,8 +1180,18 @@ export async function POST(request: NextRequest) {
       } else {
         try {
           const wsData = await transcribeWithWsProxy(request, stageResult.audioFilePath);
-          trace.push({ stage: 'asr-ws-fallback', ok: true });
-          transcribed = { data: wsData, usedMode: mode };
+          // WS fallback 结果同样过完整性校验，不达标按 WS 失败处理（沿用下方 partial/抛错逻辑）
+          const wsCoverage = assessAsrCoverage(wsData, stageResult.meta.durationSec);
+          if (wsCoverage.insufficient) {
+            throw new ImportPipelineError(
+              'ASR_RESULT_INSUFFICIENT',
+              '音频转写失败',
+              `ws fallback result insufficient: ${wsCoverage.segCount} segments, ${wsCoverage.textLen} chars, ${wsCoverage.timelineDetail}`
+            );
+          }
+          trace.push({ stage: 'asr-ws-fallback', ok: true, detail: `${wsCoverage.segCount} segments, ${wsCoverage.textLen} chars` });
+          // 如实标记实际出结果的模式，不谎报为用户请求的 mode
+          transcribed = { data: wsData, usedMode: 'ws-fallback' };
         } catch (wsError) {
           const wsPipelineError = toPipelineError(wsError);
           trace.push({
@@ -1157,6 +1205,7 @@ export async function POST(request: NextRequest) {
             log.warn(`[video-import] WS fallback failed, using partial result due to VIDEO_IMPORT_ALLOW_PARTIAL_RESULT=true (mode=${partialResult.usedMode})`);
             trace.push({ stage: `asr-${partialResult.usedMode}-partial`, ok: true, detail: 'using partial result after ws fallback failed (explicitly allowed)' });
             transcribed = partialResult;
+            usedPartialResult = true;
           } else {
             if (partialResult) {
               trace.push({
@@ -1195,6 +1244,43 @@ export async function POST(request: NextRequest) {
     const normalizedText = normalizedSegments.map((segment) => segment.text).join('');
     const normalizedTotalDuration = normalizedSegments[normalizedSegments.length - 1].endMs;
 
+    // 积分 Phase 2：导入转写与录课共享每月 600 分钟免费额度，超出按 2 积分/分钟扣。
+    // 音频已转完不可撤回，内容不截断；余额不足时按当前余额封顶少扣积分
+    // （见 point-account-service settleAsrMinutes 的 clamp 逻辑），预检提示在前端 asr-quota。
+    // 结算失败只记 warn，绝不让积分旁路打挂导入主链路。
+    try {
+      const importUserId = await getUserIdFromRequest(request);
+      const importMinutes = normalizedTotalDuration / 60000;
+      if (importUserId) {
+        // 先懒建账户（含欢迎/月度发放），否则无账户用户 settle 会抛错静默漏结算
+        await getOrCreateWithGrants(importUserId);
+        const settle = await settleAsrMinutes(
+          importUserId,
+          `video-import:${baseName}`,
+          importMinutes,
+          'asr:import',
+        );
+        if (settle.pointsCharged > 0) {
+          log.info('[video-import] asr minutes charged', {
+            userId: importUserId,
+            minutes: settle.minutes,
+            paidMinutes: settle.paidMinutes,
+            pointsCharged: settle.pointsCharged,
+          });
+        }
+      } else {
+        await recordAnonymousAsrMinutes(`video-import:${baseName}`, importMinutes, 'asr:import');
+      }
+    } catch (settleError) {
+      log.warn('[video-import] asr minutes settle failed', {
+        error: settleError instanceof Error ? settleError.message : String(settleError),
+      });
+    }
+
+    // 不完整结果（B 站部分下载放行 / ASR 部分结果被采用）必须显式标记，不得伪装完整
+    const isPartialTranscript = Boolean(stageResult.partialDownload) || usedPartialResult;
+    const partialCoverageRatio = stageResult.partialDownload?.coverageRatio ?? transcribed.coverageRatio;
+
     return NextResponse.json({
       ...normalizedTranscribedData,
       success: true,
@@ -1213,6 +1299,12 @@ export async function POST(request: NextRequest) {
         endTime: segment.endMs,
         confidence: segment.confidence,
       })),
+      ...(isPartialTranscript
+        ? {
+            partial: true,
+            ...(partialCoverageRatio !== undefined ? { coverageRatio: partialCoverageRatio } : {}),
+          }
+        : {}),
       trace,
     });
   } catch (error) {

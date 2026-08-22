@@ -98,7 +98,7 @@ export const teachBackPlugin: AppPlugin = {
     }
 
     const promptContext = buildPromptTranscriptContext(context.input.transcript, {
-      maxChars: 8_000,
+      maxChars: 48_000,
       includeIndex: true,
       includeTimestamp: false,
     });

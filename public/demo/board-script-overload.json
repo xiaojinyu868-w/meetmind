@@ -1,0 +1,49 @@
+{
+  "script": {
+    "title": "超载布局回归验证",
+    "pages": [
+      {
+        "segments": [
+          {
+            "narration": "我们先看第一个句子，up in the air 这个表达。",
+            "actions": [
+              { "type": "write", "text": "I'm so up in the air right now.", "role": "term" },
+              { "type": "write", "text": "calm down = 冷静（接线员的反应）", "role": "note" },
+              { "type": "write", "text": "moving → a little confused", "role": "note" }
+            ]
+          },
+          {
+            "narration": "第二个重点表达，relocate 和 have a hard time 的用法。",
+            "actions": [
+              { "type": "write", "text": "relocate to = 迁居到（比 move 正式）", "role": "term" },
+              { "type": "write", "text": "have a hard time getting organised", "role": "term" },
+              { "type": "write", "text": "have a hard time (in) doing sth. = 做某事很费劲", "role": "note" }
+            ]
+          },
+          {
+            "type": "checkpoint",
+            "narration": "那这个句子是什么意思？想一想再回答。",
+            "question": { "text": "I'm having a hard time finding a flat. 是什么意思？", "role": "step" },
+            "hints": [
+              "只换了 doing 后面的内容，句型纹丝不动",
+              "find 加 ing 就是 finding",
+              "a flat 就是一套公寓"
+            ],
+            "answer": "意思就是找房子找得很费劲，句型和刚才一模一样。",
+            "demoActions": [
+              { "type": "write", "text": "I'm having a hard time finding a flat.", "role": "step" },
+              { "type": "write", "text": "= 找房找得很费劲", "role": "note" }
+            ]
+          },
+          {
+            "narration": "最后再比较一次原来的句子。",
+            "actions": [
+              { "type": "write", "text": "I'm so up in the air right now.", "role": "note" }
+            ]
+          }
+        ]
+      }
+    ],
+    "quotes": []
+  }
+}

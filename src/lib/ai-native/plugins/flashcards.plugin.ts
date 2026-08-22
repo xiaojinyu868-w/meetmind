@@ -274,12 +274,10 @@ export const flashcardsPlugin: AppPlugin = {
     return context.goal.appKey === 'flashcards' || context.goal.expectedOutput === 'cards';
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
-    // 8000 字 ≈ 12-16k input tokens ≈ 15-20 分钟课堂内容。
-    // 长课时 prompt 会让 step-3.7-flash 等高速模型在 prefill 阶段就吃满 100s+，
-    // 加上 JSON 输出 ~1500 tokens，整体撞 180s 服务端超时。
+    // 48000 字对齐 cheatsheet：长课不再被稀释成残句（8000 是 180s LLM 超时时代的遗留）。
     // 上下文 > 指令，但上下文也要给得有节制。
     const promptContext = buildPromptTranscriptContext(context.input.transcript, {
-      maxChars: 8_000,
+      maxChars: 48_000,
       includeIndex: true,
       includeTimestamp: true,
       minCharsPerSegment: 48,

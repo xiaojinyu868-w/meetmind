@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @deprecated 2026-08 决策：实时语音通话下线（/api/tutor-call 已拆除）。
+ * 本组件保留一个周期作参考，之后物理删除。请勿在新代码中引用。
+ */
+
 import { useMemo } from 'react';
 import { MessageCircle, PhoneCall, PhoneOff } from 'lucide-react';
 import { useOmniRealtimeCall } from '@/hooks/useOmniRealtimeCall';

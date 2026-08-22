@@ -122,6 +122,17 @@ export async function updateConversationHistory(
     .modify({ ...updates, updatedAt: new Date() });
 }
 
+/** 迁移对话归属（anonymous → 登录用户）：旧版 auth 竞态把全局对话落到匿名名下后的认领 */
+export async function reassignConversationOwner(
+  conversationId: string,
+  userId: string
+): Promise<number> {
+  return db.conversationHistory
+    .where('conversationId')
+    .equals(conversationId)
+    .modify({ userId });
+}
+
 /** 删除对话历史（包括消息） */
 export async function deleteConversationHistory(conversationId: string): Promise<void> {
   await db.transaction('rw', [db.conversationHistory, db.conversationMessages], async () => {

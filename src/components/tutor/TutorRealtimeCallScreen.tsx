@@ -1,5 +1,11 @@
 'use client';
 
+/**
+ * @deprecated 2026-08 决策：实时语音通话下线（/api/tutor-call 已拆除），
+ * 语音同桌入口按钮已从 UI 移除。本组件保留一个周期作参考，之后物理删除。
+ * 请勿在新代码中引用。
+ */
+
 import { useEffect, useMemo, useState } from 'react';
 import {
   ChevronDown,

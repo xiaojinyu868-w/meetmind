@@ -33,8 +33,8 @@
 ## 实时 ASR 与说话人边界
 
 - Qwen 是用户主链路唯一默认实时 ASR；课堂首页与录课中不暴露“单人 / 多人”供应商开关，避免用户为底层模型做决定，也避免切到较低准确率通道。
-- `speakerDiarization` 和腾讯 speaker proxy 暂时只作为内部实验兼容能力保留；若实验调用录中切换，仍必须通过 active + pending 双 client 同步发送 PCM，pending ready 后才替换 active，禁止先断旧连接再等新连接。
-- 面向用户的说话人信息在完整原声 batch 定稿之后静默补充，并且只有至少两位稳定发言者的证据成立才显示。
-- PCM ScriptProcessor 使用 2048 帧，兼顾 Qwen 延迟与腾讯约 40ms 音频粒度；`StreamingPcmResampler` 跨 callback 保留插值相位，避免 44.1kHz 手机每个音频块独立取整造成丢样/重复采样。
-- 停止后立即把 Recorder 释放回 `idle`；完整原声定稿作为 detached job 运行，并在第一个 `await` 前捕获 recordingId/sessionId。realtime 草稿只服务课中反馈，定稿前不发布为标题 / 摘要 / 应用输入；后台结果只通过外层 pending-audio + session isolation 回填，禁止再写 Recorder 的 transcript ref，用户可以立刻开始下一节课。
+- 2026-08：腾讯 speaker proxy 与 `speakerDiarization` 开关已整体拆除（实时只有 Qwen 单路径）；课后不再自动跑完整原声 batch 定稿与说话人分离，`/api/transcribe*` / `/api/asr/diarize` 保留供将来的手动「重新精转」。
+- 面向用户的说话人信息（手动精转时）只有至少两位稳定发言者的证据成立才显示。
+- PCM ScriptProcessor 使用 2048 帧，兼顾 Qwen 延迟；`StreamingPcmResampler` 跨 callback 保留插值相位，避免 44.1kHz 手机每个音频块独立取整造成丢样/重复采样。
+- 停止后立即把 Recorder 释放回 `idle`；realtime 结果即定稿，直接发布为标题 / 摘要 / 应用输入。realtime 一句没接住时的兜底批量转写作为 detached job 运行，并在第一个 `await` 前捕获 recordingId/sessionId；后台结果只通过外层 pending-audio + session isolation 回填，禁止再写 Recorder 的 transcript ref，用户可以立刻开始下一节课。
 - realtime 停止不再固定 sleep 1.5 秒后硬关连接：正常等待 proxy 的 `session.finished`，异常最多 5 秒释放，避免尾句在网络往返稍慢时被客户端主动截断。

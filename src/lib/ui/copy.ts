@@ -434,6 +434,7 @@ export const COPY = {
       windowsAction: '下载 Windows 版',
       windowsNote: 'Windows 10 及以上 · 64 位',
       hotkeyHint: '截图热键 Ctrl/Cmd + Shift + M',
+      guideAction: '桌面端与桌宠使用说明 →',
       unsignedNote: '安装包暂未签名：macOS 请「右键 → 打开」，Windows 请在 SmartScreen 提示中选「仍要运行」。',
     },
     footer: {
@@ -510,7 +511,7 @@ export const COPY = {
         '语义、声学、视觉与交互信号联合建模',
         '开放词汇情感理解',
         '多模态证据定位与自然语言解释',
-        '课中低延迟感知，课后高精度定稿',
+        '课中低延迟实时转写，开口即定稿',
       ] as const,
       outputLabel: '输出',
       outputName: 'Classroom State Representation',
@@ -860,7 +861,13 @@ export const COPY = {
     askClassmate: '问同学',
     emptyTitle: '想到什么，就留在这里。',
     emptyBody: '不用分类，不用打标签。同学会在后台把它接回相关的课堂、目标和问题。',
-    emptyTypes: ['文字', '语音', '图片', '网页', '文件', '想法'] as const,
+    /** 空态四张自解释入口卡（上传/链接/写一句/录一段），key 供组件映射图标与动作 */
+    emptyEntries: [
+      { key: 'upload', label: '上传', hint: '文件、音频、视频、图片' },
+      { key: 'link', label: '链接', hint: '贴个网页或视频链接' },
+      { key: 'write', label: '写一句', hint: '想法、困惑、随手记' },
+      { key: 'voice', label: '录一段', hint: '语音直接留下来' },
+    ] as const,
     emptyWechatHint: '也可以从微信直接发给我。',
     deleteMemoryWarning: '删除后，这条内容不会再进入同学的回答、后续情报和个人上下文。',
     permanentDeleteWarning: '彻底删除后，这条内容不会再进入同学的回答、后续情报和个人上下文。',
@@ -1009,6 +1016,16 @@ export const COPY = {
     rateLimited: '今天聊得够多了，明天再接着聊。',
     failed: '这边卡了一下，稍后再跟我说一次。',
   },
+  wechatPodcast: {
+    /** 小宇宙链接的即时回执（区别于泛视频链接） */
+    receipt: '接住了，是小宇宙播客。转写好了我跟你说。',
+    importDone: (title: string, minutes: number): string => `《${title}》转写好了，约 ${minutes} 分钟。`,
+    importDoneCta: '点这看看',
+    importFailed: (reason?: string): string => reason
+      ? `这集转写没成功（${reason}），可以再发一次试试。`
+      : '这集转写没成功，可以再发一次试试。',
+    duplicate: '这集之前收过了，在这 →',
+  },
   player: {
     loadingAudio: '加载音频',
     preparingWaveform: '原声已收下，正在准备波形…',
@@ -1083,6 +1100,13 @@ export const COPY = {
     actionProcessing: '整理中',
     actionFailed: '原声已保留',
     actionUpcoming: '准备上课',
+  },
+
+  demo: {
+    reviewBannerTitle: '这是示例课',
+    reviewBannerBody: '你的课堂会出现在课堂列表里，随时可以录自己的第一节。',
+    reviewBannerAction: '去录我自己的课',
+    reviewBannerDismiss: '继续看示例课',
   },
 
   classroomHome: {
@@ -1283,6 +1307,9 @@ export const COPY = {
     captureFrameFailed: '没截到，再试一次。',
     startFailed: (reason: string): string => `还没有开始录音。${reason}`,
     finished: '这节课收好了',
+    /** 断连缓冲溢出导致音频帧被丢弃时的持续提示（累计秒数） */
+    audioGapWarning: (seconds: number): string =>
+      `刚才连接不稳，约有 ${seconds} 秒的声音没能转成文字。`,
     finalizingTranscript: (count: number, enhancedCount = 0): string =>
       `实时文字已收下，正在用原声定稿 · ${count} 段${enhancedCount > 0 ? ` · 已优化 ${enhancedCount} 段` : ''}`,
   },
@@ -1502,6 +1529,14 @@ export const COPY = {
         'audio-overview': { action: '换种方式再听', bestFor: '通勤或走路时，想用对话重新理解', time: '收听约 6–10 分钟' },
         infographic: { action: '做成一张图', bestFor: '想分享、展示，或用视觉方式记住', time: '查看约 2 分钟' },
         'teach-back': { action: '讲给同桌听', bestFor: '想确认自己是真懂，而不只是看懂了', time: '讲约 5–10 分钟' },
+        explainer: {
+          name: '板书精讲',
+          headline: '黑板上边写边讲，把这节课讲透',
+          description: '像坐在教室前排：粉笔字一个个写出来，圈点勾画跟着讲解走。',
+          action: '看板书精讲',
+          bestFor: '想真正弄懂这节课的核心概念，而不是只留个印象',
+          time: '观看约 5–8 分钟',
+        },
       },
     },
     infographic: {
@@ -1571,6 +1606,7 @@ export const COPY = {
       classroomReconnect: '连接断了，点这里重新进教室',
       evalFailed: '这次没能完成核对，你讲的内容还在，可以再试一次。',
       retryEval: '重新核对',
+      textHint: '写给一个没听过这节课的同学，同桌会逐条对照课堂原声核对。',
     },
     mindmap: {
       mobileGestureHint: '拖动查看 · 点 + 放大',
@@ -1629,6 +1665,62 @@ export const COPY = {
       restart: '重做全部',
       evidenceAt: (time: string): string => `来自课堂 ${time}`,
       returnToEvidenceAt: (time: string): string => `回到课堂 ${time}`,
+    },
+    explainer: {
+      appName: '板书精讲',
+      quotesVerified: (count: number): string => `${count} 处老师原话已核对`,
+      quotesDowngraded: (count: number): string => `${count} 处引用未对上原话，已改为转述`,
+      play: '播放',
+      pause: '暂停',
+      replay: '重新播放',
+      pageLabel: (current: number, total: number): string => `第 ${current} / ${total} 页`,
+      checkpointKnow: '我会了',
+      checkpointHint: '给我提示',
+      checkpointAnswer: '看解析',
+      inkStart: '板演',
+      inkClear: '擦掉重写',
+      inkDone: '写完了',
+      inkGrading: '老师正在批改你的板演…',
+      inkDemoTitle: '老师示范：',
+      preparing: '老师正在备课…',
+      awaitingGesture: '点一下黑板，听老师开讲',
+      finishedCaption: '这节课讲完了。可以重新播放，或者点「板演」自己试试。',
+      photoEntry: '拍题开讲',
+      photoPick: '选一张题目照片',
+      photoStageReading: '老师正在看题…',
+      photoStageSolving: '老师正在解题…',
+      photoStagePreparing: '老师正在备课…',
+      photoErrorNotProblem: '这张照片里好像没有题目，换一张试试',
+      photoErrorGeneric: '这次没讲成，再试一次',
+      photoChange: '换一道题',
+    },
+    teach: {
+      appName: 'AI 家教',
+      lessonStart: '老师，开始上课吧',
+      askPlaceholder: '随时提问，当前句讲完就答你…',
+      thinking: '老师在想…',
+      quoteAsk: '引用提问',
+      removeQuote: '移除引用',
+      voiceSoon: '语音提问即将上线',
+      soundOn: '讲课声音：开',
+      soundOff: '讲课声音：关',
+      history: '课程',
+      newLesson: '新开一课',
+      topicPromptTitle: '今天想学什么？',
+      topicPromptPlaceholder: '比如：黎曼猜想、勾股定理、英语过去完成时…',
+      topicPromptStart: '开课',
+      emptyChat: '课马上开始。听懂听不懂，都可以随时在下方问。',
+      restored: '已恢复到上次讲到的地方，可以继续提问。',
+      toolChip: {
+        write: '板书',
+        circle: '圈注',
+        underline: '下划线',
+        arrow: '连线',
+        mark: '批改',
+        image: '插图',
+        flip_page: '新一页',
+        ask: '提问',
+      } as Record<string, string>,
     },
     podcast: {
       appName: '课堂播客',
@@ -1781,13 +1873,46 @@ export const COPY = {
     /** 副标 */
     subtitle: '不用写好——说就行',
     /** 设置页 description */
-    description: '和教练聊一聊，把脑子里的事一起捋清楚——也可以打电话语音聊',
+    description: '和教练聊一聊，把脑子里的事一起捋清楚',
     /** 设置页：还没聊过的提示 */
     emptyHint: '还没聊过。你最近想做的事 / 想去的方向 / 还在纠结的选择，都可以慢慢说。',
     /** 设置页：开始按钮 */
     actionStart: '和教练聊一聊',
     /** 设置页：再聊一次按钮 */
     actionResume: '和教练再聊一会',
+    /**
+     * 首次会面：固定开场选择题（成熟产品 onboarding 模式——先拿稳定属性，再拿时间尺度）。
+     * 两题稳定属性（身份 → 阶段，点选即进下一题，零 LLM 往返），一题目标时间尺度；
+     * 三题答完合成第一条用户消息发给 AI，稳定属性由 AI 沉淀进「我了解到的你」。
+     */
+    openingStep1Question: '你现在是——',
+    openingStep1Options: ['在校学生', '工作中', '自由职业 / gap 中', '还在找方向'] as string[],
+    openingStep2StudentQuestion: '读到哪个阶段了？',
+    openingStep2StudentOptions: ['中学', '大学', '研究生', '备考中（考研 / 考证 / 考公）'] as string[],
+    openingStep2WorkQuestion: '工作多久了？',
+    openingStep2WorkOptions: ['还在试用期', '1-3 年', '3 年以上'] as string[],
+    openingStep3Question: '最想让 Octo 帮你盯住哪类事？',
+    openingStep3Options: [
+      '眼前的考试或 DDL',
+      '这个学期 / 季度的进步',
+      '长期的方向和本事',
+    ] as string[],
+    /** 顶部步骤条：说说 → 捋一捋 → 记下了 */
+    stepChat: '说说',
+    stepShape: '捋一捋',
+    stepSaved: '记下了',
+    /** 完成态 */
+    doneTitle: '记下了',
+    doneHint: '它已经进入你的上下文，之后的复习和首页都会围着它转。',
+    donePrimary: '好了，去主页看看',
+    doneSecondary: '再记一件',
+    /** 请求失败 / 卡死看门狗触发时的错误条 */
+    errorBanner: '刚刚断了一下，这条没收到回复。',
+    errorRetry: '重试',
+    errorDismiss: '先不管',
+    /** AI 没给选项时的兜底快答（保证永远能点选推进） */
+    fallbackContinue: '继续说',
+    fallbackWrapUp: '帮我捋出来记着',
     /** IntentDialog header：右上角切换通话 */
     switchToCall: '打电话聊',
     /** 通话视图：切回文字 */
@@ -1825,6 +1950,10 @@ export const COPY = {
     summarySaving: '记着…',
     /** 卡片：已保存 */
     summarySaved: '已记下了',
+    /** 目标时间尺度角标（horizon） */
+    horizonNear: '短期 · 有明确节点',
+    horizonTerm: '中期 · 学期 / 季度',
+    horizonLong: '长期 · 方向',
   },
 
   realtime: {
@@ -2053,6 +2182,129 @@ export const COPY = {
     rollback: '回滚到这版',
     rollbackConfirm: (version: number): string => `确认回滚到 v${version}？系统会生成一个新的线上版本。`,
     emptyHistory: '还没有版本记录。',
+  },
+
+  /** 管理员成本视图（积分影子计量 Phase 1） */
+  adminCosts: {
+    title: '模型成本',
+    body: '影子计量期只统计真实成本，不会向用户扣减。',
+    range7: '近 7 天',
+    range30: '近 30 天',
+    colFeature: '功能',
+    colModel: '模型',
+    colRequests: '请求数',
+    colTokens: 'Tokens',
+    colCost: '成本',
+    total: '合计',
+    dailyTitle: '每日趋势',
+    empty: '这个时间范围还没有计量数据。',
+    loadFailed: '成本数据加载失败。',
+    cost: (milliYuan: number): string => `¥${(milliYuan / 1000).toFixed(3)}`,
+    tokens: (count: number): string => count.toLocaleString('zh-CN'),
+  },
+
+  /** 积分（Phase 2）：余额展示、扣费拦截提示、免费录课额度 */
+  points: {
+    unit: '积分',
+    chipLabel: (balance: number): string => `${balance} 积分`,
+    balanceCaption: '当前余额',
+    freeMinutesRemaining: (minutes: number): string => `本月免费录课还能用 ${minutes} 分钟`,
+    freeMinutesUsedUp: '本月免费录课时长已用完',
+    recentRecords: '最近记录',
+    recordsEmpty: '还没有积分记录。',
+    /** 设置页流水默认只展示最近几条，其余收进展开器——否则每次用 AI 都会把设置页拉长 */
+    recordsShowAll: (count: number): string => `查看全部 ${count} 条记录`,
+    recordsCollapse: '收起记录',
+    loadFailed: '积分信息暂时没接上，稍后再看。',
+    /** 402 insufficient_points：余额不足 + 当前余额 + 下月发放说明 */
+    blockedInsufficient: (balance: number): string =>
+      `积分不够了，现在还剩 ${balance}。每月初会发新的，到时候再来。`,
+    blockedInsufficientUnknown: '积分不够了。每月初会发新的，到时候再来。',
+    /** 402 monthly_cost_cap：本月成本到顶，下月自动恢复 */
+    blockedMonthlyCap: '这个月的 AI 用到上限了，先歇一歇，下个月会自动恢复。',
+    /** 402 guest_daily_cap：未登录日试用到顶，引导登录 */
+    blockedGuestDailyCap: '今天的试用到这里了。登录后就能继续，每月还有固定额度。',
+    /** ── Paywall 付费拦截页（高意向时刻截断：402 / 录课额度用尽） ── */
+    paywallTitle: '充点积分，接着学',
+    paywallInsufficient: (balance: number, required: number): string =>
+      `这次需要 ${required} 积分，你还差 ${Math.max(1, required - balance)}。`,
+    paywallInsufficientUnknown: '积分不够这次用了，充一点就好。',
+    paywallAsrQuota: '本月免费录课时长用完了，充积分可以按分钟继续录。',
+    paywallPackCaption: (points: number): string => `${points} 积分`,
+    paywallPackLabel: { starter: '体验包', standard: '标准包', scholar: '学霸包' } as Record<string, string>,
+    paywallPackRecommend: '最多人选',
+    paywallPayCta: (fen: number): string => `微信支付 ¥${(fen / 100).toFixed(2).replace(/\.00$/, '')}`,
+    paywallPayingTitle: '微信扫码完成支付',
+    paywallPayingHint: '支付成功后积分自动到账，不用刷新页面。',
+    paywallPayExpired: '二维码过期了，重新生成一张。',
+    paywallSuccessTitle: '积分到账了',
+    paywallSuccessBody: (points: number): string => `+${points} 积分，继续吧。`,
+    paywallUnavailable: '在线支付即将开通。着急的话，先在公众号里找我们。',
+    paywallDismiss: '再想想',
+    /** 微信充值到账的客服消息（recharge-order-service 推送） */
+    rechargePaidText: (points: number, balanceAfter: number | null): string =>
+      `积分到账：+${points} 积分${typeof balanceAfter === 'number' ? `，当前余额 ${balanceAfter}` : ''}。`,
+    /** 录课前预检：免费分钟用完，轻提示不阻断 */
+    asrQuotaExhausted: (pricePerMinute: number): string =>
+      `本月免费录课时长已用完，继续录会按每分钟 ${pricePerMinute} 积分计。`,
+    settingsCaption: '积分',
+    settingsDescription: '每月发放的额度、免费录课时长和使用记录',
+    monthCostLabel: '本月 AI 成本',
+    monthCostValue: (milliYuan: number): string => `¥${(milliYuan / 1000).toFixed(2)}`,
+    monthCostCap: (milliYuan: number): string => `上限 ¥${(milliYuan / 1000).toFixed(2)}`,
+    freeMinutesLabel: '免费录课时长',
+    minutesValue: (minutes: number): string => `${minutes} 分钟`,
+    deltaLabel: (delta: number): string => (delta > 0 ? `+${delta}` : `${delta}`),
+    /** 流水 reason 枚举 → 人类可读文案 */
+    reasonLabels: {
+      welcome: '新同学见面礼',
+      monthly: '每月发放',
+      tutor: 'AI 同桌',
+      apps: '学习应用',
+      asr: '录课转写',
+      'asr:import': '播客视频导入转写',
+      'admin-adjust': '管理员调整',
+    } as const,
+    reasonFallback: '其他',
+  },
+
+  /** 订阅会员（Free / Pro / Max）：档位名、权益文案、到账通知 */
+  membership: {
+    tierName: { free: '免费版', pro: 'Pro', max: 'Max' } as Record<string, string>,
+    /** 会员档订单支付到账的客服消息（recharge-order-service 推送） */
+    paidText: (tierLabel: string, expiresOn: string): string =>
+      `${tierLabel} 已开通，有效期至 ${expiresOn}。录课额度与每月积分已按新档位生效。`,
+    /** 402 membership_required：免费档触发会员专属能力 */
+    blockedMembershipRequired: (tierLabel: string): string =>
+      `这个功能是 ${tierLabel} 会员专属的，开通后就能用。`,
+    settingsCaption: '会员',
+    expiresOn: (date: string): string => `有效期至 ${date}`,
+    renewCta: '续费',
+    upgradeCta: '升级',
+    freeTierCta: '开通会员',
+    /** 一级页面直达入口（桌面侧栏底部 / 积分面板）的副标题——付费不藏在设置里。
+        必须够短：168px 侧栏里放得下，宁可少写也不许截断出省略号 */
+    upgradeEntryHint: '解锁深度模式',
+    /** 一级页面用户菜单里的会员入口：按当前档位给动作 */
+    menuCta: { free: '开通会员', pro: '升级会员', max: '续费会员' } as Record<string, string>,
+    /** ── Paywall 会员 Tab ── */
+    paywallTabMembership: '会员',
+    paywallTabPoints: '充积分',
+    paywallTitle: '开通会员，放开用',
+    /** 主动打开（设置页）时的中性地推文案 */
+    paywallMembershipPitch: '更长的录课额度、每月更多积分，还有会员专属能力。',
+    paywallPointsPitch: '积分可以录课、向同学提问、生成学习产物。',
+    planPriceMonth: (fen: number): string =>
+      `¥${(fen / 100).toFixed(2).replace(/\.00$/, '')}/月`,
+    planCta: (tierLabel: string, fen: number): string =>
+      `开通 ${tierLabel} · ¥${(fen / 100).toFixed(2).replace(/\.00$/, '')}/月`,
+    benefitFreeMinutes: (minutes: number): string => `每月 ${minutes} 分钟免费录课`,
+    benefitMonthlyGrant: (points: number): string => `每月发 ${points} 积分`,
+    benefitDeep: '解锁深度模式',
+    benefitDiscount: '学习应用 8 折',
+    benefitModel: '优先更快的模型',
+    paywallSuccessTitle: (tierLabel: string): string => `${tierLabel} 已开通`,
+    paywallSuccessBody: '录课额度和每月积分已按新档位生效。',
   },
 
   /**

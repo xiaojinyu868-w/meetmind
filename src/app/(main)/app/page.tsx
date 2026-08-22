@@ -16,7 +16,7 @@ import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
 import { DesktopSidebar } from '@/components/DesktopSidebar';
 
-import { GUEST_DEMO_LESSON_TITLE, resolveGuestDemoEntry } from '@/components/classroom/guest-demo-entry';
+import { GUEST_DEMO_LESSON_TITLE, isDemoEntryConsumed, markDemoEntryConsumed, resolveGuestDemoEntry } from '@/components/classroom/guest-demo-entry';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { type Anchor } from '@/lib/services/anchor-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
@@ -24,6 +24,7 @@ import { memoryService, type ClassTimeline } from '@/lib/services/memory-service
 import { useAuth } from '@/lib/hooks/useAuth';
 import { runMemoryMigration } from '@/lib/services/memory-migration';
 import { fetchAndBackfillWorkspaceEvidence } from '@/lib/services/workspace-evidence-client';
+import { isDegradedLocalTranscript } from '@/lib/services/backfill-captures-to-indexeddb';
 import { ANONYMOUS_USER_ID, saveAudioSession, updateSessionStatus, getPreference } from '@/lib/db';
 
 import { buildSelectedCollectionContextText, getCollectionContextTypeLabel } from '@/lib/capture/collection-context';
@@ -131,6 +132,7 @@ const SharedWorkspacePanel = dynamic(() => import('@/components/SharedWorkspaceP
 const CollectionSelectionBar = dynamic(() => import('@/components/CollectionSelectionBar').then(m => ({ default: m.CollectionSelectionBar })), { ssr: false });
 const CollectionComposerContextPreview = dynamic(() => import('@/components/CollectionComposerContextPreview').then(m => ({ default: m.CollectionComposerContextPreview })), { ssr: false });
 const CollectionComposerBar = dynamic(() => import('@/components/CollectionComposerBar').then(m => ({ default: m.CollectionComposerBar })), { ssr: false });
+const PaywallDialog = dynamic(() => import('@/components/points/PaywallDialog').then(m => ({ default: m.PaywallDialog })), { ssr: false });
 const WorkshopWindowManager = dynamic(() => import('@/components/apps/windows/WorkshopWindowManager').then(m => ({ default: m.WorkshopWindowManager })), { ssr: false });
 const GlobalAskPanel = dynamic(() => import('@/components/GlobalAskPanel').then(m => ({ default: m.GlobalAskPanel })), { ssr: false });
 import type { WorkspaceCaptureListItem } from '@/components/WorkspaceCaptureList';
@@ -192,6 +194,16 @@ function StudentAppContent({
   initialMemoryFocus?: 'cheatsheet';
 }) {
   const router = useRouter();
+  // 试听入口（entry=demo）一次性消费：进入复习页或主动切走课堂 tab 后，
+  // 不再自动灌入示例课，课堂 tab 回到真实的课堂列表。
+  const [demoEntryConsumed, setDemoEntryConsumed] = useState(() => isDemoEntryConsumed());
+  const consumeDemoEntry = useCallback(() => {
+    markDemoEntryConsumed();
+    setDemoEntryConsumed(true);
+  }, []);
+  const effectiveAutoLoadDemo = autoLoadDemo && !demoEntryConsumed;
+  // 试听复习页的出口横幅（可暂时关掉，只影响本次展示）
+  const [demoBannerVisible, setDemoBannerVisible] = useState(true);
   // ==================== Zustand Store 订阅 ====================
   const uiActions = useUIStore((s) => s.actions);
   const playerActions = usePlayerStore((s) => s.actions);
@@ -509,7 +521,7 @@ function StudentAppContent({
   const recorderRef = useRef<RecorderHandle | null>(null);
   // 记录当前进入复习态的 sourceItem，用于非音视频类型（文章/笔记）展示原文
   const [selectedReviewItem, setSelectedReviewItem] = useState<SourceIngestItem | null>(null);
-  const reviewContextTitle = selectedReviewItem?.title || (autoLoadDemo ? GUEST_DEMO_LESSON_TITLE : undefined);
+  const reviewContextTitle = selectedReviewItem?.title || (effectiveAutoLoadDemo ? GUEST_DEMO_LESSON_TITLE : undefined);
   // Ref bridge: importVideoLinkIntoSourceItem is returned by useSourceImport (defined after
   // ingestTranscriptSegments), but consumed by openReviewFromCollection (defined before).
   // We use a ref so the callback always reads the latest function at call time.
@@ -814,6 +826,11 @@ function StudentAppContent({
   );
 
   const handleViewModeChange = useCallback(async (newMode: 'record' | 'review' | 'classroom') => {
+    // 试听旅程出口：用户在示例课上下文里主动切课堂/收集 tab = 明确要离开试听。
+    // 消费掉 entry=demo，课堂 tab 回到真实课堂列表（可录自己的课），示例课可从列表 hero 重新进入。
+    if ((newMode === 'classroom' || newMode === 'record') && autoLoadDemo && !demoEntryConsumed && !isRecording) {
+      consumeDemoEntry();
+    }
     setViewMode(newMode);
     setMobileSubPage(null);
     setShowMobileRecorder(false);
@@ -859,7 +876,7 @@ function StudentAppContent({
         console.error('Failed to load demo data:', err);
       }
     }
-  }, [hasCollectionContext, segments.length, sessionId, isGuestFastEntry]);
+  }, [hasCollectionContext, segments.length, sessionId, isGuestFastEntry, autoLoadDemo, demoEntryConsumed, isRecording, consumeDemoEntry]);
 
   useEffect(() => {
     if (!forceMobilePreview || !initialMobileSubPage) return;
@@ -904,7 +921,25 @@ function StudentAppContent({
     };
 
     // 路径 A：有 sessionId + reviewable → 从 IndexedDB 恢复
-    if (item.sessionId && item.reviewable) {
+    // 但本地转录若只是「单段兜底」的降级数据（无时间戳、结尾省略号），
+    // 而服务端有正规化证据，跳过路径 A，让路径 B 懒拉真实分段替换。
+    let localTranscriptDegraded = false;
+    if (
+      item.sessionId
+      && item.reviewable
+      && item.evidenceAvailable
+      && item.workspaceCaptureId
+      && isAuthenticated
+      && accessToken
+      && user?.id
+    ) {
+      try {
+        localTranscriptDegraded = await isDegradedLocalTranscript(item.sessionId);
+      } catch {
+        localTranscriptDegraded = false;
+      }
+    }
+    if (item.sessionId && item.reviewable && !localTranscriptDegraded) {
       try {
         const restored = await restoreReviewSession(item.sessionId, {
           reviewTab: 'timeline',
@@ -1213,13 +1248,13 @@ function StudentAppContent({
   const [mobileReviewSheetOpen, setMobileReviewSheetOpen] = useState(false);
   const digestImages = useMemo(() => {
     return sourceItems
-      .filter((item) => item.type === 'image' && item.role === 'support')
+      .filter((item) => item.type === 'image' && item.role === 'support' && item.sessionId === sessionId)
       .map((item) => ({
         imageId: item.id,
         capturedAtMs: item.capturedAtMs ?? null,
         title: item.title,
       }));
-  }, [sourceItems]);
+  }, [sourceItems, sessionId]);
   const { digest: lessonDigest, loading: digestLoading } = useLessonDigest({
     sessionId,
     segments,
@@ -1613,7 +1648,12 @@ function StudentAppContent({
           ) : null}
 
           {collectionFeedItems.length === 0 ? (
-            <CollectionEmptyState />
+            <CollectionEmptyState
+              onUpload={() => handleSourceFileButtonClick('all')}
+              onLink={() => focusCollectionComposer()}
+              onWrite={() => focusCollectionComposer()}
+              onVoice={openLiveRecorder}
+            />
           ) : (
             <div className="flex flex-col gap-2.5">
               {showMobileRecorder ? (
@@ -1990,14 +2030,41 @@ function StudentAppContent({
       {/* ── 主内容区（桌面端为侧栏右侧 flex-1） ── */}
       <div className={isMobile ? 'flex flex-1 min-h-0 flex-col' : 'flex flex-1 min-w-0 flex-col overflow-hidden'}>
       {!isMobile && <DegradedModeBanner status={serviceStatus} />}
+      {!isMobile && viewMode === 'review' && dataSource === 'demo' && demoBannerVisible && (
+        <div className="flex flex-shrink-0 items-center gap-3 border-b border-divider bg-paper-warm px-4 py-2">
+          <span className="inline-flex h-5 items-center rounded-full bg-pine-fog px-2 text-[11px] font-medium text-pine">
+            {COPY.demo.reviewBannerTitle}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[12px] text-ink-muted">
+            {COPY.demo.reviewBannerBody}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              consumeDemoEntry();
+              void handleViewModeChange('classroom');
+            }}
+            className="flex-shrink-0 rounded-full bg-pine px-3 py-1 text-[12px] font-medium text-white transition-colors hover:bg-pine-deep"
+          >
+            {COPY.demo.reviewBannerAction}
+          </button>
+          <button
+            type="button"
+            onClick={() => setDemoBannerVisible(false)}
+            className="flex-shrink-0 text-[12px] text-ink-muted transition-colors hover:text-ink-secondary"
+          >
+            {COPY.demo.reviewBannerDismiss}
+          </button>
+        </div>
+      )}
 
       {/* 主内容区 */}
       {isMobile ? (
         <MobileAppShell
           collectionFeedItems={collectionFeedItems}
           workspaceEchoes={workspaceEchoes}
-          autoStartDemo={autoLoadDemo}
-          demoMode={dataSource === 'demo' || autoLoadDemo}
+          autoStartDemo={effectiveAutoLoadDemo}
+          demoMode={dataSource === 'demo' || effectiveAutoLoadDemo}
           demoAudioUrl={dataSource === 'demo' ? (audioUrl || '/demo-audio.mp3') : undefined}
           onStartDemo={async () => {
             const demoData = await loadDemoData();
@@ -2056,7 +2123,7 @@ function StudentAppContent({
             }
           }}
           onPhotoCaptured={(file, capturedAtMs) => {
-            void handleImportFiles([file], 'support', { capturedAtMs, sessionId: sessionId || undefined });
+            void handleImportFiles([file], 'support', { capturedAtMs: capturedAtMs ?? undefined, sessionId: sessionId || undefined });
           }}
           onOpenEcho={() => { /* MobileAppShell 内部 push echo screen */ }}
           onOpenSearch={() => setShowAISearch(true)}
@@ -2179,9 +2246,11 @@ function StudentAppContent({
                 void handleViewModeChange('record').then(() => handleSourceFileButtonClick('all'));
               }}
               onSearch={() => setShowAISearch(true)}
-              autoLoadDemo={autoLoadDemo}
+              autoLoadDemo={effectiveAutoLoadDemo}
               autoOpenDemoAppKey={autoOpenDemoAppKey}
               onOpenDemoReview={() => {
+                // 看完试听进入复习页 = 试听旅程完成，消费入口
+                consumeDemoEntry();
                 setReviewTab('apps');
                 setVideoWorkspaceTab('apps');
                 setMobileSubPage(isMobile ? 'apps' : null);
@@ -3005,11 +3074,10 @@ function SearchParamsReader() {
   const wechatCaptureToken = searchParams.get('wechat_capture');
   const entryParam = searchParams.get('entry');
   const initialMobileSubPage: MobileSubPage =
-    entryParam === 'call'
-      ? 'ai-call'
-      : entryParam === 'ai' || entryParam === 'chat'
-        ? 'ai-chat'
-        : null;
+    // 2026-08：实时语音通话下线，entry=call 不再直达语音同桌，回落到文字同桌
+    entryParam === 'call' || entryParam === 'ai' || entryParam === 'chat'
+      ? 'ai-chat'
+      : null;
   const guestDemoEntry = resolveGuestDemoEntry({
     isGuestFastEntry,
     entry: entryParam,
@@ -3043,17 +3111,21 @@ function SearchParamsReader() {
   }
 
   return (
-    <StudentAppContent
-      isGuestFastEntry={isGuestFastEntry}
-      forcedWorkspaceTab={forcedWorkspaceTab}
-      initialClaimedCaptureId={initialClaimedCaptureId}
-      wechatCaptureToken={wechatCaptureToken}
-      initialMobileSubPage={initialMobileSubPage}
-      autoLoadDemo={guestDemoEntry.autoLoadDemo}
-      autoOpenDemoAppKey={guestDemoEntry.autoOpenAppKey}
-      initialGlobalAskView={initialGlobalAskView}
-      initialMemoryFocus={initialMemoryFocus}
-    />
+    <>
+      <StudentAppContent
+        isGuestFastEntry={isGuestFastEntry}
+        forcedWorkspaceTab={forcedWorkspaceTab}
+        initialClaimedCaptureId={initialClaimedCaptureId}
+        wechatCaptureToken={wechatCaptureToken}
+        initialMobileSubPage={initialMobileSubPage}
+        autoLoadDemo={guestDemoEntry.autoLoadDemo}
+        autoOpenDemoAppKey={guestDemoEntry.autoOpenAppKey}
+        initialGlobalAskView={initialGlobalAskView}
+        initialMemoryFocus={initialMemoryFocus}
+      />
+      {/* 付费拦截页：全局挂载，402/录课额度用尽时由 usePaywall 唤起 */}
+      <PaywallDialog />
+    </>
   );
 }
 

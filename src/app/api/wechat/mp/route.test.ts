@@ -49,6 +49,9 @@ vi.mock('@/lib/services/jina-reader-service', () => ({
   enrichLinkContent: vi.fn(),
   enrichArticleLinkContent: vi.fn(),
 }));
+vi.mock('@/lib/services/wechat-video-enrich-service', () => ({
+  enrichVideoLinkMeta: vi.fn(),
+}));
 vi.mock('@/lib/services/bilibili-import-service', () => ({
   resolveBilibiliUrl: vi.fn(),
   fetchViewMeta: vi.fn(),

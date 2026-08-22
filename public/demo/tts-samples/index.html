@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>板书 TTS 音色试听</title>
+<style>
+  body { font-family: -apple-system, "PingFang SC", sans-serif; max-width: 640px; margin: 40px auto; padding: 0 20px; background: #faf9f6; color: #2b2b2b; }
+  h1 { font-size: 20px; } p.tip { color: #888; font-size: 13px; }
+  .item { background: #fff; border: 1px solid #e8e4dc; border-radius: 12px; padding: 14px 16px; margin: 12px 0; }
+  .item h2 { font-size: 15px; margin: 0 0 4px; } .item .meta { font-size: 12px; color: #999; margin-bottom: 8px; }
+  audio { width: 100%; height: 36px; }
+</style>
+</head>
+<body>
+<h1>板书讲解音色试听（同一段真实板书文案）</h1>
+<p class="tip">试听文本：「拿到这类题，别急着听，先看表格结构。知道要填姓名、电话还是地址。然后边听边抓关键词，再注意同义转述。」<br/>A 是现在线上的声音，重点对比谁最像真人老师、最连贯。</p>
+<h2 style="font-size:16px;margin-top:24px">情感指令对比（2026-08-20，同一音色 longanhuan，文本：「什么意思？耳朵到哪儿，笔就得跟到哪儿；想听完再回头补，没这个机会。」）</h2>
+<p class="tip">当前线上 = neutral（平的）。重点听 happy 是否更像真人老师的劲头。中文情感词/自由指令已实测被引擎拒绝（InvalidParameter 428），只有枚举情感可用。</p>
+<div class="item"><h2>emo · neutral（当前线上基线）</h2><div class="meta">cosyvoice-v3-flash · longanhuan · 情感=neutral ✅ 时间戳</div><audio controls src="emo__neutral-基线.wav"></audio></div>
+<div class="item"><h2>emo · happy（候选）</h2><div class="meta">cosyvoice-v3-flash · longanhuan · 情感=happy ✅ 时间戳</div><audio controls src="emo__happy-枚举.wav"></audio></div>
+<h2 style="font-size:16px;margin-top:24px">音色/引擎对比（2026-08-18）</h2>
+<div class="item"><h2>A · 龙安培（当前线上）</h2><div class="meta">cosyvoice-v2 · longanpei</div><audio controls src="A__cosyvoice-v2__longanpei.wav"></audio></div>
+<div class="item"><h2>C · 龙安欢 + 课堂教学指令</h2><div class="meta">cosyvoice-v3-flash · longanhuan · instruct=课堂教学 ✅ 时间戳</div><audio controls src="C__cosyvoice-v3-flash__longanhuan__instruct.wav"></audio></div>
+<div class="item"><h2>D · 龙安欢（无指令对照）</h2><div class="meta">cosyvoice-v3-flash · longanhuan ✅ 时间戳</div><audio controls src="D__cosyvoice-v3-flash__longanhuan.wav"></audio></div>
+<div class="item"><h2>G · 龙安欢 + 课堂教学（plus 引擎）</h2><div class="meta">cosyvoice-v3-plus · longanhuan · instruct=课堂教学 ✅ 时间戳</div><audio controls src="G__cosyvoice-v3-plus__longanhuan__instruct.wav"></audio></div>
+<div class="item"><h2>E · 龙安欢 v3.6（最新旗舰引擎）</h2><div class="meta">qwen-audio-3.0-tts-plus · longanhuan_v3.6 ✅ 时间戳</div><audio controls src="E__qwen-audio-3.0-tts-plus__longanhuan_v3.6.wav"></audio></div>
+<div class="item"><h2>F · 旗舰 + 自由指令（时间戳丢失，仅参考）</h2><div class="meta">qwen-audio-3.0-tts-plus · instruct ❌ 无时间戳，不能直接用</div><audio controls src="F__qwen-audio-3.0-tts-plus__longanhuan_v3.6__instruct.wav"></audio></div>
+</body>
+</html>

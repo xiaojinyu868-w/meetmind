@@ -263,9 +263,9 @@ export const quizPlugin: AppPlugin = {
     return context.goal.appKey === 'quiz' || context.goal.expectedOutput === 'cards';
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
-    // 8000 字 ≈ 12-16k input tokens：避免长课时 prefill 撞 180s LLM 超时。
+    // 48000 字对齐 cheatsheet：长课不再被稀释成残句（8000 是 180s LLM 超时时代的遗留）。
     const promptContext = buildPromptTranscriptContext(context.input.transcript, {
-      maxChars: 8_000,
+      maxChars: 48_000,
       includeIndex: true,
       includeTimestamp: false,
       minCharsPerSegment: 52,

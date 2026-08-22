@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DashScopeASRClient } from '@/lib/services/dashscope-asr-service';
+import { COPY } from '@/lib/ui/copy';
 
 export type VoiceInputStatus = 'idle' | 'connecting' | 'recording' | 'error';
 
@@ -40,6 +41,8 @@ function normalizeVoiceInputError(error: unknown): string {
 
   if (error instanceof Error) {
     const message = (error.message || '').trim();
+    if (message.includes('ASR_QUOTA_EXCEEDED')) return COPY.points.freeMinutesUsedUp;
+    if (message.includes('GUEST_DAILY_ASR_CAP')) return COPY.points.blockedGuestDailyCap;
     if (!message) return '语音听写暂时不可用，请稍后重试。';
     if (/所有连接端口均失败|websocket 连接错误|连接失败/i.test(message)) {
       return '语音听写连接失败，请检查网络后再试。';

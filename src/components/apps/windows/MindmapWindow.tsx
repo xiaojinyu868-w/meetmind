@@ -10,7 +10,7 @@ import {
   treeToMarkdown,
   markdownToTree,
   type MindmapNode,
-} from '@/lib/ai-native/plugins/mindmap.plugin';
+} from '@/lib/ai-native/plugins/mindmap-tree';
 import {
   type LayoutNode,
   PALETTE,

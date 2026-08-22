@@ -7,6 +7,9 @@ import type { AppExecutionResult, ContextPack, DataSourceType } from '@/lib/ai-n
 import type { WorkshopAppCatalogItem } from '@/lib/ai-native/app-catalog';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { COPY } from '@/lib/ui/copy';
+import { parsePointsBlock, describePointsBlock } from '@/hooks/points-guard';
+import { openPaywallGlobal } from '@/hooks/usePaywall';
+import { notifyPointsChanged } from '@/hooks/usePointsSummary';
 
 export type AppTaskStatus = 'idle' | 'running' | 'success' | 'error';
 
@@ -402,6 +405,23 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
         } | null;
 
         if (!response.ok || !data?.ok || !data.result) {
+          // 402 积分拦截：余额不足 / 本月成本到顶。回空态 + 一句安静说明
+          // （含当前余额与下月发放），不抛错、不进红色失败态。
+          const pointsBlock = parsePointsBlock(response.status, data);
+          if (pointsBlock) {
+            const idleState = nowTaskState('idle');
+            setTaskState(idleState);
+            writeCachedTaskState(sessionId, app.key, idleState);
+            toast.message(describePointsBlock(pointsBlock));
+            notifyPointsChanged();
+            // 高意向截断：余额不足（登录用户）同步唤起付费页；会员闸门弹会员 Tab；guest 限额/月熔断不弹
+            if (pointsBlock.kind === 'insufficient_points') {
+              openPaywallGlobal({ reason: 'insufficient_points', balance: pointsBlock.balance, required: pointsBlock.required });
+            } else if (pointsBlock.kind === 'membership_required') {
+              openPaywallGlobal({ reason: 'membership_required', requiredTier: pointsBlock.requiredTier });
+            }
+            return null;
+          }
           // 429 限流友好提示
           if (response.status === 429) {
             throw new Error(data?.error || '生成请求过于频繁，请稍等片刻再点重试');
@@ -433,6 +453,8 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
         const successState = nowTaskState('success');
         setTaskState(successState);
         writeCachedTaskState(sessionId, app.key, successState);
+        // 应用生成会扣积分，让头部 chip / 设置页静默刷新余额
+        notifyPointsChanged();
         return data.result;
       } catch (error) {
         const isNetworkFailure =

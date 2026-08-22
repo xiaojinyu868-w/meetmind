@@ -25,9 +25,20 @@ export interface IntentSummaryExtraction {
   title: string;
   /** 兼容旧字段：剩余条合并为 summary */
   summary?: string;
+  /**
+   * 时间尺度（M15）：AI 在首行用 [短期] / [中期] / [长期] 前缀标记。
+   * near = 眼前有明确节点（考试/DDL）；term = 学期/季度；long = 长期方向。
+   */
+  horizon?: 'near' | 'term' | 'long';
   rawBlock: string;
   textWithoutBlock: string;
 }
+
+const HORIZON_MAP: Record<string, 'near' | 'term' | 'long'> = {
+  短期: 'near',
+  中期: 'term',
+  长期: 'long',
+};
 
 export function extractIntentSummary(text: string): IntentSummaryExtraction | null {
   const startMatch = text.match(/-{2,}我想要的-{2,}/);
@@ -49,6 +60,15 @@ export function extractIntentSummary(text: string): IntentSummaryExtraction | nu
 
   if (lines.length === 0) return null;
 
+  // 首行可带时间尺度前缀：[短期] / [中期] / [长期] —— 解析后剥掉，不进展示文本
+  let horizon: IntentSummaryExtraction['horizon'];
+  const horizonMatch = lines[0].match(/^\[(短期|中期|长期)\]\s*/);
+  if (horizonMatch) {
+    horizon = HORIZON_MAP[horizonMatch[1]];
+    lines[0] = lines[0].slice(horizonMatch[0].length).trim();
+    if (!lines[0]) return null;
+  }
+
   // 如果只有一行（旧格式），lines 就是那一行
   // 如果多行，每行是一个独立"点"
   const points = lines.map((l) => l.slice(0, 120));
@@ -60,5 +80,5 @@ export function extractIntentSummary(text: string): IntentSummaryExtraction | nu
   const after = text.slice(blockEnd).trim();
   const textWithoutBlock = [before, after].filter(Boolean).join('\n\n');
 
-  return { points, title, summary, rawBlock: text.slice(startIdx, blockEnd), textWithoutBlock };
+  return { points, title, summary, horizon, rawBlock: text.slice(startIdx, blockEnd), textWithoutBlock };
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Mic, PenLine, RotateCcw } from 'lucide-react';
+import { PenLine, RotateCcw } from 'lucide-react';
 import type {
   AppExecutionResult,
   TeachBackEvaluation,
@@ -13,7 +13,6 @@ import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceho
 import { TeachBackClassroom } from '@/components/apps/windows/TeachBackClassroom';
 import { TeachBackQuadrantMap } from '@/components/apps/windows/TeachBackQuadrantMap';
 import { formatTeachBackCompleteActivity } from '@/components/review-learning-activity';
-import { buildTeachBackStudentInstructions } from '@/lib/ai-native/teach-back-prompts';
 import { COPY } from '@/lib/ui/copy';
 import {
   buildTeachBackResultView,
@@ -30,7 +29,9 @@ interface TeachBackWindowProps {
   onLearningActivity?: (line: string) => void;
 }
 
-type Phase = 'targets' | 'call' | 'type' | 'evaluating' | 'result';
+// 2026-08：语音讲课（'call' 阶段 + useOmniRealtimeCall）随实时语音通话下线移除，
+// 讲课只保留文字模式；核对链路（/api/apps/teach-back/evaluate）不变。
+type Phase = 'targets' | 'type' | 'evaluating' | 'result';
 
 const GROUP_STYLES: Record<TeachBackQuadrantGroup, { dot: string; text: string }> = {
   'blind-spot': { dot: 'bg-vermilion', text: 'text-vermilion' },
@@ -83,11 +84,6 @@ export function TeachBackWindow({ result, transcript, contentContext, onSeek, on
   const activeTargets = useMemo(
     () => (focusTargetIds ? targets.filter((target) => focusTargetIds.includes(target.id)) : targets),
     [targets, focusTargetIds],
-  );
-
-  const studentInstructions = useMemo(
-    () => buildTeachBackStudentInstructions({ lessonTitle: contentContext, targets: activeTargets }),
-    [contentContext, activeTargets],
   );
 
   /* ── 评估等待：分阶段文案，让 10-40 秒的等待有进展感 ── */
@@ -169,19 +165,13 @@ export function TeachBackWindow({ result, transcript, contentContext, onSeek, on
     }));
   }, [phase, evaluation, onLearningActivity]);
 
-  /* ── 语音通话：挂断时若讲过内容则进入核对 ── */
+  /* ── 核对：讲完进入 evaluating 阶段 ── */
 
   const startEvaluation = () => {
     autoRetriedRef.current = false;
     setRateLimited(false);
     setEvalFailed(false);
     setPhase('evaluating');
-  };
-
-  const handleCallExit = () => {
-    const hasStudentVoice = turnsRef.current.some((turn) => turn.role === 'user' && turn.text.trim().length > 0);
-    if (hasStudentVoice) startEvaluation();
-    else setPhase('targets');
   };
 
   const handleTypedFinish = () => {
@@ -210,38 +200,12 @@ export function TeachBackWindow({ result, transcript, contentContext, onSeek, on
     return <AppWindowPlaceholder status="empty" appName={COPY.apps.teachBack.appName} />;
   }
 
-  if (phase === 'call') {
-    return (
-      <div className="h-full min-h-0">
-        <TeachBackClassroom
-          instructions={studentInstructions}
-          lessonTitle={contentContext}
-          targets={activeTargets}
-          onUserTurn={(text) => {
-            if (text.trim()) turnsRef.current.push({ role: 'user', text: text.trim() });
-          }}
-          onAssistantTurn={(text) => {
-            if (text.trim()) turnsRef.current.push({ role: 'assistant', text: text.trim() });
-          }}
-          onExit={handleCallExit}
-          onSwitchToText={() => setPhase('type')}
-        />
-      </div>
-    );
-  }
-
   if (phase === 'type') {
     return (
       <div className="relative h-full min-h-0">
         <TeachBackClassroom
-          instructions={studentInstructions}
           lessonTitle={contentContext}
           targets={activeTargets}
-          interactive={false}
-          onUserTurn={() => {}}
-          onAssistantTurn={() => {}}
-          onExit={() => {}}
-          onSwitchToText={() => {}}
         />
 
         {/* 打字讲：留在教室里，粉笔目标仍在黑板上 */}
@@ -359,7 +323,8 @@ export function TeachBackWindow({ result, transcript, contentContext, onSeek, on
                               activityWrittenRef.current = false;
                               setEvaluation(null);
                               setFocusTargetIds([item.targetId]);
-                              setPhase('call');
+                              setTypedText('');
+                              setPhase('type');
                             }}
                             className="flex-shrink-0 rounded-full border border-pine/40 px-2.5 py-1 text-[11px] font-medium text-pine transition-colors hover:bg-pine-mist"
                           >
@@ -385,7 +350,8 @@ export function TeachBackWindow({ result, transcript, contentContext, onSeek, on
               activityWrittenRef.current = false;
               setFocusTargetIds(null);
               setEvaluation(null);
-              setPhase('call');
+              setTypedText('');
+              setPhase('type');
             }}
             className="rounded-full bg-pine px-5 py-2.5 text-[13px] font-medium text-white"
           >
@@ -401,14 +367,8 @@ export function TeachBackWindow({ result, transcript, contentContext, onSeek, on
   return (
     <div className="relative h-full min-h-0">
       <TeachBackClassroom
-        instructions={studentInstructions}
         lessonTitle={contentContext}
         targets={activeTargets}
-        interactive={false}
-        onUserTurn={() => {}}
-        onAssistantTurn={() => {}}
-        onExit={() => {}}
-        onSwitchToText={() => setPhase('type')}
       />
 
       {/* 底部上台面板：毛玻璃浮在教室下方 */}
@@ -418,28 +378,19 @@ export function TeachBackWindow({ result, transcript, contentContext, onSeek, on
             <p className="text-[14px] font-semibold text-ink">{COPY.apps.teachBack.targetsTitle}</p>
             <p className="mt-0.5 text-[12px] text-ink-muted">{COPY.apps.teachBack.targetsSubtitle}</p>
           </div>
-          <div className="flex w-full items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => {
-                turnsRef.current = [];
-                setPhase('call');
-              }}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-pine px-5 py-3 text-[14px] font-medium text-white transition-opacity hover:opacity-90"
-            >
-              <Mic size={16} strokeWidth={2} />
-              {COPY.apps.teachBack.startVoice}
-            </button>
-            <button
-              type="button"
-              onClick={() => setPhase('type')}
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-divider bg-paper px-4 py-3 text-[13px] font-medium text-ink-secondary transition-colors hover:text-ink"
-            >
-              <PenLine size={15} strokeWidth={2} />
-              {COPY.apps.teachBack.startText}
-            </button>
-          </div>
-          <p className="text-center text-[11px] leading-5 text-ink-muted">{COPY.apps.teachBack.voiceHint}</p>
+          <button
+            type="button"
+            onClick={() => {
+              turnsRef.current = [];
+              setTypedText('');
+              setPhase('type');
+            }}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-pine px-5 py-3 text-[14px] font-medium text-white transition-opacity hover:opacity-90"
+          >
+            <PenLine size={15} strokeWidth={2} />
+            {COPY.apps.teachBack.startText}
+          </button>
+          <p className="text-center text-[11px] leading-5 text-ink-muted">{COPY.apps.teachBack.textHint}</p>
         </div>
       </div>
     </div>

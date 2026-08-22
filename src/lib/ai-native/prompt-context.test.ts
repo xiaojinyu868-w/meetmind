@@ -44,4 +44,45 @@ describe('buildPromptTranscriptContext', () => {
     expect(result.text.indexOf('【来源：第一讲】')).toBeLessThan(result.text.indexOf('第一段内容'));
     expect(result.text.indexOf('【来源：第二讲】')).toBeLessThan(result.text.indexOf('第二讲开始'));
   });
+
+  it('tells the model about per-segment compression and keeps timestamps when truncated', () => {
+    const transcript: TranscriptSegment[] = Array.from({ length: 200 }, (_, index) => ({
+      id: `s:${index}`,
+      text: `第${index}段`.padEnd(120, '内容'),
+      startMs: index * 30_000,
+      endMs: index * 30_000 + 25_000,
+      isFinal: true,
+    }));
+
+    const result = buildPromptTranscriptContext(transcript, {
+      maxChars: 8_000,
+      includeTimestamp: true,
+    });
+
+    expect(result.truncated).toBe(true);
+    expect(result.text.length).toBeLessThanOrEqual(8_000);
+    expect(result.text).toContain('逐段压缩');
+    expect(result.text).toContain('残句');
+    // 时间戳前缀在稀释后仍然保留
+    expect(result.text).toContain('[0:00-0:25]');
+    expect(result.text).toContain('…');
+  });
+
+  it('can omit the truncation notice for narration-style corpora', () => {
+    const transcript: TranscriptSegment[] = Array.from({ length: 200 }, (_, index) => ({
+      id: `s:${index}`,
+      text: `第${index}段`.padEnd(120, '内容'),
+      startMs: index * 30_000,
+      endMs: index * 30_000 + 25_000,
+      isFinal: true,
+    }));
+
+    const result = buildPromptTranscriptContext(transcript, {
+      maxChars: 8_000,
+      truncationNotice: false,
+    });
+
+    expect(result.truncated).toBe(true);
+    expect(result.text).not.toContain('逐段压缩');
+  });
 });

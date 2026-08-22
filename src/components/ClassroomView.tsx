@@ -152,8 +152,14 @@ export function ClassroomView({
 
   // 真实录音或显式访客试听入口 → 自动进入 recording 全屏态。
   // autoLoadDemo 必须参与同步，避免 Strict Mode 重放 effect 后落回课堂空态。
+  // 试听入口被消费（autoLoadDemo true→false）时回落到列表态，并暂停示例课音频。
   useEffect(() => {
-    setLocalPaneState(resolveClassroomPaneState({ isRecording, autoLoadDemo }));
+    const nextPane = resolveClassroomPaneState({ isRecording, autoLoadDemo });
+    if (nextPane === 'list') {
+      demoAudioRef.current?.pause();
+      setDemoAudioPlaying(false);
+    }
+    setLocalPaneState(nextPane);
   }, [isRecording, autoLoadDemo]);
 
   // ── AI 同桌的展开策略 ──

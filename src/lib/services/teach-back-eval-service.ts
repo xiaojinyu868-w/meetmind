@@ -148,7 +148,7 @@ export async function evaluateTeachBack(input: TeachBackEvalInput): Promise<Teac
   if (!hasStudentVoice) return allMissedEvaluation(targets, '这次还没有听到你讲。');
 
   const transcriptContext = buildPromptTranscriptContext(input.transcript, {
-    maxChars: 12_000,
+    maxChars: 48_000,
     includeIndex: false,
     includeTimestamp: true,
   });

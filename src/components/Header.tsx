@@ -1,9 +1,10 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { PointsChip } from '@/components/points/PointsChip';
 import {
   GraduationCap,
   User,
@@ -105,6 +106,9 @@ export function Header({ lessonTitle, courseName, viewMode = 'record', onViewMod
       <div className="flex items-center gap-4">
         {/* 外部传入的状态信息 slot */}
         {statusSlot}
+
+        {/* 积分 chip：未登录时组件内部静默隐藏 */}
+        {isAuthenticated && <PointsChip />}
 
         {/* 用户头像/登录按钮 */}
         <div className="relative">

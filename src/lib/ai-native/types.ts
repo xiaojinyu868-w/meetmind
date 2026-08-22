@@ -9,7 +9,8 @@ export type WorkshopAppKey =
   | 'mindmap'
   | 'infographic'
   | 'cheatsheet'
-  | 'teach-back';
+  | 'teach-back'
+  | 'explainer';
 
 export type WorkshopContentKind =
   | 'lecture'
@@ -143,6 +144,7 @@ export type AppRenderMode =
   | 'flashcards'
   | 'quiz'
   | 'blocks'
+  | 'board'
   | 'custom';
 
 export interface AppRenderSpec {

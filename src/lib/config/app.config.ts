@@ -7,7 +7,7 @@
 
 // ==================== 类型定义 ====================
 
-export type ModelProvider = 'stepfun' | 'deepseek' | 'qwen' | 'volcengine' | 'relay';
+export type ModelProvider = 'stepfun' | 'deepseek' | 'qwen' | 'volcengine' | 'relay' | 'moonshot';
 
 export interface ModelConfig {
   id: string;
@@ -33,6 +33,10 @@ const hasQwenKey = hasValue(process.env.DASHSCOPE_API_KEY);
 const hasVolcArkKey = hasValue(process.env.VOLCENGINE_ARK_API_KEY);
 const volcArkModelId = (process.env.VOLCENGINE_ARK_MODEL || '').trim();
 const hasRelayKey = hasValue(process.env.RELAY_API_KEY);
+const hasMoonshotKey = hasValue(process.env.MOONSHOT_API_KEY);
+// 导演模型（板书节奏标注）：默认 kimi-k3（2026-07 旗舰，用户拍板）；
+// 实时链路延迟敏感时可换 kimi-k2.7-code-highspeed / DeepSeek-V4-Flash
+const moonshotModelId = (process.env.MOONSHOT_MODEL || 'kimi-k3').trim();
 const relayModelId = (process.env.RELAY_MODEL || 'gemini-3-pro-image-preview').trim();
 
 const stepFunModels: ModelConfig[] = [
@@ -51,9 +55,9 @@ const stepFunModels: ModelConfig[] = [
 const deepseekModels: ModelConfig[] = [
   {
     id: 'DeepSeek-V4-Flash',
-    name: 'DeepSeek V4 Flash',
+    name: 'DeepSeek V4 Flash 0731',
     provider: 'deepseek',
-    description: 'DeepSeek V4 低延迟模型，适合课堂同桌、复习问答和轻量学习应用',
+    description: 'DeepSeek V4 Flash 0731 快照（百炼锁定），适合课堂同桌、复习问答和轻量学习应用',
     maxTokens: 8192,
     supportsMultimodal: false,
     enableThinking: false,
@@ -93,6 +97,16 @@ const qwenModels: ModelConfig[] = [
     enableThinking: false,
     recommended: true,
   },
+  {
+    id: 'kimi/kimi-k3',
+    name: 'Kimi K3（百炼托管）',
+    provider: 'qwen',
+    description:
+      '月之暗面 Kimi K3，经百炼兼容模式调用（复用 DASHSCOPE_API_KEY；百炼上 id 带命名空间前缀 kimi/，裸 id kimi-k3 会 access_denied）。当前用于板书导演 pass 与主生成（思考常开）。',
+    maxTokens: 32768,
+    supportsMultimodal: true,
+    enableThinking: false,
+  },
 ];
 
 const volcModels: ModelConfig[] = hasVolcArkKey && hasValue(volcArkModelId)
@@ -121,12 +135,26 @@ const relayModels: ModelConfig[] = hasRelayKey && hasValue(relayModelId)
     ]
   : [];
 
+const moonshotModels: ModelConfig[] = hasMoonshotKey
+  ? [
+      {
+        id: moonshotModelId,
+        name: 'Kimi（月之暗面）',
+        provider: 'moonshot',
+        description: 'Moonshot OpenAI 兼容接口（导演模型：板书节奏标注；K3 thinking 常开，延迟见 .env.example 注释）',
+        maxTokens: 32768,
+        supportsMultimodal: false,
+      },
+    ]
+  : [];
+
 const enabledModels: ModelConfig[] = [
   ...(hasStepFunKey ? stepFunModels : []),
   ...(hasDeepSeekKey ? deepseekModels : []),
   ...(hasQwenKey ? qwenModels : []),
   ...volcModels,
   ...relayModels,
+  ...moonshotModels,
 ];
 
 const resolvedModels: ModelConfig[] = enabledModels.length > 0 ? enabledModels : stepFunModels;
@@ -273,7 +301,7 @@ export const AuthConfig = {
 export const ASRConfig = {
   // 通义千问 ASR
   qwen: {
-    model: process.env.DASHSCOPE_ASR_WS_MODEL || 'qwen3-asr-flash-realtime-2026-02-10',
+    model: process.env.DASHSCOPE_ASR_WS_MODEL || 'qwen-audio-3.0-asr-flash-streaming',
     sampleRate: parseInt(process.env.DASHSCOPE_ASR_WS_SR || '16000', 10),
     chunkDurationSec: 180, // 3分钟分块
   },

@@ -1,0 +1,23 @@
+{
+  "title": "结构渲染探针",
+  "script": {
+    "title": "结构渲染探针",
+    "pages": [
+      {
+        "segments": [
+          { "type": "narration", "narration": "先看求根公式的完整样子。", "actions": [
+            { "type": "write", "text": "结构渲染探针", "role": "title" },
+            { "type": "write", "text": "x = \\frac{-b ± \\sqrt{b^{2} - 4ac}}{2a}", "role": "term" }
+          ]},
+          { "type": "narration", "narration": "判别式和矩阵的样子。", "actions": [
+            { "type": "write", "text": "Δ = b^{2} - 4ac", "role": "step" },
+            { "type": "write", "text": "齐次坐标 \\pmatrix{ x \\\\ y \\\\ z \\\\ w } 与仿射矩阵 \\pmatrix{ R_{3×3} & T \\\\ 0 & 1 }", "role": "step" },
+            { "type": "write", "text": "记住：==先算 Δ== 再套公式", "role": "note" }
+          ]}
+        ]
+      }
+    ],
+    "quotes": []
+  },
+  "quoteStats": { "total": 0, "verified": 0, "downgraded": 0 }
+}

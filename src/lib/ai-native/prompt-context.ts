@@ -12,6 +12,11 @@ interface TranscriptContextOptions {
   includeIndex?: boolean;
   includeTimestamp?: boolean;
   minCharsPerSegment?: number;
+  /**
+   * 超出 maxChars 触发逐段压缩时，是否在注入文本前加一行说明，让模型知道
+   * "…" 处有内容缺失、残句不是完整原话。朗读语料等不需要元说明的场景可关闭。
+   */
+  truncationNotice?: boolean;
 }
 
 function formatTimestamp(ms: number): string {
@@ -86,8 +91,13 @@ export function buildPromptTranscriptContext(
   const contentBudget = Math.max(minCharsPerSegment * rows.length, maxChars - prefixCost);
   const perSegmentBudget = Math.max(minCharsPerSegment, Math.floor(contentBudget / rows.length));
 
+  // 逐段压缩时 prefix（段号 / 时间戳 / 来源标注）原样保留，只压缩正文。
   const compressed = rows.map((row) => `${row.prefix}${withEllipsis(row.text, perSegmentBudget)}`).join('\n');
-  const finalText = withEllipsis(compressed, maxChars);
+  const truncationNotice = options.truncationNotice ?? true;
+  const notice = truncationNotice
+    ? '（说明：以下转录为控制长度经过逐段压缩，每段只保留开头，“…”表示该段后续内容被省略；段号与时间戳仍是原始定位。请基于保留的内容作答，引用原话时不要把“…”前的残句当作完整原话。）\n'
+    : '';
+  const finalText = `${notice}${withEllipsis(compressed, Math.max(200, maxChars - notice.length))}`;
 
   return {
     text: finalText,

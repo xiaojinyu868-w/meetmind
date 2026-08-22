@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import {
   ArrowUpRight,
   BookMarked,
+  BookOpen,
   Headphones,
   Image as ImageIcon,
   Layers,
@@ -45,6 +46,7 @@ const APP_ICONS: Record<WorkshopAppKey, typeof Layers> = {
   infographic: ImageIcon,
   'audio-overview': Headphones,
   'teach-back': Mic,
+  explainer: BookOpen,
 };
 
 function statusLabel(status: WorkshopCardStatus): string {

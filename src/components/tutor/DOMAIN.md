@@ -14,11 +14,11 @@
 | `tutor-agent-history.ts` | TutorAgentPanel 历史消息转换与状态文案 helper |
 | `tutor-agent-adapter.ts` | SafeAITutor / TutorAgentPanel 的 context / launchQuestion / learnerProfile / recent learning activity 纯适配 helper；个人画像、近期对话和应用交互动态只作为模型上下文，不做硬规则 |
 | `realtime-conversation-bridge.ts` | 兼容 re-export；实际 helper 在 `src/lib/tutor/realtime-conversation-bridge.ts` |
-| `realtime-tutor-panel-model.ts` | RealtimeTutorPanel 的上下文标签、近场语音 prompt、禁用状态纯 helper |
-| `RealtimeTutorPanel.tsx` | 独立语音同桌面板：承接 `TutorRealtimeCallScreen`，把转写写入 `global-chat` 并回传 conversationId 给文字 agent |
-| `TutorCallComposer.tsx` | 语音同桌模式下「文字代语音」的发送入口卡（仅作为降级/兼容，realtime 模式默认走舞台） |
-| `TutorRealtimeCallBar.tsx` | 手机端语音同桌模式的 realtime 语音通话条（对话中途使用） |
-| `TutorRealtimeCallScreen.tsx` | 语音同桌的通话舞台（PC 与手机共用），负责接通、状态反馈、动作区；接通 `useOmniRealtimeCall` 做实时语音 |
+| `realtime-tutor-panel-model.ts` | RealtimeTutorPanel 的上下文标签、近场语音 prompt、禁用状态纯 helper（随语音通话下线，仅 deprecated 组件引用） |
+| `RealtimeTutorPanel.tsx` | **@deprecated 2026-08**：独立语音同桌面板（语音通话已下线，入口已移除，保留一个周期后物理删除） |
+| `TutorCallComposer.tsx` | **@deprecated 2026-08**：语音同桌模式下「文字代语音」的发送入口卡 |
+| `TutorRealtimeCallBar.tsx` | **@deprecated 2026-08**：手机端语音同桌模式的 realtime 语音通话条 |
+| `TutorRealtimeCallScreen.tsx` | **@deprecated 2026-08**：语音同桌的通话舞台（/api/tutor-call 已拆除） |
 
 ## 依赖方向
 

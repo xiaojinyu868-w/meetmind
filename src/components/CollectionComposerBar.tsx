@@ -87,6 +87,7 @@ export function CollectionComposerBar({
         {/* 输入卡片——ChatGPT 风格：上文本区 + 下按钮行 */}
         <div
           className="rounded-2xl border border-divider bg-card"
+          data-composer-bar
           onClick={() => composerRef.current?.focus()}
         >
           {/* 上：文本输入区，撑满卡片宽度 */}

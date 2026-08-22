@@ -20,6 +20,7 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
+import remarkCjkFriendly from 'remark-cjk-friendly';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import type { Components } from 'react-markdown';
@@ -140,7 +141,7 @@ export function CompanionMarkdown({
   return (
     <div className={`companion-markdown ${className}`}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
+        remarkPlugins={[remarkCjkFriendly, remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}
         components={markdownComponents}
       >

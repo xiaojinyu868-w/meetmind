@@ -39,6 +39,8 @@ export interface VideoImportMeta {
   embedUrl?: string;
   bvid?: string;
   cid?: number;
+  /** 平台原始音频地址（如小宇宙 CDN m4a）：本服副本被清理时的兜底 / 重转写用 */
+  originAudioUrl?: string;
 }
 
 export interface StageResult {
@@ -46,6 +48,18 @@ export interface StageResult {
   audioFilePath?: string;
   subtitleSegments?: Array<{ text: string; startMs: number; endMs: number }>;
   meta: VideoImportMeta;
+  /** B 站音频只下到一部分（<25% 但 ≥60s）被放行时的真实覆盖率——必须在响应里显式标记 partial */
+  partialDownload?: { coverageRatio: number };
+}
+
+/** ASR 实际出结果的模式：HTTP 三模式之一，或 WS 代理兜底 */
+export type UsedAsrMode = TranscribeMode | 'ws-fallback';
+
+export interface TranscribedResult {
+  data: Record<string, unknown>;
+  usedMode: UsedAsrMode;
+  /** 结果被采用但内容不完整时的真实时间线覆盖率（0-1），供响应 coverageRatio 使用 */
+  coverageRatio?: number;
 }
 
 export interface StageFailure {
@@ -199,40 +213,6 @@ export function parseErrorDetail(data: unknown): string | undefined {
   return undefined;
 }
 
-export function toFiniteNumber(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-export function readSegmentEndMs(entry: Record<string, unknown>): number {
-  const endCandidates = [entry.endMs, entry.endTime, entry.end_time];
-  for (const value of endCandidates) {
-    const parsed = toFiniteNumber(value);
-    if (parsed !== null) return Math.max(0, Math.round(parsed));
-  }
-  return 0;
-}
-
-export function summarizeAsrResult(data: Record<string, unknown>): { segCount: number; textLen: number; lastEndMs: number } {
-  const rawSegments = Array.isArray(data.segments)
-    ? data.segments
-    : Array.isArray(data.sentences)
-      ? data.sentences
-      : [];
-  const segments = rawSegments.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object');
-  const textLenFromData = typeof data.text === 'string' ? (data.text as string).length : 0;
-  const textLenFromSegments = segments.reduce((sum, segment) => {
-    const text = typeof segment.text === 'string' ? segment.text.trim() : '';
-    return sum + text.length;
-  }, 0);
-  const textLen = Math.max(textLenFromData, textLenFromSegments);
-  const lastEndMs = segments.reduce((max, segment) => Math.max(max, readSegmentEndMs(segment)), 0);
-  return {
-    segCount: segments.length,
-    textLen,
-    lastEndMs,
-  };
-}
-
 export function isUnsafeVideoUrl(rawUrl: string): boolean {
   try {
     const parsed = new URL(rawUrl);
@@ -310,9 +290,4 @@ export function pickMostInformativeStageError(failures: StageFailure[]): ImportP
   if (nonYtDlpOnly) return nonYtDlpOnly.error;
 
   return failures[failures.length - 1].error;
-}
-
-export function estimatePcmDurationMs(bytes: number): number {
-  if (!Number.isFinite(bytes) || bytes <= 0) return 0;
-  return Math.round((bytes / PCM_BYTES_PER_SEC) * 1000);
 }

@@ -1,5 +1,11 @@
 'use client';
 
+/**
+ * @deprecated 2026-08 决策：实时语音通话整体下线，服务端 /api/tutor-call
+ * WebSocket 代理（server.js → DashScope omni realtime）已拆除，本 hook 无法再连通。
+ * 文件保留一个周期作参考，之后物理删除。请勿在新代码中引用。
+ */
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type OmniRealtimeCallStatus = 'idle' | 'connecting' | 'authorizing' | 'listening' | 'thinking' | 'responding' | 'muted' | 'error';

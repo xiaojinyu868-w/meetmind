@@ -34,6 +34,11 @@ export interface DashScopeASRCallbacks {
   onStatusChange?: (status: 'connecting' | 'connected' | 'transcribing' | 'stopped' | 'error') => void;
   onTaskStarted?: () => void;
   onTaskFinished?: () => void;
+  /**
+   * 断连缓冲溢出导致音频帧被丢弃时上报（累计值，含代理侧）。
+   * 单遍化架构下 realtime 即定稿，丢帧 = 这节课永久少一段——绝不能静默。
+   */
+  onAudioDropped?: (info: { droppedMsTotal: number }) => void;
 }
 
 export interface DashScopeASROptions {
@@ -43,8 +48,6 @@ export interface DashScopeASROptions {
   language?: string[];
   initialContextHint?: string;
   initialLanguageMode?: 'auto' | 'zh' | 'en';
-  /** 启用说话人分离——切换到腾讯云 16k_zh_en_speaker 引擎 */
-  speakerDiarization?: boolean;
   // M2 T2.2: WebSocket 自动重连配置
   /** 允许重连的最大次数，默认 5 */
   maxReconnectAttempts?: number;
@@ -52,7 +55,7 @@ export interface DashScopeASROptions {
   reconnectBaseMs?: number;
   /** 重连延迟上限（ms），默认 10000 */
   reconnectCapMs?: number;
-  /** 重连期间允许保留的音频上限（ms）；超过则丢弃最早的帧。默认 20000 */
+  /** 重连期间允许保留的音频上限（ms）；超过则丢弃最早的帧并通过 onAudioDropped 上报。默认 120000（2 分钟，覆盖锁屏/电梯/隧道场景） */
   reconnectAudioBufferMs?: number;
 }
 
@@ -60,24 +63,52 @@ export class DashScopeASRClient {
   private callbacks: DashScopeASRCallbacks;
   private options: DashScopeASROptions;
 
-  /** 运行时切换说话人分离设置（下次重连生效） */
-  setSpeakerDiarization(enabled: boolean): void {
-    this.options = { ...this.options, speakerDiarization: enabled };
-  }
-
   private ws: WebSocket | null = null;
   private status: 'idle' | 'connecting' | 'connected' | 'transcribing' | 'stopped' | 'error' = 'idle';
   private sentenceIndex = 0;
   private connectionGeneration = 0;
   private isReady = false;
   private audioQueue: ArrayBuffer[] = [];
-  private static readonly AUDIO_QUEUE_MAX_SIZE = 500;
+  private audioQueueBytes = 0;
+  // 断连丢帧统计：本地队列与代理侧队列分开记，合计对外上报。
+  private localDroppedAudioMs = 0;
+  private proxyDroppedAudioMs = 0;
+  private lastDropNotifiedMs = 0;
   // 客户端 → ASR-proxy 这一段理论不限速，但 ASR-proxy → DashScope 有限速（2560KB/s）。
   // 累积的 chunks 在 ready/reconnect 后同步 flush 会让 ASR-proxy 瞬时大量 send → DashScope 1007。
   // 客户端也加节流，避免 ASR-proxy 缓冲瞬时过载。
   private static readonly FLUSH_BATCH_SIZE = 60;
   private static readonly FLUSH_INTERVAL_MS = 100;
   private isFlushing = false;
+
+  /** 16kHz 16bit 单声道 PCM：每毫秒 32 字节 */
+  private bytesPerMs(): number {
+    return ((this.options.sampleRate ?? 16000) * 2) / 1000;
+  }
+
+  /** 断连缓冲预算（字节）：由 reconnectAudioBufferMs 推导，默认 120 秒 ≈ 3.84MB */
+  private audioQueueBudgetBytes(): number {
+    return (this.options.reconnectAudioBufferMs ?? 120_000) * this.bytesPerMs();
+  }
+
+  private noteLocalAudioDropped(droppedBytes: number): void {
+    this.localDroppedAudioMs += droppedBytes / this.bytesPerMs();
+    this.maybeNotifyAudioDropped();
+  }
+
+  private maybeNotifyAudioDropped(): void {
+    const total = Math.round(this.localDroppedAudioMs + this.proxyDroppedAudioMs);
+    // 首次丢失立即上报，之后每累计 1 秒再报，避免刷屏
+    if (total >= 500 && total - this.lastDropNotifiedMs >= 1000) {
+      this.lastDropNotifiedMs = total;
+      this.callbacks.onAudioDropped?.({ droppedMsTotal: total });
+    }
+  }
+
+  /** 本次会话累计丢弃的音频时长（ms），停录总结/提示用 */
+  getDroppedAudioMs(): number {
+    return Math.round(this.localDroppedAudioMs + this.proxyDroppedAudioMs);
+  }
 
   private sessionStartTime = 0;
 
@@ -149,7 +180,7 @@ export class DashScopeASRClient {
       try {
         this.updateStatus('connecting');
 
-        const candidateUrls = buildAsrWebSocketCandidates(window.location.href, this.options.speakerDiarization);
+        const candidateUrls = buildAsrWebSocketCandidates(window.location.href);
         // M13-fix: 默认重连次数从 30 降到 8。
         // 30 次（指数退避到 ~10s 上限）= 最长重试 ~80s，对真·鉴权失败/服务异常场景毫无意义，
         // 反而堆出几十条同样的报错刷爆日志。8 次（~30s）足够覆盖瞬时网络波动，重大故障应该让用户感知。
@@ -164,7 +195,16 @@ export class DashScopeASRClient {
           }
 
           const wsUrl = candidateUrls[urlIndex];
-          const ws = new WebSocket(wsUrl);
+          // 积分 Phase 2：浏览器 WebSocket 不能带 Authorization 头，
+          // JWT 走 ?token= 查询参数；server.js 在连接关闭结算时原样回传。
+          // 未登录（guest）不带 token，服务端只记影子流水不扣分。
+          const authToken = typeof window !== 'undefined'
+            ? window.localStorage.getItem('meetmind_access_token') || window.localStorage.getItem('auth_token')
+            : null;
+          const wsUrlWithAuth = authToken
+            ? `${wsUrl}${wsUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(authToken)}`
+            : wsUrl;
+          const ws = new WebSocket(wsUrlWithAuth);
           this.ws = ws;
 
           const connectionTimeout: NodeJS.Timeout = setTimeout(() => {
@@ -358,6 +398,16 @@ export class DashScopeASRClient {
           this.resolveStopFinished();
           break;
 
+        // 代理侧（proxy→DashScope 段）缓冲溢出丢帧：取代理上报的累计值
+        case 'audio-dropped': {
+          const proxyTotal = typeof msg.droppedMsTotal === 'number' ? msg.droppedMsTotal : 0;
+          if (proxyTotal > this.proxyDroppedAudioMs) {
+            this.proxyDroppedAudioMs = proxyTotal;
+            this.maybeNotifyAudioDropped();
+          }
+          break;
+        }
+
         case 'error': {
           const errorMessage = this.normalizeErrorMessage(msg.error ?? msg.message);
           if (this.isIgnorableStopError(errorMessage)) {
@@ -447,8 +497,15 @@ export class DashScopeASRClient {
     // 否则上游收到乱序 PCM，表现为重复、吞字或时间轴倒退。
     if (!this.isReady || this.isFlushing || this.audioQueue.length > 0) {
       this.audioQueue.push(buffer);
-      if (this.audioQueue.length > DashScopeASRClient.AUDIO_QUEUE_MAX_SIZE) {
-        this.audioQueue.shift();
+      this.audioQueueBytes += buffer.byteLength;
+      // 超出断连缓冲预算：丢最旧帧并上报（单遍化后丢帧=内容永久缺失，绝不静默）
+      const budget = this.audioQueueBudgetBytes();
+      while (this.audioQueueBytes > budget && this.audioQueue.length > 0) {
+        const dropped = this.audioQueue.shift();
+        if (dropped) {
+          this.audioQueueBytes -= dropped.byteLength;
+          this.noteLocalAudioDropped(dropped.byteLength);
+        }
       }
       if (this.isReady) this.flushAudioQueue();
       return;
@@ -480,7 +537,10 @@ export class DashScopeASRClient {
     const batchSize = Math.min(DashScopeASRClient.FLUSH_BATCH_SIZE, this.audioQueue.length);
     for (let i = 0; i < batchSize; i += 1) {
       const buffer = this.audioQueue.shift();
-      if (buffer) this.ws.send(buffer);
+      if (buffer) {
+        this.audioQueueBytes -= buffer.byteLength;
+        this.ws.send(buffer);
+      }
     }
 
     if (this.audioQueue.length === 0) {
@@ -504,9 +564,7 @@ export class DashScopeASRClient {
   sendContextHint(contextHint: string, languageMode: 'auto' | 'zh' | 'en' = 'auto'): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     // 允许空 hint 但指定 languageMode 的场景（比如录课一开始没有热词，但用户选了英文课）
-    // speakerDiarization 模式下无条件发送：speaker proxy 需要收到 context-hint 消息
-    // 才会建立腾讯云连接，如果这里 return 了，腾讯云连接永远不建立，start() 超时失败。
-    if (!contextHint.trim() && languageMode === 'auto' && !this.options.speakerDiarization) return;
+    if (!contextHint.trim() && languageMode === 'auto') return;
 
     this.ws.send(
       JSON.stringify({

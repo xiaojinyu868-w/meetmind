@@ -30,6 +30,9 @@ import { ShareArtifactAction } from '@/components/share/ShareArtifactAction';
 import { isShareableArtifactAppKey } from '@/components/share/share-artifact-model';
 import { WorkshopAppCard, type WorkshopCardStatus } from './WorkshopAppCard';
 import { COPY } from '@/lib/ui/copy';
+import { parsePointsBlock, describePointsBlock } from '@/hooks/points-guard';
+import { openPaywallGlobal } from '@/hooks/usePaywall';
+import { notifyPointsChanged } from '@/hooks/usePointsSummary';
 import { createLogger } from '@/lib/logger';
 import { recommendWorkshopApp } from './workshop-recommendation';
 import { useWorkshopReadiness } from './hooks/useWorkshopReadiness';
@@ -650,6 +653,25 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
 
         if (!response.ok || !data.ok || !data.result) {
           const backendError = data.error?.trim();
+          // 402 积分拦截：余额不足 / 本月成本到顶。与材料不足同级的安静空态：
+          // 卡片回可开始状态，toast 一句说明（含余额与下月发放），不记错误。
+          const pointsBlock = parsePointsBlock(response.status, data);
+          if (pointsBlock) {
+            log.info('app.execute.points_blocked', { appKey: app.key, kind: pointsBlock.kind });
+            const idleState: AppTaskState = { status: 'idle', updatedAt: Date.now() };
+            writeCachedTaskState(sessionId, app.key, idleState);
+            setTaskMap((prev) => ({ ...prev, [app.key]: idleState }));
+            upsertDockTask(app, { status: 'cancelled', updatedAt: Date.now(), message: undefined });
+            toast.message(describePointsBlock(pointsBlock));
+            notifyPointsChanged();
+            // 高意向截断：余额不足（登录用户）同步唤起付费页；会员闸门弹会员 Tab；guest 限额/月熔断不弹
+            if (pointsBlock.kind === 'insufficient_points') {
+              openPaywallGlobal({ reason: 'insufficient_points', balance: pointsBlock.balance, required: pointsBlock.required });
+            } else if (pointsBlock.kind === 'membership_required') {
+              openPaywallGlobal({ reason: 'membership_required', requiredTier: pointsBlock.requiredTier });
+            }
+            return;
+          }
           // 材料不足是预期内的诚实空态，不是失败：不记错误、不进红色失败态，
           // 卡片回到可开始状态，用户看到一句安静的说明。
           if (backendError === 'CONTENT_NOT_READY' || backendError === 'APP_NOT_SUITABLE') {

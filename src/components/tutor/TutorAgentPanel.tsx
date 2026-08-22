@@ -48,6 +48,8 @@ import {
 } from '@/lib/utils/ai-model-preference';
 import { COPY } from '@/lib/ui/copy';
 import { AdminAiInspectorLink } from '@/components/admin/AdminAiInspectorLink';
+import { openPaywallForChatError, parseChatErrorPointsBlock } from '@/hooks/usePaywall';
+import { describePointsBlock } from '@/hooks/points-guard';
 
 export interface TutorAgentPanelTranscriptSegment {
   id: string;
@@ -269,7 +271,12 @@ export function TutorAgentPanel({
     [authToken, sessionId, transcript, subject, preferredModel, mode, agentContext, options],
   );
 
-  const { messages, setMessages, sendMessage, status, error, stop } = useChat({ transport });
+  const { messages, setMessages, sendMessage, status, error, stop } = useChat({
+    transport,
+    // 402 积分/会员拦截：直接唤起对应 Paywall Tab，行内错误换成安静文案
+    onError: (chatError) => openPaywallForChatError(chatError),
+  });
+  const pointsBlock = React.useMemo(() => parseChatErrorPointsBlock(error), [error]);
   const inspectorQuery = React.useMemo(() => {
     const latestUserMessage = [...messages].reverse().find((message) => message.role === 'user');
     return latestUserMessage ? collectMessageText(latestUserMessage) : '';
@@ -683,15 +690,18 @@ export function TutorAgentPanel({
           <div className="rounded-2xl border border-divider bg-canvas px-4 py-3 text-[13px] leading-relaxed text-ink-secondary">
             {/* M14.5.3 BUG FIX: 服务端 500 / nginx 502 等会返回 HTML body，
                  AI SDK 把整段 HTML 灌进 error.message 直接渲染会污染气泡。
-                 用 sanitizeUserFacingError 检测并兜底成友好文案 */}
-            刚刚没接住：{sanitizeUserFacingError(error.message)}
-            <button
-              type="button"
-              onClick={handleRegenerateLast}
-              className="ml-3 underline decoration-pine/40 underline-offset-2 hover:decoration-pine hover:text-pine"
-            >
-              再试一次
-            </button>
+                 用 sanitizeUserFacingError 检测并兜底成友好文案；
+                 402 积分/会员拦截则展示 points-guard 统一文案（Paywall 已同步唤起） */}
+            {pointsBlock ? describePointsBlock(pointsBlock) : `刚刚没接住：${sanitizeUserFacingError(error.message)}`}
+            {!pointsBlock ? (
+              <button
+                type="button"
+                onClick={handleRegenerateLast}
+                className="ml-3 underline decoration-pine/40 underline-offset-2 hover:decoration-pine hover:text-pine"
+              >
+                再试一次
+              </button>
+            ) : null}
           </div>
         ) : null}
       </ChatMessageList>

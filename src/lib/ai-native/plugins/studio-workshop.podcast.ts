@@ -68,7 +68,7 @@ export function sanitizePodcastNarration(text: string): string {
 
 // ── Corpus & speaker normalisation ─────────────────────────────────
 
-export function buildPodcastTranscriptCorpus(transcript: TranscriptSegment[], maxChars: number = 9000): string {
+export function buildPodcastTranscriptCorpus(transcript: TranscriptSegment[], maxChars: number = 48_000): string {
   const merged = buildAudioOverviewNarrationCorpus(transcript, maxChars)
     .split('\n')
     .map((line) => sanitizePodcastNarration(line))
@@ -76,7 +76,10 @@ export function buildPodcastTranscriptCorpus(transcript: TranscriptSegment[], ma
     .join('\n');
 
   if (merged.length <= maxChars) return merged;
-  return `${merged.slice(0, Math.max(0, maxChars - 3))}...`;
+  // 与朗读语料一致：保留头 60% + 尾 40%，结尾高潮不能丢
+  const headChars = Math.max(0, Math.floor((maxChars - 3) * 0.6));
+  const tailChars = Math.max(0, maxChars - 3 - headChars);
+  return `${merged.slice(0, headChars)}...${merged.slice(merged.length - tailChars)}`;
 }
 
 export function normalizePodcastSpeaker(raw: string | undefined, index: number, mapping: Map<string, string>): string {
@@ -128,7 +131,7 @@ export async function generatePodcastPlan(
   model: string,
   systemPrompt = buildAudioOverviewSystemPrompt(),
 ): Promise<PodcastPlan | null> {
-  const corpus = buildPodcastTranscriptCorpus(context.input.transcript, 12000);
+  const corpus = buildPodcastTranscriptCorpus(context.input.transcript, 48_000);
   if (!corpus) return null;
   const chapterEvidenceContext = buildAudioOverviewChapterEvidence(context.input.transcript);
   const anchorHints = buildPromptAnchorContext(context.input.anchors, 10);
@@ -208,6 +211,7 @@ export function buildPodcastInputText(
     .filter(Boolean)
     .slice(0, 10)
     .join('\n');
+  // 这里的语料进语音合成输入（整体硬上限 12000 字，见函数末尾），不能用 LLM 侧的 48000 预算
   const corpus = buildPodcastTranscriptCorpus(context.input.transcript, 9000);
 
   const planSection = podcastPlan

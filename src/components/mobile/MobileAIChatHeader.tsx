@@ -1,6 +1,6 @@
 'use client';
 
-import { History, PhoneCall, Plus } from 'lucide-react';
+import { History, Plus } from 'lucide-react';
 import { MiniPlayer, type ConfusionMarker as MiniPlayerMarker } from './MiniPlayer';
 
 interface MobileAIChatHeaderProps {
@@ -98,15 +98,7 @@ export function MobileAIChatHeader({
               <Plus size={18} strokeWidth={1.9} />
             </button>
           )}
-          <button
-            type="button"
-            onClick={onToggleRealtimeTeacher}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-ink"
-            title="语音同桌"
-            aria-label="语音同桌"
-          >
-            <PhoneCall size={18} strokeWidth={1.9} />
-          </button>
+          {/* 2026-08：实时语音通话下线，「语音同桌」入口按钮已移除（realtime 组件保留一个周期后物理删除） */}
         </div>
       </div>
 

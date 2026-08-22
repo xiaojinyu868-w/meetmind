@@ -108,7 +108,8 @@ function findImageForSegment(
   if (images.length === 0) return null;
   // 优先找落在该段时间范围内的图片
   for (const img of images) {
-    if (img.capturedAtMs === null || img.capturedAtMs === undefined) continue;
+    // capturedAtMs 缺失或 <= 0 视为无锚点（课外随手拍），不参与课中段落匹配
+    if (img.capturedAtMs === null || img.capturedAtMs === undefined || img.capturedAtMs <= 0) continue;
     if (img.capturedAtMs >= segmentStartMs && img.capturedAtMs <= segmentEndMs) {
       return img;
     }

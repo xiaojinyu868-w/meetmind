@@ -136,4 +136,25 @@ describe('structured app prompt contracts', () => {
     expect(user).toContain('不得读进 script');
     expect(user).toContain('不能从无时间的朗读语料猜测');
   });
+
+  it('keeps head and tail of the narration corpus when over budget', () => {
+    // 40 段 × ~80 字 ≈ 3200 字：在内层预算（maxChars*2）之内不被逐段压缩，只触发外层头尾取舍
+    const transcript = Array.from({ length: 40 }, (_, index) => ({
+      id: `s${index}`,
+      text: `开头第${index}段`.padEnd(80, '内容'),
+      startMs: index * 30_000,
+      endMs: index * 30_000 + 25_000,
+      confidence: 1,
+      isFinal: true,
+    }));
+    // 结尾放一段可识别的“高潮”内容
+    transcript[39] = { ...transcript[39], id: 's-tail', text: '结尾高潮：全场最重要的结论' };
+
+    const corpus = buildAudioOverviewNarrationCorpus(transcript, 2_000);
+
+    expect(corpus.length).toBeLessThanOrEqual(2_000);
+    expect(corpus).toContain('开头第0段');
+    expect(corpus).toContain('结尾高潮');
+    expect(corpus).toContain('...');
+  });
 });

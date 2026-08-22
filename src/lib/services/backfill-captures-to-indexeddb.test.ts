@@ -74,6 +74,38 @@ describe('extractBackfillCandidate', () => {
     expect(extractBackfillCandidate(c)).toBeNull();
   });
 
+  it('evidenceAvailable 时绝不用列表截断的 normalizedText 造单段兜底', () => {
+    // 列表 API 会把 normalizedText 截到 3200 字符加省略号；固化成 1 段后
+    // 路径 A 永远命中降级数据，真实分段（evidence 懒拉）永远回不来。
+    const c = cap({
+      contentType: 'video',
+      sourceUrl: 'https://www.xiaoyuzhoufm.com/episode/abc',
+      normalizedText: '这是一段被列表 API 截断的转录…',
+      metadata: {
+        sessionId: 'podcast-session',
+        evidenceAvailable: true,
+        durationSec: 6000,
+        audioUrl: 'https://example.com/temp-audio/video_import_x.mp3',
+        videoProvider: 'xiaoyuzhou',
+      },
+    });
+    const r = extractBackfillCandidate(c);
+    expect(r).not.toBeNull();
+    expect(r!.segments).toHaveLength(0);
+    expect(r!.mediaUrl).toBe('https://example.com/temp-audio/video_import_x.mp3');
+  });
+
+  it('mediaUrl 缺失时回退到 metadata.audioUrl（播客音频副本）', () => {
+    const c = cap({
+      metadata: {
+        sessionId: 'sess-audio',
+        transcriptSegments: segs,
+        audioUrl: 'https://example.com/temp-audio/video_import_y.mp3',
+      },
+    });
+    expect(extractBackfillCandidate(c)!.mediaUrl).toBe('https://example.com/temp-audio/video_import_y.mp3');
+  });
+
   it('兼容旧 migration-v1 的 localSessionId 与汇总转录', () => {
     const c = cap({
       normalizedText: '旧设备只留下了汇总转录。',

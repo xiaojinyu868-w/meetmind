@@ -11,6 +11,9 @@
 
 import { LLMConfig, type ModelConfig, type ModelProvider } from '@/lib/config';
 import { createLogger } from '@/lib/logger';
+import { emitLLMUsage } from '@/lib/services/llm-usage-hook';
+import { Agent, setGlobalDispatcher } from 'undici';
+
 const log = createLogger('llm');
 
 
@@ -46,6 +49,20 @@ function resolveLlmHttpTimeoutMs(): number {
 }
 
 const LLM_HTTP_TIMEOUT_MS = resolveLlmHttpTimeoutMs();
+
+// undici（Node fetch）默认 headersTimeout 300s 会先于我们的 AbortSignal 触发
+// （"fetch failed / HeadersTimeoutError"）——K3 思考链生成 2-5 分钟起步，
+// 全局 dispatcher 的 header/body 超时与 LLM_HTTP_TIMEOUT_MS 对齐（+30s 余量）
+// 仅服务端执行：客户端 bundle 中 undici 被 next.config fallback 剔除（否则
+// mindmap.plugin → llm-service 静态链把 node:crypto 打进浏览器包，构建失败）
+if (typeof window === 'undefined') {
+  setGlobalDispatcher(
+    new Agent({
+      headersTimeout: LLM_HTTP_TIMEOUT_MS + 30_000,
+      bodyTimeout: LLM_HTTP_TIMEOUT_MS + 30_000,
+    }),
+  );
+}
 
 // ==================== 消息类型定义 ====================
 
@@ -112,9 +129,15 @@ export function isMultimodalModel(modelId: string): boolean {
   return config?.supportsMultimodal ?? false;
 }
 
-/** DeepSeek 官方域名只接受小写模型名；其余域名沿用原始 modelId。 */
+/** DeepSeek 官方与百炼托管（compatible-mode）的模型 id 均为小写，统一转小写发送。
+ *  百炼上锁定 0731 快照（deepseek-v4-flash-0731），避免裸别名随平台升级静默漂移；
+ *  官方 API 的 deepseek-v4-flash 同名即 0731，保持不变。 */
 function resolveDeepSeekApiModelName(baseUrl: string, modelId: string): string {
-  return /api\.deepseek\.com/i.test(baseUrl) ? modelId.toLowerCase() : modelId;
+  const lowered = modelId.toLowerCase();
+  if (lowered === 'deepseek-v4-flash' && baseUrl.includes('dashscope.aliyuncs.com')) {
+    return 'deepseek-v4-flash-0731';
+  }
+  return lowered;
 }
 
 /** 获取 API 配置 */
@@ -144,6 +167,11 @@ function getApiConfig(provider: ModelProvider) {
       return {
         baseUrl: process.env.RELAY_BASE_URL || '',
         apiKey: process.env.RELAY_API_KEY || '',
+      };
+    case 'moonshot':
+      return {
+        baseUrl: process.env.MOONSHOT_BASE_URL || 'https://api.moonshot.cn/v1',
+        apiKey: process.env.MOONSHOT_API_KEY || '',
       };
   }
 }
@@ -357,7 +385,10 @@ async function callQwen(
   }
 
   // Qwen 默认思考行为会影响首包时延，这里显式声明开关，避免服务端默认值漂移。
-  requestBody.enable_thinking = enableThinking;
+  // kimi（百炼托管，id 形如 kimi/kimi-k3）的 thinking 由平台强制，不接受该参数，跳过
+  if (!modelId.startsWith('kimi')) {
+    requestBody.enable_thinking = enableThinking;
+  }
 
   // 思考模式配置
   if (enableThinking) {
@@ -470,6 +501,57 @@ async function callRelay(
 }
 
 /**
+ * 调用 Moonshot Kimi API（OpenAI 兼容）
+ * 文档：https://platform.moonshot.cn —— model id 如 kimi-k3（thinking 常开，输出含推理 token）
+ */
+async function callMoonshot(
+  messages: ChatMessage[],
+  modelId: string,
+  options?: { temperature?: number; maxTokens?: number; responseFormat?: 'json_object' | 'text' }
+): Promise<LLMResponse> {
+  const config = getApiConfig('moonshot');
+
+  if (!config.apiKey) {
+    throw new Error('MOONSHOT_API_KEY 未配置');
+  }
+
+  const formattedMessages = buildOpenAIMessages(messages, false);
+
+  const response = await fetchWithTimeout(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: modelId,
+      messages: formattedMessages,
+      temperature: options?.temperature ?? 0.6,
+      max_tokens: options?.maxTokens ?? 8192,
+      ...(options?.responseFormat === 'json_object' ? { response_format: { type: 'json_object' } } : {}),
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Moonshot API 错误: ${response.status} - ${error}`);
+  }
+
+  const data = await response.json();
+
+  return {
+    content: data.choices[0]?.message?.content || '',
+    model: modelId,
+    thinkingContent: data.choices[0]?.message?.reasoning_content,
+    usage: data.usage ? {
+      promptTokens: data.usage.prompt_tokens,
+      completionTokens: data.usage.completion_tokens,
+      totalTokens: data.usage.total_tokens,
+    } : undefined,
+  };
+}
+
+/**
  * 调用火山方舟（OpenAI 兼容接口）
  */
 async function callVolcengine(
@@ -533,20 +615,37 @@ export async function chat(
   const modelConfig = resolveModelConfigOrDefault(modelId);
   const resolvedId = modelConfig.id;
 
+  let response: LLMResponse;
   switch (modelConfig.provider) {
     case 'stepfun':
-      return callStepFun(messages, resolvedId, options);
+      response = await callStepFun(messages, resolvedId, options);
+      break;
     case 'deepseek':
-      return callDeepSeek(messages, resolvedId, options);
+      response = await callDeepSeek(messages, resolvedId, options);
+      break;
     case 'qwen':
-      return callQwen(messages, resolvedId, options);
+      response = await callQwen(messages, resolvedId, options);
+      break;
     case 'volcengine':
-      return callVolcengine(messages, resolvedId, options);
+      response = await callVolcengine(messages, resolvedId, options);
+      break;
     case 'relay':
-      return callRelay(messages, resolvedId, options);
+      response = await callRelay(messages, resolvedId, options);
+      break;
+    case 'moonshot':
+      response = await callMoonshot(messages, resolvedId, options);
+      break;
     default:
       throw new Error(`不支持的模型提供商: ${modelConfig.provider}`);
   }
+
+  // 积分影子计量（Phase 1）：经 llm-usage-hook 发射，point-meter 在服务端自注册；
+  // feature/userId 由调用链入口的 meter context 归属，对全部 chat() 调用方零侵入。
+  if (response.usage) {
+    emitLLMUsage({ feature: '', modelId: resolvedId, usage: response.usage });
+  }
+
+  return response;
 }
 
 /**

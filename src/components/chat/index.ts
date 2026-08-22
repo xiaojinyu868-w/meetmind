@@ -52,4 +52,7 @@ export type { IntentSummaryExtraction } from './markers/extractIntentSummary';
 export { extractIntentBio } from './markers/extractIntentBio';
 export type { IntentBioExtraction } from './markers/extractIntentBio';
 
+export { extractIntentOptions, stripPartialIntentOptions, stripPartialIntentBlocks } from './markers/extractIntentOptions';
+export type { IntentOptionsExtraction } from './markers/extractIntentOptions';
+
 export { copyMessageSmart } from './markers/copyMessageSmart';

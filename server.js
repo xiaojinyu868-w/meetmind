@@ -1,13 +1,12 @@
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 if (fs.existsSync('.env.local')) {
   require('dotenv').config({ path: '.env.local' });
 } else {
   require('dotenv').config({ path: '.env' });
 }
 
-const { createServer } = require('http');
+const { createServer, request: httpRequest } = require('http');
 const { parse } = require('url');
 const next = require('next');
 const { WebSocketServer, WebSocket } = require('ws');
@@ -54,10 +53,18 @@ const {
   isLikelyHallucination,
 } = require('./server/asr/text-utils');
 const { buildQwenAsrFinishEvent, buildQwenAsrSessionConfig } = require('./server/asr/qwen-session');
+// 新一代 Qwen-Audio-3.0-ASR / Fun-ASR 的 duplex 任务协议（与旧 Omni Realtime 协议按模型族分派）
+const {
+  isDuplexAsrModel,
+  resolveAsrWsUrl,
+  generateDuplexTaskId,
+  buildDuplexRunTask,
+  buildDuplexContinueTask,
+  buildDuplexFinishTask,
+  parseDuplexServerEvent,
+} = require('./server/asr/duplex-session');
 void _unusedNormalize;
 void longestCommonSubstringRatio;
-
-const DASHSCOPE_WSS_URL = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime';
 
 let eventCounter = 0;
 function generateEventId() {
@@ -67,6 +74,99 @@ function generateEventId() {
 function clampNumber(value, min, max, fallback) {
   if (!Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, value));
+}
+
+// 积分 Phase 2：ASR 连接关闭后按连接时长回调节点内结算接口。
+// server.js 是纯 Node 不能 import src TS，走 127.0.0.1 内部 HTTP；
+// INTERNAL_API_SECRET 未配置时静默跳过（settle 路由侧同样拒绝），绝不阻塞 ASR。
+function settleAsrUsageOnClose({ connectionId, connectedAtMs, token, guestKey }) {
+  const secret = process.env.INTERNAL_API_SECRET;
+  if (!secret) return;
+  const durationMs = Date.now() - connectedAtMs;
+  const payload = JSON.stringify({
+    connectionId,
+    durationMs,
+    token: token || undefined,
+    guestKey: guestKey || undefined,
+  });
+  const req = httpRequest(
+    {
+      hostname: '127.0.0.1',
+      port,
+      path: '/api/points/settle-asr',
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'content-length': Buffer.byteLength(payload),
+        'x-internal-secret': secret,
+      },
+      timeout: 10_000,
+    },
+    (res) => {
+      res.resume();
+    }
+  );
+  req.on('timeout', () => req.destroy());
+  req.on('error', (error) => {
+    console.warn('[ASR-Proxy] points settle request failed:', error.message);
+  });
+  req.end(payload);
+}
+
+// ASR 录课前服务端额度预检（L1/L3 堵漏：登录用户免费分钟+余额、guest 日分钟上限）。
+// 返回 Promise<{ allowed, reason? }>；secret 未配置 / 请求失败一律 fail-open（allowed:true），
+// 与结算路径"绝不阻塞 ASR"的行为一致。
+function precheckAsrAllowance({ token, guestKey }) {
+  const secret = process.env.INTERNAL_API_SECRET;
+  if (!secret) return Promise.resolve({ allowed: true });
+  const payload = JSON.stringify({
+    token: token || undefined,
+    guestKey: guestKey || undefined,
+  });
+  return new Promise((resolve) => {
+    const req = httpRequest(
+      {
+        hostname: '127.0.0.1',
+        port,
+        path: '/api/points/precheck-asr',
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(payload),
+          'x-internal-secret': secret,
+        },
+        timeout: 5_000,
+      },
+      (res) => {
+        let raw = '';
+        res.on('data', (chunk) => { raw += chunk; });
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(raw);
+            resolve({ allowed: parsed.allowed !== false, reason: parsed.reason });
+          } catch {
+            resolve({ allowed: true });
+          }
+        });
+      }
+    );
+    req.on('timeout', () => { req.destroy(); resolve({ allowed: true }); });
+    req.on('error', () => resolve({ allowed: true }));
+    req.end(payload);
+  });
+}
+
+// 与 point-meter.meterUserIdFromRequest 同一取头顺序，保证 guest 归属键一致
+function guestKeyFromRequest(request) {
+  const headers = request?.headers || {};
+  const forwarded = typeof headers['x-forwarded-for'] === 'string'
+    ? headers['x-forwarded-for'].split(',')[0].trim()
+    : '';
+  const ip = forwarded
+    || (typeof headers['x-real-ip'] === 'string' ? headers['x-real-ip'].trim() : '')
+    || request?.socket?.remoteAddress
+    || '';
+  return ip ? `guest_${ip}` : '';
 }
 
 function isMissingNextChunkError(error) {
@@ -123,7 +223,7 @@ function getRuntimeMediaMimeType(filePath) {
   return mimeTypes[ext] || 'application/octet-stream';
 }
 
-function tryServeRuntimePublicFile(pathname, res) {
+function tryServeRuntimePublicFile(pathname, req, res) {
   if (!pathname) return false;
 
   const mappings = [
@@ -156,9 +256,34 @@ function tryServeRuntimePublicFile(pathname, res) {
     try {
       if (fs.existsSync(resolvedFilePath)) {
         const stat = fs.statSync(resolvedFilePath);
+        const total = stat.size;
         res.setHeader('Content-Type', getRuntimeMediaMimeType(resolvedFilePath));
-        res.setHeader('Content-Length', stat.size);
+        res.setHeader('Accept-Ranges', 'bytes');
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+
+        // Range 请求 → 206 Partial Content：<audio> seek（点时间戳跳转）依赖它，
+        // 全量 200 响应会让浏览器把媒体判定为不可拖动，长音频 currentTime 会被钳回 0
+        const rangeHeader = req && req.headers ? req.headers.range : undefined;
+        if (rangeHeader) {
+          const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader);
+          if (match) {
+            const start = match[1] ? parseInt(match[1], 10) : 0;
+            const end = match[2] ? Math.min(parseInt(match[2], 10), total - 1) : total - 1;
+            if (start >= total || start > end) {
+              res.statusCode = 416;
+              res.setHeader('Content-Range', `bytes */${total}`);
+              res.end();
+              return true;
+            }
+            res.statusCode = 206;
+            res.setHeader('Content-Range', `bytes ${start}-${end}/${total}`);
+            res.setHeader('Content-Length', end - start + 1);
+            fs.createReadStream(resolvedFilePath, { start, end }).pipe(res);
+            return true;
+          }
+        }
+
+        res.setHeader('Content-Length', total);
         fs.createReadStream(resolvedFilePath).pipe(res);
         return true;
       }
@@ -184,7 +309,7 @@ app.prepare().then(() => {
       const parsedUrl = parse(req.url, true);
 
       // 处理运行时生成的媒体文件请求（如 temp-audio / wechat-media）
-      if (tryServeRuntimePublicFile(parsedUrl.pathname, res)) {
+      if (tryServeRuntimePublicFile(parsedUrl.pathname, req, res)) {
         return;
       }
 
@@ -209,9 +334,32 @@ app.prepare().then(() => {
     }
   });
 
+  // keepAliveTimeout 必须大于上游代理的空闲 keepalive 时间（nginx upstream
+  // keepalive_timeout 默认 60s）。Node 默认 5s 时存在经典竞争：连接空闲 >5s 后
+  // Node 主动关闭，nginx 同一时刻从 keepalive 池取出该连接复用 → llhttp 报
+  // HPE_CLOSED_CONNECTION（Data after Connection: close）→ 用户看到空 body 的 400。
+  // headersTimeout 必须大于 keepAliveTimeout（Node 强制约束）。
+  server.keepAliveTimeout = 75_000;
+  server.headersTimeout = 80_000;
+
+  // 抓 HTTP 解析层的 400（llhttp 拒绝畸形请求时会返回空 body 的 400，
+  // 不进 Next 路由、无任何日志——前端表现为"请求失败但重试又成功"）。
+  // 记录解析错误与原始包头部，定位是哪个客户端/哪个字段畸形。
+  server.on('clientError', (err, socket) => {
+    try {
+      const rawHead = err.rawPacket
+        ? err.rawPacket.subarray(0, 400).toString('latin1').replace(/[^\x20-\x7e\r\n]/g, '?')
+        : '';
+      console.error('[Server] clientError:', err.code || '', err.message, '| raw:', JSON.stringify(rawHead));
+    } catch {
+      console.error('[Server] clientError (no detail)');
+    }
+    if (socket.writable && !socket.destroyed) {
+      socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+    }
+  });
+
   const asrWss = new WebSocketServer({ noServer: true });
-  const speakerAsrWss = new WebSocketServer({ noServer: true });
-  const tutorCallWss = new WebSocketServer({ noServer: true });
   const nextUpgradeHandler = app.getUpgradeHandler();
 
   if ('didWebSocketSetup' in app) {
@@ -231,19 +379,8 @@ app.prepare().then(() => {
       return;
     }
 
-    if (pathname === '/api/asr-stream-speaker') {
-      speakerAsrWss.handleUpgrade(request, socket, head, (ws) => {
-        speakerAsrWss.emit('connection', ws, request);
-      });
-      return;
-    }
-
-    if (pathname === '/api/tutor-call') {
-      tutorCallWss.handleUpgrade(request, socket, head, (ws) => {
-        tutorCallWss.emit('connection', ws, request);
-      });
-      return;
-    }
+    // 2026-08 决策下线：/api/asr-stream-speaker（腾讯云实时分人实验）与
+    // /api/tutor-call（实时语音通话）两条 WS 代理已整体拆除，不再注册。
 
     try {
       nextUpgradeHandler(request, socket, head);
@@ -253,409 +390,48 @@ app.prepare().then(() => {
     }
   });
 
-  // ============================================================
-  // 腾讯云实时说话人分离 WebSocket 代理
-  // /api/asr-stream-speaker
-  //
-  // 与 /api/asr-stream（DashScope）的区别：
-  //   - 用腾讯云 16k_zh_en_speaker 引擎，同时做 ASR + 声纹聚类
-  //   - 返回 speaker_id（0-9），支持最多 10 个说话人分离
-  //   - 把腾讯云的返回格式翻译成与 DashScope 代理兼容的格式
-  //     （{event:'ready'}, {event:'result', sentence:{...}}, {event:'interim', ...}）
-  //   - 前端 DashScopeASRClient 不用改，只需要换 WS URL
-  // ============================================================
+  asrWss.on('connection', async (clientWs, request) => {
+    console.log('[ASR-Proxy] Client connected');
 
-  function buildTencentASRSignature(params) {
-    const appId = process.env.TENCENT_ASR_APP_ID;
-    const secretId = process.env.TENCENT_ASR_SECRET_ID;
-    const secretKey = process.env.TENCENT_ASR_SECRET_KEY;
-
-    if (!appId || !secretId || !secretKey) {
-      throw new Error('腾讯云 ASR 密钥未配置');
-    }
-
-    // 腾讯云签名要求：参数按字典序排序，拼接签名原文（不含 wss://）
-    // 参数值不做 URL 编码——签名原文用原始值
-    const sortedParams = Object.keys(params)
-      .filter((k) => k !== 'signature')
-      .sort()
-      .map((k) => `${k}=${params[k]}`)
-      .join('&');
-
-    const signStr = `asr.cloud.tencent.com/asr/v2/${appId}?${sortedParams}`;
-    const signature = crypto
-      .createHmac('sha1', secretKey)
-      .update(signStr)
-      .digest('base64');
-
-    console.log('[Speaker-ASR-Proxy] Sign str:', signStr.substring(0, 120) + '...');
-    console.log('[Speaker-ASR-Proxy] Signature:', signature);
-
-    return { signature, appId, secretId };
-  }
-
-  function buildTencentASRUrl(voiceId, options) {
-    const appId = process.env.TENCENT_ASR_APP_ID;
-    const secretId = process.env.TENCENT_ASR_SECRET_ID;
-
-    const timestamp = Math.floor(Date.now() / 1000);
-    const expired = timestamp + 86400; // 1 天有效期
-    const nonce = Math.floor(Math.random() * 1000000000);
-
-    const params = {
-      secretid: secretId,
-      timestamp,
-      expired,
-      nonce,
-      engine_model_type: options.engineModelType || '16k_zh_en_speaker',
-      voice_id: voiceId,
-      voice_format: 1, // PCM
-      needvad: 1,
-      convert_num_mode: 1,
-      filter_dirty: 0,
-      filter_modal: 0,
-      filter_punc: 0,
-      speaker_diarization: 1, // 显式开启话者分离
-      sentence_strategy: 0,   // 0=语义单句
+    // 积分 Phase 2：连接级结算标识。token 来自前端 WS URL 的 ?token= 查询参数
+    //（浏览器 WebSocket 不能带 Authorization 头）；匿名连接只记影子流水不扣分。
+    const asrConnectionQuery = parse(request?.url || '', true).query;
+    const asrUserToken = typeof asrConnectionQuery.token === 'string' ? asrConnectionQuery.token : '';
+    const asrConnectionId = crypto.randomUUID();
+    const asrGuestKey = asrUserToken ? '' : guestKeyFromRequest(request);
+    const asrConnectedAtMs = Date.now();
+    let asrUsageSettled = false;
+    const settleAsrUsageOnce = () => {
+      if (asrUsageSettled) return;
+      asrUsageSettled = true;
+      settleAsrUsageOnClose({
+        connectionId: asrConnectionId,
+        connectedAtMs: asrConnectedAtMs,
+        token: asrUserToken,
+        guestKey: asrGuestKey,
+      });
     };
 
-    // 热词
-    if (options.hotwordList) {
-      params.hotword_list = options.hotwordList;
-    }
-
-    const { signature } = buildTencentASRSignature(params);
-    const encodedSig = encodeURIComponent(signature);
-
-    const queryStr = Object.keys(params)
-      .filter((k) => k !== 'signature')
-      .sort()
-      .map((k) => `${k}=${encodeURIComponent(params[k])}`)
-      .join('&');
-
-    return `wss://asr.cloud.tencent.com/asr/v2/${appId}?${queryStr}&signature=${encodedSig}`;
-  }
-
-  speakerAsrWss.on('connection', (clientWs) => {
-    console.log('[Speaker-ASR-Proxy] Client connected');
-
-    const appId = process.env.TENCENT_ASR_APP_ID;
-    const secretId = process.env.TENCENT_ASR_SECRET_ID;
-    const secretKey = process.env.TENCENT_ASR_SECRET_KEY;
-
-    if (!appId || !secretId || !secretKey) {
-      clientWs.send(JSON.stringify({ event: 'error', error: '腾讯云 ASR 密钥未配置，请在 .env 中设置 TENCENT_ASR_APP_ID / TENCENT_ASR_SECRET_ID / TENCENT_ASR_SECRET_KEY' }));
+    // L1/L3 堵漏：连上游之前先做服务端额度预检（登录：免费分钟+余额；guest：日分钟上限）。
+    // 拒绝时给客户端一个可识别的错误码，前端映射成安静的额度说明。
+    const asrAllowance = await precheckAsrAllowance({ token: asrUserToken, guestKey: asrGuestKey });
+    if (!asrAllowance.allowed) {
+      console.warn('[ASR-Proxy] precheck denied:', asrAllowance.reason);
+      clientWs.send(JSON.stringify({
+        event: 'error',
+        error: asrAllowance.reason === 'guest_daily_asr_cap' ? 'GUEST_DAILY_ASR_CAP' : 'ASR_QUOTA_EXCEEDED',
+      }));
       clientWs.close();
       return;
     }
 
-    let tencentWs = null;
-    let isReady = false;
-    let stopRequested = false;
-    let sentenceIndex = 0;
-    let lastFinalSegment = null;
-    const finalizedTencentSentenceIds = new Set();
-    const dedupSimilarity = clampNumber(
-      parseFloat(process.env.ASR_DEDUP_SIMILARITY || '0.95'),
-      0.7, 1, 0.95
-    );
-    const dedupGapMs = clampNumber(
-      parseInt(process.env.ASR_DEDUP_GAP_MS || '1500', 10),
-      200, 10000, 1500
-    );
-    const audioQueue = [];
-    const AUDIO_QUEUE_MAX_SIZE = 500;
-    let isFlushingAudioQueue = false;
-    let voiceId = '';
-
-    // 从客户端接收 context-hint（热词）
-    let hotwordList = '';
-
-    function sendClientEvent(payload) {
-      if (clientWs.readyState !== WebSocket.OPEN) return;
-      clientWs.send(JSON.stringify(payload));
-    }
-
-    function flushAudioQueue() {
-      if (isFlushingAudioQueue) return;
-      if (audioQueue.length === 0) return;
-      isFlushingAudioQueue = true;
-      flushNextAudioBatch();
-    }
-
-    function flushNextAudioBatch() {
-      if (!isFlushingAudioQueue) return;
-      if (!tencentWs || tencentWs.readyState !== WebSocket.OPEN) {
-        isFlushingAudioQueue = false;
-        return;
-      }
-      const batchSize = Math.min(60, audioQueue.length);
-      for (let i = 0; i < batchSize; i++) {
-        const data = audioQueue.shift();
-        if (data) tencentWs.send(data);
-      }
-      if (audioQueue.length === 0) {
-        isFlushingAudioQueue = false;
-        return;
-      }
-      setTimeout(flushNextAudioBatch, 100);
-    }
-
-    // 接收客户端文本消息（context-hint / stop）
-    clientWs.on('message', (data, isBinary) => {
-      if (isBinary) {
-        // 二进制音频数据
-        if (
-          isReady
-          && !isFlushingAudioQueue
-          && audioQueue.length === 0
-          && tencentWs
-          && tencentWs.readyState === WebSocket.OPEN
-        ) {
-          tencentWs.send(data);
-        } else {
-          if (audioQueue.length < AUDIO_QUEUE_MAX_SIZE) {
-            audioQueue.push(data);
-          } else if (audioQueue.length === AUDIO_QUEUE_MAX_SIZE) {
-            console.warn('[Speaker-ASR-Proxy] audioQueue reached max size, dropping new chunks until ready');
-            audioQueue.push(null);
-          }
-          if (isReady) flushAudioQueue();
-        }
-        return;
-      }
-
-      try {
-        const jsonText = typeof data === 'string' ? data : data.toString('utf8');
-        const msg = JSON.parse(jsonText);
-
-        if (msg.type === 'ping') {
-          sendClientEvent({ event: 'pong', at: msg.at || Date.now() });
-          return;
-        }
-
-        if (msg.type === 'context-hint') {
-          const hint = typeof msg.contextHint === 'string' ? msg.contextHint.trim() : '';
-          if (hint) {
-            // 腾讯云热词格式：词1|权重1,词2|权重2
-            const words = hint.split(/[\n,，;；]/).map((w) => w.trim()).filter(Boolean);
-            if (words.length > 0) {
-              hotwordList = words.map((w) => `${w}|10`).join(',');
-              console.log('[Speaker-ASR-Proxy] Hotwords:', words.length, 'words');
-            }
-          }
-
-          // 如果还没连接腾讯云，现在连接
-          if (!tencentWs && !stopRequested) {
-            voiceId = crypto.randomUUID();
-            const wsUrl = buildTencentASRUrl(voiceId, { hotwordList });
-
-            tencentWs = new WebSocket(wsUrl);
-
-            tencentWs.on('open', () => {
-              console.log('[Speaker-ASR-Proxy] Tencent cloud connected, voice_id:', voiceId);
-            });
-
-            tencentWs.on('message', (tData) => {
-              console.log('[Speaker-ASR-Proxy] Raw message:', tData.toString().substring(0, 200));
-              try {
-                const tMsg = JSON.parse(tData.toString());
-
-                if (tMsg.code !== 0) {
-                  console.error('[Speaker-ASR-Proxy] Error:', tMsg.code, tMsg.message);
-                  // 资源包耗尽 / 鉴权失败等不可恢复错误——通知客户端停止重连
-                  const nonRetriable = /4004|4005|4002|4003|欠费|耗尽|鉴权|未开通/.test(tMsg.message || '');
-                  if (nonRetriable) {
-                    sendClientEvent({ event: 'auth_failed', error: `腾讯云：${tMsg.message}` });
-                  } else {
-                    sendClientEvent({ event: 'error', error: tMsg.message || `腾讯云错误 ${tMsg.code}` });
-                  }
-                  return;
-                }
-
-                // 流结束标志：final=1 表示整段音频识别已结束
-                if (tMsg.final === 1) {
-                  console.log('[Speaker-ASR-Proxy] Final');
-                  sendClientEvent({ event: 'finished' });
-                  sendClientEvent({ event: 'closed' });
-                  return;
-                }
-
-                // 实时说话人分离接口的结果在 tMsg.sentences.sentence_list[]
-                // 完整结构：{code:0, voice_id, message_id, sentences: { sentence_list: [{ sentence, sentence_type, sentence_id, speaker_id, start_time, end_time }] }}
-                // 握手成功响应里没有 sentences 字段，借此区分"握手成功"和"识别结果"
-                const sentencesObj = tMsg.sentences;
-                if (!sentencesObj || typeof sentencesObj !== 'object') {
-                  if (!isReady) {
-                    isReady = true;
-                    console.log('[Speaker-ASR-Proxy] Ready, voice_id:', voiceId);
-                    sendClientEvent({ event: 'ready' });
-                    flushAudioQueue();
-                  }
-                  return;
-                }
-
-                // 官方协议明确要求遍历 sentence_list；一次回调可能携带多条句子。
-                // final 结果按腾讯 sentence_id 去重，interim 则允许同一 id 持续修订。
-                const sentenceList = sentencesObj.sentence_list;
-                if (!Array.isArray(sentenceList) || sentenceList.length === 0) return;
-                for (const sentence of sentenceList) {
-
-                  // sentence_type: 0=不确定, 1=确定(稳态)
-                  // speaker_id: -1=未识别, 0-9=具体说话人
-                  const isFinal = sentence.sentence_type === 1;
-                  const rawSpeakerId = sentence.speaker_id;
-                  if (isFinal) {
-                    console.log(`[Speaker-ASR-Proxy] Final: "${(sentence.sentence||'').substring(0,40)}" speaker_id=${rawSpeakerId} type=${sentence.sentence_type}`);
-                  }
-                  const speakerId =
-                    typeof rawSpeakerId === 'number' && rawSpeakerId >= 0 && rawSpeakerId <= 9
-                      ? String(rawSpeakerId)
-                      : undefined;
-                  const text = sentence.sentence || '';
-                  if (!text) continue;
-
-                  // 腾讯云返回的时间戳单位是毫秒（自流开始计），保持毫秒透传给前端
-                  const beginTime = Number(sentence.start_time) || 0;
-                  const endTime = Number(sentence.end_time) || 0;
-                  const itemId = String(sentence.sentence_id ?? sentenceIndex);
-
-                  if (isFinal) {
-                    const finalKey = String(sentence.sentence_id ?? `${beginTime}:${endTime}:${text}`);
-                    if (finalizedTencentSentenceIds.has(finalKey)) continue;
-                    finalizedTencentSentenceIds.add(finalKey);
-                    // 幻觉过滤——跟 DashScope 代理一致
-                    const durationMs = Math.max(0, endTime - beginTime);
-                    if (isLikelyHallucination(text, durationMs)) {
-                      console.log(`[Speaker-ASR-Proxy] Dropped hallucination: "${text.substring(0, 40)}" (duration=${durationMs}ms)`);
-                      continue;
-                    }
-
-                    // 长文本切分——跟 DashScope 代理一致
-                    const splitSegments = splitLongTranscript(text, beginTime, endTime);
-                    for (const seg of splitSegments) {
-                      // 去重——跟 DashScope 代理一致
-                      let replaces;
-                      const nextFinal = {
-                        id: `seg-${sentenceIndex}`,
-                        text: seg.text,
-                        beginTime: seg.beginTime,
-                        endTime: seg.endTime,
-                      };
-                      if (lastFinalSegment && shouldDedupSegment(lastFinalSegment, nextFinal, dedupSimilarity, dedupGapMs)) {
-                        replaces = [lastFinalSegment.id];
-                      }
-
-                      sendClientEvent({
-                        event: 'result',
-                        provisional: false,
-                        replaces,
-                        sentence: {
-                          id: `seg-${sentenceIndex++}`,
-                          text: seg.text,
-                          beginTime: seg.beginTime,
-                          endTime: seg.endTime,
-                          isFinal: true,
-                          confidence: 0.95,
-                          itemId,
-                        },
-                        speakerId,
-                      });
-                      lastFinalSegment = nextFinal;
-                    }
-                  } else {
-                    // 中间结果
-                    sendClientEvent({
-                      event: 'interim',
-                      itemId,
-                      text,
-                      provisional: true,
-                      beginTime,
-                      endTime,
-                      speakerId,
-                    });
-                  }
-                }
-              } catch (e) {
-                console.error('[Speaker-ASR-Proxy] Parse error:', e);
-              }
-            });
-
-            tencentWs.on('unexpected-response', (req, res) => {
-              console.error('[Speaker-ASR-Proxy] Unexpected HTTP response:', res.statusCode, res.statusMessage);
-              let body = '';
-              res.on('data', (chunk) => { body += chunk; });
-              res.on('end', () => {
-                console.error('[Speaker-ASR-Proxy] Response body:', body.substring(0, 500));
-              });
-              sendClientEvent({ event: 'error', error: `腾讯云握手失败: HTTP ${res.statusCode} ${res.statusMessage}` });
-            });
-
-            tencentWs.on('error', (error) => {
-              console.error('[Speaker-ASR-Proxy] Tencent error:', error.message);
-              const authFailed = /4002|4003|鉴权|未开通/.test(error.message || '');
-              if (authFailed) {
-                sendClientEvent({ event: 'auth_failed', error: `腾讯云鉴权失败：${error.message}` });
-                clientWs.close(4401, 'Tencent auth failed');
-              } else {
-                sendClientEvent({ event: 'error', error: `腾讯云连接错误: ${error.message}` });
-              }
-            });
-
-            tencentWs.on('close', (code, reason) => {
-              console.log('[Speaker-ASR-Proxy] Tencent closed:', code, String(reason || ''));
-              isReady = false;
-              if (clientWs.readyState === WebSocket.OPEN) {
-                sendClientEvent({ event: 'finished' });
-                sendClientEvent({ event: 'closed', code });
-                if (code !== 1000 && !stopRequested) {
-                  clientWs.close(1000, 'Tencent disconnected');
-                }
-              }
-            });
-          }
-          return;
-        }
-
-        if (msg.action === 'stop') {
-          stopRequested = true;
-          if (tencentWs && tencentWs.readyState === WebSocket.OPEN) {
-            tencentWs.send(JSON.stringify({ type: 'end' }));
-          }
-          setTimeout(() => {
-            if (tencentWs && tencentWs.readyState === WebSocket.OPEN) {
-              tencentWs.close(1000, 'Client stop');
-            }
-          }, 2000);
-        }
-      } catch {
-        // ignore
-      }
-    });
-
-    clientWs.on('close', () => {
-      console.log('[Speaker-ASR-Proxy] Client disconnected');
-      stopRequested = true;
-      if (tencentWs && tencentWs.readyState === WebSocket.OPEN) {
-        tencentWs.send(JSON.stringify({ type: 'end' }));
-        setTimeout(() => {
-          if (tencentWs && tencentWs.readyState === WebSocket.OPEN) {
-            tencentWs.close(1000, 'Client disconnected');
-          }
-        }, 1000);
-      }
-    });
-
-    clientWs.on('error', (error) => {
-      console.error('[Speaker-ASR-Proxy] Client error:', error.message);
-    });
-  });
-
-  asrWss.on('connection', (clientWs) => {
-    console.log('[ASR-Proxy] Client connected');
-
     const apiKey = process.env.DASHSCOPE_API_KEY;
-    const model = process.env.DASHSCOPE_ASR_WS_MODEL || 'qwen3-asr-flash-realtime-2026-02-10';
+    const model = process.env.DASHSCOPE_ASR_WS_MODEL || 'qwen-audio-3.0-asr-flash-streaming';
+    // 协议分派：qwen-audio-3.0* / fun-asr* 走 duplex 任务协议（/api-ws/v1/inference），
+    // qwen3-asr* 走旧 Omni Realtime 协议（/api-ws/v1/realtime?model=）。改 env 即可回退旧模型。
+    const useDuplexAsr = isDuplexAsrModel(model);
+    const duplexTaskId = useDuplexAsr ? generateDuplexTaskId() : null;
+    const upstreamWsUrl = resolveAsrWsUrl(model, process.env.DASHSCOPE_ASR_WS_URL);
     const sampleRate = parseInt(process.env.DASHSCOPE_ASR_WS_SR || '16000', 10);
     const turnSilenceMs = clampNumber(
       parseInt(process.env.DASHSCOPE_ASR_WS_VAD_SILENCE_MS || '1000', 10),
@@ -697,7 +473,10 @@ app.prepare().then(() => {
     let dashscopeWs = null;
     let isSessionReady = false;
     const audioQueue = [];
-    const AUDIO_QUEUE_MAX_SIZE = 500; // 上限 500 个 chunk（约 16 秒 @16kHz）
+    const AUDIO_QUEUE_MAX_SIZE = 2000; // 上限 2000 个 chunk（约 200 秒 @16kHz，每 chunk ~100ms/3.2KB）
+    // 代理侧丢帧统计：溢出 = 这段音频永远到不了 DashScope，必须告知客户端（单遍化后无兜底）
+    let droppedAudioBytes = 0;
+    let lastDropNotifiedBytes = 0;
 
     // DashScope 限速：2560KB/s（约 2.5MB/s）。每个 PCM chunk 3.2KB。
     // 旧 flushAudioQueue 同步 while loop 一次性 send 全部累积 chunks，
@@ -780,6 +559,25 @@ app.prepare().then(() => {
       }
 
       const corpusText = buildASRCorpusText();
+
+      if (useDuplexAsr) {
+        // 新 duplex 协议：连接后发送 run-task，上下文走 input.context，VAD 断句走 max_sentence_silence。
+        const runTask = buildDuplexRunTask({
+          taskId: duplexTaskId,
+          model,
+          sampleRate,
+          languageMode,
+          contextHint: corpusText,
+          maxSentenceSilenceMs: turnSilenceMs,
+        });
+        dashscopeWs.send(JSON.stringify(runTask));
+        initialSessionUpdateSent = true;
+        if (extraLog) {
+          console.log(`[ASR-Proxy] run-task sent (${extraLog}), model=${model}, lang=${languageMode}, context length: ${corpusText.length}`);
+        }
+        return;
+      }
+
       // Qwen 官方最佳实践：混合语种或不确定时，不传 language 参数，让模型自动识别。
       // 只有客户端明确指定 'zh' 或 'en' 时才下发 language。
       const sessionConfig = buildQwenAsrSessionConfig({
@@ -819,14 +617,15 @@ app.prepare().then(() => {
       if (hasFinishedSession) return false;
       if (!hasAudioAppended && audioQueue.length === 0) return false;
 
-      // Qwen ASR 当前使用 server_vad。官方协议明确规定：VAD 模式下
-      // input_audio_buffer.commit 被禁用；录音结束必须发送 session.finish，
-      // 服务端才会把最后一段尚未遇到足够静音的语音完整定稿。
-      // 旧实现发送 commit，错误又被静默吞掉，正是“只识别第一句话/结尾吞字”的根因。
       if (isFlushingAudioQueue || audioQueue.length > 0) return false;
 
       try {
-        dashscopeWs.send(JSON.stringify(buildQwenAsrFinishEvent(generateEventId())));
+        // 新 duplex 协议发 finish-task；旧 Omni Realtime 在 server_vad 下必须发 session.finish
+        // （input_audio_buffer.commit 仅属 manual mode，会报错并吞掉尾句）。
+        const finishMessage = useDuplexAsr
+          ? buildDuplexFinishTask(duplexTaskId)
+          : buildQwenAsrFinishEvent(generateEventId());
+        dashscopeWs.send(JSON.stringify(finishMessage));
         hasFinishedSession = true;
         console.log(`[ASR-Proxy] Session finish sent (${finishReason})`);
         return true;
@@ -849,6 +648,14 @@ app.prepare().then(() => {
       if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) return;
       const chunkSize = pcmData?.length || pcmData?.byteLength || 0;
       if (chunkSize <= 0) return;
+
+      if (useDuplexAsr) {
+        // 新 duplex 协议：task-started 后直接发二进制 PCM 帧，不再 base64 包 JSON。
+        dashscopeWs.send(Buffer.from(pcmData));
+        hasAudioAppended = true;
+        appendedChunks += 1;
+        return;
+      }
 
       const base64Audio = Buffer.from(pcmData).toString('base64');
       if (!base64Audio) return;
@@ -927,13 +734,103 @@ app.prepare().then(() => {
       return { beginTime, endTime };
     }
 
+    /**
+     * 新 duplex 协议定稿时间戳：优先使用服务端句级 begin_time/end_time（毫秒），
+     * 缺失时才回退到客户端 VAD 猜测（resolveTimestamp）。
+     */
+    function resolveDuplexTimestamps(sentence, rawMsg) {
+      if (typeof sentence.beginTime === 'number' && typeof sentence.endTime === 'number') {
+        const beginTime = sentence.beginTime;
+        const endTime = Math.max(sentence.endTime, beginTime);
+        lastSentenceEndTime = Math.max(lastSentenceEndTime, endTime);
+        return { beginTime, endTime };
+      }
+      return resolveTimestamp(rawMsg);
+    }
+
+    /** 新 duplex 协议服务端事件分派（task-started / result-generated / task-finished / task-failed） */
+    function handleDuplexServerEvent(msg) {
+      const { event, sentence, errorMessage } = parseDuplexServerEvent(msg);
+
+      switch (event) {
+        case 'task-started':
+          isSessionReady = true;
+          sessionStartTime = Date.now();
+          sendClientEvent({ event: 'ready' });
+          flushAudioQueue();
+          break;
+
+        case 'result-generated': {
+          if (!sentence || !sentence.text) break;
+          const itemId = `duplex-${sentenceIndex}`;
+
+          if (!sentence.isFinal) {
+            // 中间稿：sentence_end=false，同一句话会持续覆盖更新
+            activeInterimItemId = itemId;
+            const payload = {
+              text: sentence.text,
+              stableText: '',
+              unstableText: sentence.text,
+              beginTime: typeof sentence.beginTime === 'number' ? sentence.beginTime : undefined,
+            };
+            const state = upsertInterimState(itemId, payload);
+            const now = Date.now();
+            const shouldForce = !state.lastSentText || (payload.text.length - state.lastSentText.length >= 8);
+            maybeSendInterim(itemId, shouldForce || now - state.lastSentAt >= draftFlushMs);
+            break;
+          }
+
+          // 定稿：sentence_end=true。抗幻觉门控 / 去重 / 长句切分与旧协议共用同一条路径。
+          const finalText = sentence.text.trim();
+          const { beginTime, endTime } = resolveDuplexTimestamps(sentence, msg);
+          clearInterim(itemId);
+          if (!finalText) break;
+
+          const durationMs = Math.max(0, endTime - beginTime);
+          if (isLikelyHallucination(finalText, durationMs)) {
+            console.log(`[ASR-Proxy] Dropped likely hallucination: "${finalText}" (duration=${durationMs}ms)`);
+            break;
+          }
+
+          const splitSegments = splitLongTranscript(finalText, beginTime, endTime);
+          for (const seg of splitSegments) {
+            sendFinalSegment(seg, itemId);
+          }
+          break;
+        }
+
+        case 'task-finished':
+          // 新协议的正式收尾事件：只有收到它，最后一段语音才视为完整定稿。
+          sendClientFinished(1000);
+          if (closeTimer) {
+            clearTimeout(closeTimer);
+            closeTimer = null;
+          }
+          scheduleDashscopeClose('task-finished', 100);
+          break;
+
+        case 'task-failed': {
+          const error = errorMessage || '识别错误';
+          console.error('[ASR-Proxy] Duplex task failed:', error);
+          sendClientEvent({ event: 'error', error });
+          scheduleDashscopeClose('task-failed', 100);
+          break;
+        }
+
+        default:
+          break;
+      }
+    }
+
     function upsertInterimState(itemId, payload) {
       const currentElapsedMs = Date.now() - sessionStartTime;
       const prev = interimByItemId.get(itemId) || {
         text: '',
         stableText: '',
         unstableText: '',
-        beginTime: currentSpeechStartMs ?? Math.max(0, lastSentenceEndTime),
+        beginTime: typeof payload.beginTime === 'number'
+          ? payload.beginTime
+          : (currentSpeechStartMs ?? Math.max(0, lastSentenceEndTime)),
         endTime: currentElapsedMs,
         lastSentAt: 0,
         lastSentText: '',
@@ -944,6 +841,7 @@ app.prepare().then(() => {
         text: payload.text,
         stableText: payload.stableText,
         unstableText: payload.unstableText,
+        beginTime: typeof payload.beginTime === 'number' ? payload.beginTime : prev.beginTime,
         endTime: currentElapsedMs,
       };
 
@@ -1019,10 +917,10 @@ app.prepare().then(() => {
     }
 
     try {
-      const wsUrl = `${DASHSCOPE_WSS_URL}?model=${encodeURIComponent(model)}`;
-      dashscopeWs = new WebSocket(wsUrl, {
+      // 新族模型在 run-task 里带 model，URL 不带 ?model=；鉴权头按官方示例用小写 bearer。
+      dashscopeWs = new WebSocket(upstreamWsUrl, {
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: useDuplexAsr ? `bearer ${apiKey}` : `Bearer ${apiKey}`,
         },
       });
 
@@ -1037,6 +935,12 @@ app.prepare().then(() => {
           if (isBinary) return;
 
           const msg = JSON.parse(data.toString());
+
+          if (useDuplexAsr) {
+            handleDuplexServerEvent(msg);
+            return;
+          }
+
           const msgType = msg.type;
 
           switch (msgType) {
@@ -1213,10 +1117,14 @@ app.prepare().then(() => {
         } else {
           if (audioQueue.length < AUDIO_QUEUE_MAX_SIZE) {
             audioQueue.push(data);
-          } else if (audioQueue.length === AUDIO_QUEUE_MAX_SIZE) {
-            // 仅首次触发时警告，避免日志刷屏
-            console.warn('[ASR-Proxy] audioQueue reached max size, dropping new chunks until DashScope ready');
-            audioQueue.push(null); // 哨兵值，标记已溢出，长度变为 MAX+1 后不再进入此分支
+          } else {
+            // 缓冲溢出 = 这段音频永久丢失：累计并按秒上报给客户端（约 32 字节/ms）
+            droppedAudioBytes += dataLen;
+            if (droppedAudioBytes - lastDropNotifiedBytes >= 32000) {
+              lastDropNotifiedBytes = droppedAudioBytes;
+              console.warn(`[ASR-Proxy] audioQueue overflow, dropped ${Math.round(droppedAudioBytes / 32)}ms audio total`);
+              sendClientEvent({ event: 'audio-dropped', droppedMsTotal: Math.round(droppedAudioBytes / 32) });
+            }
           }
           if (isSessionReady) flushAudioQueue();
         }
@@ -1268,9 +1176,20 @@ app.prepare().then(() => {
             console.log('[ASR-Proxy] Received context hint, length:', contextHint.length);
           }
           // 只要 hint 或 languageMode 有变化，且 session 还没起来，就刷新 session.update。
-          // session 已建立则只更新内存变量（DashScope 不允许二次 session.update）。
+          // 旧协议 session 已建立则只更新内存变量（DashScope 不允许二次 session.update）；
+          // 新 duplex 协议支持任务进行中用 continue-task 更新上下文。
           if ((hint || languageModeChanged) && !isSessionReady && !initialSessionUpdateSent) {
             sendSessionUpdate('context-hint received (pre-ready)');
+          } else if (useDuplexAsr && isSessionReady && hint && dashscopeWs && dashscopeWs.readyState === WebSocket.OPEN) {
+            try {
+              dashscopeWs.send(JSON.stringify(buildDuplexContinueTask({
+                taskId: duplexTaskId,
+                contextHint: buildASRCorpusText(),
+              })));
+              console.log('[ASR-Proxy] continue-task sent (context updated mid-task), length:', contextHint.length);
+            } catch (error) {
+              console.warn('[ASR-Proxy] continue-task failed:', error);
+            }
           } else if (hint || languageModeChanged) {
             console.log('[ASR-Proxy] context-hint/languageMode received AFTER session ready - stored for next session only');
           }
@@ -1300,6 +1219,12 @@ app.prepare().then(() => {
         `[ASR-Proxy] Client disconnected, recvChunks=${receivedBinaryChunks}, recvBytes=${receivedBinaryBytes}, appended=${appendedChunks}, queue=${audioQueue.length}`
       );
 
+      // 积分 Phase 2：只结算真正有音频流过的连接（空连接/秒断不计分钟）。
+      // 幂等键 asr:{userId}:{connectionId}，路由侧重复结算安全。
+      if (hasAudioAppended || appendedChunks > 0) {
+        settleAsrUsageOnce();
+      }
+
       stopRequestedByClient = true;
       if (!finishDashscopeSession('client disconnected')) {
         if (!hasAudioAppended && audioQueue.length === 0) {
@@ -1315,327 +1240,14 @@ app.prepare().then(() => {
     });
   });
 
-  tutorCallWss.on('connection', (clientWs) => {
-    console.log('[TutorCall] Client connected');
-
-    const apiKey = process.env.DASHSCOPE_API_KEY;
-    const model = process.env.DASHSCOPE_OMNI_REALTIME_MODEL || 'qwen3.5-omni-plus-realtime';
-    const transcriptionModel = process.env.DASHSCOPE_OMNI_REALTIME_TRANSCRIPT_MODEL || 'gummy-realtime-v1';
-    const defaultVoice = process.env.DASHSCOPE_OMNI_REALTIME_VOICE || 'Ethan';
-
-    if (!apiKey) {
-      clientWs.send(JSON.stringify({ event: 'error', error: 'API Key 未配置' }));
-      clientWs.close();
-      return;
-    }
-
-    let dashscopeWs = null;
-    let isSessionReady = false;
-    let hasSentReady = false;
-    let assistantTranscript = '';
-    let sessionConfig = {
-      instructions: '你是一位自然、耐心、会顺着学生刚说的话继续讲下去的中文老师。',
-      voice: defaultVoice,
-      enableSearch: false,
-    };
-
-    function sendClientEvent(payload) {
-      if (clientWs.readyState !== WebSocket.OPEN) return;
-      clientWs.send(JSON.stringify(payload));
-    }
-
-    // 抗噪 / 抗打断三件套：
-    //   1) turn_detection.type='semantic_vad'  让模型基于"对话语义意图"判断这是不是真要说话
-    //      （能区分"附和声 / 咳嗽 / 别人说话"和"用户真在跟你说"）。旧 server_vad 只看音量，
-    //      在嘈杂环境下被打断频繁。环境变量 DASHSCOPE_OMNI_TURN_DETECTION 可强制回退 server_vad。
-    //   2) silence_duration_ms 调大到 1500ms，给附和声 / 短暂背景音留缓冲。
-    //   3) input_audio_noise_reduction.type='near_field' 在桌面/手机贴麦场景下做服务端降噪。
-    //      远场（教室、会议室）用 'far_field'；走环境变量切换。
-    const turnDetectionType = process.env.DASHSCOPE_OMNI_TURN_DETECTION || 'semantic_vad';
-    const noiseReductionType = process.env.DASHSCOPE_OMNI_NOISE_REDUCTION || 'near_field';
-    const silenceDurationMs = Number(process.env.DASHSCOPE_OMNI_SILENCE_DURATION_MS || 1500);
-    const vadThreshold = Number(process.env.DASHSCOPE_OMNI_VAD_THRESHOLD || 0.5);
-
-    function buildSessionPayload() {
-      const turnDetection = {
-        type: turnDetectionType,
-        threshold: vadThreshold,
-        silence_duration_ms: silenceDurationMs,
-        prefix_padding_ms: 500,
-        create_response: true,
-        interrupt_response: true,
-      };
-      const payload = {
-        modalities: ['text', 'audio'],
-        instructions: sessionConfig.instructions,
-        voice: sessionConfig.voice || defaultVoice,
-        input_audio_format: 'pcm16',
-        output_audio_format: 'pcm16',
-        input_audio_transcription: {
-          model: transcriptionModel,
-        },
-        turn_detection: turnDetection,
-      };
-      // 服务端噪音抑制：'off' 关闭；'near_field' 适合桌面 / 手机贴麦；'far_field' 适合远场。
-      if (noiseReductionType && noiseReductionType !== 'off') {
-        payload.input_audio_noise_reduction = { type: noiseReductionType };
-      }
-      return payload;
-    }
-
-    function sendSessionUpdate(reason) {
-      if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) return;
-
-      dashscopeWs.send(JSON.stringify({
-        event_id: generateEventId(),
-        type: 'session.update',
-        session: buildSessionPayload(),
-      }));
-
-      if (reason) {
-        console.log(`[TutorCall] Session updated (${reason})`);
-      }
-    }
-
-    function markSessionReady(reason) {
-      if (hasSentReady) return;
-      hasSentReady = true;
-      isSessionReady = true;
-      sendClientEvent({ event: 'ready', reason });
-    }
-
-    function appendAudioToDashScope(buffer) {
-      if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) return;
-
-      const base64Audio = Buffer.from(buffer).toString('base64');
-      if (!base64Audio) return;
-
-      dashscopeWs.send(JSON.stringify({
-        event_id: generateEventId(),
-        type: 'input_audio_buffer.append',
-        audio: base64Audio,
-      }));
-
-    }
-
-    try {
-      const wsUrl = `${DASHSCOPE_WSS_URL}?model=${encodeURIComponent(model)}`;
-      dashscopeWs = new WebSocket(wsUrl, {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-      });
-
-      dashscopeWs.on('open', () => {
-        sendSessionUpdate('initial');
-      });
-
-      dashscopeWs.on('message', (data, isBinary) => {
-        try {
-          if (isBinary) return;
-
-          const msg = JSON.parse(data.toString());
-          const msgType = msg.type;
-
-          switch (msgType) {
-            case 'session.created':
-              markSessionReady('session.created');
-              break;
-            case 'session.updated':
-              markSessionReady('session.updated');
-              break;
-            case 'input_audio_buffer.speech_started':
-              sendClientEvent({
-                event: 'speech_started',
-                audioStartMs: msg.audio_start_ms ?? null,
-              });
-              break;
-            case 'input_audio_buffer.speech_stopped':
-              sendClientEvent({
-                event: 'speech_stopped',
-                audioEndMs: msg.audio_end_ms ?? null,
-              });
-              break;
-            case 'conversation.item.input_audio_transcription.delta': {
-              const payload = extractInterimPayload(msg);
-              if (payload.text) {
-                sendClientEvent({
-                  event: 'user_transcript',
-                  transcript: payload.text,
-                  isFinal: false,
-                });
-              }
-              break;
-            }
-            case 'conversation.item.input_audio_transcription.completed': {
-              const transcript = extractFinalText(msg);
-              if (transcript) {
-                sendClientEvent({
-                  event: 'user_transcript',
-                  transcript,
-                  isFinal: true,
-                });
-              }
-              break;
-            }
-            case 'response.created':
-              assistantTranscript = '';
-              sendClientEvent({ event: 'assistant_response_start' });
-              break;
-            case 'response.audio_transcript.delta':
-              if (typeof msg.delta === 'string' && msg.delta) {
-                assistantTranscript += msg.delta;
-                sendClientEvent({
-                  event: 'assistant_transcript',
-                  text: assistantTranscript,
-                  isFinal: false,
-                });
-              }
-              break;
-            case 'response.audio_transcript.done': {
-              const transcript = typeof msg.transcript === 'string' && msg.transcript.trim()
-                ? msg.transcript.trim()
-                : assistantTranscript.trim();
-
-              if (transcript) {
-                assistantTranscript = transcript;
-                sendClientEvent({
-                  event: 'assistant_transcript',
-                  text: transcript,
-                  isFinal: true,
-                });
-              }
-              break;
-            }
-            case 'response.audio.delta':
-              if (typeof msg.delta === 'string' && msg.delta) {
-                sendClientEvent({
-                  event: 'assistant_audio',
-                  audio: msg.delta,
-                });
-              }
-              break;
-            case 'response.done':
-              sendClientEvent({ event: 'assistant_response_end' });
-              assistantTranscript = '';
-              break;
-            case 'error': {
-              const error = msg.error?.message || msg.message || '语音通话出错了';
-              console.error('[TutorCall] Error:', msg.error || msg);
-              sendClientEvent({ event: 'error', error });
-              break;
-            }
-            default:
-              break;
-          }
-        } catch (error) {
-          console.error('[TutorCall] Parse error:', error);
-        }
-      });
-
-      dashscopeWs.on('error', (error) => {
-        console.error('[TutorCall] DashScope error:', error.message);
-        // M13-fix: 401/403 透传 auth_failed，让前端不要无脑重连
-        const authFailed = /401|403|InvalidApiKey|Unauthorized|access denied/i.test(error.message || '');
-        if (authFailed) {
-          sendClientEvent({ event: 'auth_failed', error: `语音服务密钥失效或无权限：${error.message}` });
-          if (clientWs.readyState === WebSocket.OPEN) {
-            clientWs.close(4401, 'DashScope auth failed');
-          }
-        } else {
-          sendClientEvent({ event: 'error', error: `DashScope 连接错误: ${error.message}` });
-        }
-      });
-
-      dashscopeWs.on('close', (code, reason) => {
-        console.log('[TutorCall] DashScope closed:', code, String(reason || ''));
-        isSessionReady = false;
-
-        if (clientWs.readyState === WebSocket.OPEN) {
-          sendClientEvent({ event: 'assistant_response_end' });
-        }
-      });
-    } catch (error) {
-      console.error('[TutorCall] Failed to connect:', error);
-      sendClientEvent({ event: 'error', error: '连接失败' });
-      clientWs.close();
-      return;
-    }
-
-    clientWs.on('message', (data, isBinary) => {
-      if (isBinary) {
-        if (isSessionReady) {
-          appendAudioToDashScope(data);
-        }
-        return;
-      }
-
-      try {
-        const message = JSON.parse(typeof data === 'string' ? data : data.toString('utf8'));
-
-        if (message.type === 'session-config') {
-          sessionConfig = {
-            instructions: typeof message.instructions === 'string' && message.instructions.trim()
-              ? message.instructions.trim()
-              : sessionConfig.instructions,
-            voice: typeof message.voice === 'string' && message.voice.trim()
-              ? message.voice.trim()
-              : defaultVoice,
-            enableSearch: Boolean(message.enableSearch),
-          };
-
-          if (isSessionReady) {
-            sendSessionUpdate('client update');
-          }
-          return;
-        }
-
-        if (message.action === 'cancel') {
-          if (dashscopeWs && dashscopeWs.readyState === WebSocket.OPEN) {
-            dashscopeWs.send(JSON.stringify({
-              event_id: generateEventId(),
-              type: 'response.cancel',
-            }));
-          }
-          assistantTranscript = '';
-          sendClientEvent({ event: 'cancelled' });
-          return;
-        }
-
-        if (message.action === 'clear') {
-          if (dashscopeWs && dashscopeWs.readyState === WebSocket.OPEN) {
-            dashscopeWs.send(JSON.stringify({
-              event_id: generateEventId(),
-              type: 'input_audio_buffer.clear',
-            }));
-          }
-        }
-      } catch {
-        console.warn('[TutorCall] Ignoring malformed client message');
-      }
-    });
-
-    clientWs.on('close', () => {
-      console.log('[TutorCall] Client disconnected');
-      if (dashscopeWs && dashscopeWs.readyState === WebSocket.OPEN) {
-        dashscopeWs.close(1000, 'Client disconnected');
-      }
-    });
-
-    clientWs.on('error', (error) => {
-      console.error('[TutorCall] Client error:', error.message);
-    });
-  });
-
   installGracefulShutdown({
     server,
-    webSocketServers: [asrWss, speakerAsrWss, tutorCallWss],
+    webSocketServers: [asrWss],
   });
 
   server.listen(port, hostname, () => {
     console.log(`> Ready on http://${hostname}:${port}`);
     console.log(`> WebSocket proxy available at ws://${hostname}:${port}/api/asr-stream`);
-    console.log(`> Tutor call proxy available at ws://${hostname}:${port}/api/tutor-call`);
   });
 
   server.on('error', (error) => {

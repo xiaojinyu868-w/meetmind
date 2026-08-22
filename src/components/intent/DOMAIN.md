@@ -1,25 +1,40 @@
-# components/intent — 「聊聊你想要的」对话式目标共建入口
+# components/intent — 「聊聊你想要的」选择题式目标共建入口
 
-> M11：v3.0 信息流哲学落地的第一个产品入口。  
+> M15 重做：从"开放式闲聊"改为**选择题驱动的短仪式**（用户心理：不想久聊、能选就不说）。
 > 替代旧的硬编码两步表单 `LearnerOnboarding`（保留作 settings 备用 fallback）。
 
 ## 这一域做的事
 
-让用户带着一个愿望、困扰或没说完的念头来，先在第一轮得到真实帮助；模型在过程中静默理解稳定上下文，必要时再把已经说清的愿望捋成一条 `GoalEntry` 写到 `learnerProfile.goals`。用户不需要先自我介绍，也不承担“维护画像”的工作。后续信息流（首页、复习、应用矩阵）会围绕这些 target 工作。
+让用户带着一个愿望、困扰或没说完的念头来，用**最少的打字**把它捋成一条确认过的 `GoalEntry` 写到 `learnerProfile.goals`。后续信息流（首页、复习、应用矩阵）围绕这些 target 工作。
 
-**核心动作**：用户表达 → AI 引导 → AI 用 `---我想要的---...---结束---` 自然提炼 → 用户确认/修改/保存。
+**核心动作（M15 交互模型，对齐 Duolingo / Noom 式成熟 onboarding）**：
+1. **固定开场选择题**（首次会面前端写死，零 LLM 往返）：Q1 稳定身份 → Q2 分支阶段（学生/工作才有）→ Q3 目标时间尺度；三题答完合成一条第一人称消息发给 AI。**稳定属性（身份/阶段）进 bio，易变的意图按时间尺度进 goals**——这是记忆框架的分层判断
+2. **AI 动态选择题**：goal 模式 prompt 要求每轮回复必带 `---选项---` 块（2-4 个 ≤12 字选项）→ 前端渲染果冻按钮，输入框始终保留
+3. **收敛义务**：3 轮内必须产出 `---我想要的---` 确认卡 → 用户逐条确认/否定 → 保存
+4. **horizon 时间尺度**：每张目标卡必须标 `[短期]`（有明确节点、会过期）/ `[中期]`（学期/季度）/ `[长期]`（方向能力），写在 marker 首行开头，解析进 `GoalEntry.horizon`，卡片与设置页显示角标
+5. **完成态**：保存成功弹出定格时刻（记下了 / 去主页 / 再记一件），给对话一个句号
+6. **步骤条**：顶部 `说说 → 捋一捋 → 记下了` 随对话状态推进，用户随时知道在哪一步
 
-首次会面不是 onboarding 访谈：不从身份、年级、专业、学校开始采集资料；先接住当前需要，能行动就先行动。只有答案会改变下一步帮助方式时才问一个问题。身份、阶段和习惯只在自然出现且会影响未来帮助时静默沉淀；一时情绪、模型建议和猜测不能进入长期上下文。
+首次会面不是 onboarding 访谈：不从身份、年级、专业、学校开始采集资料；先接住当前需要，能行动就先行动。身份、阶段和习惯只在自然出现且会影响未来帮助时静默沉淀；一时情绪、模型建议和猜测不能进入长期上下文。
 
 ## 文件清单
 
 | 文件 | 职责 |
 |---|---|
-| `IntentDialog.tsx` | 全屏文字对话主体。`useChat` 打 `/api/tutor/agent` mode='goal'。内置文字+语音+文件三种输入；管理员可在现场透镜检查实际 goal 上下文与最近用户表达。 |
-| `IntentSummaryCard.tsx` | AI 提炼出的"我听到的是..."卡片，用户可编辑标题/摘要后点"就是这样"保存。 |
-| `IntentDialogContainer.tsx` | 对外封装：打包文字态 + 通话态 + saveLearnerProfile。父组件只 open/onClose。 |
+| `IntentDialog.tsx` | 全屏对话主体（v7 米白纸感）。`useChat` 打 `/api/tutor/agent` mode='goal'；编排开场问题流、步骤条、完成态、错误条与卡死看门狗（45s 无响应主动掐断 + 一键重试） |
+| `IntentOpeningFlow.tsx` | Elys 式开场问题流：问句是 AI 气泡、回答是用户气泡，三步固定题像聊天一样推进；回访用户一句欢迎 + 快捷入口 |
+| `IntentMessageItem.tsx` | 单条消息渲染：可见文本 + bio/goal 确认卡 + 选项果冻行；流式剃除半截 marker；模型漏给选项时给兜底快答 |
+| `IntentOptionChips.tsx` | 果冻选项软行（整行软卡 + stagger 弹入 + 按压回弹） |
+| `IntentStepBar.tsx` | 顶部步骤条（说说 → 捋一捋 → 记下了），纯展示 |
+| `IntentCompletionOverlay.tsx` | 保存成功完成态浮层 |
+| `IntentErrorBanner.tsx` | 请求失败/卡死时的错误条（重试 / 忽略） |
+| `IntentSummaryCard.tsx` | "我想要的"逐条确认卡（带 horizon 时间尺度角标），编辑后保存为 GoalEntry |
+| `IntentBioCard.tsx` | "我了解到的你"逐条确认卡 |
+| `IntentDialogContainer.tsx` | 对外封装：对话 + saveLearnerProfile。父组件只 open/onClose |
 
-通话态视图在 `src/components/realtime/IntentVoiceCallScreen.tsx`，呼吸光晕组件 `RealtimeOrb` 在 `src/components/realtime/`，复习态 `TutorRealtimeCallScreen` 共用一套视觉。
+`---选项---` 解析器在 `src/components/chat/markers/extractIntentOptions.ts`（含流式半截 marker 剃除 `stripPartialIntentBlocks`）。
+
+通话态视图 `src/components/realtime/IntentVoiceCallScreen.tsx` 已随实时语音通话下线标记 deprecated（保留一个周期后物理删除）；意图录入只走文字 IntentDialog。
 
 ## 入口
 
@@ -32,17 +47,17 @@
 ## 数据流
 
 ```
-用户消息 + (可选)文件解析后的纯文本
+用户点选选项 / 打字 / (可选)文件解析后的纯文本
   → IntentDialog 透传给 /api/tutor/agent (mode='goal')
   → 服务端 buildTutorSystemPrompt('goal', { goal: { existingGoals, sessionHint }, supportMaterials })
-  → AI 流式回复
-  → extractIntentSummary 拦截 ---我想要的---...---结束--- 块
-  → IntentSummaryCard 渲染
-  → 用户点"就是这样"
+  → AI 流式回复（末尾必带 ---选项--- 块）
+  → extractIntentOptions 渲染果冻按钮；extractIntentSummary 拦截 ---我想要的--- 块
+  → IntentSummaryCard 逐条确认 → 用户点"记下确认的"
   → IntentDialogContainer.handleSaveGoal
   → useAuth.saveLearnerProfile(merged learnerProfile)
   → PATCH /api/auth/learner-profile
   → 服务端写 learnerProfileJson + onboardingCompletedAt
+  → IntentCompletionOverlay 完成态（去主页 / 再记一件）
 ```
 
 Marker 选择遵循内容语义：身份、阶段、状态沉淀为 `---我了解到的你---`；愿望、方向、想完成的事沉淀为 `---我想要的---`。当用户明确确认并要求保存一个具体愿望时，目标 marker 优先，不再继续追问，也不改写成画像 marker；目标卡内使用用户第一人称，让内容像用户自己的话。
@@ -60,23 +75,25 @@ Marker 选择遵循内容语义：身份、阶段、状态沉淀为 `---我了�
 
 ## 后端契约
 
-`/api/tutor/agent` 新增 `mode='goal'` 分支（详见 `src/lib/prompts/tutor-prompts.ts` 的 `MODE_GOAL_SEGMENT`）：
+`/api/tutor/agent` 的 `mode='goal'` 分支（详见 `src/lib/prompts/tutor-prompts.ts` 的 GOAL_HEADER / GOAL_PATH_A/B / GOAL_COMMON）：
 - 跳过 `transcript` / `recentFocus` / `fullTranscript`（无课堂上下文）
 - 注入 `context.goal.existingGoals` + `context.goal.sessionHint`
+- **每轮必须输出** `---选项---` 快答块（2-4 个 ≤12 字选项）
+- **收敛义务**：3 轮内产出 `---我想要的---` 卡；保存后一句话收尾
 - **禁用** native tools（无 transcript 可查）
 - **禁用** inline app marker（goal 态不生产学习产物）
 - **禁用** 时间戳 `[MM:SS]`（无原录音可跳）
 
-## 通话态
+## 通话态（2026-08 已下线）
 
-`IntentDialogContainer` 内部维护 `mode: 'text' | 'call'` state。点 IntentDialog header 的"打电话聊"切到 `IntentVoiceCallScreen`，复用 `useOmniRealtimeCall` 走 `/api/tutor-call`（DashScope omni realtime）。
-
-通话 instructions 由 `buildCallInstructions(profile)` 拼出来，**不用** `buildTutorSystemPrompt`——那是 `/api/tutor/agent` 的格式，realtime API 走的是 DashScope 原生协议。
+实时语音通话整体下线：`/api/tutor-call` 代理已拆除，`IntentDialogContainer` 的
+`mode: 'text' | 'call'` 切换与「打电话聊」入口已移除，`IntentVoiceCallScreen` /
+`useOmniRealtimeCall` 标记 deprecated，保留一个周期后物理删除。
 
 ## 设计宪法
 
-视觉走 v7：米白纸感 + pine 主签名色 + vermilion 响应点缀。  
-通话呼吸光晕是 6 个仪式时刻白名单之一，允许更情绪化（多层 radial gradient + 错位旋转）。
+视觉走 v7：米白纸感整页 + pine 主签名色 + vermilion 响应点缀（M15 起弃用旧深色沉浸风）。
+果冻动效（spring 回弹 `cubic-bezier(0.34, 1.56, 0.64, 1)`）只用于选项按钮与完成态定格。
 
 ## 不做的事
 

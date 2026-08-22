@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { UIMessage } from 'ai';
 import { conversationService } from '@/lib/services/conversation-service';
+import type { ConversationHistory, ConversationMessage } from '@/types/conversation';
 
 type AskDepth = 'quick' | 'deep';
 
 interface UseGlobalAskHistoryOptions {
   open: boolean;
+  /** auth 初始化完成（isCheckingAuth=false）前为 false：避免以 anonymous 身份读写后再被真实 userId 覆盖 */
+  authReady: boolean;
   userId: string;
   depth: AskDepth;
   busy: boolean;
@@ -34,6 +37,7 @@ function toUIMessage(message: { messageId: string; role: string; content: string
 
 export function useGlobalAskHistory({
   open,
+  authReady,
   userId,
   depth,
   busy,
@@ -50,10 +54,22 @@ export function useGlobalAskHistory({
   const conversationIdRef = useRef<string | null>(null);
   const persistedIdsRef = useRef<Set<string>>(new Set());
   const persistingIdsRef = useRef<Set<string>>(new Set());
+  // 恢复是异步的；期间用户可能已经开始新对话，落盘前必须基于最新消息列表判断，不能覆盖
+  const messagesRef = useRef<UIMessage[]>(messages);
 
   useEffect(() => {
-    if (!open) return;
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    if (!open || !authReady) return;
     let alive = true;
+    // 组件保持挂载、对话仍在继续（重新打开或 auth 就绪后重跑）：
+    // 不重置、不覆盖，沿用现有 refs 继续增量持久化
+    if (messagesRef.current.length > 0) {
+      setHydrated(true);
+      return () => { alive = false; };
+    }
     setHydrated(false);
     setRestoredTitle(null);
     setConversationId(null);
@@ -64,14 +80,40 @@ export function useGlobalAskHistory({
 
     const hydrate = async () => {
       try {
-        const conversations = await conversationService.listConversations(userId, {
-          type: 'global-chat',
-          limit: 20,
-        });
-        const target = conversations.find((item) => item.metadata?.scope === 'global-ask');
-        if (!target || !alive) return;
-        const history = await conversationService.getMessages(target.conversationId);
-        if (!alive) return;
+        // 跳过空壳对话（创建后消息未落库的残留），回退到最近一条有内容的，
+        // 否则会出现"已接回上次对话"标题 + 空态欢迎页的死局
+        const findScopedWithMessages = async (
+          ownerId: string,
+        ): Promise<{ target: ConversationHistory; history: ConversationMessage[] } | null> => {
+          const conversations = await conversationService.listConversations(ownerId, {
+            type: 'global-chat',
+            // 窗口内混着课堂复习对话（无 scope），留足余量避免问同学对话被挤出去
+            limit: 50,
+          });
+          const scoped = conversations.filter((item) => item.metadata?.scope === 'global-ask');
+          for (const candidate of scoped) {
+            const candidateMessages = await conversationService.getMessages(candidate.conversationId);
+            if (candidateMessages.length > 0) {
+              return { target: candidate, history: candidateMessages };
+            }
+          }
+          return null;
+        };
+
+        let found = await findScopedWithMessages(userId);
+        // 旧版 auth 竞态可能把对话落到了 anonymous 名下：登录态找不到时回退捞取，
+        // 并把归属迁移到当前用户，之后照常恢复/增量持久化
+        if (!found && userId !== 'anonymous') {
+          const orphan = await findScopedWithMessages('anonymous');
+          if (orphan) {
+            await conversationService.claimConversation(orphan.target.conversationId, userId);
+            found = orphan;
+          }
+        }
+        if (!found || !alive) return;
+        const { target, history } = found;
+        // 读取期间用户已经开始新对话：不覆盖，等 persist 把它存成新对话
+        if (messagesRef.current.length > 0) return;
         const restoredDepth = target.metadata?.depth === 'deep' ? 'deep' : 'quick';
         conversationIdRef.current = target.conversationId;
         persistedIdsRef.current = new Set(history.map((message) => message.messageId));
@@ -87,10 +129,10 @@ export function useGlobalAskHistory({
     };
     void hydrate();
     return () => { alive = false; };
-  }, [onDepthRestored, open, setMessages, userId]);
+  }, [authReady, onDepthRestored, open, setMessages, userId]);
 
   useEffect(() => {
-    if (!open || !hydrated || busy) return;
+    if (!open || !authReady || !hydrated || busy) return;
     const persist = async () => {
       const unsaved = messages.filter((message) => (
         (message.role === 'user' || message.role === 'assistant')
@@ -116,7 +158,8 @@ export function useGlobalAskHistory({
           });
           conversationIdRef.current = created.conversationId;
           setConversationId(created.conversationId);
-          setRestoredTitle(created.title);
+          // 注意：这里不 setRestoredTitle——restoredTitle 只用于"真实恢复的历史对话"，
+          // 新建对话也设置会让标题栏误显示"已接回上次对话"
         }
         const currentConversationId = conversationIdRef.current;
         await conversationService.addMessages(currentConversationId, unsaved.map((message) => ({
@@ -144,7 +187,7 @@ export function useGlobalAskHistory({
       }
     };
     void persist();
-  }, [busy, depth, fallbackTitle, getMessageText, hydrated, messages, onAssistantPersisted, open, userId]);
+  }, [authReady, busy, depth, fallbackTitle, getMessageText, hydrated, messages, onAssistantPersisted, open, userId]);
 
   const reset = useCallback(() => {
     conversationIdRef.current = null;

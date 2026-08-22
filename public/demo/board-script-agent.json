@@ -1,0 +1,918 @@
+{
+  "type": "done",
+  "title": "一元二次方程：求根公式与判别式",
+  "script": {
+    "title": "一元二次方程：求根公式与判别式",
+    "pages": [
+      {
+        "segments": [
+          {
+            "type": "narration",
+            "narration": "好，上课。今天这节课目标很明确：把一元二次方程的求根公式亲手推出来，再搞懂它背后的判别式。学完以后，任何二次方程到你手上，四步之内出答案。 推导用的武器，是你已经学过的配方法，先拿它热热身。[a0][a1][a2][a3][a4][a5][a6][a7][a8][a9][a10][a11]",
+            "narrationDisplay": "好，上课。今天这节课目标很明确：把一元二次方程的求根公式亲手推出来，再搞懂它背后的判别式。学完以后，任何二次方程到你手上，四步之内出答案。 推导用的武器，是你已经学过的配方法，先拿它热热身。",
+            "cues": [
+              {
+                "charIndex": 95,
+                "actionIndex": 0
+              },
+              {
+                "charIndex": 95,
+                "actionIndex": 1
+              },
+              {
+                "charIndex": 95,
+                "actionIndex": 2
+              },
+              {
+                "charIndex": 95,
+                "actionIndex": 3
+              },
+              {
+                "charIndex": 95,
+                "actionIndex": 4
+              },
+              {
+                "charIndex": 95,
+                "actionIndex": 5
+              },
+              {
+                "charIndex": 95,
+                "actionIndex": 6
+              },
+              {
+                "charIndex": 95,
+                "actionIndex": 7
+              },
+              {
+                "charIndex": 95,
+                "actionIndex": 8
+              },
+              {
+                "charIndex": 95,
+                "actionIndex": 9
+              },
+              {
+                "charIndex": 95,
+                "actionIndex": 10
+              },
+              {
+                "charIndex": 95,
+                "actionIndex": 11
+              }
+            ],
+            "actions": [
+              {
+                "type": "write",
+                "text": "一元二次方程：求根公式与判别式",
+                "role": "title"
+              },
+              {
+                "type": "write",
+                "text": "一、知识回顾",
+                "role": "term"
+              },
+              {
+                "type": "write",
+                "text": "一般式（General Form）",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "ax^2+bx+c=0\\quad(a\\neq 0)",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "==a≠0==，否则退化成一次方程",
+                "role": "note"
+              },
+              {
+                "type": "write",
+                "text": "热身：配方法解 x²+6x+5=0",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "① 移项：常数移到右边",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "x^2+6x=-5",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "② 配方：两边同加 (6/2)²",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "x^2+6x+9=-5+9",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "③ 写成完全平方",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "(x+3)^2=4",
+                "role": "formula"
+              }
+            ]
+          },
+          {
+            "type": "narration",
+            "narration": "左栏写满了，换右栏，把热身题收尾。[a0][a1][a2][a3]",
+            "narrationDisplay": "左栏写满了，换右栏，把热身题收尾。",
+            "cues": [
+              {
+                "charIndex": 17,
+                "actionIndex": 0
+              },
+              {
+                "charIndex": 17,
+                "actionIndex": 1
+              },
+              {
+                "charIndex": 17,
+                "actionIndex": 2
+              },
+              {
+                "charIndex": 17,
+                "actionIndex": 3
+              }
+            ],
+            "actions": [
+              {
+                "type": "new_column"
+              },
+              {
+                "type": "write",
+                "text": "④ 开方求解",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "x+3=\\pm 2\\;\\Rightarrow\\; x_1=-1,\\;x_2=-5",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "开方千万别忘了 ==±==！",
+                "role": "note"
+              }
+            ]
+          },
+          {
+            "type": "narration",
+            "narration": "热身完成：x₁=-1，x₂=-5。但你看，配方法每道题都要这么折腾四步，太慢。数学家的偷懒办法是：对一般式一次性配好，把答案写成 a、b、c 的公式——以后任何方程直接套。翻页，正式推导。",
+            "narrationDisplay": "热身完成：x₁=-1，x₂=-5。但你看，配方法每道题都要这么折腾四步，太慢。数学家的偷懒办法是：对一般式一次性配好，把答案写成 a、b、c 的公式——以后任何方程直接套。翻页，正式推导。",
+            "cues": [],
+            "actions": []
+          }
+        ]
+      },
+      {
+        "segments": [
+          {
+            "type": "narration",
+            "narration": "[a0][a1][a2][a3][a4][a5][a6][a7][a8][a9][a10][a11][a12]这里停一下——右边通分那一步，我把 b²/(4a²) 和 -c/a 合起来，分母统一成 4a²，分子就是 b²-4ac。这个组合是今天的主角，看一眼再往下走。[a13][a14][a15][a16][a17][a18][a19][a20][a21]",
+            "narrationDisplay": "这里停一下——右边通分那一步，我把 b²/(4a²) 和 -c/a 合起来，分母统一成 4a²，分子就是 b²-4ac。这个组合是今天的主角，看一眼再往下走。",
+            "cues": [
+              {
+                "charIndex": 0,
+                "actionIndex": 0
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 1
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 2
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 3
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 4
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 5
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 6
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 7
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 8
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 9
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 10
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 11
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 12
+              },
+              {
+                "charIndex": 79,
+                "actionIndex": 13
+              },
+              {
+                "charIndex": 79,
+                "actionIndex": 14
+              },
+              {
+                "charIndex": 79,
+                "actionIndex": 15
+              },
+              {
+                "charIndex": 79,
+                "actionIndex": 16
+              },
+              {
+                "charIndex": 79,
+                "actionIndex": 17
+              },
+              {
+                "charIndex": 79,
+                "actionIndex": 18
+              },
+              {
+                "charIndex": 79,
+                "actionIndex": 19
+              },
+              {
+                "charIndex": 79,
+                "actionIndex": 20
+              },
+              {
+                "charIndex": 79,
+                "actionIndex": 21
+              }
+            ],
+            "actions": [
+              {
+                "type": "write",
+                "text": "二、配方法推导求根公式",
+                "role": "term"
+              },
+              {
+                "type": "write",
+                "text": "ax^2+bx+c=0\\quad(a\\neq 0)",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "第1步：==两边同除 a==",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "把 x² 系数化为 1，才好配方",
+                "role": "note"
+              },
+              {
+                "type": "write",
+                "text": "x^2+\\frac{b}{a}x+\\frac{c}{a}=0",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "第2步：移项",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "x^2+\\frac{b}{a}x=-\\frac{c}{a}",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "第3步：==配方==",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "一次项系数一半：(b/a)/2 = b/(2a)",
+                "role": "note"
+              },
+              {
+                "type": "write",
+                "text": "两边同加它的平方：",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "x^2+\\frac{b}{a}x+\\left(\\frac{b}{2a}\\right)^2=-\\frac{c}{a}+\\left(\\frac{b}{2a}\\right)^2",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "第4步：左边合成完全平方",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "\\left(x+\\frac{b}{2a}\\right)^2=\\frac{b^2-4ac}{4a^2}",
+                "role": "formula"
+              },
+              {
+                "type": "pause",
+                "ms": 2500
+              },
+              {
+                "type": "circle",
+                "target": "w13"
+              },
+              {
+                "type": "new_column"
+              },
+              {
+                "type": "write",
+                "text": "第5步：两边开方（前提 Δ≥0）",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "x+\\frac{b}{2a}=\\pm\\frac{\\sqrt{b^2-4ac}}{2a}",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "√(4a²)=2|a|，与 ± 合并成 2a",
+                "role": "note"
+              },
+              {
+                "type": "write",
+                "text": "第6步：把 b/(2a) 移过去",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "求根公式（Quadratic Formula）",
+                "role": "term"
+              },
+              {
+                "type": "write",
+                "text": "x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a}",
+                "role": "formula"
+              }
+            ]
+          },
+          {
+            "type": "narration",
+            "narration": "这就是求根公式——任何二次方程的万能钥匙。给它画上红线，这是你高中三年用得最多的公式之一。[a0][a1]",
+            "narrationDisplay": "这就是求根公式——任何二次方程的万能钥匙。给它画上红线，这是你高中三年用得最多的公式之一。",
+            "cues": [
+              {
+                "charIndex": 45,
+                "actionIndex": 0
+              },
+              {
+                "charIndex": 45,
+                "actionIndex": 1
+              }
+            ],
+            "actions": [
+              {
+                "type": "underline",
+                "target": "w19"
+              },
+              {
+                "type": "pause",
+                "ms": 1200
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "segments": [
+          {
+            "type": "narration",
+            "narration": "[a0][a1][a2][a3][a4][a5][a6][a7][a8]为什么 Δ 这么神？回头看推导：开方之前，左边是平方，永远非负。所以右边那个分数也得非负——分母 4a² 恒正，全看分子 b²-4ac 的脸色。它正，开出两个值；它零，开出来就是零；它负，没戏。三种情况，一张图记牢。[a9][a10]",
+            "narrationDisplay": "为什么 Δ 这么神？回头看推导：开方之前，左边是平方，永远非负。所以右边那个分数也得非负——分母 4a² 恒正，全看分子 b²-4ac 的脸色。它正，开出两个值；它零，开出来就是零；它负，没戏。三种情况，一张图记牢。",
+            "cues": [
+              {
+                "charIndex": 0,
+                "actionIndex": 0
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 1
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 2
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 3
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 4
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 5
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 6
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 7
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 8
+              },
+              {
+                "charIndex": 108,
+                "actionIndex": 9
+              },
+              {
+                "charIndex": 108,
+                "actionIndex": 10
+              }
+            ],
+            "actions": [
+              {
+                "type": "write",
+                "text": "三、判别式（Discriminant）",
+                "role": "term"
+              },
+              {
+                "type": "write",
+                "text": "\\Delta=b^2-4ac",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "根号里的东西，决定根的命运",
+                "role": "note"
+              },
+              {
+                "type": "write",
+                "text": "① Δ>0 ⇒ ==两个不相等实根==",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "x_1=\\frac{-b+\\sqrt{\\Delta}}{2a},\\quad x_2=\\frac{-b-\\sqrt{\\Delta}}{2a}",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "② Δ=0 ⇒ ==两个相等实根==",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "x_1=x_2=-\\frac{b}{2a}",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "③ Δ<0 ⇒ ==无实数根==",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "根号下为负数，实数范围开不了方",
+                "role": "note"
+              },
+              {
+                "type": "ref",
+                "page": 2,
+                "target": "w13"
+              },
+              {
+                "type": "image",
+                "url": "/uploads/teach-agent/9458e043c0d8ffd2.png",
+                "prompt": "三条抛物线示意：第一条与 x 轴交于两点（Δ>0），第二条与 x 轴相切于一点（Δ=0），第三条完全在 x 轴上方不相交（Δ<0），简洁教学线稿风",
+                "caption": "Δ 的三种情况"
+              }
+            ]
+          },
+          {
+            "type": "narration",
+            "narration": "从图像上看也直观：方程的根就是抛物线和 x 轴的交点。交两点、贴一点、不相交——正好对应 Δ 的三种情况。好，理论齐了，换右栏，完整示范一道题怎么套公式。[a0][a1][a2][a3][a4][a5][a6][a7][a8][a9]",
+            "narrationDisplay": "从图像上看也直观：方程的根就是抛物线和 x 轴的交点。交两点、贴一点、不相交——正好对应 Δ 的三种情况。好，理论齐了，换右栏，完整示范一道题怎么套公式。",
+            "cues": [
+              {
+                "charIndex": 77,
+                "actionIndex": 0
+              },
+              {
+                "charIndex": 77,
+                "actionIndex": 1
+              },
+              {
+                "charIndex": 77,
+                "actionIndex": 2
+              },
+              {
+                "charIndex": 77,
+                "actionIndex": 3
+              },
+              {
+                "charIndex": 77,
+                "actionIndex": 4
+              },
+              {
+                "charIndex": 77,
+                "actionIndex": 5
+              },
+              {
+                "charIndex": 77,
+                "actionIndex": 6
+              },
+              {
+                "charIndex": 77,
+                "actionIndex": 7
+              },
+              {
+                "charIndex": 77,
+                "actionIndex": 8
+              },
+              {
+                "charIndex": 77,
+                "actionIndex": 9
+              }
+            ],
+            "actions": [
+              {
+                "type": "new_column"
+              },
+              {
+                "type": "write",
+                "text": "四、实战示范",
+                "role": "term"
+              },
+              {
+                "type": "write",
+                "text": "例：解方程 2x²-4x-6=0",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "第1步：==认准 a、b、c==",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "a=2,\\quad b=-4,\\quad c=-6",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "先化成一般式再认，符号要带上！",
+                "role": "note"
+              },
+              {
+                "type": "write",
+                "text": "第2步：==先算 Δ==",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "\\Delta=(-4)^2-4\\times2\\times(-6)=16+48=64>0",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "Δ=64 是完全平方数 ⇒ 根很漂亮",
+                "role": "note"
+              },
+              {
+                "type": "pause",
+                "ms": 1200
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "segments": [
+          {
+            "type": "narration",
+            "narration": "[a0][a1][a2][a3][a4][a5][a6][a7][a8][a9][a10]完整一遍走完：认系数、算 Δ、代公式、拆根，四步流水线。这个流程就是你以后解任何二次方程的反射动作。现在轮到你了——我出道题，你按这四步来。[a11]",
+            "narrationDisplay": "完整一遍走完：认系数、算 Δ、代公式、拆根，四步流水线。这个流程就是你以后解任何二次方程的反射动作。现在轮到你了——我出道题，你按这四步来。",
+            "cues": [
+              {
+                "charIndex": 0,
+                "actionIndex": 0
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 1
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 2
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 3
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 4
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 5
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 6
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 7
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 8
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 9
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 10
+              },
+              {
+                "charIndex": 70,
+                "actionIndex": 11
+              }
+            ],
+            "actions": [
+              {
+                "type": "write",
+                "text": "第3步：==代入公式==",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "x=\\frac{-(-4)\\pm\\sqrt{64}}{2\\times2}=\\frac{4\\pm8}{4}",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "-b = -(-4) = 4，负负得正最易错",
+                "role": "note"
+              },
+              {
+                "type": "write",
+                "text": "第4步：==拆开 ±，各算一个根==",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "x_1=\\frac{4+8}{4}=3,\\quad x_2=\\frac{4-8}{4}=-1",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "验算：代回原方程，两边相等才算数",
+                "role": "note"
+              },
+              {
+                "type": "write",
+                "text": "==套公式四步流程==",
+                "role": "term"
+              },
+              {
+                "type": "write",
+                "text": "① 化一般式，认 a、b、c",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "② 算 Δ，判断根的情况",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "③ 代公式，注意符号",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "④ 拆 ±，写两个根（验算）",
+                "role": "step"
+              },
+              {
+                "type": "new_column"
+              }
+            ]
+          },
+          {
+            "type": "checkpoint",
+            "narration": "听题：用求根公式解方程 x²-6x+9=0。先说说 a、b、c 各是多少，再算 Δ——你猜 Δ 算出来会有什么特别的？根又会是什么样？动手试试。",
+            "narrationDisplay": "听题：用求根公式解方程 x²-6x+9=0。先说说 a、b、c 各是多少，再算 Δ——你猜 Δ 算出来会有什么特别的？根又会是什么样？动手试试。",
+            "cues": [],
+            "question": {
+              "text": "用求根公式解方程 x²-6x+9=0（先算 Δ，说说它有什么特别）",
+              "role": "step"
+            },
+            "hints": [
+              "先认 a=1、b=-6、c=9，然后算 Δ=b²-4ac，看看等于多少",
+              "Δ=(-6)²-4×1×9=36-36=0，回忆一下 Δ=0 对应哪种情况",
+              "Δ=0 时根号开出来是 0，x=6/2，两个根合二为一"
+            ],
+            "answer": "a=1，b=-6，c=9。Δ=36-36=0，这是两个相等实根的情况：x=6/2=3，即 x₁=x₂=3。其实这方程就是 (x-3)²=0，配方一眼也能看出来——公式和配方法在这里汇合了。",
+            "answerDisplay": "a=1，b=-6，c=9。Δ=36-36=0，这是两个相等实根的情况：x=6/2=3，即 x₁=x₂=3。其实这方程就是 (x-3)²=0，配方一眼也能看出来——公式和配方法在这里汇合了。",
+            "answerCues": [],
+            "demoActions": [
+              {
+                "type": "write",
+                "text": "a=1,\\; b=-6,\\; c=9",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "\\Delta=(-6)^2-4\\times1\\times9=36-36=0",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "Δ=0 ⇒ 两个相等实根",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "x= rac{6\\pm\\sqrt{0}}{2}=3",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "x_1=x_2=3，即 (x-3)²=0",
+                "role": "step"
+              },
+              {
+                "type": "mark",
+                "mark": "check",
+                "target": "w5"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "segments": [
+          {
+            "type": "narration",
+            "narration": "[a0][a1][a2][a3][a4][a5][a6][a7][a8][a9][a10][a11]今天这堂课，核心就两件事：第一，求根公式不是天上掉的，是配方法对一般式一步步推出来的，你自己能复述那条推导链；第二，Δ 是根的裁判，先算 Δ 再动手，三种情况对号入座。作业：3x²+2x-7=0 和 x²-4x+5=0，各按四步走一遍——第二道的 Δ 会给你一个惊喜。下课。",
+            "narrationDisplay": "今天这堂课，核心就两件事：第一，求根公式不是天上掉的，是配方法对一般式一步步推出来的，你自己能复述那条推导链；第二，Δ 是根的裁判，先算 Δ 再动手，三种情况对号入座。作业：3x²+2x-7=0 和 x²-4x+5=0，各按四步走一遍——第二道的 Δ 会给你一个惊喜。下课。",
+            "cues": [
+              {
+                "charIndex": 0,
+                "actionIndex": 0
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 1
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 2
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 3
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 4
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 5
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 6
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 7
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 8
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 9
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 10
+              },
+              {
+                "charIndex": 0,
+                "actionIndex": 11
+              }
+            ],
+            "actions": [
+              {
+                "type": "write",
+                "text": "五、本课总结",
+                "role": "term"
+              },
+              {
+                "type": "write",
+                "text": "求根公式由==配方法==对一般式推出",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a}",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "\\Delta=b^2-4ac：根的裁判",
+                "role": "formula"
+              },
+              {
+                "type": "write",
+                "text": "Δ>0 两实根；Δ=0 重根；Δ<0 无实根",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "四步：认系数 → 算Δ → 代公式 → 拆根",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "==三大易错点==",
+                "role": "term"
+              },
+              {
+                "type": "write",
+                "text": "① 没化一般式就认系数",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "② -b 的符号（b 为负时）",
+                "role": "step"
+              },
+              {
+                "type": "write",
+                "text": "③ Δ<0 硬开方，忘了判\"无实根\"",
+                "role": "step"
+              },
+              {
+                "type": "underline",
+                "target": "w3"
+              },
+              {
+                "type": "circle",
+                "target": "w5"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "quotes": []
+  },
+  "steps": 24,
+  "images": 1,
+  "finishSummary": "用配方法对一般式 ax²+bx+c=0 逐步推导求根公式，引出判别式 Δ=b²-4ac 的三种根情况；通过完整例题建立\"认系数→算Δ→代公式→拆根\"四步流程，课堂练习覆盖 Δ=0 重根情形。",
+  "quoteStats": {
+    "total": 0,
+    "verified": 0,
+    "downgraded": 0
+  }
+}

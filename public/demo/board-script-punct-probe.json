@@ -1,0 +1,24 @@
+{
+  "script": {
+    "title": "标点探针",
+    "pages": [
+      {
+        "segments": [
+          {
+            "narration": "探针页：三条带标点步骤一口气写完。",
+            "narrationDisplay": "探针页：三条带标点步骤一口气写完。",
+            "cues": [],
+            "breathMs": 300,
+            "actions": [
+              { "type": "write", "text": "标点探针", "role": "title" },
+              { "type": "write", "text": "1. 边听边答，手不离笔", "role": "step" },
+              { "type": "write", "text": "2. 用例题定格式、找起点", "role": "step" },
+              { "type": "write", "text": "3. 跟信号词走：first of all", "role": "step" }
+            ]
+          }
+        ]
+      }
+    ],
+    "quotes": []
+  }
+}

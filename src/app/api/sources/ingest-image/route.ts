@@ -5,18 +5,24 @@ import * as path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
 import { LLMConfig } from '@/lib/config';
 import { chat, isMultimodalModel } from '@/lib/services/llm-service';
+import { createLogger } from '@/lib/logger';
 import {
   isToolNotFoundError,
   resolveFfmpegPath,
   runCommand,
   safeUnlink,
 } from '@/lib/services/media-tooling';
+import { extractTextFromImage, isQwenOcrAvailable } from '@/lib/services/qwen-ocr-service';
 import type { TranscriptSegment } from '@/types';
+
+const log = createLogger('ingest-image');
 
 export const runtime = 'nodejs';
 export const maxDuration = 180;
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
+// OCR 输出有效字符低于该阈值（纯照片/全糊场景）自动回退多模态 vision 链路
+const DEFAULT_OCR_MIN_CHARS = 20;
 const TEMP_DIR = path.join(os.tmpdir(), 'meetmind-image-ingest');
 const SUPPORTED_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'heic', 'heif']);
 
@@ -186,37 +192,73 @@ async function imagePathToDataUrl(filePath: string): Promise<string> {
   return `data:image/png;base64,${buffer.toString('base64')}`;
 }
 
-async function extractImageText(file: File): Promise<string> {
+async function extractImageTextViaVision(dataUrl: string): Promise<string> {
   const modelId = LLMConfig.defaultVisionModel;
   if (!modelId || !isMultimodalModel(modelId)) {
     throw new Error('当前没有可用的多模态模型来解析图片');
   }
 
+  const response = await chat(
+    [
+      {
+        role: 'system',
+        content:
+          '你是学习资料 OCR 助手。请先尽可能准确提取图片中的文字，再整理成适合阅读的纯文本。不要输出 Markdown 标题、列表符号、分隔线、代码块，也不要额外解释。看不清的地方直接写“[图片不清晰]”。',
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: '请识别这张图片中的文字内容，并整理成干净的纯文本。' },
+          { type: 'image_url', image_url: { url: dataUrl } },
+        ],
+      },
+    ],
+    modelId,
+    { temperature: 0.1, maxTokens: 2400 }
+  );
+
+  return response.content || '';
+}
+
+function getOcrMinChars(): number {
+  const parsed = Number.parseInt(process.env.IMAGE_OCR_MIN_CHARS || '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_OCR_MIN_CHARS;
+}
+
+/** 去空白后的有效字符数，用于判断 OCR 是否真的识别到了内容 */
+function countContentChars(text: string): number {
+  return text.replace(/\s/g, '').length;
+}
+
+async function extractImageText(file: File): Promise<string> {
   const sourcePath = await writeIncomingImage(file);
   let normalizedPath = sourcePath;
   try {
     normalizedPath = await normalizeImagePath(sourcePath);
     const dataUrl = await imagePathToDataUrl(normalizedPath);
-    const response = await chat(
-      [
-        {
-          role: 'system',
-          content:
-            '你是学习资料 OCR 助手。请先尽可能准确提取图片中的文字，再整理成适合阅读的纯文本。不要输出 Markdown 标题、列表符号、分隔线、代码块，也不要额外解释。看不清的地方直接写“[图片不清晰]”。',
-        },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: '请识别这张图片中的文字内容，并整理成干净的纯文本。' },
-            { type: 'image_url', image_url: { url: dataUrl } },
-          ],
-        },
-      ],
-      modelId,
-      { temperature: 0.1, maxTokens: 2400 }
-    );
 
-    return response.content || '';
+    // 主链路：Qwen-OCR（qwen-vl-ocr，便宜一个量级）直接产出结构化 Markdown
+    // （正文 / LaTeX 公式 / 图表还原 / 图形描述），即最终上下文，不再过 LLM 整理
+    if (isQwenOcrAvailable()) {
+      try {
+        const ocr = await extractTextFromImage({ imageUrl: dataUrl });
+        const charCount = countContentChars(ocr.text);
+        if (charCount >= getOcrMinChars()) {
+          return ocr.text;
+        }
+        log.warn('ingest-image.ocr_low_yield_fallback_vision', {
+          chars: charCount,
+          minChars: getOcrMinChars(),
+        });
+      } catch (error) {
+        log.warn('ingest-image.ocr_failed_fallback_vision', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    // 兜底：原多模态 vision 链路
+    return await extractImageTextViaVision(dataUrl);
   } finally {
     safeUnlink(sourcePath);
     if (normalizedPath !== sourcePath) {
@@ -248,7 +290,9 @@ export async function POST(request: NextRequest) {
     }
 
     const text = await extractImageText(file);
-    const title = file.name.replace(/\.[^.]+$/, '').trim() || '图片材料';
+    // Android 相机文件名常是 epoch 毫秒（如 1785241871674.jpg），不能直接当标题
+    const rawTitle = file.name.replace(/\.[^.]+$/, '').trim();
+    const title = rawTitle && !/^\d{6,}$/.test(rawTitle) ? rawTitle : '图片材料';
     return jsonSuccess(title, text);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

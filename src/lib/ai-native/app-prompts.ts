@@ -254,12 +254,14 @@ export function sanitizeAudioOverviewNarration(text: string): string {
     .trim();
 }
 
-export function buildAudioOverviewNarrationCorpus(transcript: TranscriptSegment[], maxChars = 12_000): string {
+export function buildAudioOverviewNarrationCorpus(transcript: TranscriptSegment[], maxChars = 48_000): string {
   const promptContext = buildPromptTranscriptContext(transcript, {
-    maxChars: Math.max(12_000, maxChars * 2),
+    maxChars: maxChars * 2,
     includeIndex: false,
     includeTimestamp: false,
     minCharsPerSegment: 56,
+    // 朗读语料不给模型看“已压缩”元说明；语料本身就是要被朗读的内容
+    truncationNotice: false,
   });
   const merged = promptContext.text
     .split('\n')
@@ -267,7 +269,10 @@ export function buildAudioOverviewNarrationCorpus(transcript: TranscriptSegment[
     .filter(Boolean)
     .join('\n');
   if (merged.length <= maxChars) return merged;
-  return `${merged.slice(0, Math.max(0, maxChars - 3))}...`;
+  // 播客脚本要覆盖全场：保留头 60% + 尾 40%，结尾高潮不能丢
+  const headChars = Math.max(0, Math.floor((maxChars - 3) * 0.6));
+  const tailChars = Math.max(0, maxChars - 3 - headChars);
+  return `${merged.slice(0, headChars)}...${merged.slice(merged.length - tailChars)}`;
 }
 
 export function buildAudioOverviewChapterEvidence(transcript: TranscriptSegment[]): string {

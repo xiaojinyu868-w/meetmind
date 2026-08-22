@@ -37,6 +37,8 @@
 | **Instrument Serif** | `font-serif` 或 `.font-serif-italic` | 仪式字 · 标题里偶尔的 italic em |
 | **JetBrains Mono** | `font-mono` 或 `.font-mono-cite` | 引用资产化 · `[MM:SS]` / `[资料 N]` 专用 |
 
+板书精讲（v32 起为备课本讲义场景：淡米色纸底 + 细横格线）独立字体栈，不走上面三件套：**v32 起统一系统屏显栈**（`BOARD_FONT`：-apple-system / PingFang SC / Noto Sans CJK SC / Microsoft YaHei，见 `BoardWrite.tsx`；鸿雷板书 / Caveat / hanzi-writer 笔顺动画随手写体时代退役）；文字按生成流速逐 token 显现接力；公式（write role=formula）走 KaTeX 排版（katex.min.css，块完整后 400ms 淡入）。
+
 ## 投影系统（必须存在但克制）
 
 | Tailwind | 强度 | 用途 |

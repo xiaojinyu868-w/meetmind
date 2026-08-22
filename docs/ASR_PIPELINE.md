@@ -1,7 +1,9 @@
 # ASR Pipeline Domain
 
-> 当前产品合同：课中字幕优先低延迟，完整原声从用户开口前就开始保留，
-> 课后再用完整原声做一次高精度定稿。两者分工，不让「快」和「准」互相牺牲。
+> 当前产品合同（2026-08 单遍化）：课中 realtime 低延迟字幕**即定稿**——realtime 质量已够好、
+> 课堂≈单说话人，课后不再自动跑完整原声 batch 定稿和说话人分离。
+> batch 路由（/api/transcribe*）与 /api/asr/diarize 保留可用，供将来的手动「重新精转」；
+> realtime 一句没接住时的兜底批量转写仍然保留（那是唯一的转录来源）。
 
 ---
 
@@ -12,19 +14,21 @@
   ├→ MediaRecorder 立即保留完整原声（不等 WebSocket）
   ├→ AudioContext 连续相位重采样为 PCM 16kHz（兼容 44.1kHz 手机）
   └→ 有界 FIFO → WebSocket → server.js ASR proxy
-       ├→ DashScope Qwen3-ASR-Flash realtime（默认 2026-02-10 最新快照）
-       ├→ server VAD（远场优先默认 threshold=0.20 / silence=1000ms）
+       ├→ DashScope Qwen-Audio-3.0-ASR-Flash-Streaming（默认；duplex 任务协议 /api-ws/v1/inference）
+       │    按模型族分派：qwen-audio-3.0* / fun-asr* 走新协议，qwen3-asr* 走旧 Omni Realtime 协议
+       ├→ server VAD（新协议 max_sentence_silence=1000ms；旧协议 threshold=0.20 / silence=1000ms）
+       ├→ 服务端句级/字级时间戳（新协议 begin_time/end_time，优先于客户端 VAD 猜测）
        ├→ 幻觉过滤（过短、不可能语速、低信息附和词）
        ├→ 去重 (shouldDedupSegment, LCS 相似度 + 时间 gap)
        └→ interim/stable/final 三段式课中渲染
 
 结束这节课
-  ├→ server_vad 会话发送 session.finish（不是 manual-only commit）
-  ├→ 收到 session.finished 后交付完整 realtime 尾句 + 原声
-  └→ qwen3-asr-flash / filetrans 完整原声定稿
-       ├→ 定稿前保持 processing，不把 realtime 草稿发布为标题、摘要或应用输入
-       ├→ 定稿结果一次性替换 realtime 临时转录，不追加重复段
-       └→ 按 recordingId + sessionId 回填，不得覆盖下一节课 UI
+  ├→ 新协议发送 finish-task / 旧协议 server_vad 会话发送 session.finish（不是 manual-only commit）
+  ├→ 收到 task-finished / session.finished 后交付完整 realtime 尾句 + 原声
+  └→ realtime 结果即定稿（2026-08 单遍化），直接发布为标题、摘要与应用输入
+       ├→ 不再自动跑 qwen-audio-3.0-asr-flash / filetrans 课后定稿；/api/transcribe* 保留供手动「重新精转」
+       ├→ 例外：realtime 一句没接住且原声有效 → 兜底批量转写（唯一转录来源，保留）
+       └→ 兜底结果按 recordingId + sessionId 回填，不得覆盖下一节课 UI
 
 文件上传
   ├→ ffmpeg 分片 (10min + 2s overlap)   ← M2 T2.7
@@ -72,7 +76,7 @@
 ### 杠杆 3: ITN + LLM 后编辑并联
 
 - **ITN**：Qwen3-ASR-Flash `parameters.enable_itn: true` 默认开启（"二零二六"→"2026"），不自己接 WeTextProcessing 避免双重 ITN
-- **LLM 后编辑**：M5 接入 `postEditSegments`（`src/lib/services/asr/post-edit.ts`）对低置信片段调 qwen3.5-plus 做 post-correction；失败静默降级。
+- **LLM 后编辑**：`postEditSegments`（`src/lib/services/asr/post-edit.ts`）对低置信片段调 DeepSeek V4 Flash 做 post-correction（2026-08 起默认开启，按节分批 + 字符上限护栏）；失败静默降级为原文。
 
 ### 杠杆 4: 纠错反馈闭环
 
@@ -107,24 +111,28 @@
 
 - 手机端只有在拿到音频流、MediaRecorder 真正启动并创建新 session 后才进入录课页；此时同步清空上节课的 segments / interim / anchors / timeline，不等待 ASR WebSocket。权限拒绝或设备失败留在原页并明确提示，不能出现假的 `00:00` 录课态。
 - 每次录课使用独立 sessionId + recordingId。
-- 停止后 Recorder 立即可开始下一节课；batch 定稿在后台 detached 运行，启动时就冻结 sessionId + recordingId。
-- realtime 字幕只属于课中反馈；`finalPassPending` 期间不落为可复习 transcript、不派生课堂标题，完整原声定稿返回后才把课堂推进到 ready / review。
-- 完整原声定稿失败时保留原声并明确落为 failed / 可重试，不把 realtime 草稿静默升级成课后证据，也不让课堂永久卡在 pending。
-- 上节课延迟到达的 batch 定稿只写回它自己的 session，不更新当前编辑器；漏传 sessionId 的结果也拒绝进入当前课堂。
-- 课后说话人整理严格排在完整原声 batch 定稿并落盘之后；不得与 final pass 并发，避免较晚返回的 realtime 衍生结果覆盖高精度定稿。
-- Qwen Realtime 当前工作在 `server_vad` 模式，结束时必须发送官方 `session.finish` 并等待 `session.finished`；`input_audio_buffer.commit` 只属于 manual mode。旧链路把 VAD 会话当 manual 提交，错误又被静默吞掉，实测会让 25 秒干净课堂只剩第一句话（CER 78.57%）。
-- proxy 先排空弱网音频 FIFO 再发 `session.finish`；浏览器正常等待最终事件，异常网络最多等待 5 秒后释放，完整原声仍由后台 batch 定稿兜底。
+- 停止后 Recorder 立即可开始下一节课；realtime 结果即定稿（2026-08 单遍化），兜底批量转写在后台 detached 运行时启动时就冻结 sessionId + recordingId。
+- realtime 字幕随停录即落为可复习 transcript 并派生课堂标题（课后理解 realtime 完成即触发）。
+- 兜底批量转写失败时保留原声并明确落为 failed / 可重试，不让课堂永久卡在 pending。
+- 上节课延迟到达的兜底转写只写回它自己的 session，不更新当前编辑器；漏传 sessionId 的结果也拒绝进入当前课堂。
+- 课后说话人整理 2026-08 起不再自动触发；`finalPassPending` 两段式定稿机制整体退役（字段保留兼容，见 `recorder-types.ts`）。
+- Qwen Realtime 当前工作在 `server_vad` 模式，结束时必须发送官方 `session.finish` 并等待 `session.finished`；`input_audio_buffer.commit` 只属于 manual mode。旧链路把 VAD 会话当 manual 提交，错误又被静默吞掉，实测会让 25 秒干净课堂只剩第一句话（CER 78.57%）。新一代 `qwen-audio-3.0-asr-flash-streaming` 走 duplex 任务协议，对应收尾动作为 `finish-task` / `task-finished`。
+- proxy 先排空弱网音频 FIFO 再发 `session.finish` / `finish-task`；浏览器正常等待最终事件，异常网络最多等待 5 秒后释放，realtime 一句没有时完整原声仍由后台兜底批量转写接住。
+
+### 模型族协议分派（2026-08 起）
+
+- 实时：`DASHSCOPE_ASR_WS_MODEL` 以 `qwen-audio-3.0` / `fun-asr` 开头 → duplex 任务协议（`wss://dashscope.aliyuncs.com/api-ws/v1/inference`，`run-task` 后直接发二进制 PCM 帧，结果事件 `result-generated` 带句级/字级时间戳）；`qwen3-asr` 开头 → 旧 Omni Realtime 协议（`/api-ws/v1/realtime?model=`，base64 JSON 帧）。上游地址可用 `DASHSCOPE_ASR_WS_URL` 整体覆盖（如 WorkspaceId 专属域名）。
+- 参数映射：`corpus.text` 上下文 → `input.context`（input_text 消息，每条 ≤400 字最多 5 条）；`silence_duration_ms` → `max_sentence_silence`（[200,6000]）；`language` → `language_hints` 数组；`turn_detection.threshold` 新协议无对应参数，忽略。新协议默认开 `heartbeat: true` 防长静音 60s 断连；任务进行中可用 `continue-task` 更新上下文。
+- batch / filetrans 同理按族分派：新族 batch 走 multimodal-generation 消息式 `input_audio`（响应文本在 `output.text` / `output.output.sentence.text`），新族 filetrans 用 `input.file_urls` + `language_hints`，查询结果 URL 在 `output.results[0].transcription_url`（旧族在 `output.result.transcription_url`）。
 
 ### 说话人产品策略：听准是主链路，分人是课后增强
 
-- Qwen `qwen3-asr-flash-realtime-2026-02-10` 是用户主链路唯一默认实时引擎。首页与录课中不再展示“单人 / 多人”技术开关；用户不需要理解供应商差异，也不能为了分人牺牲正文准确率。
-- 腾讯 `16k_zh_en_speaker` proxy 与 `speakerDiarization` 参数只作为内部实验兼容能力保留，不作为正式主路径。实验若切换，旧引擎仍持续收音，新引擎同步接收并缓冲同一份 PCM；只有新连接 ready 后才原子交接，失败则继续使用旧引擎。
-- 正式产品在完整原声 batch 定稿之后静默尝试说话人整理。只有至少两位发言者各自累计 ≥1.5s 且 ≥6 个非空白字符、整段有效语音 ≥6s 时才应用标签；`speakerId=-1` 与短噪声聚类永远不展示。
+- Qwen `qwen-audio-3.0-asr-flash-streaming` 是用户主链路唯一默认实时引擎（旧默认 `qwen3-asr-flash-realtime-2026-02-10` 可通过 env 回退）。首页与录课中不再展示“单人 / 多人”技术开关；用户不需要理解供应商差异，也不能为了分人牺牲正文准确率。
+- 2026-08：腾讯 `16k_zh_en_speaker` proxy（/api/asr-stream-speaker）与前端 `speakerDiarization` 参数已整体拆除，实验链路关闭。
+- 2026-08 单遍化后课后不再自动跑说话人整理；`/api/asr/diarize` 与 `diarization-service.ts` 保留，供将来的手动「重新精转」。届时仍按原证据门槛：至少两位发言者各自累计 ≥1.5s 且 ≥6 个非空白字符、整段有效语音 ≥6s 才应用标签；`speakerId=-1` 与短噪声聚类永远不展示。
 - UI 仅显示匿名“发言者 A / B”，不自动把第一位命名为老师，也不猜真实姓名。没有足够证据时保持无标签，比展示错误身份更可信。
-- diarization 句子贴回 batch 定稿时按时间区间最大重叠匹配；只有没有重叠时才允许 ≤1.5s 的近邻兜底，禁止用宽松起始时间近邻把整段错标给另一个人。
+- diarization 句子贴回已有转写时按时间区间最大重叠匹配；只有没有重叠时才允许 ≤1.5s 的近邻兜底，禁止用宽松起始时间近邻把整段错标给另一个人。
 - 说话人质量用 DER 单独验收：先做匿名 speaker ID 最优映射，再统计 missed speech / false alarm / confusion；不能用正文 CER 代替说话人评测。
-- 浏览器 PCM chunk 使用 2048 帧（48kHz 输入约 42.7ms），贴近腾讯官方 40ms 读取粒度，也降低 Qwen 首字延迟。
-- 腾讯 `sentence_list[]` 按官方协议完整遍历，final 按 `sentence_id` 去重，不再只消费第一句。
 
 ### T2.3 Polling 退避
 `waitForSingleTask`: `p-retry` + AWS Full Jitter
@@ -185,15 +193,16 @@ fixture 与人工 reference 在 `tests/eval/asr/fixtures/`、`datasets/real-nois
 
 | 名称 | 默认 | 说明 |
 |---|---|---|
-| `DASHSCOPE_API_KEY` | — | Qwen3-ASR-Flash 凭证 |
-| `DASHSCOPE_ASR_WS_MODEL` | `qwen3-asr-flash-realtime-2026-02-10` | 课中低延迟模型 |
-| `DASHSCOPE_ASR_BATCH_MODEL` | `qwen3-asr-flash-2026-02-10` | 短音频完整原声定稿模型 |
-| `DASHSCOPE_ASR_FILE_MODEL` | `qwen3-asr-flash-filetrans-2025-11-17` | 长音频异步定稿模型（当前最新 filetrans 快照） |
+| `DASHSCOPE_API_KEY` | — | DashScope（百炼）凭证 |
+| `DASHSCOPE_ASR_WS_MODEL` | `qwen-audio-3.0-asr-flash-streaming` | 课中低延迟模型（改回 `qwen3-asr-flash-realtime-*` 即回退旧协议） |
+| `DASHSCOPE_ASR_BATCH_MODEL` | `qwen-audio-3.0-asr-flash` | 短音频完整原声定稿模型 |
+| `DASHSCOPE_ASR_FILE_MODEL` | `qwen-audio-3.0-asr-flash-filetrans` | 长音频异步定稿模型 |
+| `DASHSCOPE_ASR_WS_URL` | 按模型族自动选择 | 实时上游地址整体覆盖（如 `wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference`） |
 | `ASR_SEGMENT_DURATION_SEC` | 600 | 长音频分片 |
 | `ASR_SEGMENT_OVERLAP_SEC` | 2 | 相邻段重叠 |
 | `ASR_MIN_DURATION_FOR_SPLIT_SEC` | 240 | 低于此时长不分片 |
-| `DASHSCOPE_ASR_WS_VAD_SILENCE_MS` | 1000 | realtime 句尾静音时长；比对话多保留 200ms 上下文，interim 首字延迟不受影响 |
-| `DASHSCOPE_ASR_WS_VAD_THRESHOLD` | 0.20 | server VAD 触发阈值；优先接住手机与远场软声，高噪声环境需用真实录音 A/B 后再调高 |
+| `DASHSCOPE_ASR_WS_VAD_SILENCE_MS` | 1000 | realtime 句尾静音时长（新协议映射 `max_sentence_silence`）；比对话多保留 200ms 上下文，interim 首字延迟不受影响 |
+| `DASHSCOPE_ASR_WS_VAD_THRESHOLD` | 0.20 | 仅旧协议 server VAD 触发阈值；新协议无对应参数，会被忽略 |
 | `NEXT_PUBLIC_ASR_AUTO_GAIN_CONTROL` | `true` | 浏览器 AGC |
 | `NEXT_PUBLIC_ASR_ECHO_CANCELLATION` | `true` | 浏览器 AEC |
 | `NEXT_PUBLIC_ASR_NOISE_SUPPRESSION` | `true` | 浏览器 NS |
@@ -203,10 +212,10 @@ fixture 与人工 reference 在 `tests/eval/asr/fixtures/`、`datasets/real-nois
 ## 下一步
 
 - [ ] M4.5: 纠错闭环 MVP（T2.9）
-- [x] M5: qwen3.5-plus 低置信后编辑（T2.8）— `src/lib/services/asr/post-edit.ts`
-- [x] 课中 realtime + 课后完整原声定稿双通道
+- [x] M5: 低置信后编辑（T2.8）— `src/lib/services/asr/post-edit.ts`（2026-08 起默认开，DeepSeek V4 Flash）
+- [x] 课中 realtime 单遍即定稿（2026-08 起；课后 batch 定稿退役为手动精转能力）
 - [x] 录课开始不等 ASR ready，首段 PCM 有界排队
-- [x] 新课同步清屏 + 延迟定稿 session 隔离
+- [x] 新课同步清屏 + 延迟回填 session 隔离
 - [x] 同一英语课堂 clean / 5dB / 10dB / 20dB 粉红噪声确定性回归
 - [ ] 扩充真实评测集：中文、中英混合、真实远场、风扇与键盘噪声
 - [ ] 在真实数据上 A/B `qwen3-asr-flash-realtime-2026-02-10` / `fun-asr-realtime` / `qwen3.5-omni-plus-realtime`，用 CER + first-partial + final-lag + 噪声误触发率决策
