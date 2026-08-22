@@ -55,6 +55,13 @@ export async function touchThread(id: string): Promise<void> {
   await prisma.teachThread.update({ where: { id }, data: {} });
 }
 
+/** 课程改名（agent 写下正式课题标题时跟随——中途换题后历史列表/页头不再停留在旧课题） */
+export async function renameThread(id: string, title: string): Promise<void> {
+  const clean = title.trim().slice(0, 60);
+  if (!clean) return;
+  await prisma.teachThread.update({ where: { id }, data: { title: clean } });
+}
+
 // ---------- 事件日志（append-only JSONL） ----------
 
 function eventLogPath(threadId: string): string {

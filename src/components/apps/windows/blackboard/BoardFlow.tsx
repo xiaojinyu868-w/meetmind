@@ -26,6 +26,7 @@ import { estimateWriteMs, paceScaleFor } from './board-model';
 import { BoardWrite } from './BoardWrite';
 import { BoardFormula } from './BoardFormula';
 import { BoardImage } from './BoardImage';
+import { BlockAnnotation } from './BlockAnnotation';
 
 /** 流式内容项：write/image 成块；new_column 折成分栏标记；标注不进流 */
 export interface FlowItem extends LectureFlowItem {
@@ -55,6 +56,11 @@ interface BoardFlowProps {
   flowViewportRef: React.RefObject<HTMLDivElement>;
   flowContentRef: React.RefObject<HTMLDivElement>;
   firstColumnRef: React.RefObject<HTMLDivElement>;
+  /**
+   * v33 坐标系归一：wN → 块内标注（circle/underline/mark）。
+   * 标注画在目标块自己的盒子里，随块移动/换栏/收缩，永不错位。
+   */
+  annotationsByWn?: Map<string, Array<Extract<BoardAction, { type: 'circle' | 'underline' | 'mark' }>>>;
 }
 
 export function BoardFlow({
@@ -72,6 +78,7 @@ export function BoardFlow({
   flowViewportRef,
   flowContentRef,
   firstColumnRef,
+  annotationsByWn,
 }: BoardFlowProps) {
   /** 单个流式块（write / formula / image / checkpoint 追加 write）渲染 */
   const renderFlowItem = (item: FlowItem) => {
@@ -82,45 +89,54 @@ export function BoardFlow({
     if (action.type !== 'write') return null;
     const role = action.role;
     const active = instant || doneWrites.has(item.key) || activeWriteKey === item.key;
+    // v33 块内标注：目标块写完后，圈/下划线/勾叉画进块自己的坐标系
+    const wn = writeIdByKey.get(item.key);
+    const blockAnnotations =
+      wn && (instant || doneWrites.has(item.key)) ? (annotationsByWn?.get(wn) ?? []) : [];
+    const withAnnotations = (children: React.ReactNode) => (
+      // position:relative 是块内标注的坐标系锚点（唯一目的）
+      <div key={item.key} style={{ ...roleBlockStyle(role, BOARD_WIDTH, BOARD_HEIGHT), position: 'relative' }}>
+        {children}
+        {blockAnnotations.map((annotation, index) => (
+          <BlockAnnotation key={`${item.key}-ann${index}`} action={annotation} paused={paused} />
+        ))}
+      </div>
+    );
     // v31 块级公式：LaTeX → KaTeX（整块淡入，不走逐字接力）
     if (role === 'formula') {
-      return (
-        <div key={item.key} style={roleBlockStyle(role, BOARD_WIDTH, BOARD_HEIGHT)}>
-          <BoardFormula
-            latex={action.text}
-            fontSize={lectureFontSize('formula', BOARD_HEIGHT)}
-            writeId={writeIdByKey.get(item.key)}
-            active={active}
-            onDone={() => onWriteDone(item.key)}
-            instant={instant}
-            paused={paused}
-          />
-        </div>
-      );
-    }
-    return (
-      <div key={item.key} style={roleBlockStyle(role, BOARD_WIDTH, BOARD_HEIGHT)}>
-        <BoardWrite
-          action={action}
-          flowFontSize={
-            role === 'title'
-              ? fitTitleFontSize(action.text, BOARD_WIDTH, BOARD_HEIGHT)
-              : lectureFontSize(role, BOARD_HEIGHT)
-          }
-          writeId={writeIdByKey.get(item.key)}
+      return withAnnotations(
+        <BoardFormula
+          latex={action.text}
+          fontSize={lectureFontSize('formula', BOARD_HEIGHT)}
+          writeId={wn}
           active={active}
           onDone={() => onWriteDone(item.key)}
-          fontFamily={fontFamily}
           instant={instant}
           paused={paused}
-          paceScale={
-            (item.extra
-              ? 1
-              : paceScaleFor(action, budgets?.[item.key] ?? estimateWriteMs(action.text, role))) *
-            writePaceScale
-          }
-        />
-      </div>
+        />,
+      );
+    }
+    return withAnnotations(
+      <BoardWrite
+        action={action}
+        flowFontSize={
+          role === 'title'
+            ? fitTitleFontSize(action.text, BOARD_WIDTH, BOARD_HEIGHT)
+            : lectureFontSize(role, BOARD_HEIGHT)
+        }
+        writeId={wn}
+        active={active}
+        onDone={() => onWriteDone(item.key)}
+        fontFamily={fontFamily}
+        instant={instant}
+        paused={paused}
+        paceScale={
+          (item.extra
+            ? 1
+            : paceScaleFor(action, budgets?.[item.key] ?? estimateWriteMs(action.text, role))) *
+          writePaceScale
+        }
+      />,
     );
   };
 

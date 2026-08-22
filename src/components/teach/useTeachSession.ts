@@ -175,6 +175,10 @@ export function useTeachSession(): UseTeachSessionResult {
       } else if (event.type === 'tool-call') {
         setBothStreaming(true);
         if (isVisibleTool(event.name)) appendChip(event.id, event.name);
+        // 标题跟随：agent 写下正式课题标题 → 页头同步（中途换题不滞留旧课题）
+        if (event.name === 'write' && event.args.role === 'title' && typeof event.args.text === 'string') {
+          setTitle(event.args.text);
+        }
         // "说完一句就落笔"：工具调用是自然断句点，半句也送合成；
         // 先断句再取闸门序号——板书锚到刚说完的这句
         if (live && event.name !== 'pause' && event.name !== 'new_column') feedBreak();

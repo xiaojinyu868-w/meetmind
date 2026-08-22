@@ -219,12 +219,30 @@ export function BoardCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWriteKey]);
 
-  // 标注等目标 write 全部写完才落笔（讲写同步）
+  // 标注等目标 write 全部写完才落笔（讲写同步）——只服务箭头；
+  // 圈/下划线/勾叉走块内渲染，由 BoardFlow 按 doneWrites 自行设卡
   const annotationReady = (action: BoardAction): boolean =>
     targetRefsOf(action).every((ref) => {
       const targetKey = orderedWriteKeys[ref - 1];
       return targetKey !== undefined && doneWrites.has(targetKey);
     });
+
+  // v33 坐标系归一：circle/underline/mark 按目标 wN 分组下发给 BoardFlow 块内渲染；
+  // 只有 arrow（跨块）留在覆盖层走 DOM 实测
+  const annotationsByWn = useMemo(() => {
+    const map = new Map<string, Array<Extract<BoardAction, { type: 'circle' | 'underline' | 'mark' }>>>();
+    for (const { action } of visible) {
+      if (action.type !== 'circle' && action.type !== 'underline' && action.type !== 'mark') continue;
+      const refs = targetRefsOf(action);
+      const wn = refs.length > 0 ? `w${refs[0]}` : null;
+      if (!wn) continue;
+      const list = map.get(wn) ?? [];
+      list.push(action);
+      map.set(wn, list);
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible.length, pageIndex, extraAnnotations]);
 
   // v31 流式内容分栏：write/image 成块，new_column 折成分栏标记
   const flowItems: FlowItem[] = [];
@@ -398,8 +416,7 @@ export function BoardCanvas({
             </div>
           ) : null}
           {/* 流式画布：页首 title 通栏，正文一页两栏、栏内从上到下追加。
-              包一层抬 z-index：墨迹永远在标注之上（圈/下划线压到相邻行小字时，
-              字保持可读——v33 遮挡修复）；横格线在 mm-board-page 之下，标注仍在线之上 */}
+              v33 起圈/下划线/勾叉在块内渲染（与墨迹同盒同坐标系），分层只为箭头 */}
           <div className="absolute inset-0" style={{ zIndex: 1 }}>
             <BoardFlow
               flow={flow}
@@ -416,17 +433,17 @@ export function BoardCanvas({
               flowViewportRef={flowViewportRef}
               flowContentRef={flowContentRef}
               firstColumnRef={firstColumnRef}
+              annotationsByWn={annotationsByWn}
             />
           </div>
 
-          {/* 标注 / 贴图覆盖层：DOM 实测坐标（实测即收缩后真值，不做二次补偿；
-              flowScale 仅作为重测信号经 prop 下发）。
+          {/* 箭头覆盖层：唯一跨块标注，仍走 DOM 实测（MeasuredTarget）。
               pointerEvents:none——划线提问的文本选择不被标注挡住 */}
           <div className="absolute inset-0" style={{ zIndex: 0, pointerEvents: 'none' }}>
             {visible.map(({ key, action }) => {
-              if (action.type === 'write') return null;
-              if (action.type === 'pause') return null;
-              if (action.type === 'new_column') return null;
+              // v33：circle/underline/mark 已走块内渲染（annotationsByWn → BoardFlow），
+              // 覆盖层只剩跨块箭头
+              if (action.type !== 'arrow') return null;
               if (!annotationReady(action)) return null;
 
               return (

@@ -274,5 +274,13 @@ export async function handleMcpToolCall(
   const result = await executeTeachTool(threadId, name, finalArgs);
   emit(threadId, { type: 'tool-result', id, result });
   log.info('teach tool', { threadId, name, ok: result.ok !== false });
+  // 标题跟随：agent 写下正式课题标题时同步线程标题（中途换题也能追上），
+  // 仅在标题仍是初始课题时覆盖（历史列表/页头不再停留在旧课题）
+  if (name === 'write' && finalArgs.role === 'title' && typeof finalArgs.text === 'string' && result.ok !== false) {
+    const thread = await store.getThread(threadId);
+    if (thread && thread.title === thread.topic) {
+      await store.renameThread(threadId, finalArgs.text).catch(() => undefined);
+    }
+  }
   return result;
 }
