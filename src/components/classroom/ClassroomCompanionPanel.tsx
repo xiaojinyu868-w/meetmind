@@ -64,6 +64,7 @@ import { normalizeCompanionMarkdown } from './companion-markdown-utils';
 // M14: 课堂同桌 chip 行（稳定 + 动态）
 import { ClassroomChipRow, type ClassroomDynamicChip } from './ClassroomChipRow';
 import { AdminAiInspectorLink } from '@/components/admin/AdminAiInspectorLink';
+import { FenshenEntryChip } from '@/components/fenshen/FenshenEntryChip';
 
 const IN_CLASS_EXCLUDED_SKILL_APP_KEYS: readonly WorkshopAppKey[] = ['flashcards', 'quiz'];
 
@@ -414,6 +415,8 @@ function ListeningStarterCard({
                   {prompt}
                 </button>
               ))}
+              {/* 课后复习态固定入口：请一个分身（fixed inset-0 架层，非应用矩阵产物） */}
+              <FenshenEntryChip />
             </div>
           </div>
         </div>

@@ -82,6 +82,7 @@ make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
 12. **ChatBase 底座**：6 个对话面板收口于薄底座 + adapter，底座不引入业务逻辑 → `src/components/chat/DOMAIN.md`
 13. **清小搭接入（2026-08）**：`src/app/api/compat/` OpenAI 兼容适配层（「上场前」智能体：语音试讲 → 追问诊断 → 讲稿 docx / 上场包 HTML），Bearer 自验（`XIAODA_API_KEY`，非 MeetMind JWT）+ 每日成本闸，纯增量不改主链路 → `src/app/api/compat/DOMAIN.md`
 14. **AI 家教「上课」线（2026-08，codex app-server 底座）**：`/api/teach/*`（SSE 事件契约 + 历史课程 TeachThread）→ `src/lib/services/teach-codex/` 编排 codex app-server（每线程一进程，CODEX_HOME 隔离 data/teach-codex/）←MCP stdio→ `server/teach/teach-mcp-server.mjs`（内部回调进事件总线）；模型经进程内 shim（Responses→Chat）调上游，`TEACH_PROVIDER` 一行切换（默认 gemini-commonstack）；工具 schema 单一事实源 `teach-agent/tools.ts`（11 个，无 ask 阻塞）→ `src/app/api/teach/DOMAIN.md` + `src/lib/services/teach-codex/DOMAIN.md`
+15. **「请一个分身」线（2026-08，nuwa skill × codex harness）**：`/api/fenshen/*`（SSE 事件契约与 teach 同构）→ `src/lib/services/fenshen/` 复用 teach-codex 通用件（进程封装/shim/provider 注册表）；蒸馏线程（workspace-write + Firecrawl 官方远端 MCP）跑原版 nuwa skill（`assets/fenshen/huashu-nuwa/` 原文，零改动）产人物 SKILL.md；对话线程（read-only、零 MCP）挂 skill  persona + 课后上下文物化文件（lesson/ learner/）；私有轨语料 `corpus-service.ts`（B站字幕捷径→ASR 兜底）；skill 永不对用户可见，确认走试听「像/不像」→ 重蒸馏；spike 事实源 `out/fenshen-spike/REPORT.md` → `src/app/api/fenshen/DOMAIN.md` + `src/lib/services/fenshen/DOMAIN.md`
 
 ---
 
@@ -98,6 +99,7 @@ make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
 | **改 API 接口** | `src/app/api/DOMAIN.md` → 对应子目录 DOMAIN.md → route.ts |
 | **改清小搭接入 / 「上场前」** | `src/app/api/compat/DOMAIN.md` → 对应 route / `src/lib/prompts/rehearsal-prompts.ts` |
 | **改 AI 家教上课线（codex 底座）** | `src/app/api/teach/DOMAIN.md`（事件契约）→ `src/lib/services/teach-codex/DOMAIN.md` → 对应模块；工具 schema 改 `teach-agent/tools.ts` |
+| **改「请一个分身」线（蒸馏/对话）** | `src/app/api/fenshen/DOMAIN.md`（事件契约）→ `src/lib/services/fenshen/DOMAIN.md` → 对应模块；nuwa 模板在 `assets/fenshen/huashu-nuwa/`（只随上游版本整体替换，不做局部改写）；前端 `src/components/fenshen/DOMAIN.md` |
 | **改 Tutor 后端 / prompt** | `src/app/api/tutor/DOMAIN.md` + `src/lib/prompts/tutor-prompts.ts` + `项目开发文档/提示词设计哲学.md` |
 | **改管理员 AI 控制中心** | `src/components/admin/DOMAIN.md` → `src/lib/services/ai-control-service.ts` → `src/app/api/admin/ai-control/route.ts` |
 | **改目标共建 / 教练对话** | `src/components/intent/DOMAIN.md`（IntentDialog 系列 + `buildGoalSegment`） |

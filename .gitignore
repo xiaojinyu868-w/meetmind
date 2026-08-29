@@ -40,6 +40,9 @@ data/teach-events/
 # teach/board TTS 合成缓存（可再生的音频产物）
 data/teach-tts-cache/
 data/board-tts-cache/
+# 分身线运行时产物（codex 每分身 CODEX_HOME + workspace + 事件日志）
+data/fenshen-codex/
+data/fenshen-events/
 
 # 临时文件
 *.tmp

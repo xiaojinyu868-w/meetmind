@@ -27,6 +27,7 @@ import {
 import styles from './WorkshopYellowPage.module.css';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { ShareArtifactAction } from '@/components/share/ShareArtifactAction';
+import { FenshenEntryChip } from '@/components/fenshen/FenshenEntryChip';
 import { isShareableArtifactAppKey } from '@/components/share/share-artifact-model';
 import { WorkshopAppCard, type WorkshopCardStatus } from './WorkshopAppCard';
 import { COPY } from '@/lib/ui/copy';
@@ -947,6 +948,16 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       {tier === 'class' && props.onOpenClassroomFlow ? (
         <ClassroomFlowMatrixEntry sessionId={sessionId} onOpen={props.onOpenClassroomFlow} />
       ) : null}
+
+      {/* 「请一个分身」固定入口（非产物型应用，不进 catalog；架层在 chip 内部） */}
+      <section className={styles.matrixSection} aria-labelledby="fenshen-entry-title">
+        <div className={styles.sectionHeading}>
+          <h3 id="fenshen-entry-title" className={styles.sectionTitle}>
+            {COPY.fenshen.entrySectionTitle}
+          </h3>
+        </div>
+        <FenshenEntryChip variant="card" />
+      </section>
 
       {recommendedApp ? (
         <section className={styles.matrixSection} aria-labelledby="workshop-recommended-title">

@@ -5,6 +5,37 @@
 
 ---
 
+## 2026-08-26 — 「请一个分身」线 v1（nuwa skill × codex harness）+ 教练语音输入
+
+> 把任何人"蒸馏"成可对话的分身：上传你喜欢老师的讲课录音/B站链接（或从名人堂请孔子），
+> 原版 nuwa skill 在 codex harness 里异步蒸馏出人物 skill，然后分身带着你这节课的
+> 完整课后上下文和你聊。skill 永不对用户可见，确认发生在输出上（试听 → 像/不像 → 重蒸馏）。
+
+### 分身线（/api/fenshen/*，与 teach 线平级，复用其 codex harness 通用件）
+- **蒸馏线程**（每分身一个，workspace-write + Firecrawl 官方远端 MCP）：跑 `assets/fenshen/huashu-nuwa/` 的原版 nuwa skill（零改动，标准 Agent Skills 挂载）；名人轨 agent 自己联网采集语料；私有轨走 nuwa 原生"纯本地语料模式"
+- **对话线程**（read-only、零 MCP）：skill 文件挂载为 persona，课后上下文物化成文件（lesson/transcript、outline、confusions + learner/profile）铺进 workspace——全线零自研工具
+- **私有轨语料** `corpus-service.ts`：B站官方字幕捷径（段数+覆盖率双门槛）→ 免下载免 ASR；否则 bilibili-import + DashScope filetrans；upload 轨复用 upload-audio 产物；异步管线不阻塞路由
+- **数据**：`FenshenEgo`（prisma）+ `data/fenshen-codex/<egoId>/` 线程工作区 + `data/fenshen-events/` 事件日志；前端 `src/components/fenshen/`（分身架/请分身/对话面板/账本式蒸馏进度），渲染层用 Vercel AI Elements
+- **名人堂首发**：孔子（`scripts/seed-confucius-ego.ts` 落库；spike 蒸馏 14 分钟，盲测与无 skill 基线差距显著，见 `out/fenshen-spike/REPORT.md`）
+
+### harness 修复（惠及 teach 线）
+- shim Responses→Chat 翻译：function_call_output 转 tool 消息补 `name`（call_id→函数名映射）——Gemini 系上游硬性要求，codex 内置工具（update_plan/shell）在 teach 线同踩此坑（`shim-translate.ts` + 测试）
+- spike 实测沉淀：codex 0.149 移除 chat wire API；Gemini 3 强制 thought_signature（蒸馏线程固定 GLM，`resolveDistillProvider`，对话线程不受影响）；Firecrawl stdio MCP 挂死 → 托管远端 MCP；沙箱 workspace-write 需显式开网络
+
+### 学习教练语音输入
+- IntentDialog 输入条接入麦克风（ChatComposer `mic` 能力 → `VoiceMicButton` → `/api/asr/oneshot`，课堂同款 ASR 链路），识别文字回填输入框
+
+### 当日下午加固（冒烟实测驱动）
+- **空轮静默重试**：上游偶发瞬断会返回零 delta 的 completed；对话轮完成时零 delta 且未补过枪 → 同线程原样重发一次（SSE 不断、用户无感；`emptyTurnAction` 纯函数 + 单测）
+- **teach narration `==高亮==` 归一**：老师偶发把讲义马克笔语法漏进对话文本，显示层统一转加粗（`normalize-narration-marks.ts` + 单测）
+- **teach TTFT**：`gemini-openai-next` provider 注入 `reasoning_effort=low`（推理量压约 1/4）+ prompt 加"脱口而出、先说结论"的实时课堂约束
+- **teach 渲染层迁移 AI Elements** 浏览器端目测通过（CJK 加粗/代码块/滚动跟随/回到最新，console 零报错，截图在 `out/audit/ui-visual/`；审计脚本 `scripts/ui-visual-audit-{teach,fenshen}.ts`）
+- **私有轨真实 e2e 打通**：B站链接 → 匿名音频下载 → ffmpeg 转码 → DashScope filetrans（经 PUBLIC_DOMAIN 公网拉取）→ nuwa 语料落盘，198s 视频 50s 出稿；同时实测确认匿名 x/player/v2 对 AI 字幕返回空——不配 BILIBILI_COOKIE 时大部分视频走 ASR 兜底（DOMAIN 已注）
+- codex 线程 `project_doc_max_bytes = 0`（teach + fenshen），根治仓库根 AGENTS.md 被注入线程的污染
+- **分身入口挂进应用矩阵**：card 形态入口卡落进课后矩阵页 `WorkshopYellowPage`（原只挂在课中同桌面板，课后页看不到；`FenshenEntryChip` 加 `variant: 'chip' | 'card'`；生产实测入口可见、开架正常）
+
+---
+
 ## 2026-07-30 — Octo Buddy 参数化宠物 v3 + 旁听闭环（桌面端 v1.3.0）
 
 > 桌宠从"换皮挂件"升级为"活的生命"：原画 100% 保留，生命感全部来自连续参数。

@@ -77,6 +77,9 @@ const PUBLIC_ROUTES = [
   // AI 家教「上课」线（codex app-server 底座）：EventSource 无法带 Bearer，
   // 与 /api/classroom/* 同级别公开；internal 子路由靠 x-teach-internal 共享令牌自验
   '/api/teach/*',
+  // 「请一个分身」线（codex app-server 底座，teach 平级复刻）：EventSource
+  // 无法带 Bearer，与 /api/teach/* 同级别公开；分身线无 MCP 内部回调，不需要 internal 令牌
+  '/api/fenshen/*',
   '/api/analytics',
   '/api/analytics/stats',
   '/api/feedback',

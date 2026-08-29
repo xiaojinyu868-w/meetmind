@@ -698,6 +698,27 @@ model TeachThread {
   @@index([status, updatedAt])
 }
 
+/// 「请一个分身」线的分身架条目：一个分身 = 一条蒸馏线程（一次性）+ 一条对话线程（长期）。
+/// distillThreadId / chatThreadId 是 codex app-server 线程 id（各自 CODEX_HOME 落盘，
+/// 见 src/lib/services/fenshen/），拉起后回填，进程回收/重启后 thread/resume 续跑。
+model FenshenEgo {
+  id              String   @id @default(cuid())
+  name            String // 分身对象（孔子 / 费曼 / 用户自己的老师…）
+  sourceType      String // hall | bilibili | upload
+  sourceRef       String   @default("") // hall 名单 key / B 站链接 / 上传产物引用
+  status          String   @default("learning") // learning | ready | failed
+  skillPath       String? // 蒸馏产物相对 work/ 的目录名（skills/<name>-perspective）
+  distillThreadId String?
+  chatThreadId    String?
+  model           String
+  failReason      String? // status=failed 时的人可读原因
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([updatedAt])
+  @@index([status, updatedAt])
+}
+
 /// AI 控制台的提示词 / 模型覆盖版本。
 /// 代码中的默认 prompt 永远保留为基线；这里只存管理员显式创建的 draft / published 叠加层。
 model AiControlRevision {

@@ -34,6 +34,7 @@
 | `translation-retry-policy.ts` | 23 | 翻译接口失败/429 后的前端退避策略 | `getTranslationRetryDelayMs`, `shouldSkipTranslationTerm`, `shouldSkipTranslationRequest` |
 | `inline-app-transcript.ts` | 19 | AI 同桌内联应用生成时选择最新可用转录 | `selectInlineAppTranscript`, `hasEnoughInlineAppTranscript` |
 | `inline-app-fallback.ts` | 103 | 内联应用后端生成失败时的本地兜底 payload | `buildInlineAppFallbackPayload` |
+| `normalize-narration-marks.ts` | 8 | teach narration 漏出的 `==高亮==` 归一为 markdown 加粗 | `normalizeNarrationMarks` |
 | `app-execution-cache.ts` | 223 | 应用矩阵 / 复习对话共用的 localStorage 产物缓存与 task 状态 key；进入历史对话时必须先读缓存，避免已生成应用重复执行 | `readCachedAppResult`, `writeCachedAppResult`, `readCachedTaskState`, `writeCachedTaskState` |
 | `learning-context.ts` | ~180 | 长期记忆 / 课堂归组偏好 / 近期活动 / 学习线索的纯恢复、合并、去重与 Tutor 上下文格式化；课堂原件不复制进画像，只同步用户对课程边界的纠正 | `learningContextFromProfile`, `mergeLearningMemory`, `mergeLearningActivity`, `toLearningActivityPreview`, `formatLearningContextForTutor` |
 | `course-context.ts` | ~290 | 从真实 `audioSessions` 推导课程上下文：显式学科优先，URL / 裸日期 / 裸时间不得成为课程标题；课名与重复时段只作可见建议；合并用户改名、标签、确认、暂停、单课移出偏好及当前考试边界，被移出的课堂成为可恢复的单课卡 | `buildCourseContextGroups` |
