@@ -476,7 +476,8 @@ export function IntentDialog({
         uploadError={fileUpload.error}
         onRetryUpload={fileUpload.retryLast}
         isDragging={fileUpload.isDragging}
-        capabilities={{ file: true }}
+        capabilities={{ file: true, mic: true }}
+        onVoiceTranscript={(text) => composer.setValue([composer.value, text].filter(Boolean).join(' '))}
         placeholder="点上面的选项就好，也可以自己说"
         busyPlaceholder={COPY.intent.inputPlaceholderBusy}
         variant="paper"

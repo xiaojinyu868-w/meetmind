@@ -6,12 +6,15 @@
  * Responses 请求翻译成 chat 请求，把上游 chat SSE chunk 翻译回 Responses 事件。
  * 只做协议翻译，无任何编排逻辑。
  *
- * 已验证的三个真实坑（见 out/codex-spike/REPORT.md §2）：
+ * 已验证的四个真实坑（前三个见 out/codex-spike/REPORT.md §2）：
  * - codex 会发 `developer` role，chat API 只认 system/user/assistant/tool → 映射 system
  * - parallel tool calls 必须聚合成一条 assistant 消息的 tool_calls 数组，
  *   否则上游报 "tool_calls must be followed by tool messages"
  * - codex 0.149 把 MCP 工具包装成 `type:"namespace"` 工具 → 展平为
  *   `mcp__xxx__tool` 普通 function，响应侧按 {name, namespace} 还原
+ * - function_call_output 转 tool 消息必须带 name（call_id → 函数名映射补全），
+ *   否则 Gemini 系上游报 "function_response.name: Name cannot be empty"
+ *   （fenshen-spike 实测；codex 内置工具如 update_plan 也会踩）
  */
 
 // ---------- 宽松输入类型（协议面，逐字段 narrow，不信任上游） ----------
@@ -33,6 +36,8 @@ export interface ChatMessage {
   content: string;
   tool_calls?: ChatToolCall[];
   tool_call_id?: string;
+  /** tool 消息的函数名：Gemini 系上游（commonstack 等）硬性要求 function_response.name 非空 */
+  name?: string;
 }
 
 export interface ChatToolCall {
@@ -91,6 +96,8 @@ export function translateMessages(req: ResponsesRequest): ChatMessage[] {
 
   // parallel tool calls 聚合成一条 assistant 消息（上游硬性要求）
   const pendingCalls: ChatToolCall[] = [];
+  // call_id → 函数名：function_call_output 转 tool 消息时补 name（Gemini 系上游硬性要求）
+  const callNames = new Map<string, string>();
   const flushCalls = () => {
     if (pendingCalls.length === 0) return;
     messages.push({ role: 'assistant', content: '', tool_calls: pendingCalls.splice(0) });
@@ -114,8 +121,10 @@ export function translateMessages(req: ResponsesRequest): ChatMessage[] {
       // 历史 item 带 namespace 字段时拼回 flat 名
       const name = String(item.name ?? '');
       const flatName = item.namespace ? `${item.namespace}__${name}` : name;
+      const callId = String(item.call_id || item.id || `call_${pendingCalls.length}`);
+      callNames.set(callId, flatName);
       pendingCalls.push({
-        id: String(item.call_id || item.id || `call_${pendingCalls.length}`),
+        id: callId,
         type: 'function',
         function: {
           name: flatName,
@@ -127,9 +136,11 @@ export function translateMessages(req: ResponsesRequest): ChatMessage[] {
       });
     } else if (type === 'function_call_output') {
       flushCalls();
+      const callId = String(item.call_id || item.id || '');
       messages.push({
         role: 'tool',
-        tool_call_id: String(item.call_id || item.id || ''),
+        tool_call_id: callId,
+        name: callNames.get(callId) || 'tool',
         content:
           typeof item.output === 'string' ? item.output : JSON.stringify(item.output ?? ''),
       });

@@ -40,7 +40,9 @@ describe('shim-translate: 请求侧（Responses → Chat）', () => {
       type: 'function',
       function: { name: 'write', arguments: '{"text":"a"}' },
     });
-    expect(messages[1]).toEqual({ role: 'tool', tool_call_id: 'c1', content: '{"ok":true}' });
+    // tool 消息带 name：Gemini 系上游硬性要求 function_response.name 非空
+    expect(messages[1]).toEqual({ role: 'tool', tool_call_id: 'c1', name: 'write', content: '{"ok":true}' });
+    expect(messages[2]).toEqual({ role: 'tool', tool_call_id: 'c2', name: 'pause', content: '{"ok":true}' });
   });
 
   it('namespace(MCP) 工具展平为 flat 名，历史 item 带 namespace 时拼回', () => {

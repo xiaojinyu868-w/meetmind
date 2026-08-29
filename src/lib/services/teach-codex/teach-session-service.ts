@@ -85,6 +85,7 @@ async function writeCodexConfig(threadId: string, codexHome: string): Promise<vo
 model = "${tomlEscape(provider.model)}"
 model_provider = "teach_shim"
 approval_policy = "never"
+project_doc_max_bytes = 0
 
 [model_providers.teach_shim]
 name = "teach responses->chat shim (${tomlEscape(provider.id)})"

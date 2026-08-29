@@ -34,7 +34,7 @@
 
 `---选项---` 解析器在 `src/components/chat/markers/extractIntentOptions.ts`（含流式半截 marker 剃除 `stripPartialIntentBlocks`）。
 
-通话态视图 `src/components/realtime/IntentVoiceCallScreen.tsx` 已随实时语音通话下线标记 deprecated（保留一个周期后物理删除）；意图录入只走文字 IntentDialog。
+通话态视图 `src/components/realtime/IntentVoiceCallScreen.tsx` 已随实时语音通话下线标记 deprecated（保留一个周期后物理删除）；意图录入走 IntentDialog，文字为主，输入条带语音听写（ChatComposer `mic` 能力 → `VoiceMicButton` → `/api/asr/oneshot`，识别文字回填输入框，不直接发送）。
 
 ## 入口
 

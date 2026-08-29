@@ -15,7 +15,8 @@
 | `teach-store.ts` | localStorage 历史（mock 阶段模拟 GET /api/teach/threads）：线程列表 + 每线程快照（对话 + 画布 + mock 游标） |
 | `useTeachSession.ts` | 会话状态机 hook：事件流 → messages（text-delta 追加 / tool-call 挂 chip）+ pages（boardEffectOf 上板、flip_page 翻页）；ref 为权威数据源，快照 turn-complete 落盘；发送中再发问 = 先 interrupt 再发（「当前句讲完再说」的精确时机留后端联调）；语音管线接线：live 事件喂 speech-pipeline（回放不出声），interrupted/send/stop/换课立刻 silenceVoice；暴露 speaking/muted/setMuted/unlockAudio |
 | `TeachBoard.tsx` | 画布封装：BoardCanvas（v32 备课本）+ 划线引用提问（useTextSelection + QuoteAskPopover）；历史恢复 instant 直出终态 |
-| `TeachChatPanel.tsx` | 右栏对话（Chat 底座：ChatMessageList/ChatBubble/ChatComposer/ChatRenderer）；chip 行在气泡上方；语音按钮 UI 占位（micDisabledHint）；quote chip 走 composer topSlot |
+| `TeachChatPanel.tsx` | 右栏对话。渲染层 = Vercel AI Elements（`@/components/ai-elements/`）：ChatMessageList→Conversation（use-stick-to-bottom 自动跟随 + 回到最新）、ChatBubble→Message/MessageContent、ChatRenderer→MessageResponse（Streamdown 流式 markdown，CJK 加粗插件原语内置，排版规格 leading-[1.85]/text-[14.5px]/pine marker 走 className 覆盖，math 用默认链 + remark-math/rehype-katex 追加；narration 漏出的 `==高亮==` 经 `@/lib/utils/normalize-narration-marks` 归一为加粗）、ChatThinkingStripBubble→Loader；chip 行在消息上方；语音按钮 UI 占位（micDisabledHint）；quote chip 走 composer topSlot（ChatComposer/useChatComposer 保留） |
+| `teach-response.test.tsx` | 渲染层迁移回归：CJK 加粗（MessageResponse vs 底座 StreamingMarkdown 对照）、流式半截 ``` 兜底、KaTeX 对齐、user 气泡壳 |
 | `TeachThreadList.tsx` | 课程会话列表（桌面左栏 / 移动抽屉），新开一课/删除 |
 | `QuoteAskPopover.tsx` | 划线浮钮「引用提问」（交互复用 WordExplainer 未展开态 + useTextSelection 豁免约定） |
 | `useTeachSpeech.ts` | 讲课声音 hook 封装（从 useTeachSession 拆出）：SentenceSplitter+Player 持有，feedDelta/feedBreak/silence 三个喂口 + speaking/muted/unlockAudio |

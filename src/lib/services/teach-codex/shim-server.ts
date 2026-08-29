@@ -91,6 +91,8 @@ async function handleResponses(res: http.ServerResponse, bodyText: string) {
     jsonError(res, 400, 'missing model');
     return;
   }
+  // provider 级额外参数（如 reasoning_effort）在发出前浅合并进请求体
+  const upstreamBody = provider.upstreamParams ? { ...chat, ...provider.upstreamParams } : chat;
 
   let upstream: Response;
   try {
@@ -100,7 +102,7 @@ async function handleResponses(res: http.ServerResponse, bodyText: string) {
         'content-type': 'application/json',
         authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(chat),
+      body: JSON.stringify(upstreamBody),
     });
   } catch (cause) {
     log.error('upstream fetch failed', { error: cause instanceof Error ? cause.message : String(cause) });

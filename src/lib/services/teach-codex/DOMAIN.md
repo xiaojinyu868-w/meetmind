@@ -45,7 +45,9 @@
 配套：`server/teach/teach-mcp-server.mjs`（codex 的子进程，零依赖手写 MCP
 stdio）；`src/lib/prompts/teach-teacher-prompt.ts`（baseInstructions，整体
 替换 codex 编码人设）；`src/lib/config/teach.config.ts`（provider 注册表：
-gemini-commonstack 默认 / glm-dashscope 备选，`TEACH_PROVIDER` 一行切换）。
+gemini-commonstack 默认 / glm-dashscope、gemini-openai-next 备选，
+`TEACH_PROVIDER` 一行切换；provider 可用 `upstreamParams` 让 shim 往上游
+请求体注入参数，gemini-openai-next 即借此注入 `reasoning_effort=low` 压 TTFT）。
 
 ## 生命周期与恢复
 

@@ -7,7 +7,9 @@
  *
  * 默认：Gemini 3.7 Flash 经 commonstack（用户拍板 2026-08，价格刊例明确、
  * 中文教学语感三模型最佳；注意 TTFT 4–30s 抖动，见 out/codex-spike/REPORT.md）。
- * 备选：百炼 GLM-5.3（TEACH_PROVIDER=glm-dashscope，复用 DASHSCOPE_API_KEY）。
+ * 备选：OpenAI Next 中转（TEACH_PROVIDER=gemini-openai-next，同模型走
+ * api.openai-next.com）；百炼 GLM-5.3（TEACH_PROVIDER=glm-dashscope，复用
+ * DASHSCOPE_API_KEY）。
  */
 
 export interface TeachProviderConfig {
@@ -18,6 +20,8 @@ export interface TeachProviderConfig {
   baseUrl: string;
   /** apiKey 来源环境变量名（shim 转发上游时作 Bearer） */
   apiKeyEnv: string;
+  /** 合并进上游 chat completions 请求体的额外参数（shim 发出前浅合并，provider 级） */
+  upstreamParams?: Record<string, unknown>;
   description: string;
 }
 
@@ -45,6 +49,17 @@ const REGISTRY: Record<string, () => TeachProviderConfig> = {
     apiKeyEnv: 'DASHSCOPE_API_KEY',
     description: '百炼 GLM-5.3（备选；注意 5.3 无缓存命中，见 spike 报告）',
   }),
+  'gemini-openai-next': () => ({
+    id: 'gemini-openai-next',
+    model: env('TEACH_MODEL') || 'gemini-3.7-flash',
+    baseUrl: env('OPENAI_NEXT_BASE_URL') || 'https://api.openai-next.com/v1',
+    apiKeyEnv: 'OPENAI_NEXT_API_KEY',
+    // 实时教学压 TTFT：该网关上 gemini-3.7-flash 默认 70%+ 输出是 reasoning
+    // （TTFT 中位 ~7s）；reasoning_effort=low 实测把推理量压约 1/4。
+    // thinking.type=disabled / thinking_budget=0 / enable_thinking=false 均被静默忽略。
+    upstreamParams: { reasoning_effort: 'low' },
+    description: 'Gemini 3.7 Flash 经 OpenAI Next 中转（OpenAI 兼容协议，注入 reasoning_effort=low）',
+  }),
 };
 
 export type TeachProviderId = keyof typeof REGISTRY;
@@ -55,6 +70,14 @@ export const TEACH_PROVIDER_IDS = Object.keys(REGISTRY) as TeachProviderId[];
 export function resolveTeachProvider(): TeachProviderConfig {
   const wanted = (process.env.TEACH_PROVIDER || '').trim();
   const factory = REGISTRY[wanted] || REGISTRY['gemini-commonstack'];
+  return factory();
+}
+
+/** 按 id 显式取 provider（非法 id 回落默认）。fenshen 蒸馏线程用它固定 GLM——
+ *  Gemini 3 强制 function call 带 thought_signature，shim 透传不了，
+ *  带 MCP 工具的线程在 commonstack/Gemini 上会 400（out/fenshen-spike/REPORT.md） */
+export function resolveTeachProviderById(id: string): TeachProviderConfig {
+  const factory = REGISTRY[id] || REGISTRY['gemini-commonstack'];
   return factory();
 }
 
