@@ -82,12 +82,25 @@ export interface BoardRefAction {
  * v28 贴图（teach-agent 生成）：真人老师把打印图贴上黑板——粉笔框插图。
  * url 为空 = 生成中（播放器渲染粉笔框占位）；prompt 保留供追溯/重生成。
  * 不参与 wN 计数（countPageWrites 只数 write）。
+ * callId：teach-codex 线（/teach 直播）的 tool-call 事件 id，image-ready
+ * 回填时按它定位画布上已渲染的占位动作（备课态无此字段）。
  */
 export interface BoardImageAction {
   type: 'image';
   url: string;
   prompt?: string;
   caption?: string;
+  callId?: string;
+}
+
+/**
+ * teach 新引擎（teach-engine）wb_clear 动作的画布映射：清板。
+ * 渲染语义 = 本页最后一个 clear 之前的动作全部不可见（BoardCanvas 在
+ * flattenPage 后按它截断）；clear 自身不产生墨迹。legacy 词表无此动作，
+ * 备课脚本/旧线程回放永不含 clear，「页内只增不减」不变式对它们不变。
+ */
+export interface BoardClearAction {
+  type: 'clear';
 }
 
 export type BoardAction =
@@ -99,7 +112,8 @@ export type BoardAction =
   | BoardPauseAction
   | BoardNewColumnAction
   | BoardRefAction
-  | BoardImageAction;
+  | BoardImageAction
+  | BoardClearAction;
 
 // ── 段型（v3 联合类型） ────────────────────────────────────────────────────
 

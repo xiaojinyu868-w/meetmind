@@ -6,7 +6,7 @@ import { buildTerminologyHintBlock } from './prompt-context';
  *
  * 三段式契约：
  *   1. targets —— 插件从课堂证据选 3-5 个「应该能亲口讲出来」的目标点
- *   2. student —— 实时语音/打字会话里 AI 扮演安静学生的 instructions
+ *   2. student —— 半双工语音讲课里同桌（AI 学生）的开口人设（/api/apps/teach-back/respond）
  *   3. eval    —— 讲述转录对照课堂转录，判 coverage × confidence
  *
  * 本文件只放纯字符串函数，前端（TeachBackWindow）也会 import，
@@ -46,10 +46,7 @@ ${context.transcriptContext}
 }
 
 /**
- * @deprecated 2026-08：实时语音通话下线后「讲给同桌听」只走文字模式，
- * 安静学生语音 persona 暂无调用方；保留一个周期，之后随语音链路物理删除。
- *
- * 实时语音会话的 system instructions。
+ * /api/apps/teach-back/respond 的 system prompt——半双工语音版里同桌（AI 学生）的开口人设。
  * 安静学生：大部分时候只听；只有跟不上、或有目标没被讲到时才开口。
  */
 export function buildTeachBackStudentInstructions(input: {

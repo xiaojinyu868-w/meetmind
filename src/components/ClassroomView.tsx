@@ -287,6 +287,22 @@ export function ClassroomView({
     return () => window.clearTimeout(timer);
   }, [isDemoRecordingPane, playDemoAudio]);
 
+  // 自动播放被浏览器拦截（无手势禁音策略）时，借用户首次任意交互续播一次，
+  // 避免首屏三栏干等、还要自己找「播放声音」按钮。
+  useEffect(() => {
+    if (!isDemoRecordingPane || !demoAudioNeedsGesture || demoComplete) return;
+    const resume = () => {
+      const audio = demoAudioRef.current;
+      if (audio && audio.paused) void playDemoAudio();
+    };
+    window.addEventListener('pointerdown', resume, { once: true });
+    window.addEventListener('keydown', resume, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', resume);
+      window.removeEventListener('keydown', resume);
+    };
+  }, [isDemoRecordingPane, demoAudioNeedsGesture, demoComplete, playDemoAudio]);
+
   const handleReplayDemo = useCallback(() => {
     const audio = demoAudioRef.current;
     if (!audio) return;

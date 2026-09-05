@@ -712,6 +712,30 @@
   object-fit: contain;
 }
 
+/* 播客做好即弹的试听卡：纸感卡片落在深色 scrim 上，与信息图预览同一浮层体系 */
+.podcastCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(420px, 92vw);
+  padding: 20px;
+  border-radius: 16px;
+  background: #faf7f2;
+}
+
+.podcastTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #1c1b19;
+}
+
+.podcastAudio {
+  width: 100%;
+  display: block;
+}
+
 .previewActions {
   display: flex;
   align-items: center;

@@ -28,7 +28,12 @@
   └→ realtime 结果即定稿（2026-08 单遍化），直接发布为标题、摘要与应用输入
        ├→ 不再自动跑 qwen-audio-3.0-asr-flash / filetrans 课后定稿；/api/transcribe* 保留供手动「重新精转」
        ├→ 例外：realtime 一句没接住且原声有效 → 兜底批量转写（唯一转录来源，保留）
+       ├→ 「重录」同走此保底：旧录音先按停录契约落库/兜底，再开始新录音，不再静默丢弃（2026-09）
        └→ 兜底结果按 recordingId + sessionId 回填，不得覆盖下一节课 UI
+
+课中可观测
+  ├→ 连续 15s 绝对零音量（PCM 链路静默）→ 当场提醒一次「一直收不到声音」（realtime 必空的唯一常见根因）
+  └→ proxy 断开日志带 `upstreamResults` / `finalSent` 计数：区分「上游没出字」与「客户端丢了字」
 
 文件上传
   ├→ ffmpeg 分片 (10min + 2s overlap)   ← M2 T2.7

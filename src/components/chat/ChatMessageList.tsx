@@ -81,23 +81,22 @@ export function ChatMessageList({
         {showEmpty ? emptyState : children}
       </div>
 
-      {/* "回到最新"浮起按钮 */}
+      {/* "回到最新"浮起按钮：右下角圆钮，避免遮挡居中的消息文字 */}
       {!disableAutoFollow && shouldShowJumpToLatest ? (
         <button
           type="button"
           onClick={followNow}
+          title="回到最新"
           className={cn(
-            'sticky bottom-4 left-1/2 z-10 -translate-x-1/2',
-            'inline-flex h-9 items-center gap-1.5 rounded-full px-4',
-            'text-[12.5px] font-medium shadow-card transition-all',
+            'sticky bottom-4 z-10 ml-auto mr-4 flex h-9 w-9 items-center justify-center rounded-full',
+            'shadow-card transition-all',
             variant === 'glass'
               ? 'bg-white/85 text-ink backdrop-blur-md hover:bg-white'
               : 'bg-ink text-white hover:bg-pine',
           )}
           aria-label="回到最新消息"
         >
-          <ArrowDown size={13} strokeWidth={2} />
-          回到最新
+          <ArrowDown size={14} strokeWidth={2} />
         </button>
       ) : null}
     </div>

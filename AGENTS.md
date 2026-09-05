@@ -59,6 +59,7 @@ make eval           # 完整套件
 make eval-asr       # ASR dry-run（改 ASR 必跑）
 make eval-tutor     # Tutor dry-run（改 Tutor 必跑）
 make eval-guard     # CI gate：baseline 在 tests/eval/baselines/
+make ledger         # 生成能力台账（交付里程碑 / 新增底座资产后必跑，产物在 design-demo/capability-board/）
 
 # 数据库
 make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client

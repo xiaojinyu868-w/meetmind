@@ -20,6 +20,26 @@ export default function Error({
   useEffect(() => {
     // 可以在这里上报错误到监控服务
     console.error('Application Error:', error);
+
+    // 部署后旧标签页再拉懒加载 chunk 必然 404（next build 会清掉旧 chunks），
+    // 表现为点某个按钮整页跳错误页。这类 ChunkLoadError 刷新一次拿新包即恢复，
+    // 自动刷新一次（60s 内最多一次，防循环），不给用户看错误页。
+    const isChunkLoadError =
+      error?.name === 'ChunkLoadError' ||
+      /Loading chunk [\w-]+ failed|Failed to fetch dynamically imported module|error loading dynamically imported module/i.test(
+        error?.message ?? '',
+      );
+    if (isChunkLoadError && typeof window !== 'undefined') {
+      try {
+        const last = Number(sessionStorage.getItem('chunk-error-reload-at') || 0);
+        if (Date.now() - last > 60_000) {
+          sessionStorage.setItem('chunk-error-reload-at', String(Date.now()));
+          window.location.reload();
+        }
+      } catch {
+        // sessionStorage 不可用时静默放弃自动刷新，走正常错误页
+      }
+    }
   }, [error]);
 
   return (

@@ -37,4 +37,11 @@ describe('AppPluginRegistry error contract', () => {
     expect(result.raw).toMatchObject({ error: 'provider timeout' });
     expect(result.trace).toContain('plugin_execution_failed=provider timeout');
   });
+
+  it('rethrows artifact failures (no image / no audio) so the API returns ok:false', async () => {
+    const registry1 = new AppPluginRegistry([pluginThatThrows('信息图出图失败:provider timeout')]);
+    await expect(registry1.execute(context, 'test-plugin')).rejects.toThrow('信息图出图失败');
+    const registry2 = new AppPluginRegistry([pluginThatThrows('播客出音频失败：建连失败：403 Forbidden')]);
+    await expect(registry2.execute(context, 'test-plugin')).rejects.toThrow('播客出音频失败');
+  });
 });

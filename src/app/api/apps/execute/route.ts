@@ -51,9 +51,19 @@ const APP_EXEC_PODCAST_TIMEOUT_MS = parseServerTimeoutMs(
   60 * 1000,
   15 * 60 * 1000
 );
+// 信息图：draft LLM + 内联生图串行（DashScope plus 降级通道最坏 ~2 分钟轮询 +
+// 下载），默认 180s 会在长文渲染时整单超时，单独放宽到 5 分钟。
+const APP_EXEC_INFOGRAPHIC_TIMEOUT_MS = parseServerTimeoutMs(
+  process.env.APP_EXEC_INFOGRAPHIC_TIMEOUT_MS,
+  300 * 1000,
+  60 * 1000,
+  15 * 60 * 1000
+);
 
 function resolveExecuteTimeoutMs(appKey: string): number {
-  return appKey === 'audio-overview' ? APP_EXEC_PODCAST_TIMEOUT_MS : APP_EXEC_DEFAULT_TIMEOUT_MS;
+  if (appKey === 'audio-overview') return APP_EXEC_PODCAST_TIMEOUT_MS;
+  if (appKey === 'infographic') return APP_EXEC_INFOGRAPHIC_TIMEOUT_MS;
+  return APP_EXEC_DEFAULT_TIMEOUT_MS;
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {

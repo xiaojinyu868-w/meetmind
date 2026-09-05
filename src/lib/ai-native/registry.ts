@@ -9,8 +9,14 @@ function getErrorMessage(error: unknown): string {
 
 const SEMANTIC_REJECTIONS = new Set(['CONTENT_NOT_READY']);
 
+// 产物没做出来（信息图没出图 / 播客没出音频）也是可信的失败信号，必须穿透到
+// API 层返回 ok:false——否则会被包装成伪成功结果，前端提示"做好了"却拿不出东西。
+const ARTIFACT_FAILURE_PREFIXES = ['信息图出图失败', '播客出音频失败'];
+
 function shouldRethrowPluginError(error: unknown): error is Error {
-  return error instanceof Error && SEMANTIC_REJECTIONS.has(error.message);
+  if (!(error instanceof Error)) return false;
+  if (SEMANTIC_REJECTIONS.has(error.message)) return true;
+  return ARTIFACT_FAILURE_PREFIXES.some((prefix) => error.message.startsWith(prefix));
 }
 
 export class AppPluginRegistry {

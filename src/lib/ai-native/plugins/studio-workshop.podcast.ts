@@ -185,6 +185,26 @@ function extractScriptLines(cards: AppExecutionResult['cards']): Array<{ speaker
 
 export { extractScriptLines };
 
+/**
+ * 选出要进语音合成的双主播脚本行：优先 LLM plan 里的 script，
+ * 没有才退到卡片 dialogue。DashScope 逐句合成路径（无"整期一键"API）消费它。
+ */
+export function selectPodcastScriptLines(
+  podcastPlan: PodcastPlan | null,
+  cards: AppExecutionResult['cards'],
+): Array<{ speaker: string; text: string }> {
+  const planScript = toPodcastScript(podcastPlan?.script, 42);
+  const speakerMap = new Map<string, string>();
+  const cardScript = extractScriptLines(cards).map((line, index) => ({
+    speaker: normalizePodcastSpeaker(line.speaker, index, speakerMap),
+    text: sanitizePodcastNarration(line.line),
+  }));
+  const scriptSource = planScript.length > 0 ? planScript : cardScript;
+  return scriptSource
+    .map((line) => ({ speaker: line.speaker, text: sanitizePodcastNarration(line.text) }))
+    .filter((line) => line.speaker && line.text);
+}
+
 export function buildPodcastInputText(
   context: AppExecutionContext,
   output: { summary?: string } | null,

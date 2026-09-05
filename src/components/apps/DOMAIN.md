@@ -10,7 +10,7 @@
 
 ```
 apps/
-├── WorkshopYellowPage.tsx   # 分层学习动作矩阵（class / unit / exam 白名单 + 一个有依据的首选 / 显性跨课速查表入口 / 后台生成 / 任务 dock）
+├── WorkshopYellowPage.tsx   # 分层学习动作矩阵（class / unit / exam 白名单 + 一个有依据的首选 / 显性跨课速查表入口 / 后台生成 / 任务 dock）；信息图后台生成成功后直接在当前页弹出成品图预览（缓存有 imageUrl 时），无图才退回「查看」→ 独立页补生成；播客同一契约——生成成功且缓存有 audioUrl 时直接弹播放器试听卡（autoPlay 尽力而为），无音频才退回「查看」→ 完整页（脚本 + 重试条）
 ├── ClassroomFlowArtifact.tsx # 录课时已生成的课堂脉络入口与课后时间线工作区；复用持久化结果并支持时间戳回跳原话
 ├── WorkshopAppCard.tsx      # 学习动作导向的应用卡：首选完整卡 + 其他能力紧凑卡；状态与单一主操作；渲染 `data-app={app.key}`，module.css 按应用给 icon cover 分配克制签名色（cheatsheet=sand/quiz=vermilion/mindmap=pine-fog/audio=vermilion-mist/infographic=pine-mist）
 ├── workshop-recommendation.ts # 显式标记 / 已知难点的低风险推荐兜底；无可靠信号时允许不推荐

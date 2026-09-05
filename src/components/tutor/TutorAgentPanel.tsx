@@ -300,34 +300,47 @@ export function TutorAgentPanel({
 
     const hydrateConversation = async () => {
       try {
-        const targetConversation = selectedConversationId
-          ? await conversationService.getConversation(selectedConversationId)
-          : (await conversationService.listConversations(userId, {
-              type: 'global-chat',
-              sessionId,
-              limit: 1,
-            }))[0];
-        if (!alive || !targetConversation) {
-          const recentConversations = await conversationService.listConversations(userId, {
+        // 自动接回只认复习面板自己产出的对话（metadata.scope = 'review-tutor'），
+        // 不捡同会话 global-chat 桶里其他来源（材料问答、旧版残留）的最新对话——
+        // 否则复习这节课会接回一段不相干话题（手动从「历史」选择不受限）。
+        // 与 useGlobalAskHistory 的 findScopedWithMessages 同一模式：跳过空壳。
+        const findScopedWithMessages = async () => {
+          if (selectedConversationId) {
+            const target = await conversationService.getConversation(selectedConversationId);
+            if (!target) return null;
+            const history = await conversationService.getMessages(target.conversationId);
+            return { target, history };
+          }
+          const conversations = await conversationService.listConversations(userId, {
             type: 'global-chat',
             sessionId,
-            limit: 5,
+            limit: 50,
           });
-          if (alive) setRecentLearningActivity(formatRecentLearningActivityForTutorAgent(recentConversations));
-          return;
-        }
-        const historyMessages = await conversationService.getMessages(targetConversation.conversationId);
+          for (const candidate of conversations) {
+            if (candidate.metadata?.scope !== 'review-tutor') continue;
+            const candidateMessages = await conversationService.getMessages(candidate.conversationId);
+            if (candidateMessages.length > 0) {
+              return { target: candidate, history: candidateMessages };
+            }
+          }
+          return null;
+        };
+        const found = await findScopedWithMessages();
         const recentConversations = await conversationService.listConversations(userId, {
           type: 'global-chat',
           sessionId,
           limit: 5,
         });
         if (!alive) return;
-        conversationIdRef.current = targetConversation.conversationId;
-        persistedMessageIdsRef.current = new Set(historyMessages.map((message) => message.messageId));
-        setRecentLearningActivity(formatRecentLearningActivityForTutorAgent(recentConversations, targetConversation.conversationId));
-        setRestoredConversationTitle(selectedConversationTitle || targetConversation.title);
-        setMessages(historyMessages.map(conversationMessageToUIMessage));
+        if (!found) {
+          setRecentLearningActivity(formatRecentLearningActivityForTutorAgent(recentConversations));
+          return;
+        }
+        conversationIdRef.current = found.target.conversationId;
+        persistedMessageIdsRef.current = new Set(found.history.map((message) => message.messageId));
+        setRecentLearningActivity(formatRecentLearningActivityForTutorAgent(recentConversations, found.target.conversationId));
+        setRestoredConversationTitle(selectedConversationTitle || found.target.title);
+        setMessages(found.history.map(conversationMessageToUIMessage));
       } catch (err) {
         console.error('[TutorAgentPanel] failed to hydrate conversation history:', err);
       } finally {
@@ -358,6 +371,7 @@ export function TutorAgentPanel({
             title: conversationService.generateTitleFromMessage(firstUserText || '复习对话'),
             sessionId,
             model: 'tutor-agent',
+            metadata: { scope: 'review-tutor' },
           });
           conversationIdRef.current = conversation.conversationId;
           setRestoredConversationTitle(conversation.title);

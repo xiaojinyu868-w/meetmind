@@ -36,6 +36,8 @@ import { cn } from '@/lib/utils';
 interface VoiceMicButtonProps {
   /** 识别完成的最终文字（一次性回填到输入框） */
   onTranscript: (text: string) => void;
+  /** 录音真正开始的回调（父级可借此让播放中的 TTS 闭嘴） */
+  onRecordingStart?: () => void;
   /** 是否禁用 */
   disabled?: boolean;
   /** 按钮尺寸 */
@@ -92,6 +94,7 @@ function VoiceWaveBars({ size }: { size: 'sm' | 'md' }) {
 
 export function VoiceMicButton({
   onTranscript,
+  onRecordingStart,
   disabled = false,
   size = 'md',
   dark = false,
@@ -219,6 +222,7 @@ export function VoiceMicButton({
       recorder.start();
       setState('recording');
       setSecondsLeft(MAX_RECORD_SECONDS);
+      onRecordingStart?.();
 
       // 倒计时
       tickRef.current = setInterval(() => {
@@ -257,7 +261,7 @@ export function VoiceMicButton({
         if (stateRef.current === 'error') setState('idle');
       }, 1800);
     }
-  }, [disabled, state, finishUpload, cleanup]);
+  }, [disabled, state, finishUpload, cleanup, onRecordingStart]);
 
   const stopRecording = React.useCallback(() => {
     if (state !== 'recording') return;

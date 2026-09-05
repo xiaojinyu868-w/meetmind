@@ -5,8 +5,8 @@ import { getThread } from '@/lib/services/teach-codex/thread-store';
  * GET /api/teach/threads/[id]/stream —— 线程事件 SSE 订阅（EventSource 友好）。
  *
  * 连接建立即发 {type:'thread',threadId}，随后实时扇出该线程的所有事件
- * （text-delta / tool-call / tool-result / turn-complete / interrupted / error）。
- * 长连接跨 turn 存活；25s 心跳注释行防代理断连。
+ * （text-delta / tool-call / tool-result / turn-complete / interrupted /
+ * image-ready / error）。长连接跨 turn 存活；25s 心跳注释行防代理断连。
  */
 
 export async function GET(_request: Request, { params }: { params: { id: string } }) {

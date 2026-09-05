@@ -43,7 +43,7 @@ hooks → stores + types + lib/db + lib/utils
 | `useCollectionComposer.ts` | ~689 | 收集 Composer 完整逻辑（输入/提交/上下文选择/引用/滚动/菜单操作/语音听写），从 page.tsx 提取（Phase 3）；placeholder 与 pulse nudge 文案统一走 `COPY.collection` |
 | `useCollectionPulse.ts` | ~250 | 收集整理提示（collectionPulse 状态计算 + captureActivitySummary + 自动显隐 effect），从 page.tsx 提取（Phase 3）；title/body/chips/actions 文案统一走 `COPY.collection.pulse` |
 | `useTutorLauncher.ts` | ~340 | AI 家教启动逻辑（blobToDataUrl + buildTutorLaunchImages + buildTutorPrompt* + openTutor* + applyBatchAction），从 page.tsx 提取（Phase 4） |
-| `useTranscriptIngest.ts` | ~400 | 转录摄入与持久化；尊重调用方的 persistSourceKey/sourceType/role，并将来源 provenance 写入 WorkspaceCapture |
+| `useTranscriptIngest.ts` | ~400 | 转录摄入与持久化；尊重调用方的 persistSourceKey/sourceType/role，并将来源 provenance 写入 WorkspaceCapture。音频拼接护栏：只有「当前会话本身就是上一次导入新建的」才把已有会话音频并入（模块级 lastIngestCreatedSessionId），防止资料 A 的音频拼进课程 B |
 | `useRecordingLifecycle.ts` | 477 | 录音生命周期（persistCaptureToWorkspace + handleRecordingStart + handleRecordingStop）；写入 `transcriptionStatus` pending/completed/failed；2026-08 单遍化：realtime 结果停录即发布为课后证据并触发课后理解，不再自动跑课后 batch 定稿与说话人分离 |
 | `useTranscriptHandlers.ts` | 349 | 转录处理器（handleTranscriptUpdate + handleRecordingTranscriptionError + handleTranscriptEnhanced + handleVideoAssistantMessage + handleTranscriptTextUpdate）；兜底批量转写落盘后推进 ready / review，失败时同步 audioSession 为 failed；不再自动触发 diarization |
 | `useAudioMessagePlayback.ts` | ~130 | 收集流音频播放（stopAudioMessagePlayback + toggleAudioMessagePlayback + cleanup effect），从 page.tsx 提取（Phase 4） |

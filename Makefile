@@ -4,7 +4,7 @@
 RUNTIME_TARGETS := dev check build deploy test test-watch test-server test-all lint \
 	smoke smoke-intent smoke-review smoke-in-class smoke-shared smoke-all ttft \
 	eval eval-unit eval-asr eval-asr-real eval-tutor eval-tutor-real eval-guard \
-	eval-guard-update eval-ci db-push db-studio
+	eval-guard-update eval-ci db-push db-studio ledger
 
 .PHONY: assert-node-runtime
 assert-node-runtime:
@@ -24,10 +24,10 @@ check: ## 类型检查（最常用，每次改完必跑）
 
 .PHONY: build
 build: ## 生产构建
-	# 堆上限 4096：v32 后 webpack compile 峰值越过 1536（2026-08-21），v34 又越过
-	# 2560（2026-08-22），fenshen+ai-elements 后再越过 3072（2026-08-26）；机器
-	# 7.4G RAM + 15G swap。长期解法是把 teach/demo 页从主 bundle 拆开
-	NEXT_BUILD_CPUS=1 NODE_OPTIONS="--max-old-space-size=4096" npm run build
+	# 堆上限 5120：v32 后 webpack compile 峰值越过 1536（2026-08-21），v34 又越过
+	# 2560（2026-08-22），fenshen+ai-elements 后再越过 3072（2026-08-26），2026-09-03
+	# 越过 4096；机器 14G RAM + swap。长期解法是把 teach/demo 页从主 bundle 拆开
+	NEXT_BUILD_CPUS=1 NODE_OPTIONS="--max-old-space-size=5120" npm run build
 
 .PHONY: deploy
 deploy: build ## 构建 + PM2 优雅停机后重启 + 健康检查
@@ -86,6 +86,10 @@ smoke-all: ## 跑全部 4 个 mode 的 e2e smoke（goal + review + in-class + sh
 ttft: ## 测首 token 延迟（4 mode × N=5）—— 优化任何 prompt / smoothStream / provider 后必跑
 	@PORT=$${PORT:-3101} N=$${N:-5} \
 	 npx tsx scripts/measure-ttft.ts
+
+.PHONY: ledger
+ledger: ## 生成能力台账（design-demo/capability-board/ledger.json）—— 交付里程碑 / 新增底座资产后必跑
+	@npx tsx scripts/capability-ledger.ts
 
 # === Eval Harness ===
 # 设计原则：见 tests/eval/README.md

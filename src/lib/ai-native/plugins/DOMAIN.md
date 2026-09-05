@@ -11,7 +11,7 @@
 | `class-check.plugin.ts` | 随堂检验插件（基于知识点结构的智能随堂检验，视频内触发，不在 catalog） |
 | `studio-workshop.plugin.ts` | Studio Workshop 主文件（~340 行），子模块如下 |
 | `studio-workshop.types.ts` | 类型/模式检测/解析辅助（~210 行，有测试） |
-| `studio-workshop.podcast.ts` | 播客管线（~290 行） |
+| `studio-workshop.podcast.ts` | 播客管线（~310 行）：plan/清洗/时间戳污染检测/脚本行选择；合成 provider 由 `PODCAST_TTS_PROVIDER` 一行切换（默认 dashscope 逐句合成+拼接，volc 一键成品备选）；音频没拿到即整次 execute 抛错（"不出音频不算好"） |
 | `studio-workshop.renderers.ts` | 渲染负载构建器（~180 行） |
 | `flashcards.plugin.ts` | 闪卡（模型题面 / 答案必须重新落回真实原文；无语义支持则用证据片段生成安全兜底卡） |
 | `flashcards.plugin.test.ts` | 闪卡证据回锚测试：语义匹配优先、秒/毫秒归一、禁止按卡片序号轮转原文 |
@@ -19,7 +19,7 @@
 | `cheatsheet.plugin.ts` | 跨课 / 考试速查表：课堂、大纲、真题三类证据分别回锚；无支持条目直接丢弃，`strong` 只由明确强调或真题证据保留；正文保留有依据的 GFM / LaTeX / 紧凑 Mermaid（flowchart / pie / xychart-beta；小表格只用于对比，图中数值必须直接来自证据），不得为装饰滥用富文本；模型判断材料无学习价值或全部条目无法落回证据时返回 `CONTENT_NOT_READY`，禁止逐句包装原文制造假成品 |
 | `teach-back.plugin.ts` | 讲给同桌听（费曼检验）：从课堂证据选 3-5 个「应该能亲口讲出来」的目标点，`anchorText` 经 `resolveGroundedEvidence` 重新锚定，锚不住 `evidence=null` 不伪造时间戳；转录过短或选点为空抛 `CONTENT_NOT_READY`。讲述后的四象限核对不在此插件，走 `/api/apps/teach-back/evaluate`（`teach-back-eval-service.ts`：coverage × confidence 由 LLM 判断，quadrant 由服务端映射推导，不信 LLM 自报） |
 | `explainer.plugin.ts` | 板书精讲：一次 LLM 调用产出 BoardScript（讲稿 narration + 板书动作 DSL），render mode `'board'`；唯一防线是老师原话逐字校验，其余完全信任模型 |
-| `board-script.ts` | BoardScript DSL 类型 + helper（`parseWriteRef` / `countPageWrites` / `segmentDisplayText` / `checkpointAnswerText` / `extractCues`）；v2 起 write 不携带坐标，标注按 write 序号引用（'w3'）；v3 段联合类型 NarrationSegment/CheckpointSegment、ref 动作、narration 内联 cue（[aN] 词级讲写对齐，charIndex 为剥 cue 后坐标系；兼容模型偷懒写法 [N]）；**checkpoint 答案同规则：`answerDisplay` + `answerCues`（指向 demoActions，解析念到哪示范写到哪），sanitize 一并剥除 hints/question.text 里的标记——不剥会被 TTS 逐字念出（2026-08-19 实测）** |
+| `board-script.ts` | BoardScript DSL 类型 + helper（`parseWriteRef` / `countPageWrites` / `segmentDisplayText` / `checkpointAnswerText` / `extractCues`）；v2 起 write 不携带坐标，标注按 write 序号引用（'w3'）；v3 段联合类型 NarrationSegment/CheckpointSegment、ref 动作、narration 内联 cue（[aN] 词级讲写对齐，charIndex 为剥 cue 后坐标系；兼容模型偷懒写法 [N]）；BoardAction 联合含 `BoardClearAction`（teach 新引擎 wb_clear 的画布映射：清板，渲染语义 = 最后一个 clear 之前的动作不渲染，见 board-lecture.ts flattenPage；legacy 词表/备课脚本不含它）；**checkpoint 答案同规则：`answerDisplay` + `answerCues`（指向 demoActions，解析念到哪示范写到哪），sanitize 一并剥除 hints/question.text 里的标记——不剥会被 TTS 逐字念出（2026-08-19 实测）** |
 | `board-script-sanitize.ts` | `sanitizeBoardScript` 编排（quotes、页级标注越界二次清洗、script 级 ref 越界三次清洗、保底页） |
 | `board-script-sanitize-actions.ts` | 动作 / 段级形状清洗：九种动作（v31 增 `new_column` 分栏标记；write role 增 `formula`——text 为 LaTeX，KaTeX 渲染）、narration 段（cue 提取剥除）、checkpoint 段（hints 必须恰好 3 级、question/answer 缺字段整段丢弃、demoActions 只允许引用页级 write）；无 type 旧数据按 narration 兼容。与 orchestrator 合称清洗层（AmIWrite：坏动作跳过记 trace 不崩；非法 target/未知 type/空 text 丢弃计数，页数/段数超限截断）；`sanitizeBoardScript` 入口从 board-script.ts 再导出 |
 | `explainer-prompts.ts` | 板书精讲 System/User Prompt（2026-08 v17 少结构多智能：只留输出契约 + 品味宪法 + 引用铁律，微管理配方全部删除——节奏与结构由模型智能把握）：JSON 契约（title/pages/quotes + breathMs）、七种动作（含 ref）、**一口气一段（v26：一个 segment = 一口气——一两句完整的话 15-45 字 + 0-2 个板书动作，写东西的那口气说的就是它；纯讲的口气 actions 为空；上百字长讲稿明文禁止——小单元让音画配合在单元内天然成立，背压/闸门降级为保险丝）**、[aN] 嘴手一体（v20：写的时候嘴里说的就是手上写的；cue 锚在"开始讲述该内容"的词上，说到它笔开始写它；纯讲解时段不排书写动作）、**板书成品章法（v22：课题置顶+写完画线、并列要点序号分点、每行值得拍照、一页正文 ≤6 行疏朗不拥挤、最重要 1-2 处圈划、term=黄粉笔必记重点）**、checkpoint 契约（hints 恰好 3 条）、英文保留空格、JSON 紧凑 |

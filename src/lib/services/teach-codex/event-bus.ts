@@ -13,6 +13,7 @@
  *   {type:'tool-result',id,result}  工具结果（BoardEnv digest：{ok,board,...}）
  *   {type:'turn-complete'}          一轮讲完
  *   {type:'interrupted'}            当前 turn 被打断
+ *   {type:'image-ready',id,url}     插图回填完成（id = image tool-call 的 id）
  *   {type:'error',message}          错误（人可读）
  */
 
@@ -23,6 +24,7 @@ export type TeachStreamEvent =
   | { type: 'tool-result'; id: string; result: unknown }
   | { type: 'turn-complete' }
   | { type: 'interrupted' }
+  | { type: 'image-ready'; id: string; url: string }
   | { type: 'error'; message: string };
 
 /**

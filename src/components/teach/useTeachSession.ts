@@ -15,12 +15,13 @@
  * - tool-call → 可见工具挂 chip（isVisibleTool）+ boardEffectOf 上板/翻页
  * - turn-complete / interrupted → 一轮结束；mock 模式快照落盘（teach-store）
  * - student-message → 仅事件日志回放出现，还原用户气泡（quote 拆回引用块）
+ * - image-ready → 插图回填：按 toolCallId 把画布占位 image 动作的 url 填上
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BoardPage } from '@/lib/ai-native/plugins/board-script';
 import { COPY } from '@/lib/ui/copy';
-import { boardEffectOf, buildWireText, isVisibleTool, parseWireText } from './teach-events';
+import { applyImageUrlToBoard, boardEffectOf, buildWireText, engineTitleFollow, isVisibleTool, parseWireText } from './teach-events';
 import type { TeachChatMessage, TeachEvent } from './teach-events';
 import { useTeachBoardSync } from './useTeachBoardSync';
 import {
@@ -99,6 +100,8 @@ export function useTeachSession(): UseTeachSessionResult {
   streamingRef.current = streaming;
   // tool-call 分气泡闸门：上一段话以句末标点收尾才分（下一段 text-delta 开新气泡）
   const boundaryRef = useRef(false);
+  // 新引擎标题跟随：本线程首条 wb_draw_text 是否已消费（prompt 契约 = 课题标题）
+  const engineTitleSeenRef = useRef(false);
 
   const setBothStreaming = useCallback((value: boolean) => {
     streamingRef.current = value;
@@ -137,8 +140,8 @@ export function useTeachSession(): UseTeachSessionResult {
     [commitMessages],
   );
 
-  const applyBoardEffect = useCallback((name: string, args: Record<string, unknown>) => {
-    const effect = boardEffectOf(name, args);
+  const applyBoardEffect = useCallback((name: string, args: Record<string, unknown>, callId?: string) => {
+    const effect = boardEffectOf(name, args, callId);
     if (effect.type === 'none') return;
     if (effect.type === 'flip') {
       const nextPages = [...pagesRef.current, emptyPage()];
@@ -175,14 +178,23 @@ export function useTeachSession(): UseTeachSessionResult {
       } else if (event.type === 'tool-call') {
         setBothStreaming(true);
         if (isVisibleTool(event.name)) appendChip(event.id, event.name);
+        let args = event.args;
         // 标题跟随：agent 写下正式课题标题 → 页头同步（中途换题不滞留旧课题）
         if (event.name === 'write' && event.args.role === 'title' && typeof event.args.text === 'string') {
           setTitle(event.args.text);
+        } else if (event.name === 'wb_draw_text' && !engineTitleSeenRef.current) {
+          // 新引擎（teach-engine）标题跟随：首条 wb_draw_text = 课题标题（回放同路径）
+          engineTitleSeenRef.current = true;
+          const follow = engineTitleFollow(event.name, event.args);
+          if (follow) {
+            setTitle(follow.title);
+            args = follow.args;
+          }
         }
         // "说完一句就落笔"：工具调用是自然断句点，半句也送合成；
         // 先断句再取闸门序号——板书锚到刚说完的这句
         if (live && event.name !== 'pause' && event.name !== 'new_column') feedBreak();
-        gateBoardEffect(event.name, event.args, live);
+        gateBoardEffect(event.name, args, live, event.id);
         // 句号闸门：上一段话说完了才分气泡；pause/new_column 不切碎话头
         if (event.name !== 'pause' && event.name !== 'new_column') {
           const last = messagesRef.current[messagesRef.current.length - 1];
@@ -202,6 +214,14 @@ export function useTeachSession(): UseTeachSessionResult {
           ...messagesRef.current,
           { id: newMessageId(), role: 'user', text, chips: [], ...(quote ? { quote } : {}) },
         ]);
+      } else if (event.type === 'image-ready') {
+        // 插图回填：按 toolCallId 找到画布上已渲染的占位动作，把 url 填上
+        // （直播与回放同路径；找不到 = 占位已不在当前板上，忽略）
+        const nextPages = applyImageUrlToBoard(pagesRef.current, event.id, event.url);
+        if (nextPages) {
+          pagesRef.current = nextPages;
+          setPages(nextPages);
+        }
       } else if (event.type === 'error') {
         setError(event.message);
       }
@@ -267,6 +287,7 @@ export function useTeachSession(): UseTeachSessionResult {
           pagesRef.current = [emptyPage()];
           pageIndexRef.current = 0;
           boundaryRef.current = false;
+          engineTitleSeenRef.current = false;
           setMessages([]);
           setPages(pagesRef.current);
           setPageIndex(0);
@@ -337,6 +358,7 @@ export function useTeachSession(): UseTeachSessionResult {
       pagesRef.current = [emptyPage()];
       pageIndexRef.current = 0;
       boundaryRef.current = false;
+      engineTitleSeenRef.current = false;
       setMessages([]);
       setPages(pagesRef.current);
       setPageIndex(0);
@@ -374,6 +396,7 @@ export function useTeachSession(): UseTeachSessionResult {
       setTitle(meta.title);
       threadIdRef.current = meta.id;
       boundaryRef.current = false;
+      engineTitleSeenRef.current = false;
       if (!isMockMode()) {
         // 真实：事件日志回放重建对话与画布，再订阅续讲
         const events = await teachFetchEvents(meta.id);

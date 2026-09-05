@@ -88,6 +88,7 @@ src/app/
 | `all-notes/page.tsx` | 440 | 跨 session 的笔记聚合页 |
 | `admin/ai-control/page.tsx` | — | 管理员专属 AI 控制中心；复杂编辑与版本管理留在独立页面，产品现场仅提供带本次真实上下文的轻入口 |
 | `wechat/capture/[token]/page.tsx` | 152 | 接收微信推送的 capture 数据 |
+| `error.tsx` | — | 根段错误兜底页（OOPS · Octo 没接住这条）。对 ChunkLoadError（部署后旧标签页拉不到已清除的懒加载 chunk）自动刷新一次拿新包（60s 内最多一次，sessionStorage 防循环），其余错误走原错误页 |
 
 ## 最近的 God File 偿还
 
