@@ -10,6 +10,7 @@
  */
 
 import type {
+  FenshenChatScope,
   FenshenEgoDto,
   FenshenLogEvent,
   FenshenSourceType,
@@ -98,21 +99,31 @@ export function fenshenSubscribe(
   return () => source.close();
 }
 
-/** 与分身对话（ack；事件经订阅流出）。分身未 ready 或 turn 进行中 409。 */
-export async function fenshenPostMessage(egoId: string, text: string): Promise<Response> {
+/** 与分身对话（ack；事件经订阅流出）。分身未 ready 或 turn 进行中 409。
+ *  scope.sessionId = 用户当前复习页的课程会话，分身按这节课物化上下文；
+ *  scope.lessonSnapshot = 这节课的前端快照（guest/demo 未持久化时服务端用它兜底）。 */
+export async function fenshenPostMessage(
+  egoId: string,
+  text: string,
+  scope: FenshenChatScope = {},
+): Promise<Response> {
   return fetch(egoUrl(egoId, '/messages'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, sessionId: scope.sessionId, lessonSnapshot: scope.lessonSnapshot }),
   });
 }
 
-/** 打断；附带 text 时 interrupted 落地后同线程续讲 */
-export async function fenshenPostInterrupt(egoId: string, text?: string): Promise<Response> {
+/** 打断；附带 text 时 interrupted 落地后同线程续讲。scope 语义同 messages。 */
+export async function fenshenPostInterrupt(
+  egoId: string,
+  text?: string,
+  scope: FenshenChatScope = {},
+): Promise<Response> {
   return fetch(egoUrl(egoId, '/interrupt'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(text ? { text } : {}),
+    body: JSON.stringify({ text, sessionId: scope.sessionId, lessonSnapshot: scope.lessonSnapshot }),
   });
 }
 

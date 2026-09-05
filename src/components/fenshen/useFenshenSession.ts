@@ -26,6 +26,7 @@ import {
 import type {
   DistillProgressEntry,
   FenshenChatMessage,
+  FenshenChatScope,
   FenshenLogEvent,
   FenshenSessionState,
   FenshenStreamEvent,
@@ -47,8 +48,8 @@ export interface UseFenshenSessionResult {
   error: string | null;
   /** 打开一个分身：回放历史 + 订阅实时流（重复调用切换分身） */
   open: (egoId: string) => Promise<void>;
-  /** 发消息（streaming 中 = 打断续讲） */
-  send: (text: string) => Promise<void>;
+  /** 发消息（streaming 中 = 打断续讲）；scope = 当前复习页课程会话 + 这节课快照 */
+  send: (text: string, scope?: FenshenChatScope) => Promise<void>;
   /** 纯打断（不带续讲消息） */
   interrupt: () => Promise<void>;
   /** 试听反馈；unlike 后状态由调用方按契约回到 learning */
@@ -161,7 +162,7 @@ export function useFenshenSession(): UseFenshenSessionResult {
     [],
   );
 
-  const send = useCallback(async (text: string) => {
+  const send = useCallback(async (text: string, scope?: FenshenChatScope) => {
     const id = egoIdRef.current;
     const trimmed = text.trim();
     if (!id || !trimmed) return;
@@ -169,12 +170,12 @@ export function useFenshenSession(): UseFenshenSessionResult {
     apply({ type: 'user-message', text: trimmed });
     try {
       if (stateRef.current.streaming) {
-        const response = await fenshenPostInterrupt(id, trimmed);
+        const response = await fenshenPostInterrupt(id, trimmed, scope);
         if (!response.ok) throw new Error(await fenshenErrorMessage(response));
       } else {
-        const response = await fenshenPostMessage(id, trimmed);
+        const response = await fenshenPostMessage(id, trimmed, scope);
         if (response.status === 409) {
-          const retry = await fenshenPostInterrupt(id, trimmed);
+          const retry = await fenshenPostInterrupt(id, trimmed, scope);
           if (!retry.ok) throw new Error(await fenshenErrorMessage(retry));
         } else if (!response.ok) {
           throw new Error(await fenshenErrorMessage(response));

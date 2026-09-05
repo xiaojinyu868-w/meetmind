@@ -141,6 +141,10 @@ export interface ClassroomCompanionPanelProps {
    * 用户**不点也行**，不强制读。
    */
   dynamicChips?: ClassroomDynamicChip[];
+  /** 当前课程会话：「请一个分身」入口按这节课物化对话上下文 */
+  sessionId?: string;
+  /** 这节课的标题：分身架子副标题与对话头部 chip 用 */
+  lessonTitle?: string;
   adminInspector?: {
     context: Record<string, unknown>;
     options: Record<string, unknown>;
@@ -325,6 +329,8 @@ function EmptyCompanion({
   suggestedPrompts,
   afterClass,
   onAfterClassAction,
+  sessionId,
+  lessonTitle,
 }: {
   mode: CompanionMode;
   onPickSkill: (prompt: string) => void;
@@ -332,6 +338,8 @@ function EmptyCompanion({
   suggestedPrompts: string[];
   afterClass: boolean;
   onAfterClassAction?: () => void;
+  sessionId?: string;
+  lessonTitle?: string;
 }) {
   if (mode === 'listening') {
     return (
@@ -341,6 +349,8 @@ function EmptyCompanion({
           suggestedPrompts={suggestedPrompts}
           afterClass={afterClass}
           onAfterClassAction={onAfterClassAction}
+          sessionId={sessionId}
+          lessonTitle={lessonTitle}
         />
       </div>
     );
@@ -369,12 +379,18 @@ function ListeningStarterCard({
   suggestedPrompts = DEFAULT_LIGHT_PROMPTS,
   afterClass = false,
   onAfterClassAction,
+  sessionId,
+  lessonTitle,
 }: {
   onPickSkill: (prompt: string) => void;
   onOpenApp?: (appKey: WorkshopAppKey) => void;
   suggestedPrompts?: string[];
   afterClass?: boolean;
   onAfterClassAction?: () => void;
+  /** 当前课程会话：分身入口按这节课物化对话上下文 */
+  sessionId?: string;
+  /** 这节课的标题：分身架子副标题与对话头部 chip 用 */
+  lessonTitle?: string;
 }) {
   if (!afterClass) {
     return (
@@ -416,7 +432,7 @@ function ListeningStarterCard({
                 </button>
               ))}
               {/* 课后复习态固定入口：请一个分身（fixed inset-0 架层，非应用矩阵产物） */}
-              <FenshenEntryChip />
+              <FenshenEntryChip sessionId={sessionId} lessonTitle={lessonTitle} />
             </div>
           </div>
         </div>
@@ -503,6 +519,8 @@ export function ClassroomCompanionPanel({
   onAfterClassAction,
   onMarkMoment,
   dynamicChips = [],
+  sessionId,
+  lessonTitle,
   adminInspector,
 }: ClassroomCompanionPanelProps) {
   const effectivePlaceholder = placeholder ?? (
@@ -543,6 +561,8 @@ export function ClassroomCompanionPanel({
             suggestedPrompts={suggestedPrompts}
             afterClass={afterClass}
             onAfterClassAction={onAfterClassAction}
+            sessionId={sessionId}
+            lessonTitle={lessonTitle}
           />
         ) : (
           <div className="flex flex-col">
@@ -562,6 +582,8 @@ export function ClassroomCompanionPanel({
                 suggestedPrompts={suggestedPrompts}
                 afterClass={afterClass}
                 onAfterClassAction={onAfterClassAction}
+                sessionId={sessionId}
+                lessonTitle={lessonTitle}
               />
             ) : null}
             {streamingMessage ? (

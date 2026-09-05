@@ -188,22 +188,39 @@ async function detectDistilledSkill(egoId: string): Promise<string | null> {
   return null;
 }
 
-/** codex 内置 exec/MCP 通知 → 账本式 distill-progress 事件（文案化，截断防爆） */
-function progressNote(notification: CodexNotification): string | null {
+/**
+ * codex 内置 exec/MCP 通知 → 账本式 distill-progress 事件。
+ *
+ * 铁律：skill 内部机制（命令、文件名、Phase、SKILL.md、分句指纹）不进 UI。
+ * 这里只映射为固定的人话步骤短语，相邻去重；raw 字符串一律丢弃。
+ */
+const DISTILL_STEP_PHRASES = [
+  '翻阅讲课素材',
+  '提炼语言习惯',
+  '整理知识脉络',
+  '校准表达风格',
+  '核对内容细节',
+  '打磨讲解方式',
+];
+const distillStepCounters = new Map<string, number>();
+const lastDistillNote = new Map<string, string>();
+
+function progressNote(egoId: string, notification: CodexNotification): string | null {
   if (notification.method !== 'item/started') return null;
   const item = (notification.params ?? {}).item as Record<string, unknown> | undefined;
   if (!item) return null;
-  const clip = (value: unknown, max = 80) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+  let note: string | null = null;
   if (item.type === 'commandExecution') {
-    const command = clip(item.command);
-    return command ? `执行命令：${command}` : '执行命令';
+    const n = distillStepCounters.get(egoId) ?? 0;
+    distillStepCounters.set(egoId, n + 1);
+    note = DISTILL_STEP_PHRASES[n % DISTILL_STEP_PHRASES.length];
+  } else if (item.type === 'mcpToolCall') {
+    note = '检索公开资料';
   }
-  if (item.type === 'mcpToolCall') {
-    const tool = clip(item.tool) || clip(item.name);
-    const server = clip(item.server);
-    return `调用工具：${server ? `${server} / ` : ''}${tool || 'unknown'}`;
-  }
-  return null;
+  if (!note) return null;
+  if (lastDistillNote.get(egoId) === note) return null;
+  lastDistillNote.set(egoId, note);
+  return note;
 }
 
 async function onDistillTurnSettled(egoId: string): Promise<void> {
@@ -223,12 +240,9 @@ function onDistillNotification(egoId: string, notification: CodexNotification) {
   const { method, params } = notification;
   const p = (params ?? {}) as Record<string, unknown>;
 
-  if (method === 'item/agentMessage/delta') {
-    const delta = typeof p.delta === 'string' ? p.delta : '';
-    if (delta) emit(egoId, { type: 'text-delta', text: delta });
-    return;
-  }
-  const note = progressNote(notification);
+  // 蒸馏线程的 agent 叙述（Phase/SKILL.md 等内部机制）一律不进 UI——
+  // 进度只由 distill-progress 账本承载（skill 永不对用户可见）。
+  const note = progressNote(egoId, notification);
   if (note) {
     emit(egoId, { type: 'distill-progress', note });
     return;

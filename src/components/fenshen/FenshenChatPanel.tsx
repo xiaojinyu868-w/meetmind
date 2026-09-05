@@ -27,17 +27,27 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { COPY } from '@/lib/ui/copy';
 import { DistillProgressView } from './DistillProgressView';
-import type { FenshenEgoDto, FenshenEgoStatus } from './fenshen-events';
+import type {
+  FenshenEgoDto,
+  FenshenEgoStatus,
+  FenshenLessonSnapshot,
+} from './fenshen-events';
 import { useFenshenSession } from './useFenshenSession';
 
 interface FenshenChatPanelProps {
   ego: FenshenEgoDto;
   onBack: () => void;
+  /** 当前复习页课程会话：分身按这节课物化上下文（哪节课打开就听哪节课） */
+  sessionId?: string;
+  /** 这节课的标题：头部常驻 chip 明示分身正在读哪节课 */
+  lessonTitle?: string;
+  /** 这节课的前端快照（guest/demo 未持久化到服务端 DB 时的上下文兜底） */
+  lessonSnapshot?: FenshenLessonSnapshot;
 }
 
 type FeedbackState = 'idle' | 'editing-unlike' | 'done';
 
-export function FenshenChatPanel({ ego, onBack }: FenshenChatPanelProps) {
+export function FenshenChatPanel({ ego, onBack, sessionId, lessonTitle, lessonSnapshot }: FenshenChatPanelProps) {
   const session = useFenshenSession();
   const [draft, setDraft] = useState('');
   // unlike 反馈后契约上状态回 learning；等 ego-ready 再翻回（hook ready 为准）
@@ -70,9 +80,9 @@ export function FenshenChatPanel({ ego, onBack }: FenshenChatPanelProps) {
       const trimmed = text.trim();
       if (!trimmed || !chatReady) return;
       setDraft('');
-      await session.send(trimmed);
+      await session.send(trimmed, sessionId ? { sessionId, lessonSnapshot } : {});
     },
-    [chatReady, session],
+    [chatReady, session, sessionId, lessonSnapshot],
   );
 
   const handleFeedback = useCallback(
@@ -116,6 +126,13 @@ export function FenshenChatPanel({ ego, onBack }: FenshenChatPanelProps) {
         <h3 className="flex-1 truncate text-center text-[14px] font-medium text-ink">{ego.name}</h3>
         {statusBadge}
       </div>
+
+      {/* 常驻课名 chip：分身「正在读哪节课」从产品上显式在场（上下文本是隐式的） */}
+      {lessonTitle ? (
+        <div className="border-b border-divider bg-pine-fog/60 px-4 py-1.5 text-center text-[11px] text-ink-secondary">
+          {COPY.fenshen.chatLessonChip(lessonTitle)}
+        </div>
+      ) : null}
 
       {/* 账本式进度（可折叠，默认收起） */}
       {session.progress.length > 0 ? (

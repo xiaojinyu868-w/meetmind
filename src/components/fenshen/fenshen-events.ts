@@ -40,6 +40,18 @@ export type FenshenStreamEvent =
   | { type: 'interrupted' }
   | { type: 'error'; message: string };
 
+/** 这节课的快照（guest/demo 会话未持久化到服务端 DB 时的上下文来源） */
+export interface FenshenLessonSnapshot {
+  title?: string;
+  segments?: { startMs: number; endMs: number; text: string; speakerId?: string | null }[];
+}
+
+/** 发送时的物化范围：sessionId 定位这节课，lessonSnapshot 兜底这节课的内容 */
+export interface FenshenChatScope {
+  sessionId?: string;
+  lessonSnapshot?: FenshenLessonSnapshot;
+}
+
 /** 事件日志行 = SSE 契约事件 + 用户消息记录（只落盘不广播，回放恢复对话用） */
 export type FenshenLogEvent = FenshenStreamEvent | { type: 'user-message'; text: string };
 
