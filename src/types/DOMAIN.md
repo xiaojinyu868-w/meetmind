@@ -18,6 +18,7 @@
 | `conversation.ts` | 121 | 对话历史类型 | `ConversationType`, `MessageRole`, `ConversationHistory`, `ConversationMessage` |
 | `classroom-flow.ts` | ~35 | 课中课堂脉络契约 | `ClassroomFlowState`, `ClassroomMoment`, `ClassroomSignal` |
 | `learning-intent.ts` | ~45 | 深度学习开始前的交互式意图契约 | `LearningIntentPlan`, `LearningIntentQuestion`, `LearningIntentAnswer`, `LearningIntentApproach`, `LearningContextFocus` |
+| `learning-event.ts` | ~80 | 学习记忆事件契约（P0 事件化：事件表是画像唯一写入口） | `LearningEventType`、`LearningEventInput`、`LearningConversationPayload`、`LearningActivityPayload`（payload 含版本字段 `v`） |
 | `ai-control.ts` | ~120 | 管理员 AI 控制台的 Tutor / 理解层 / 应用链路目录、提示词覆盖、版本、预览与真实结果对比契约 | `AiControlKey`, `AiPromptOverride`, `AiControlItem`, `AiPromptPreview`, `AiControlComparison` |
 
 ## 使用约定

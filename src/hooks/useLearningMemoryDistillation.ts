@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
-import type { UseLearningContextReturn } from '@/hooks/useLearningContext';
+import { refreshLearningContextFromServer, type UseLearningContextReturn } from '@/hooks/useLearningContext';
 import type { DistilledLearningMemory, ExistingLearningMemory } from '@/lib/services/learning-memory-distillation-service';
 import type { LearningIntentPlan } from '@/types/learning-intent';
 import type { LearningThreadEntry } from '@/types/user';
@@ -14,6 +14,8 @@ interface DistillLearningMemoryRequest {
 
 interface UseLearningMemoryDistillationOptions {
   accessToken?: string;
+  /** 登录用户 ID（服务端事件管道的读刷新按 ownerKey 广播）；访客无需传 */
+  userId?: string;
   memories: ExistingLearningMemory[];
   activeThread?: LearningThreadEntry;
   activeIntent?: LearningIntentPlan | null;
@@ -22,8 +24,12 @@ interface UseLearningMemoryDistillationOptions {
   setActiveThread: UseLearningContextReturn['setActiveThread'];
 }
 
+// 服务端蒸馏合并是 fire-and-forget：事件落库后延迟重拉画像刷新本地 state。
+const SERVER_REFRESH_DELAYS_MS = [2_500, 8_000];
+
 export function useLearningMemoryDistillation({
   accessToken,
+  userId,
   memories,
   activeThread,
   activeIntent,
@@ -35,12 +41,37 @@ export function useLearningMemoryDistillation({
     input: DistillLearningMemoryRequest,
   ): Promise<void> => {
     try {
+      if (accessToken && userId) {
+        // 登录用户（P0 事件化）：只发事件，蒸馏与 merge 收归服务端
+        // （learning-event-service），客户端不再走 merge→PATCH 整体回写。
+        // type 标 'progress'：这是蒸馏前的原始互动回合，具体性质由蒸馏模型判定。
+        const response = await fetch('/api/memory/events', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            appId: 'global-ask',
+            type: 'progress',
+            payload: { v: 1, userText: input.userText, assistantText: input.assistantText },
+            sourceId: input.sourceId,
+            idempotencyKey: `global-understanding:${input.sourceId}`,
+          }),
+        });
+        if (!response.ok) return;
+        for (const delay of SERVER_REFRESH_DELAYS_MS) {
+          setTimeout(() => {
+            void refreshLearningContextFromServer(userId, accessToken);
+          }, delay);
+        }
+        return;
+      }
+
+      // 访客：维持现有客户端蒸馏 + 本地合并流程（IndexedDB learning_context_guest_v1）
       const response = await fetch('/api/tutor/memory', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userText: input.userText,
           assistantText: input.assistantText,
@@ -90,5 +121,5 @@ export function useLearningMemoryDistillation({
     } catch {
       // Context maintenance must never interrupt the user's main learning flow.
     }
-  }, [accessToken, activeIntent, activeThread, addMemory, memories, setActiveThread, updateMemory]);
+  }, [accessToken, userId, activeIntent, activeThread, addMemory, memories, setActiveThread, updateMemory]);
 }

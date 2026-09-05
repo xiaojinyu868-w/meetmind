@@ -796,6 +796,25 @@ model RechargeOrder {
   @@index([userId, createdAt])
 }
 
+/// 学习记忆事件（P0 事件化：事件表是画像唯一写入口，learnerProfileJson 是物化视图）。
+/// 写入方（客户端边缘观察 / 服务端观察器）只发事件；蒸馏与合并由
+/// learning-event-service 在服务端完成。idempotencyKey 撞 unique 静默返回已有；
+/// 事件全量留史，可回放重建画像。
+model LearningEvent {
+  id             String   @id @default(cuid())
+  userId         String // 用户ID（一期只收登录用户；guest 归并留待后续）
+  appId          String // 来源应用：global-ask | classroom | wechat | teach...
+  type           String // confusion | mastery | error | preference | progress | activity
+  payloadJson    String // JSON — 事件载荷（版本字段约定见 src/types/learning-event.ts）
+  sourceId       String? // 业务对象ID（conversationId / captureId...）
+  idempotencyKey String?  @unique // 幂等键，冲突则跳过
+  occurredAt     DateTime @default(now()) // 事件发生时间（客户端可回填）
+  createdAt      DateTime @default(now())
+
+  @@index([userId, occurredAt])
+  @@index([userId, appId])
+}
+
 // 订阅会员：无记录或 expiresAt 已过 = 免费档（读时判断，无需定时任务）
 model Membership {
   id               String   @id @default(cuid())
