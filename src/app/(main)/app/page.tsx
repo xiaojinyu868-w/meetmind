@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { hasActiveScreenTrack, captureFrameViaRecordingHook } from '@/lib/services/keyframe/screen-frame-grabber';
@@ -2038,16 +2039,26 @@ function StudentAppContent({
           <span className="min-w-0 flex-1 truncate text-[12px] text-ink-muted">
             {COPY.demo.reviewBannerBody}
           </span>
-          <button
-            type="button"
-            onClick={() => {
-              consumeDemoEntry();
-              void handleViewModeChange('classroom');
-            }}
-            className="flex-shrink-0 rounded-full bg-pine px-3 py-1 text-[12px] font-medium text-white transition-colors hover:bg-pine-deep"
-          >
-            {COPY.demo.reviewBannerAction}
-          </button>
+          {!isAuthenticated ? (
+            <Link
+              href="/login"
+              onClick={() => consumeDemoEntry()}
+              className="flex-shrink-0 rounded-full bg-pine px-3 py-1 text-[12px] font-medium text-white transition-colors hover:bg-pine-deep"
+            >
+              {COPY.demo.reviewBannerLoginAction}
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                consumeDemoEntry();
+                void handleViewModeChange('classroom');
+              }}
+              className="flex-shrink-0 rounded-full bg-pine px-3 py-1 text-[12px] font-medium text-white transition-colors hover:bg-pine-deep"
+            >
+              {COPY.demo.reviewBannerAction}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setDemoBannerVisible(false)}

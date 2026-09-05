@@ -7,7 +7,6 @@ export const APP_PROMPT_VERSIONS = {
   quiz: 'app-quiz-v1',
   mindmap: 'app-mindmap-v1',
   cheatsheet: 'app-cheatsheet-v1',
-  infographic: 'app-infographic-v1',
   audioOverview: 'app-audio-overview-v1',
   teachBack: 'app-teach-back-v1',
 } as const;
@@ -200,45 +199,8 @@ ${context.transcriptContext}
 ${context.anchorContext ? `学习者关注点：\n${context.anchorContext}\n` : ''}${buildTerminologyHintBlock(context.terminologyHint)}`;
 }
 
-export function buildInfographicSystemPrompt(): string {
-  return '你是一位教育信息设计师。把一节课提炼成“一张图带走”的视觉学习卡：先判断这节课最值得被看见的一个中心命题，再用极少文字呈现支撑它的结构。严格基于课堂证据，不编造老师金句、数字或关系。信息图不是缩小版课堂笔记，也不是装饰海报；只输出 JSON。';
-}
-
-export function buildInfographicUserPrompt(context: StructuredAppPromptContext): string {
-  return `应用目标：${context.goalIntent || '生成一张图带走这节课'}
-应用场景：学生会在复习时扫一眼，也可能把成品分享到班级群。手机上必须无需放大就能看懂，视觉层级优先于信息数量。
-
-输出 JSON：
-{
-  "title": "结果标题",
-  "summary": "一句话摘要",
-  "cards": [{ "title": "模块标题", "body": "模块正文", "bullets": ["要点"] }],
-  "infographic": {
-    "title": "信息图标题",
-    "subtitle": "副标题",
-    "keyPoints": ["关键点1", "关键点2"],
-    "visualPlan": ["版式/视觉关系说明"],
-    "imagePrompt": "供图片模型执行的完整提示词",
-    "stylePreset": "克制、清晰的视觉风格",
-    "suggestedScene": "class-take-away|timeline|comparison|flowchart|data-viz",
-    "suggestedOrientation": "landscape|portrait|square",
-    "suggestedDetailLevel": "concise|standard"
-  }
-}
-
-质量合同：
-- 只保留一个中心命题和 3-5 个真正支撑它的视觉模块；不要把整节课摘要塞进一张图
-- title 中文尽量不超过 14 字，subtitle 不超过 28 字；每个 keyPoint 尽量不超过 22 字
-- 关系优先用位置、连线、对比、流程或尺度表达；不要用一排同质卡片冒充信息设计
-- 老师原话只有在课堂原文有可核对措辞时才能作为引语；否则改写为知识陈述，不加引号
-- imagePrompt 必须逐字保留 title 与 keyPoints，并明确“禁止新增文字、禁止伪造数字、禁止密集小字”
-- 没有数值证据时不得选择 data-viz；没有顺序或因果证据时不得选择 timeline / flowchart
-- 适配 MeetMind 的米白纸感、墨绿与朱批红点缀；禁止高饱和渐变、3D 商务插画和模板海报感
-- 只输出 JSON，不解释
-
-${context.anchorContext ? `学习者关注点：\n${context.anchorContext}\n\n` : ''}课堂原文：
-${context.transcriptContext}${buildTerminologyHintBlock(context.terminologyHint)}`;
-}
+// 信息图 prompt 已迁至 src/lib/services/infographic-skill-service.ts
+// (宝玉 baoyu-infographic 手册管线,预设画风/版式/横版),此处不再保留旧版。
 
 const AUDIO_TIMESTAMP_PATTERN = /\b\d{1,2}:\d{2}(?::\d{2})?\b/g;
 const AUDIO_META_PATTERN = /\b(startMs|endMs)\s*=\s*\d+\b/gi;

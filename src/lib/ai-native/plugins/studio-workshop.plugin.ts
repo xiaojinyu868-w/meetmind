@@ -7,7 +7,6 @@
  *   - studio-workshop.podcast.ts  — podcast pipeline (plan, assembly, pollution, rounds)
  *   - studio-workshop.renderers.ts — render payload builders (slides, infographic, etc.)
  */
-import type { TranscriptSegment } from '@/types';
 import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import {
@@ -16,9 +15,15 @@ import {
   type VolcPodcastResult,
 } from '@/lib/services/volc-podcast';
 import {
-  generateGeminiImage,
-  isGeminiImageEnabled,
-} from '@/lib/services/gemini-image-service';
+  generateInfographicImage,
+  isInfographicImageEnabled,
+} from '@/lib/services/infographic-image-provider';
+import {
+  buildInfographicSkillSystemPrompt,
+  buildInfographicSkillUserPrompt,
+  assembleInfographicImagePrompt,
+  INFOGRAPHIC_PRESET,
+} from '@/lib/services/infographic-skill-service';
 import type {
   AppExecutionContext,
   AppExecutionResult,
@@ -26,10 +31,6 @@ import type {
   AppPluginTools,
 } from '../types';
 import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
-import {
-  buildInfographicSystemPrompt,
-  buildInfographicUserPrompt,
-} from '../app-prompts';
 
 import type { StudioMode, StudioOutput } from './studio-workshop.types';
 import {
@@ -52,7 +53,12 @@ import {
   hasTimestampPollution,
   buildPodcastInputText,
   buildPodcastRoundCards,
+  selectPodcastScriptLines,
 } from './studio-workshop.podcast';
+import {
+  generateDashscopePodcast,
+  isDashscopePodcastEnabled,
+} from '@/lib/services/dashscope-podcast';
 import { buildInfographicDraft, buildRenderPayload } from './studio-workshop.renderers';
 
 // ── LLM: generic studio output ────────────────────────────────────
@@ -65,11 +71,13 @@ async function generateStudioOutput(
   anchorContext: string,
   controlledSystemPrompt?: string,
 ): Promise<StudioOutput | null> {
+  // 信息图走 skill 管线:手册材料(基座模板+预设画风+预设版式)进 system,
+  // LLM 单次过整节课转录,直接产出可交生图模型的完整提示词。
   const systemPrompt = controlledSystemPrompt || (mode === 'infographic'
-    ? buildInfographicSystemPrompt()
+    ? buildInfographicSkillSystemPrompt()
     : `你是${modeRole(mode)}，目标是把课堂内容转成可直接使用的学习产物。严格基于课堂证据，不编造。输出纯 JSON。`);
   const userPrompt = mode === 'infographic'
-    ? buildInfographicUserPrompt({
+    ? buildInfographicSkillUserPrompt({
         goalIntent: context.goal.intent,
         transcriptContext,
         anchorContext,
@@ -103,10 +111,23 @@ ${anchorContext ? `学习者关注点：\n${anchorContext}` : ''}${buildTerminol
       },
     ],
     model,
-    { temperature: 0.25, maxTokens: 2800, responseFormat: 'json_object' }
+    { temperature: 0.25, maxTokens: mode === 'infographic' ? 6000 : 2800, responseFormat: 'json_object' }
   );
 
-  return parseJsonResponse<StudioOutput>(response.content);
+  const output = parseJsonResponse<StudioOutput>(response.content);
+  // 信息图:生图提示词由代码按手册基座模板确定性拼装(LLM 只出内容,不抄模板),
+  // 防止 LLM 留下 {{CONTENT}} 空占位符导致生图模型自由发挥跑题。
+  if (mode === 'infographic' && output?.infographic) {
+    output.infographic.imagePrompt = assembleInfographicImagePrompt({
+      title: output.infographic.title?.trim() || output.title?.trim() || '课堂信息图',
+      subtitle: output.infographic.subtitle?.trim() || '',
+      keyPoints: toStringArray(output.infographic.keyPoints, 8),
+      contentOutline: (output.infographic as { contentOutline?: string }).contentOutline?.trim()
+        || toStringArray(output.infographic.keyPoints, 8).join('\n'),
+      textLabels: toStringArray((output.infographic as { textLabels?: unknown }).textLabels, 40),
+    });
+  }
+  return output;
 }
 
 // ── Plugin export ──────────────────────────────────────────────────
@@ -269,50 +290,93 @@ export const studioWorkshopPlugin: AppPlugin = {
     let podcastResult: VolcPodcastResult | null = null;
     let podcastError = '';
     if (mode === 'podcast') {
-      const enabled = isVolcPodcastEnabled();
-      trace.push(`podcast_enabled=${enabled ? 'true' : 'false'}`);
+      // provider 一行切换：dashscope（默认；百炼 qwen3-tts 逐句合成 + ffmpeg 拼接，
+      // 复用已付费 DASHSCOPE_API_KEY）/ volc（火山 podcasttts 一键成品，账号需在
+      // 控制台开通 volc.service_type.10050，否则建连 403）。
+      const provider = (process.env.PODCAST_TTS_PROVIDER || 'dashscope').trim().toLowerCase();
+      trace.push(`podcast_provider=${provider}`);
       trace.push(`podcast_plan=${podcastPlan ? 'yes' : 'no'}`);
-      if (enabled) {
-        try {
-          const podcastInput = buildPodcastInputText(context, output, evidenceSegments, cards, podcastPlan);
-          const podcastTimeoutMs = resolvePodcastTimeoutMs(podcastInput.length);
-          trace.push(`podcast_input_chars=${podcastInput.length}`);
-          trace.push(`podcast_timeout_ms=${podcastTimeoutMs}`);
-          podcastResult = await generateVolcPodcast({
-            inputText: podcastInput,
-            timeoutMs: podcastTimeoutMs,
-            format: 'mp3',
-            sampleRate: 24000,
-            speechRate: 0,
-            useHeadMusic: false,
-            useTailMusic: false,
-          });
-          if (hasTimestampPollution(podcastResult.rounds)) {
-            trace.push('podcast_retry=timestamp_pollution_detected');
-            const retryInput = buildPodcastInputText(context, output, evidenceSegments, cards, podcastPlan, true);
-            const retryTimeoutMs = resolvePodcastTimeoutMs(retryInput.length);
-            trace.push(`podcast_retry_input_chars=${retryInput.length}`);
-            trace.push(`podcast_retry_timeout_ms=${retryTimeoutMs}`);
+      if (provider === 'volc') {
+        const enabled = isVolcPodcastEnabled();
+        trace.push(`podcast_enabled=${enabled ? 'true' : 'false'}`);
+        if (enabled) {
+          try {
+            const podcastInput = buildPodcastInputText(context, output, evidenceSegments, cards, podcastPlan);
+            const podcastTimeoutMs = resolvePodcastTimeoutMs(podcastInput.length);
+            trace.push(`podcast_input_chars=${podcastInput.length}`);
+            trace.push(`podcast_timeout_ms=${podcastTimeoutMs}`);
             podcastResult = await generateVolcPodcast({
-              inputText: retryInput,
-              timeoutMs: retryTimeoutMs,
+              inputText: podcastInput,
+              timeoutMs: podcastTimeoutMs,
               format: 'mp3',
               sampleRate: 24000,
               speechRate: 0,
               useHeadMusic: false,
               useTailMusic: false,
             });
+            if (hasTimestampPollution(podcastResult.rounds)) {
+              trace.push('podcast_retry=timestamp_pollution_detected');
+              const retryInput = buildPodcastInputText(context, output, evidenceSegments, cards, podcastPlan, true);
+              const retryTimeoutMs = resolvePodcastTimeoutMs(retryInput.length);
+              trace.push(`podcast_retry_input_chars=${retryInput.length}`);
+              trace.push(`podcast_retry_timeout_ms=${retryTimeoutMs}`);
+              podcastResult = await generateVolcPodcast({
+                inputText: retryInput,
+                timeoutMs: retryTimeoutMs,
+                format: 'mp3',
+                sampleRate: 24000,
+                speechRate: 0,
+                useHeadMusic: false,
+                useTailMusic: false,
+              });
+            }
+            trace.push(`podcast_rounds=${podcastResult.roundCount}`);
+            trace.push(`podcast_audio_url=${podcastResult.audioUrl ? 'yes' : 'no'}`);
+            trace.push(`podcast_audio_bytes=${podcastResult.audioBytes}`);
+          } catch (error) {
+            podcastError = error instanceof Error ? error.message : '播客生成失败';
+            trace.push(`podcast_error=${podcastError}`);
           }
-          trace.push(`podcast_rounds=${podcastResult.roundCount}`);
-          trace.push(`podcast_audio_url=${podcastResult.audioUrl ? 'yes' : 'no'}`);
-          trace.push(`podcast_audio_bytes=${podcastResult.audioBytes}`);
+        } else {
+          podcastError =
+            '未配置火山播客参数（VOLCENGINE_PODCAST_APP_ID / VOLCENGINE_PODCAST_ACCESS_TOKEN）。';
+        }
+      } else if (isDashscopePodcastEnabled()) {
+        try {
+          const scriptLines = selectPodcastScriptLines(podcastPlan, cards);
+          trace.push(`podcast_script_lines=${scriptLines.length}`);
+          const startedAt = Date.now();
+          const ds = await generateDashscopePodcast(scriptLines);
+          trace.push(`podcast_dashscope_ms=${Date.now() - startedAt}`);
+          trace.push(`podcast_audio_bytes=${ds.audioBytes}`);
+          podcastResult = {
+            inputId: `dashscope_${Date.now()}`,
+            sessionId: context.input.sessionId,
+            requestId: `dashscope_${Date.now()}`,
+            audioUrl: ds.audioUrl,
+            audioBytes: ds.audioBytes,
+            roundCount: ds.lines.length,
+            rounds: ds.lines.map((line, index) => ({
+              roundId: index + 1,
+              speaker: line.speaker,
+              text: line.text,
+            })),
+            usage: { inputTextTokens: 0, outputAudioTokens: 0 },
+            events: {},
+            trace: [],
+          };
         } catch (error) {
           podcastError = error instanceof Error ? error.message : '播客生成失败';
           trace.push(`podcast_error=${podcastError}`);
         }
       } else {
-        podcastError =
-          '未配置火山播客参数（VOLCENGINE_PODCAST_APP_ID / VOLCENGINE_PODCAST_ACCESS_TOKEN），已回退到脚本模式。';
+        podcastError = '未配置 DASHSCOPE_API_KEY，播客语音合成不可用。';
+      }
+
+      // 「不出音频不算好」：与信息图同一契约——音频没拿到（含上游 403/超时/未配置）
+      // 整个 execute 报错，前端卡片进失败重试态；不再出现"做好了"却只能看脚本的假完成。
+      if (!podcastResult?.audioUrl) {
+        throw new Error(`播客出音频失败：${podcastError || '未返回可播放音频'}`);
       }
 
       const roundCards = buildPodcastRoundCards(podcastResult?.rounds || [], evidenceSegments);
@@ -320,16 +384,6 @@ export const studioWorkshopPlugin: AppPlugin = {
         cards.push(...roundCards);
         trace.push(`podcast_script_cards=${roundCards.length}`);
       }
-
-      cards.splice(1, 0, {
-        id: 'studio-podcast-status',
-        type: 'insight',
-        title: podcastResult?.audioUrl ? '播客音频已生成' : '播客音频未生成',
-        body: podcastResult?.audioUrl
-          ? '已生成可播放音频，支持直接试听与分享链接。'
-          : podcastError || '当前仅生成脚本，可稍后重试播客生成。',
-        priority: 'high',
-      });
     }
 
     const tasks = (output?.tasks || []).slice(0, 6).map((task, index) => ({
@@ -356,24 +410,29 @@ export const studioWorkshopPlugin: AppPlugin = {
     const renderMode = resolveRenderMode(mode);
     const infographicDraft = mode === 'infographic' ? buildInfographicDraft(output, cards) : undefined;
 
-    // 一键生成 = 真的出图。draft 出来后直接串一次图片生成，失败静默降级为仅 draft。
+    // 一键生成 = 真的出图。draft 出来后直接串一次图片生成(横版,预设画风在 skill 管线里)。
+    // 「不出图不算好」:生图失败先自动重试一次,仍失败则整个 execute 报错——
+    // 前端只会提示失败重试,不会再出现"做好了"却点进去干等的情况。
     let infographicImage:
       | { imageUrl: string; requestId: string; model: string }
       | undefined;
-    let infographicImageError = '';
     if (mode === 'infographic' && infographicDraft) {
-      if (isGeminiImageEnabled()) {
+      if (!isInfographicImageEnabled()) {
+        throw new Error('未配置图片生成服务的 API Key,请先完成环境变量配置。');
+      }
+      const imgStart = Date.now();
+      let lastError: unknown = null;
+      for (let attempt = 1; attempt <= 2 && !infographicImage; attempt += 1) {
         try {
-          const imgStart = Date.now();
-          const imgResult = await generateGeminiImage({
+          const imgResult = await generateInfographicImage({
             prompt: infographicDraft.imagePrompt,
-            stylePreset: infographicDraft.stylePreset,
-            orientation: infographicDraft.suggestedOrientation,
+            stylePreset: INFOGRAPHIC_PRESET.stylePresetLabel,
+            orientation: INFOGRAPHIC_PRESET.orientation,
             detailLevel: infographicDraft.suggestedDetailLevel,
             scenePreset: infographicDraft.suggestedScene,
           });
-          // 写服务端文件返回 HTTP URL——base64 data URL 太大，进 localStorage 会被
-          // stripLargeInlineData 剥空、进分享 snapshotJson 也不可靠（分享页没图）。
+          // 写服务端文件返回 HTTP URL——base64 data URL 太大,进 localStorage 会被
+          // stripLargeInlineData 剥空、进分享 snapshotJson 也不可靠(分享页没图)。
           // 动态 import 避免客户端 bundle fs。
           const { persistInfographicImage } = await import('@/lib/services/infographic-image-storage');
           infographicImage = {
@@ -383,14 +442,16 @@ export const studioWorkshopPlugin: AppPlugin = {
           };
           trace.push(`infographic_image=ok`);
           trace.push(`infographic_image_ms=${Date.now() - imgStart}`);
+          if (attempt > 1) trace.push(`infographic_image_retry=${attempt}`);
         } catch (error) {
-          infographicImageError =
-            error instanceof Error ? error.message : '图片生成失败';
-          trace.push(`infographic_image=error`);
-          trace.push(`infographic_image_error=${infographicImageError.slice(0, 120)}`);
+          lastError = error;
+          trace.push(`infographic_image=error_attempt_${attempt}`);
         }
-      } else {
-        trace.push('infographic_image=skipped_no_key');
+      }
+      if (!infographicImage) {
+        const message = lastError instanceof Error ? lastError.message : '图片生成失败';
+        trace.push(`infographic_image_error=${message.slice(0, 120)}`);
+        throw new Error(`信息图出图失败:${message}`);
       }
     }
 
@@ -424,7 +485,6 @@ export const studioWorkshopPlugin: AppPlugin = {
         infographicImageUrl: infographicImage?.imageUrl,
         infographicImageRequestId: infographicImage?.requestId,
         infographicImageModel: infographicImage?.model,
-        infographicImageError: infographicImageError || undefined,
         podcastPlan: podcastPlan || undefined,
         podcast: podcastResult
           ? {

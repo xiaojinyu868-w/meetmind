@@ -95,9 +95,19 @@ const WORKSHOP_EXEC_TIMEOUT_PODCAST_MS = parseClientTimeoutMs(
   60 * 1000,
   15 * 60 * 1000
 );
+// 信息图：execute 现在内含服务端内联生图（见 studio-workshop 插件），
+// 与服务端 APP_EXEC_INFOGRAPHIC_TIMEOUT_MS 对齐放宽到 5 分钟。
+const WORKSHOP_EXEC_TIMEOUT_INFOGRAPHIC_MS = parseClientTimeoutMs(
+  process.env.NEXT_PUBLIC_APP_EXEC_INFOGRAPHIC_TIMEOUT_MS,
+  300 * 1000,
+  60 * 1000,
+  15 * 60 * 1000
+);
 
 function resolveWorkshopTimeoutMs(appKey: string): number {
-  return appKey === 'audio-overview' ? WORKSHOP_EXEC_TIMEOUT_PODCAST_MS : WORKSHOP_EXEC_TIMEOUT_DEFAULT_MS;
+  if (appKey === 'audio-overview') return WORKSHOP_EXEC_TIMEOUT_PODCAST_MS;
+  if (appKey === 'infographic') return WORKSHOP_EXEC_TIMEOUT_INFOGRAPHIC_MS;
+  return WORKSHOP_EXEC_TIMEOUT_DEFAULT_MS;
 }
 
 interface WorkshopYellowPageProps {
@@ -215,6 +225,24 @@ function readCachedInfographicImageUrl(sessionId: string): { url: string; title:
     }
     if (!url) return null;
     const title = parsed?.render?.title || parsed?.cards?.[0]?.title || '课堂信息图';
+    return { url, title };
+  } catch {
+    return null;
+  }
+}
+
+// 播客与信息图同一交互契约：execute 已内联生成音频，缓存里能直接读出 audioUrl，
+// 做好即弹播放器；缓存无音频（生成降级为纯脚本）才退回 toast「查看」进完整页。
+function readCachedPodcastAudio(sessionId: string): { url: string; title: string } | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(buildResultCacheKey(sessionId, 'audio-overview'));
+    const parsed = raw ? (JSON.parse(raw) as AppExecutionResult) : null;
+    const payload = (parsed?.render?.payload || {}) as { audioUrl?: string };
+    const url =
+      payload.audioUrl || ((parsed?.raw as { podcast?: { audioUrl?: string } } | undefined)?.podcast?.audioUrl ?? '');
+    if (!url) return null;
+    const title = parsed?.render?.title || '课堂播客';
     return { url, title };
   } catch {
     return null;
@@ -414,6 +442,8 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
   // 若缓存 result 没有 imageUrl 会 auto-start 重新触发 5 步生成 loading，
   // 导致"做好了点查看却又在生成"。改为直接从缓存读出已生成图片在当前页弹出。
   const [infographicPreview, setInfographicPreview] = useState<{ url: string; title: string } | null>(null);
+  // 播客同一契约：做好即弹播放器，音频 URL 从缓存直读，不进完整页干等。
+  const [podcastPreview, setPodcastPreview] = useState<{ url: string; title: string } | null>(null);
 
   const downloadInfographicImage = useCallback(async () => {
     if (!infographicPreview?.url) return;
@@ -708,9 +738,23 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           hasResult: true,
           message: undefined,
         });
+        // 信息图做好即弹成品图（execute 已内联生图，缓存里能直接读出 imageUrl），
+        // 不再让用户点「查看」或进独立页干等；缓存无图（生图降级失败）才退回
+        // toast「查看」→ 独立页补生成。播客同一契约：做好即弹播放器直播。
+        const infographicReady =
+          app.key === 'infographic' ? readCachedInfographicImageUrl(sessionId) : null;
+        if (infographicReady) {
+          setInfographicPreview(infographicReady);
+        }
+        const podcastReady =
+          app.key === 'audio-overview' ? readCachedPodcastAudio(sessionId) : null;
+        if (podcastReady) {
+          setPodcastPreview(podcastReady);
+        }
+        const poppedDirectly = Boolean(infographicReady || podcastReady);
         toast.success(COPY.apps.matrix.generated(app.name), {
           action:
-            onOpenAppWindow || app.key === 'infographic'
+            !poppedDirectly && (onOpenAppWindow || app.key === 'infographic' || app.key === 'audio-overview')
               ? {
                   label: COPY.apps.matrix.openResult,
                   onClick: () => {
@@ -722,6 +766,13 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                       }
                       router.push(buildAppHref(app.key));
                       return;
+                    }
+                    if (app.key === 'audio-overview') {
+                      const cached = readCachedPodcastAudio(sessionId);
+                      if (cached) {
+                        setPodcastPreview(cached);
+                        return;
+                      }
                     }
                     onOpenAppWindow?.(app.key);
                   },
@@ -833,6 +884,14 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         }
         router.push(buildAppHref(app.key));
         return;
+      }
+      if (app.key === 'audio-overview') {
+        // 播客同理：缓存里有音频就直接弹播放器，没有才进完整页。
+        const cached = readCachedPodcastAudio(sessionId);
+        if (cached) {
+          setPodcastPreview(cached);
+          return;
+        }
       }
       openAppSurface(app.key);
     },
@@ -1132,6 +1191,42 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
               <button
                 type="button"
                 onClick={() => setInfographicPreview(null)}
+                className={styles.previewSecondaryAction}
+              >
+                {COPY.apps.matrix.closePreview}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {podcastPreview ? (
+        <div
+          className={styles.previewOverlay}
+          onClick={() => setPodcastPreview(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={COPY.apps.matrix.podcastPreview}
+        >
+          <div
+            className={styles.previewStage}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.podcastCard}>
+              <p className={styles.podcastTitle}>{podcastPreview.title}</p>
+              {/* autoPlay 是尽力而为：异步完成后浏览器多半已收回用户手势，
+                  被拦时用户点一下播放键即可，不会再被带去别的页面等 */}
+              <audio
+                className={styles.podcastAudio}
+                src={podcastPreview.url}
+                controls
+                autoPlay
+                preload="auto"
+              />
+            </div>
+            <div className={styles.previewActions}>
+              <button
+                type="button"
+                onClick={() => setPodcastPreview(null)}
                 className={styles.previewSecondaryAction}
               >
                 {COPY.apps.matrix.closePreview}

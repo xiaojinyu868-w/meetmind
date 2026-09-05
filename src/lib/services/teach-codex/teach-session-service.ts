@@ -25,6 +25,7 @@ import { normalizeFormulaText } from '@/lib/services/teach-agent/tools';
 import { publishTeachEvent, type TeachStreamEvent } from './event-bus';
 import { ensureShimServer } from './shim-server';
 import { executeTeachTool } from './board-env';
+import { scheduleTeachImageBackfill } from './image-backfill';
 import {
   CodexAppServer,
   getCodexSession,
@@ -53,9 +54,9 @@ const state: SessionState = globalForSession.__teachSessionState ?? {
 };
 globalForSession.__teachSessionState = state;
 
-function emit(threadId: string, event: TeachStreamEvent) {
+function emit(threadId: string, event: TeachStreamEvent): Promise<void> {
   publishTeachEvent(threadId, event);
-  store.appendThreadEvent(threadId, event).catch((cause) => {
+  return store.appendThreadEvent(threadId, event).catch((cause) => {
     log.warn('event append failed', {
       threadId,
       error: cause instanceof Error ? cause.message : String(cause),
@@ -136,7 +137,13 @@ function onCodexNotification(threadId: string, notification: CodexNotification) 
   if (method === 'turn/completed') {
     const turn = p.turn as { status?: string } | undefined;
     state.activeTurns.delete(threadId);
-    emit(threadId, turn?.status === 'interrupted' ? { type: 'interrupted' } : { type: 'turn-complete' });
+    const appended = emit(
+      threadId,
+      turn?.status === 'interrupted' ? { type: 'interrupted' } : { type: 'turn-complete' },
+    );
+    // 一轮结束：对缺配图的 image 调用后台生图回填（等 turn 末尾事件落盘后再扫
+    // 日志；生图几十秒级，绝不阻塞这里——完成后靠 image-ready 事件生效）
+    void appended.then(() => scheduleTeachImageBackfill(threadId));
     store.touchThread(threadId).catch(() => {});
     const waiter = state.interruptWaiters.get(threadId);
     if (waiter) {

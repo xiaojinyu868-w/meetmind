@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MeetMind · 能力沉淀</title>
+<link rel="stylesheet" href="../v7/tokens.css" />
+<style>
+  body { background: var(--paper); }
+
+  .board {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 26px 32px 22px;
+  }
+
+  /* ===== 顶栏 ===== */
+  .board-head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 18px;
+  }
+  .board-head .left { display: flex; align-items: baseline; gap: 16px; }
+  .board-head .logo {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 700; font-size: 17px; letter-spacing: -0.01em;
+  }
+  .board-head .logo .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--pine);
+    box-shadow: 0 0 0 3px rgba(47,107,85,0.14);
+  }
+  .board-head .subtitle { font-size: 13px; color: var(--ink-3); }
+  .board-head .right {
+    display: flex; align-items: center; gap: 14px;
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3);
+  }
+  .live-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono); font-size: 10.5px;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--pine); font-weight: 600;
+    background: var(--pine-fog);
+    border: 1px solid var(--pine-mist);
+    padding: 4px 10px; border-radius: 999px;
+  }
+  .live-badge i {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--pine);
+    box-shadow: 0 0 0 3px rgba(47,107,85,0.16);
+  }
+
+  /* ===== 论点 ===== */
+  .thesis {
+    display: flex; align-items: baseline; gap: 18px;
+    margin-bottom: 18px;
+  }
+  .thesis .main {
+    font-size: 26px; font-weight: 600;
+    letter-spacing: -0.02em; line-height: 1.25;
+    color: var(--ink);
+  }
+  .thesis .main em {
+    font-family: var(--font-serif); font-style: italic;
+    font-weight: 400; color: var(--pine);
+  }
+  .thesis .note {
+    font-size: 12px; color: var(--ink-3); line-height: 1.55;
+    max-width: 44ch; margin-left: auto; text-align: right;
+  }
+
+  /* ===== 主体两栏 ===== */
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 14px;
+    align-items: start;
+  }
+
+  /* ===== 沉积层 ===== */
+  .strata {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-soft);
+    overflow: hidden;
+  }
+  .strata-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 13px 18px 10px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .strata-head .t { font-size: 13px; font-weight: 600; }
+  .strata-head .n {
+    font-family: var(--font-mono); font-size: 10px; color: var(--ink-3);
+  }
+
+  .layer {
+    display: grid;
+    grid-template-columns: 92px 1fr 24px 1.15fr;
+    gap: 12px;
+    align-items: center;
+    padding: 9px 18px;
+    border-bottom: 1px solid var(--rule-soft);
+    position: relative;
+  }
+  .layer:last-of-type { border-bottom: none; }
+  .layer::before {
+    content: '';
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--pine);
+    opacity: var(--edge, 0.35);
+  }
+
+  .layer .date {
+    font-family: var(--font-mono);
+    font-size: 10.5px; color: var(--ink-3);
+    letter-spacing: 0.02em;
+  }
+  .layer .ship {
+    font-size: 12px; color: var(--ink);
+    line-height: 1.45;
+  }
+  .layer .arrow {
+    color: var(--ink-4); font-size: 12px; text-align: center;
+  }
+  .layer .deposit {
+    font-size: 11.5px; color: var(--ink-2);
+    line-height: 1.45;
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  }
+  .ref {
+    font-family: var(--font-mono); font-size: 9.5px; font-weight: 600;
+    color: var(--pine-deep); background: var(--pine-mist);
+    padding: 1px 6px; border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  .strata-foot {
+    padding: 10px 18px;
+    background: var(--pine-fog);
+    border-top: 1px solid var(--pine-mist);
+    font-size: 11.5px; color: var(--pine-deep);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .strata-foot .mono { font-family: var(--font-mono); font-size: 10px; margin-left: auto; color: var(--pine); }
+
+  /* ===== 能力账户 ===== */
+  .account {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-soft);
+    overflow: hidden;
+    position: sticky; top: 20px;
+  }
+  .account-head {
+    padding: 13px 18px 10px;
+    border-bottom: 1px solid var(--rule);
+    display: flex; align-items: baseline; justify-content: space-between;
+  }
+  .account-head .t { font-size: 13px; font-weight: 600; }
+  .account-head .n { font-family: var(--font-mono); font-size: 10px; color: var(--ink-3); }
+
+  .asset {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 8px 18px;
+    border-bottom: 1px solid var(--rule-soft);
+    font-size: 12px;
+  }
+  .asset:last-of-type { border-bottom: none; }
+  .asset .no {
+    font-family: var(--font-mono); font-size: 10px;
+    color: var(--pine); font-weight: 600;
+    flex: 0 0 20px;
+  }
+  .asset .name { font-weight: 600; color: var(--ink); flex: 0 0 auto; }
+  .asset .count {
+    margin-left: auto;
+    font-family: var(--font-mono); font-size: 10px;
+    color: var(--ink-3); white-space: nowrap;
+  }
+
+  .account-foot {
+    padding: 14px 18px;
+    background: linear-gradient(135deg, var(--pine-fog) 0%, rgba(196,94,76,0.05) 100%);
+    border-top: 1px solid var(--pine-mist);
+  }
+  .account-foot .line {
+    font-size: 13.5px; font-weight: 600; color: var(--ink);
+    line-height: 1.5; letter-spacing: -0.01em;
+  }
+  .account-foot .line em {
+    font-family: var(--font-serif); font-style: italic;
+    font-weight: 400; color: var(--pine);
+  }
+  .account-foot .sub {
+    margin-top: 4px;
+    font-size: 10.5px; color: var(--ink-3); line-height: 1.5;
+  }
+
+  /* ===== 产出证据带 ===== */
+  .grown {
+    margin-top: 14px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-soft);
+    padding: 13px 20px;
+  }
+  .grown-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 9px;
+  }
+  .grown-head .t { font-size: 12.5px; font-weight: 600; }
+  .grown-head .n { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); }
+  .grown-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .grown-chips .g {
+    font-size: 11.5px; font-weight: 500;
+    color: var(--pine-deep); background: var(--pine-fog);
+    border: 1px solid var(--pine-mist);
+    padding: 3px 10px; border-radius: 999px;
+  }
+  .grown-chips .g.v {
+    color: var(--vermilion-deep); background: var(--vermilion-fog);
+    border-color: var(--vermilion-mist);
+  }
+
+  .board-foot {
+    margin-top: 12px;
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--ink-4);
+  }
+  .board-foot .mono { font-size: 10.5px; }
+
+  #loadError {
+    padding: 40px; text-align: center; color: var(--ink-3); font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<div class="board" id="root" style="display:none">
+
+  <!-- ===== 顶栏 ===== -->
+  <div class="board-head">
+    <div class="left">
+      <div class="logo"><span class="dot"></span>MeetMind 能力沉淀</div>
+      <div class="subtitle">团队能力积淀 · 外显</div>
+    </div>
+    <div class="right">
+      <span class="live-badge"><i></i>数字实时采集自代码库</span>
+      <span id="generatedAt"></span>
+    </div>
+  </div>
+
+  <!-- ===== 论点 ===== -->
+  <div class="thesis">
+    <div class="main" id="thesis"></div>
+    <div class="note">左边是真实交付记录（新的在上，地基在下）；每一次交付向右沉淀出可复用资产，汇入右侧能力账户。本页由 <span class="mono">scripts/capability-ledger.ts</span> 从代码库实时生成。</div>
+  </div>
+
+  <!-- ===== 主体 ===== -->
+  <div class="main">
+
+    <!-- 沉积层 -->
+    <div class="strata">
+      <div class="strata-head">
+        <span class="t">沉积层</span>
+        <span class="n">SHIP → DEPOSIT · 新 → 旧</span>
+      </div>
+      <div id="layers"></div>
+      <div class="strata-foot">
+        <span id="layerCount"></span>
+        <span class="mono">CHANGELOG.md</span>
+      </div>
+    </div>
+
+    <!-- 能力账户 -->
+    <div class="account">
+      <div class="account-head">
+        <span class="t">能力账户</span>
+        <span class="n" id="assetCount"></span>
+      </div>
+      <div id="assets"></div>
+      <div class="account-foot">
+        <div class="line">下一个产品，<em>从这些沉积之上开始盖。</em></div>
+        <div class="sub">第 10 个产品继承前 9 个产品积累的组织能力——这一页就是继承清单。</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===== 产出证据带 ===== -->
+  <div class="grown">
+    <div class="grown-head">
+      <span class="t">这套沉积已经长出</span>
+      <span class="n">截至 2026-09 · 全部线上运行</span>
+    </div>
+    <div class="grown-chips" id="grown"></div>
+  </div>
+
+  <div class="board-foot">
+    <span>MeetMind · Capability Strata</span>
+    <span class="mono" id="footSources"></span>
+  </div>
+
+</div>
+
+<div id="loadError" style="display:none">
+  无法读取 ledger.json —— 请通过 HTTP 访问（如 python3 -m http.server），或先运行 npx tsx scripts/capability-ledger.ts
+</div>
+
+<script>
+const CIRCLED = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];
+
+// 沉积质感：越深的层底色越沉（按索引在 #FFFFFF → #D8E2D8 之间插值）
+function strataBg(i, n) {
+  if (n <= 1) return '#FFFFFF';
+  const t = i / (n - 1);
+  const mix = (a, b) => Math.round(a + (b - a) * t);
+  return `rgb(${mix(0xFF, 0xD8)}, ${mix(0xFF, 0xE2)}, ${mix(0xFF, 0xD8)})`;
+}
+
+fetch('./ledger.json')
+  .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then((data) => {
+    document.getElementById('root').style.display = '';
+
+    // 顶栏
+    const d = new Date(data.generatedAt);
+    document.getElementById('generatedAt').textContent =
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} 生成`;
+
+    // 论点（thesis 里的「和一份能力」用仪式字着色）
+    document.getElementById('thesis').innerHTML =
+      data.thesis.replace('一个产品，和一份能力。', '<em>一个产品，和一份能力。</em>');
+
+    // 沉积层
+    const layersEl = document.getElementById('layers');
+    data.layers.forEach((layer, i) => {
+      const refs = layer.assets.map((a) => `<span class="ref">${CIRCLED[a - 1]}</span>`).join('');
+      const div = document.createElement('div');
+      div.className = 'layer';
+      div.style.background = strataBg(i, data.layers.length);
+      div.style.setProperty('--edge', i === 0 ? '1' : '0.35');
+      div.innerHTML = `
+        <span class="date">${layer.date}</span>
+        <span class="ship">${layer.ship}</span>
+        <span class="arrow">→</span>
+        <span class="deposit">${layer.deposit} ${refs}</span>`;
+      layersEl.appendChild(div);
+    });
+    const cn = ['零','一','二','三','四','五','六','七','八','九','十','十一','十二','十三','十四','十五'];
+    document.getElementById('layerCount').textContent =
+      `${cn[data.layers.length] ?? data.layers.length} 层沉积，全部可复查。`;
+
+    // 能力账户
+    document.getElementById('assetCount').textContent = `${data.assets.length} 项资产 · 持续生息`;
+    const assetsEl = document.getElementById('assets');
+    data.assets.forEach((a) => {
+      const div = document.createElement('div');
+      div.className = 'asset';
+      div.innerHTML = `<span class="no">${CIRCLED[a.no - 1]}</span><span class="name">${a.name}</span><span class="count" title="${a.source}">${a.count}</span>`;
+      assetsEl.appendChild(div);
+    });
+
+    // 产出证据带
+    const grownEl = document.getElementById('grown');
+    data.grown.forEach((g) => {
+      const span = document.createElement('span');
+      span.className = 'g' + (g.kind === 'product' ? ' v' : '');
+      span.textContent = g.name;
+      grownEl.appendChild(span);
+    });
+
+    // 页脚：数据来源
+    document.getElementById('footSources').textContent =
+      `①–⑩ = 能力账户资产编号 · 采集自 ${data.sources.collectedFrom.join(' · ')}`;
+  })
+  .catch(() => {
+    document.getElementById('loadError').style.display = '';
+  });
+</script>
+
+</body>
+</html>

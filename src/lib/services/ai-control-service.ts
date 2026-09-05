@@ -41,13 +41,16 @@ import {
   buildCheatsheetUserPrompt,
   buildFlashcardsSystemPrompt,
   buildFlashcardsUserPrompt,
-  buildInfographicSystemPrompt,
-  buildInfographicUserPrompt,
   buildMindmapSystemPrompt,
   buildMindmapUserPrompt,
   buildQuizSystemPrompt,
   buildQuizUserPrompt,
 } from '@/lib/ai-native/app-prompts';
+import {
+  INFOGRAPHIC_PROMPT_VERSION,
+  buildInfographicSkillSystemPrompt,
+  buildInfographicSkillUserPrompt,
+} from '@/lib/services/infographic-skill-service';
 import {
   buildTeachBackTargetsSystemPrompt,
   buildTeachBackTargetsUserPrompt,
@@ -390,7 +393,7 @@ function promptVersionFor(controlKey: AiControlKey): string {
   if (controlKey === 'app:quiz') return APP_PROMPT_VERSIONS.quiz;
   if (controlKey === 'app:mindmap') return APP_PROMPT_VERSIONS.mindmap;
   if (controlKey === 'app:cheatsheet') return APP_PROMPT_VERSIONS.cheatsheet;
-  if (controlKey === 'app:infographic') return APP_PROMPT_VERSIONS.infographic;
+  if (controlKey === 'app:infographic') return INFOGRAPHIC_PROMPT_VERSION;
   if (controlKey === 'app:audio-overview') return APP_PROMPT_VERSIONS.audioOverview;
   if (controlKey === 'app:teach-back') return APP_PROMPT_VERSIONS.teachBack;
   return PROMPT_VERSIONS.tutorSystem;
@@ -410,7 +413,7 @@ function buildBaseControlPrompt(
   if (definition.key === 'app:quiz') return buildQuizSystemPrompt();
   if (definition.key === 'app:mindmap') return buildMindmapSystemPrompt();
   if (definition.key === 'app:cheatsheet') return buildCheatsheetSystemPrompt();
-  if (definition.key === 'app:infographic') return buildInfographicSystemPrompt();
+  if (definition.key === 'app:infographic') return buildInfographicSkillSystemPrompt();
   if (definition.key === 'app:audio-overview') return buildAudioOverviewSystemPrompt();
   if (definition.key === 'app:teach-back') return buildTeachBackTargetsSystemPrompt();
   return buildTutorSystemPrompt(definition.mode as TutorMode, contextValue as TutorSystemContext, optionsValue as TutorSystemOptions);
@@ -457,7 +460,7 @@ function buildTrialUserPrompt(
   if (definition.key === 'app:flashcards') return buildFlashcardsUserPrompt(appPromptContext);
   if (definition.key === 'app:quiz') return buildQuizUserPrompt(appPromptContext);
   if (definition.key === 'app:mindmap') return buildMindmapUserPrompt(appPromptContext);
-  if (definition.key === 'app:infographic') return buildInfographicUserPrompt(appPromptContext);
+  if (definition.key === 'app:infographic') return buildInfographicSkillUserPrompt(appPromptContext);
   if (definition.key === 'app:teach-back') return buildTeachBackTargetsUserPrompt(appPromptContext);
   if (definition.key === 'app:audio-overview') {
     return buildAudioOverviewUserPrompt({
@@ -659,7 +662,7 @@ export async function buildControlledAppPrompt(
         : appKey === 'cheatsheet'
           ? buildCheatsheetSystemPrompt()
           : appKey === 'infographic'
-            ? buildInfographicSystemPrompt()
+            ? buildInfographicSkillSystemPrompt()
             : appKey === 'teach-back'
               ? buildTeachBackTargetsSystemPrompt()
               : buildAudioOverviewSystemPrompt();

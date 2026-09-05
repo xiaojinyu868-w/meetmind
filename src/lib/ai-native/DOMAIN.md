@@ -12,7 +12,7 @@ page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → r
 2. 客观证据充足时，当前 `contextTier` 的全部应用都可由用户主动执行；模型误判不得降为整页不可用
 3. `/api/apps/execute` 再做一次服务端 readiness 校验，只阻止证据不足或跨层调用
 4. `context-builder.ts` 构建 `AppExecutionContext`；服务端执行路由再为已治理应用注入 `runtimeControl`
-5. `registry.ts` 查找对应 plugin，Plugin 调用 LLM 生成结果；运行故障继续包装成稳定结果，但 `CONTENT_NOT_READY` 这类语义拒绝必须透传给 API，不能伪装成成功产物
+5. `registry.ts` 查找对应 plugin，Plugin 调用 LLM 生成结果；运行故障继续包装成稳定结果，但 `CONTENT_NOT_READY` 这类语义拒绝与「产物没做出来」失败（信息图出图失败 / 播客出音频失败，按消息前缀识别）必须透传给 API 返回 ok:false，不能伪装成成功产物
 6. 前端浮窗渲染结果。插件不得直接依赖 Prisma-backed 管理服务，因为部分插件模块也被客户端渲染器复用
 
 ## 文件索引
@@ -28,10 +28,10 @@ page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → r
 | `workshop-readiness.ts` | ~190 | 浏览器 / 服务端共用的内容证据门：安全 fallback、模型结果清洗、按 class / unit / exam 收口应用白名单；客观证据充足时模型只能推荐、不能撤销能力 |
 | `evidence-grounding.ts` | ~115 | 生成后证据校验：模型时间戳仅作候选，题面 / 条目 / 节点必须与真实原文语义匹配；匹配失败由各插件降级或剔除 |
 | `context-builder.ts` | 83 | 从请求构建执行上下文 |
-| `registry.ts` | ~85 | 插件注册中心；区分运行故障与 `CONTENT_NOT_READY` 语义拒绝 |
+| `registry.ts` | ~85 | 插件注册中心；区分运行故障与语义拒绝 / 产物失败（`CONTENT_NOT_READY`、`信息图出图失败*`、`播客出音频失败*` 透传） |
 | `registry.test.ts` | — | 插件运行故障兜底与内容拒绝透传契约 |
 | `prompt-context.ts` | ~130 | Prompt 上下文构建（转录 + 锚点 + 术语）；超预算时逐段压缩但保留段号/时间戳，并在注入文本前声明"…处有内容缺失、残句非完整原话"（朗读语料可用 `truncationNotice: false` 关闭） |
-| `app-prompts.ts` | ~450 | 应用矩阵六类应用的版本化 System/User Prompt 基线；含速查表跨课来源拼装、播客去时间戳朗读语料与带时间戳章节证据的分离构建，真实插件、产品现场管理员透镜与控制中心共同复用 |
+| `app-prompts.ts` | ~420 | 应用矩阵应用的版本化 System/User Prompt 基线；含速查表跨课来源拼装、播客去时间戳朗读语料与带时间戳章节证据的分离构建，真实插件、产品现场管理员透镜与控制中心共同复用（信息图除外：2026-09 起迁至 `src/lib/services/infographic-skill-service.ts` 宝玉手册管线） |
 | `app-prompts.test.ts` | ~150 | 六类应用 Prompt 的证据、认知动作、防泄题、打印 / 手机阅读、音频章节定位与输出格式合同测试 |
 | `tools.ts` | 48 | 插件工具注入 |
 | `index.ts` | 38 | barrel 导出 |
@@ -40,7 +40,7 @@ page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → r
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `studio-workshop.plugin.ts` | ~340 | Studio Workshop 主文件（manifest + canHandle + run + generateStudioOutput） |
+| `studio-workshop.plugin.ts` | ~340 | Studio Workshop 主文件（manifest + canHandle + run + generateStudioOutput）；信息图走 skill 管线（`infographic-skill-service`，单次 LLM + 预设画风/横版），生图失败自动重试一次、仍失败则 execute 整体报错——不出图不提示「做好了」 |
 | `studio-workshop.types.ts` | ~210 | 类型/接口（7个） + MODE_HINTS + 模式检测/解析辅助函数 |
 | `studio-workshop.podcast.ts` | ~240 | 播客管线（复用共享 Prompt，plan 生成 / 文本组装 / 时间戳污染检测 / round cards / 叙述清洗） |
 | `studio-workshop.renderers.ts` | ~180 | 渲染负载构建器（slides/infographic/table/audio/script/document） |

@@ -161,6 +161,11 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     speechStartMs: 0,
     silenceStartMs: 0,
   });
+  // 连续绝对零音量计时：真实麦克风/系统声音永远带底噪，长时间纯 0 = PCM 链路静默
+  // （AudioContext 被挂起/被打断等），此时实时转写必然零产出，必须当场告诉用户。
+  const zeroLevelMsRef = useRef(0);
+  const lastLevelTickAtRef = useRef(0);
+  const silentWarnedRef = useRef(false);
 
   const VAD_CONFIG = {
     baseEnergyThreshold: 0.05,
@@ -459,6 +464,9 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         silenceStartMs: 0,
       };
       noiseFloorRef.current = 0.02;
+      zeroLevelMsRef.current = 0;
+      lastLevelTickAtRef.current = 0;
+      silentWarnedRef.current = false;
       
       let actualSampleRate = wsSampleRate;
       let source: MediaStreamAudioSourceNode | null = null;
@@ -491,6 +499,21 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
           const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
           const normalizedLevel = average / 255;
           setLevel(normalizedLevel);
+
+          // 连续绝对零音量 ≥15s → PCM 链路静默，实时转写必空，当场提醒一次
+          const tickAt = performance.now();
+          const tickDelta = lastLevelTickAtRef.current > 0 ? tickAt - lastLevelTickAtRef.current : 0;
+          lastLevelTickAtRef.current = tickAt;
+          if (normalizedLevel < 0.002) {
+            zeroLevelMsRef.current += tickDelta;
+            if (!silentWarnedRef.current && zeroLevelMsRef.current >= 15_000) {
+              silentWarnedRef.current = true;
+              console.warn('[Recorder] 15s of absolute zero audio level — PCM pipeline appears silent');
+              toast(COPY.recording.silentAudioWarning, { duration: 8000 });
+            }
+          } else {
+            zeroLevelMsRef.current = 0;
+          }
 
           if (startTimeRef.current > 0) {
             const currentElapsedMs = Date.now() - startTimeRef.current;
@@ -1222,6 +1245,12 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   const restartRecording = async () => {
     setShowRestartConfirm(false);
 
+    // 0. 保底：旧录音不能像垃圾一样丢掉。按停录的同一条契约先把已有内容落库——
+    // 有实时文字就存文字；一句没有但原声在，就跑兜底批量转写（同 stopRecording 的
+    // streamingProducedNothing 分支）。否则用户点一次「重录」，前面整段课就凭空没了。
+    const prevTranscript = transcriptRef.current;
+    const prevMeta = getCallbackMeta();
+
     // 1. Tear down current recording infrastructure
     asrSwitchGenerationRef.current += 1;
     const clients = Array.from(new Set([
@@ -1244,8 +1273,9 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
+    let prevBlob: Blob | null = null;
     if (mediaRecorderRef.current) {
-      await stopMediaRecorderSafely();
+      prevBlob = await stopMediaRecorderSafely();
     }
     if (audioContextRef.current) {
       await audioContextRef.current.close().catch(() => {});
@@ -1263,7 +1293,26 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       enhanceManagerRef.current = null;
     }
 
-    // 2. Reset all state
+    // 2. Persist the previous recording (must happen before startRecording resets refs)
+    const MIN_FALLBACK_BLOB_BYTES = 8 * 1024;
+    if (prevTranscript.length > 0) {
+      onTranscriptUpdate?.(prevTranscript, prevMeta);
+      onRecordingStop?.(prevBlob ?? undefined, prevMeta);
+    } else if (prevBlob && prevBlob.size > MIN_FALLBACK_BLOB_BYTES) {
+      // 实时一句没接住但原声在 → 兜底批量转写，转好的段由外层回填
+      console.warn('[Recorder] restart: previous recording had 0 realtime segments — falling back to batch transcription', {
+        blobBytes: prevBlob.size,
+      });
+      onRecordingStop?.(prevBlob, prevMeta);
+      void transcribeWithQwenASR(prevBlob, {
+        skipEnhancement: true,
+        emitStopCallback: false,
+        detached: true,
+        callbackMeta: prevMeta,
+      }).catch((err) => console.error('[Recorder] restart fallback transcription error:', err));
+    }
+
+    // 3. Reset all state
     setLevel(0);
     setElapsedMs(0);
     setTranscript([]);
@@ -1804,7 +1853,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       {showRestartConfirm && (
         <div className="flex-shrink-0 mx-4 mt-3 p-4 bg-white border border-[#E8E2D5] rounded-xl animate-scale-in">
           <p className="text-sm text-[#1C1B19] mb-3">
-            确定要清空当前录音并重新开始吗？已经录下的内容不会保留。
+            {COPY.recording.restartConfirm}
           </p>
           <div className="flex items-center justify-end gap-2">
             <button

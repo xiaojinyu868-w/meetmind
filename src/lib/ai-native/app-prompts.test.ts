@@ -9,13 +9,17 @@ import {
   buildAudioOverviewNarrationCorpus,
   buildAudioOverviewSystemPrompt,
   buildAudioOverviewUserPrompt,
-  buildInfographicSystemPrompt,
-  buildInfographicUserPrompt,
   buildMindmapSystemPrompt,
   buildMindmapUserPrompt,
   buildQuizSystemPrompt,
   buildQuizUserPrompt,
 } from './app-prompts';
+import {
+  INFOGRAPHIC_PRESET,
+  assembleInfographicImagePrompt,
+  buildInfographicSkillSystemPrompt,
+  buildInfographicSkillUserPrompt,
+} from '@/lib/services/infographic-skill-service';
 
 describe('structured app prompt contracts', () => {
   it('keeps flashcards grounded, atomic, and answer-safe', () => {
@@ -107,18 +111,32 @@ describe('structured app prompt contracts', () => {
     expect(scope.examScope).toContain('sourceId=past-paper:0');
   });
 
-  it('keeps infographic output sparse, evidence-bound, and mobile-readable', () => {
-    const system = buildInfographicSystemPrompt();
-    const user = buildInfographicUserPrompt({
+  it('builds infographic prompt from the vendored baoyu skill with preset style and landscape layout', () => {
+    const system = buildInfographicSkillSystemPrompt();
+    const user = buildInfographicSkillUserPrompt({
       goalIntent: '一张图带走机会成本与沉没成本',
       transcriptContext: '机会成本是放弃的最佳替代方案。',
       anchorContext: '两者容易混淆。',
     });
-    expect(system).toContain('不是缩小版课堂笔记');
-    expect(user).toContain('手机上必须无需放大就能看懂');
-    expect(user).toContain('3-5 个真正支撑它的视觉模块');
-    expect(user).toContain('禁止新增文字、禁止伪造数字、禁止密集小字');
-    expect(user).toContain('禁止高饱和渐变');
+    // 手册材料原文进 system:预设版式 + 预设画风
+    expect(system).toContain(INFOGRAPHIC_PRESET.layout);
+    expect(system).toContain(INFOGRAPHIC_PRESET.style);
+    // 预设写进任务契约:横版、LLM 只出内容(占位符拼装由代码完成)
+    expect(user).toContain('"suggestedOrientation": "landscape"');
+    expect(user).toContain('textLabels');
+    expect(user).toContain('机会成本是放弃的最佳替代方案。');
+
+    const prompt = assembleInfographicImagePrompt({
+      title: '认识分数',
+      subtitle: '三大重点',
+      keyPoints: ['分母是总份数', '分子是取的份数'],
+      contentOutline: 'hero 格放标题,其余格各放一个重点',
+      textLabels: ['认识分数', '分母是总份数'],
+    });
+    expect(prompt).not.toContain('{{');
+    expect(prompt).toContain('认识分数');
+    expect(prompt).toContain('分母是总份数');
+    expect(prompt).toContain('禁止新增任何文字');
   });
 
   it('separates podcast narration from timestamp evidence', () => {

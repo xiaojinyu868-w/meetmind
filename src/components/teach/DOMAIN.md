@@ -9,11 +9,11 @@
 
 | 文件 | 职责 |
 |------|------|
-| `teach-events.ts` | SSE 事件契约类型 + 纯函数：`boardEffectOf`（tool-call → 画布效果：append/flip/none）、`isVisibleTool`（气泡 chip 过滤）、`boardActionToToolCall`（mock 翻译用） |
+| `teach-events.ts` | SSE 事件契约类型 + 纯函数：`boardEffectOf`（tool-call → 画布效果：append/flip/none；image 动作带 callId 回填定位键；**双词汇分支**：legacy 词表 write/circle/... 永久保留供旧线程回放，新引擎 teach-engine 词表 wb_draw_text→write（首条注入 title）/wb_draw_latex→formula/spotlight→circle（a_N→wN 启发式）/wb_clear→BoardClearAction/laser→none（P3 vendor UI 换真渲染）/wb_open/wb_close/discussion→none；TEACH_ACTIONS_FULL 全量词表里的 shape/table/line/code/edit_code 降级 none，渲染器留待后续期）、`applyImageUrlToBoard`（image-ready → 占位动作填 url）、`isVisibleTool`（气泡 chip 过滤；SILENT_TOOLS 含 speech/discussion/wb_open/wb_close）、`boardActionToToolCall`（mock 翻译用） |
 | `mockTeachStream.ts` | `MockTeachSession`：BoardScript → 契约事件流（text-delta 按字流出、cue 到位插 tool-call、checkpoint 挂起等作答、answer 时「你的答案：…」write 上墙演示、ask canned 解答含 quote 织入）；游标快照/恢复 |
 | `teach-client.ts` | **唯一收口**：listThreads/createThread/startLesson/sendMessage/interrupt + SSE 解析；mock（localStorage + MockTeachSession）与真实路由（/api/teach/*）双实现，isMockMode 一行切换（URL ?mock=0 或 NEXT_PUBLIC_TEACH_MOCK=0） |
 | `teach-store.ts` | localStorage 历史（mock 阶段模拟 GET /api/teach/threads）：线程列表 + 每线程快照（对话 + 画布 + mock 游标） |
-| `useTeachSession.ts` | 会话状态机 hook：事件流 → messages（text-delta 追加 / tool-call 挂 chip）+ pages（boardEffectOf 上板、flip_page 翻页）；ref 为权威数据源，快照 turn-complete 落盘；发送中再发问 = 先 interrupt 再发（「当前句讲完再说」的精确时机留后端联调）；语音管线接线：live 事件喂 speech-pipeline（回放不出声），interrupted/send/stop/换课立刻 silenceVoice；暴露 speaking/muted/setMuted/unlockAudio |
+| `useTeachSession.ts` | 会话状态机 hook：事件流 → messages（text-delta 追加 / tool-call 挂 chip）+ pages（boardEffectOf 上板、flip_page 翻页、image-ready 回填占位 url）；ref 为权威数据源，快照 turn-complete 落盘；发送中再发问 = 先 interrupt 再发（「当前句讲完再说」的精确时机留后端联调）；语音管线接线：live 事件喂 speech-pipeline（回放不出声），interrupted/send/stop/换课立刻 silenceVoice；暴露 speaking/muted/setMuted/unlockAudio；标题跟随双协议（write role=title / 新引擎首条 wb_draw_text，engineTitleSeenRef 按线程重置，回放同路径） |
 | `TeachBoard.tsx` | 画布封装：BoardCanvas（v32 备课本）+ 划线引用提问（useTextSelection + QuoteAskPopover）；历史恢复 instant 直出终态 |
 | `TeachChatPanel.tsx` | 右栏对话。渲染层 = Vercel AI Elements（`@/components/ai-elements/`）：ChatMessageList→Conversation（use-stick-to-bottom 自动跟随 + 回到最新）、ChatBubble→Message/MessageContent、ChatRenderer→MessageResponse（Streamdown 流式 markdown，CJK 加粗插件原语内置，排版规格 leading-[1.85]/text-[14.5px]/pine marker 走 className 覆盖，math 用默认链 + remark-math/rehype-katex 追加；narration 漏出的 `==高亮==` 经 `@/lib/utils/normalize-narration-marks` 归一为加粗）、ChatThinkingStripBubble→Loader；chip 行在消息上方；语音按钮 UI 占位（micDisabledHint）；quote chip 走 composer topSlot（ChatComposer/useChatComposer 保留） |
 | `teach-response.test.tsx` | 渲染层迁移回归：CJK 加粗（MessageResponse vs 底座 StreamingMarkdown 对照）、流式半截 ``` 兜底、KaTeX 对齐、user 气泡壳 |
@@ -25,6 +25,16 @@
 | `teach-stream.test.ts` | teach-events + MockTeachSession 单测 |
 
 页面：`src/app/teach/page.tsx`（布局：顶标题 / 左列表 / 中画布 / 右对话 380px；?pace=N 加速 mock 流）。
+
+## 新引擎适配遗留（P1-B 收口，留 P2/P3）
+
+- **done/讲完态**：旧协议 finish 工具置 done；新引擎 v1 词表无 finish 等价物，
+  engine 线程 done 永不置位（UI 上完课态不出现）。P2 决策：词表加 finish
+  还是前端按 turn-complete 启发。
+- **laser**：降级 none，P3 vendor UI 接入时换真渲染；spotlight 的 a_N→wN 是
+  启发式（模型自带 elementId 或清板后序号会错位，标注找不到目标即不画，不炸板）。
+- 清板渲染语义在 `flattenPage`（board-lecture.ts）：最后一个 BoardClearAction
+  之前的动作不渲染、write 从 w1 重编号；legacy 词表无 clear，行为不变。
 
 ## 待后端联调（2026-08-21 已完成一轮，契约终稿见 src/app/api/teach/DOMAIN.md）
 

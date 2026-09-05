@@ -133,7 +133,7 @@ describe('ai-control-service contracts', () => {
     expect(plan.candidatePrompt).toContain('定义与公式之间建立交叉索引');
   });
 
-  it('uses the mobile-readable visual contract in infographic trials', () => {
+  it('uses the vendored skill preset contract in infographic trials', () => {
     const plan = buildAiControlComparisonPlan(
       'app:infographic',
       { goalIntent: '一张图带走这节课', transcriptContext: '真实课堂原文', anchorContext: '这里最容易混淆' },
@@ -141,9 +141,11 @@ describe('ai-control-service contracts', () => {
       { enabled: false, additionalInstructions: '' },
       { enabled: true, additionalInstructions: '优先用对比关系表达' },
     );
-    expect(plan.onlinePrompt).toContain('不是缩小版课堂笔记');
-    expect(plan.trialPrompt).toContain('手机上必须无需放大就能看懂');
-    expect(plan.trialPrompt).toContain('禁止新增文字、禁止伪造数字');
+    // 线上提示词 = 宝玉手册版式/画风原文;试跑契约 = 横版 + 文字保真
+    expect(plan.onlinePrompt).toContain('bento-grid');
+    expect(plan.onlinePrompt).toContain('hand-drawn-edu');
+    expect(plan.trialPrompt).toContain('横版 16:9');
+    expect(plan.trialPrompt).toContain('不允许出现任何其他文字');
     expect(plan.candidatePrompt).toContain('优先用对比关系表达');
   });
 

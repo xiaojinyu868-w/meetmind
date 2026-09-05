@@ -21,6 +21,8 @@ interface PendingBoardItem {
   seq: number;
   name: string;
   args: Record<string, unknown>;
+  /** tool-call 事件 id（image 占位回填定位用） */
+  callId?: string;
   /** 入队时间戳：超时强制放行用（板书等声音必须有界） */
   enqueuedAt: number;
 }
@@ -33,14 +35,14 @@ const MAX_WAIT_MS = 4000;
 export interface UseTeachBoardSyncResult
   extends Pick<UseTeachSpeechResult, 'speaking' | 'muted' | 'unlockAudio' | 'feedDelta' | 'feedBreak'> {
   setMuted: (muted: boolean) => void;
-  /** 板书动作过闸门：live 且语音活着时锚句延迟上板，否则立即 */
-  gateBoardEffect: (name: string, args: Record<string, unknown>, live: boolean) => void;
+  /** 板书动作过闸门：live 且语音活着时锚句延迟上板，否则立即；callId 透传给 image 回填定位 */
+  gateBoardEffect: (name: string, args: Record<string, unknown>, live: boolean, callId?: string) => void;
   /** 老师闭嘴 + 丢弃未说出口的板书 */
   silenceVoice: () => void;
 }
 
 export function useTeachBoardSync(
-  applyBoardEffect: (name: string, args: Record<string, unknown>) => void,
+  applyBoardEffect: (name: string, args: Record<string, unknown>, callId?: string) => void,
 ): UseTeachBoardSyncResult {
   const startedSeqRef = useRef(0);
   const pendingBoardRef = useRef<PendingBoardItem[]>([]);
@@ -53,7 +55,7 @@ export function useTeachBoardSync(
     const waiting: PendingBoardItem[] = [];
     for (const item of pending) {
       // 放行条件：锚句已开始播 / 等待超时（有界等待，板书绝不冻结）
-      if (item.seq <= started || now - item.enqueuedAt >= MAX_WAIT_MS) applyBoardEffect(item.name, item.args);
+      if (item.seq <= started || now - item.enqueuedAt >= MAX_WAIT_MS) applyBoardEffect(item.name, item.args, item.callId);
       else waiting.push(item);
     }
     pendingBoardRef.current = waiting;
@@ -76,23 +78,23 @@ export function useTeachBoardSync(
   } = speech;
 
   const gateBoardEffect = useCallback(
-    (name: string, args: Record<string, unknown>, live: boolean) => {
+    (name: string, args: Record<string, unknown>, live: boolean, callId?: string) => {
       if (!live || !isAudioActive()) {
-        applyBoardEffect(name, args);
+        applyBoardEffect(name, args, callId);
         return;
       }
       const seq = lastSeq();
       if (seq <= startedSeqRef.current) {
-        applyBoardEffect(name, args);
+        applyBoardEffect(name, args, callId);
         return;
       }
       // 语音积压有界：队列里没播的句子超阈值，板书直接上（老师不会因嘴里
       // 没说完就停笔几分钟——TTS 合成慢于生成流速时这个兜底救活整板）
       if (seq - startedSeqRef.current > MAX_BACKLOG_SENTENCES) {
-        applyBoardEffect(name, args);
+        applyBoardEffect(name, args, callId);
         return;
       }
-      pendingBoardRef.current.push({ seq, name, args, enqueuedAt: Date.now() });
+      pendingBoardRef.current.push({ seq, name, args, callId, enqueuedAt: Date.now() });
       // 超时放行需要独立驱动（句子迟迟不开播时 drain 不会被回调触发）
       setTimeout(drainPendingBoard, MAX_WAIT_MS);
     },
@@ -106,7 +108,7 @@ export function useTeachBoardSync(
         // 静音 = 不再等声音：待上板动作全部立即放行
         const pending = pendingBoardRef.current;
         pendingBoardRef.current = [];
-        for (const item of pending) applyBoardEffect(item.name, item.args);
+        for (const item of pending) applyBoardEffect(item.name, item.args, item.callId);
       }
     },
     [speechSetMuted, applyBoardEffect],

@@ -503,6 +503,9 @@ app.prepare().then(() => {
     let receivedBinaryChunks = 0;
     let receivedBinaryBytes = 0;
     let appendedChunks = 0;
+    // 会话级转写产出统计：断开时随日志输出，用于区分「上游没出字」与「客户端丢了字」
+    let upstreamResultEvents = 0;
+    let finalSegmentsSent = 0;
 
     let contextHint = '';
     let initialSessionUpdateTimer = null;
@@ -762,6 +765,7 @@ app.prepare().then(() => {
 
         case 'result-generated': {
           if (!sentence || !sentence.text) break;
+          upstreamResultEvents += 1;
           const itemId = `duplex-${sentenceIndex}`;
 
           if (!sentence.isFinal) {
@@ -892,6 +896,7 @@ app.prepare().then(() => {
     }
 
     function sendFinalSegment(segment, itemId) {
+      finalSegmentsSent += 1;
       const nextFinal = {
         id: `seg-${sentenceIndex++}`,
         text: segment.text,
@@ -1216,7 +1221,7 @@ app.prepare().then(() => {
 
     clientWs.on('close', () => {
       console.log(
-        `[ASR-Proxy] Client disconnected, recvChunks=${receivedBinaryChunks}, recvBytes=${receivedBinaryBytes}, appended=${appendedChunks}, queue=${audioQueue.length}`
+        `[ASR-Proxy] Client disconnected, recvChunks=${receivedBinaryChunks}, recvBytes=${receivedBinaryBytes}, appended=${appendedChunks}, queue=${audioQueue.length}, upstreamResults=${upstreamResultEvents}, finalSent=${finalSegmentsSent}`
       );
 
       // 积分 Phase 2：只结算真正有音频流过的连接（空连接/秒断不计分钟）。

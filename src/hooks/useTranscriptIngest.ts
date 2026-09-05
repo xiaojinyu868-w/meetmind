@@ -36,6 +36,15 @@ import type { AudioSession } from '@/lib/db';
 
 // ── Types ──────────────────────────────────────────────────────────
 
+/**
+ * 拼接护栏：只有"当前内存会话本身就是上一次导入新建出来的"才允许并入，
+ * 杜绝"复习/驻留着课程 B 时上传资料 A → A 永久混入 B 的转写"（跨课污染）。
+ * 录课的续录不走本 hook（走录音链路），不受影响；多段同课的连续上传
+ * （ part1 → part2 ）仍可拼接。页面刷新后不再拼接（part2 独立成课），
+ * 以安全优先。
+ */
+let lastIngestCreatedSessionId: string | null = null;
+
 export interface UseTranscriptIngestDeps {
   appendSourceItem: (params: {
     id?: string;
@@ -152,7 +161,9 @@ export function useTranscriptIngest(
     // 视频是独立的 primary source：每个视频导入应该创建新会话，
     // 不与之前的 segments 合并，否则会出现 A+B 字幕混合 + videoSource 不更新的 bug。
     const isNewVideoImport = params.sourceType === 'video' && !!params.videoSource;
-    const hasExisting = rawHasExisting && !isNewVideoImport;
+    const isContinuationOfIngest =
+      lastIngestCreatedSessionId !== null && sessionIdRef.current === lastIngestCreatedSessionId;
+    const hasExisting = rawHasExisting && !isNewVideoImport && isContinuationOfIngest;
 
     const nextSessionId = hasExisting ? sessionIdRef.current : generateSessionId();
     const sourceItemId = params.sourceItemId || `${params.sourceType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -183,6 +194,10 @@ export function useTranscriptIngest(
     if (!hasExisting) {
       sessionAct.setSessionId(nextSessionId);
       sessionIdRef.current = nextSessionId;
+      if (!isNewVideoImport) {
+        // 标记"当前会话由导入创建"：下一次导入只有当它仍驻留该会话时才允许拼接
+        lastIngestCreatedSessionId = nextSessionId;
+      }
       editorAct.setAnchors([]);
       sessionAct.setSelectedAnchor(null);
       clearTopics();
@@ -214,14 +229,12 @@ export function useTranscriptIngest(
     editorAct.setSegments(mergedSegments);
     segmentsRef.current = mergedSegments;
     liveSegmentsRef.current = mergedSegments;
-    // 如果当前已在 review 模式（用户正在复习别的内容），不强制切走
+    // 如果当前已在 review 模式（用户正在复习别的内容），不强制切走。
+    // 注意：非拼接导入在 review 模式下也是新建会话（拼接护栏），
+    // 保持 review 视图展示的是刚导入资料自己的内容。
     const currentViewMode = useUIStore.getState().viewMode;
     if (currentViewMode !== 'review') {
       uiAct.setViewMode(shouldKeepVideoSource ? 'review' : 'record');
-    } else if (shouldKeepVideoSource) {
-      // 已在 review 且本次是视频导入，保持 review
-    } else {
-      // 已在 review 但本次是非视频数据追加（如文档/音频拼接），保持 review 不打断
     }
     colAct.setSourceImportError('');
 

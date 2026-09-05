@@ -24,7 +24,9 @@
 - **无 ask 阻塞结构**：不实现阻塞式提问工具；教学提问走自然轮次
   （学生消息 = 新 turn），工具集 11 个（不含 teach-agent 的 ask）。
 - **tool 事件单通道**：tool-call/tool-result 只由 MCP 内部回调发（带我们的
-  id 与 digest），codex 的 mcpToolCall 通知忽略，避免双通道重复。
+  id 与 digest），codex 的 mcpToolCall 通知忽略，避免双通道重复。image 的
+  url 不走 tool-call args（zod strip 多传字段），由 image-backfill 异步发
+  image-ready 回填。
 - **shim 零编排**：只做 Responses↔Chat 翻译；三个已验证的坑（developer
   role、parallel calls 聚合、namespace 工具展平/还原）见 shim-translate.ts 头注。
 
@@ -39,8 +41,9 @@
 | `event-bus.ts` | 按线程 pub/sub + 契约事件类型（SSE 唯一事实源） |
 | `thread-store.ts` | TeachThread prisma CRUD + 事件日志落盘/读取（data/teach-events/*.jsonl） |
 | `board-env.ts` | 按线程 BoardEnv：工具描述导出（z.toJSONSchema）、参数校验执行、事件日志重放恢复 |
+| `image-backfill.ts` | 插图回填：扫事件日志挑缺配图的 image tool-call → 后台 dashscope 生图（复用 `dashscope-image-service`，与旧 teach-agent 线同 provider）→ 落盘 `public/uploads/teach/`（sha1(callId) 前 16 位命名，同旧线风格）→ 发 `image-ready` 事件（SSE + 日志追加）。触发点：turn 收尾（teach-session-service）与事件日志回放路由；三层去重（已有 image-ready / inflight 占位 / 失败 10min 冷却），任何路径不抛异常（生图失败不毁课，画布留占位） |
 | `internal-auth.ts` | 内部回调共享令牌（进程内随机生成，经 codex config.toml mcp env 下发） |
-| `*.test.ts` | shim 翻译 / 事件总线 / 工具执行与重放（vitest） |
+| `*.test.ts` | shim 翻译 / 事件总线 / 工具执行与重放 / 插图回填（vitest） |
 
 配套：`server/teach/teach-mcp-server.mjs`（codex 的子进程，零依赖手写 MCP
 stdio）；`src/lib/prompts/teach-teacher-prompt.ts`（baseInstructions，整体

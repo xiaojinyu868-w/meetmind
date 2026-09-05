@@ -87,6 +87,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/apps/catalog` | GET | 获取应用目录 |
 | `/api/apps/readiness` | POST | 结合真实原文、场景标题/来源、学习信号与 `contextTier` 给出应用推荐；模型判断只影响推荐与提示语气，`allowedAppKeys` 始终是该层 catalog 白名单（单课不含考试速查表），只有空内容 / 极短碎片（<2 段或 <80 字或 <20 秒）才返回 `not_ready`。游客复习也会调用，已在 `public-routes.ts` 放行并由 route 自身限流 |
 | `/api/apps/infographic/generate-image` | POST | Gemini 信息图生成 |
+| `/api/podcast/audio/[file]` | GET | 读取运行时生成的播客 mp3（public/uploads/podcast/；next start 下运行时新文件走静态 404，故同信息图一样走动态路由） |
 
 ### 👤 认证
 

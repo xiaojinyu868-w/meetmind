@@ -1106,6 +1106,7 @@ export const COPY = {
     reviewBannerTitle: '这是示例课',
     reviewBannerBody: '你的课堂会出现在课堂列表里，随时可以录自己的第一节。',
     reviewBannerAction: '去录我自己的课',
+    reviewBannerLoginAction: '登录，留住这节课',
     reviewBannerDismiss: '继续看示例课',
   },
 
@@ -1310,6 +1311,10 @@ export const COPY = {
     /** 断连缓冲溢出导致音频帧被丢弃时的持续提示（累计秒数） */
     audioGapWarning: (seconds: number): string =>
       `刚才连接不稳，约有 ${seconds} 秒的声音没能转成文字。`,
+    /** 重录确认：旧录音会先按正常停录保底落库，再开始新录音 */
+    restartConfirm: '确定要重新开始吗？当前这段会先收好，再从零录一段新的。',
+    /** 录音中持续检测到零音量（PCM 链路静默）时的一次性提醒 */
+    silentAudioWarning: '一直收不到声音，文字不会生成。请检查麦克风或声音来源后重录。',
     finalizingTranscript: (count: number, enhancedCount = 0): string =>
       `实时文字已收下，正在用原声定稿 · ${count} 段${enhancedCount > 0 ? ` · 已优化 ${enhancedCount} 段` : ''}`,
   },
@@ -1497,6 +1502,7 @@ export const COPY = {
       cancel: '取消',
       noTasks: '还没有正在准备的内容。',
       infographicPreview: '信息图预览',
+      podcastPreview: '播客试听',
       downloadImage: '保存图片',
       closePreview: '关闭',
       imageDownloaded: '图片已保存',
@@ -1523,7 +1529,7 @@ export const COPY = {
       workspaceSubtitle: (action: string, bestFor: string): string => `${action} · ${bestFor}`,
       catalogMeta: {
         cheatsheet: { action: '带进考场', bestFor: '多节课已组成单元，或正在准备允许携带资料的考试', time: '排版约 10–20 分钟' },
-        quiz: { action: '检验理解', bestFor: '想知道自己是真懂，还是只是看懂了', time: '作答约 5–8 分钟' },
+        quiz: { action: '检验理解', bestFor: '想做题测一测，马上知道哪里没掌握', time: '作答约 5–8 分钟' },
         flashcards: { action: '记住核心', bestFor: '概念、术语和公式需要反复回忆', time: '练习约 5 分钟' },
         mindmap: { action: '看清结构', bestFor: '内容较多，想分清主干、关系和层次', time: '浏览约 2 分钟' },
         'audio-overview': { action: '换种方式再听', bestFor: '通勤或走路时，想用对话重新理解', time: '收听约 6–10 分钟' },
@@ -1577,10 +1583,11 @@ export const COPY = {
       targetsSubtitle: '能讲出来的，才是真的懂。',
       evidenceLabel: '课堂依据',
       startVoice: '走上讲台',
-      startText: '打字讲',
       voiceHint: '同桌安静听你讲，只在跟不上或你有没讲到的点时开口。',
-      textTitle: '用自己的话讲一遍',
-      textPlaceholder: '就像讲给一个没听过这节课的同学……',
+      textTitle: '把这节课讲给同桌',
+      speakPlaceholder: '讲一段，或打字补充……',
+      submitSegment: '讲给同桌',
+      deskmateListening: '同桌在听',
       finishText: '讲完了',
       evaluating: '同桌正在对照课堂原声核对你讲的……',
       evaluatingStage2: '正在逐条核对你讲的和课堂原声……',
@@ -1606,7 +1613,7 @@ export const COPY = {
       classroomReconnect: '连接断了，点这里重新进教室',
       evalFailed: '这次没能完成核对，你讲的内容还在，可以再试一次。',
       retryEval: '重新核对',
-      textHint: '写给一个没听过这节课的同学，同桌会逐条对照课堂原声核对。',
+      textHint: '用嘴讲，同桌听得见；他跟不上时会开口问。',
     },
     mindmap: {
       mobileGestureHint: '拖动查看 · 点 + 放大',

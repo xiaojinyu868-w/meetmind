@@ -66,6 +66,7 @@ const PUBLIC_ROUTES = [
   '/api/apps/execute',
   '/api/apps/teach-back/evaluate',
   '/api/apps/teach-back/cover-check',
+  '/api/apps/teach-back/respond',
   '/api/class-check/plan',
   '/api/class-check/question',
   '/api/apps/infographic/generate-image',
@@ -95,6 +96,8 @@ const PUBLIC_ROUTES = [
   '/api/workspace/images/*',
   // 信息图图片 —— <img> 标签无法带 Bearer，分享页匿名访问；靠不可猜文件名（requestId+时间戳）控制访问。
   '/api/infographic/image/*',
+  // 播客音频 —— <audio> 标签无法带 Bearer；靠不可猜文件名（podcast-<时间戳>）控制访问，与信息图同级别。
+  '/api/podcast/audio/*',
   // v3.0 SharedAgent —— 落地页和 4 个 share API 都允许匿名打开。
   // 需要鉴权的（创建、领取）由各自 route handler 内部用 authService.verifyToken 自查。
   '/share/*',

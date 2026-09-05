@@ -135,7 +135,14 @@ export function flattenPage(page: BoardPage): FlatAction[] {
       list.push({ key: `s${segmentIndex}a${actionIndex}`, action });
     });
   });
-  return list;
+  // BoardClearAction（teach 新引擎 wb_clear）：清板 = 最后一个 clear 之前的动作
+  // 全部不渲染（clear 自身也不产生墨迹）；之后的 write 从 w1 重新编号。
+  // legacy 词表/备课脚本不含 clear，对它们零行为变化（「页内只增不减」不变）。
+  let lastClear = -1;
+  list.forEach(({ action }, index) => {
+    if (action.type === 'clear') lastClear = index;
+  });
+  return lastClear >= 0 ? list.slice(lastClear + 1) : list;
 }
 
 /** 标注引用的全部 wN（串行链 gating 用）。 */
