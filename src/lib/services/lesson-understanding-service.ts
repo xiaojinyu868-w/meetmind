@@ -19,6 +19,10 @@ import {
   composeLessonTitle,
   retitleCaptureIfUnlocked,
 } from '@/lib/services/lesson-title-service';
+import {
+  appendLearningEvent,
+  triggerLearningEventProcessing,
+} from '@/lib/services/learning-event-service';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('lesson-understanding');
@@ -179,6 +183,31 @@ export async function applyLessonUnderstanding(params: {
     });
     result.highlightCount += 1;
   }
+
+  // 学习记忆观察器（P0 范例）：课后理解完成即追加 activity 事件并触发服务端合并。
+  // fire-and-forget：事件管道失败只记日志，绝不影响标题/摘要/精选的落库结果。
+  void appendLearningEvent(userId, {
+    appId: 'classroom',
+    type: 'activity',
+    payload: {
+      v: 1,
+      kind: 'lesson',
+      title: understanding.topic ?? params.courseTitle ?? '课堂学习',
+      detail: understanding.overview ?? undefined,
+      sessionId,
+      appKey: 'classroom',
+    },
+    sourceId: `lesson-understanding:${captureId}`,
+    idempotencyKey: `lesson-understanding:${captureId}`,
+    occurredAt: params.occurredAt.toISOString(),
+  })
+    .then((event) => { if (event) void triggerLearningEventProcessing(event); })
+    .catch((error) => {
+      log.warn('learning event append failed', {
+        captureId,
+        message: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
+      });
+    });
 
   return result;
 }

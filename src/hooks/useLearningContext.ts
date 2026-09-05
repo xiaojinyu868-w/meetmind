@@ -21,6 +21,10 @@ import {
 
 const GUEST_CONTEXT_KEY = 'learning_context_guest_v1';
 const CONTEXT_EVENT = 'meetmind:learning-context-change';
+// 服务端事件管道（P0）只写画像的 memories / recentLearningActivities 两个字段，
+// 服务端→客户端的读刷新也只采纳这两个字段，其余（activeThread/coursePreferences 等）
+// 保持本地 state，不被刷新覆盖。
+const CONTEXT_SERVER_EVENT = 'meetmind:learning-context-server-sync';
 
 type MemoryDraft = Pick<LearningMemoryEntry, 'kind' | 'title'> &
   Partial<Pick<LearningMemoryEntry, 'detail' | 'source' | 'sourceId'>>;
@@ -32,6 +36,31 @@ function createId(prefix: string): string {
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return `${prefix}-${random}`;
+}
+
+/**
+ * 登录用户的学习记忆读刷新：重拉服务端画像（事件管道合并后的物化视图），
+ * 只把 memories / recentLearningActivities 广播给同 owner 的 useLearningContext 实例。
+ * 静默理解链路专用：失败静默，绝不影响主流程。
+ */
+export async function refreshLearningContextFromServer(
+  ownerKey: string,
+  accessToken: string,
+): Promise<void> {
+  try {
+    const response = await fetch('/api/auth/learner-profile', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) return;
+    const payload = await response.json() as { success?: boolean; learnerProfile?: LearnerProfile | null };
+    if (!payload.success) return;
+    const next = learningContextFromProfile(payload.learnerProfile);
+    window.dispatchEvent(new CustomEvent(CONTEXT_SERVER_EVENT, {
+      detail: { ownerKey, memories: next.memories, recentActivities: next.recentActivities },
+    }));
+  } catch {
+    // 记忆刷新是后台动作，失败不打断用户
+  }
 }
 
 export interface UseLearningContextReturn extends LearningContextState {
@@ -50,7 +79,7 @@ export interface UseLearningContextReturn extends LearningContextState {
 }
 
 export function useLearningContext(): UseLearningContextReturn {
-  const { user, isAuthenticated, saveLearnerProfile } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [state, setState] = useState<LearningContextState>(() => (
     learningContextFromProfile(user?.learnerProfile)
   ));
@@ -58,11 +87,9 @@ export function useLearningContext(): UseLearningContextReturn {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const stateRef = useRef(state);
-  const profileRef = useRef<LearnerProfile | null>(user?.learnerProfile ?? null);
   const ownerKey = user?.id || 'guest';
 
   useEffect(() => { stateRef.current = state; }, [state]);
-  useEffect(() => { profileRef.current = user?.learnerProfile ?? null; }, [user?.learnerProfile]);
 
   useEffect(() => {
     let alive = true;
@@ -94,38 +121,51 @@ export function useLearningContext(): UseLearningContextReturn {
       stateRef.current = detail.state;
       setState(detail.state);
     };
+    const onServerSync = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        ownerKey: string;
+        memories: LearningContextState['memories'];
+        recentActivities: LearningContextState['recentActivities'];
+      }>).detail;
+      if (!detail || detail.ownerKey !== ownerKey) return;
+      // 只采纳服务端事件管道负责的两个字段，本地维护的其余 state 不动
+      const next: LearningContextState = {
+        ...stateRef.current,
+        memories: detail.memories,
+        recentActivities: detail.recentActivities,
+      };
+      stateRef.current = next;
+      setState(next);
+    };
     window.addEventListener(CONTEXT_EVENT, onContextChange);
-    return () => window.removeEventListener(CONTEXT_EVENT, onContextChange);
+    window.addEventListener(CONTEXT_SERVER_EVENT, onServerSync);
+    return () => {
+      window.removeEventListener(CONTEXT_EVENT, onContextChange);
+      window.removeEventListener(CONTEXT_SERVER_EVENT, onServerSync);
+    };
   }, [ownerKey]);
 
   const persist = useCallback(async (next: LearningContextState) => {
     stateRef.current = next;
     setState(next);
     window.dispatchEvent(new CustomEvent(CONTEXT_EVENT, { detail: { ownerKey, state: next } }));
+    if (isAuthenticated) {
+      // P0 事件化：登录用户的画像四字段（memories/recentActivities/coursePreferences/
+      // activeThread）改由服务端事件管道合并，客户端不再整体 PATCH 回写；
+      // 本地 state 照旧维护（prompt 拼接要用），服务端→客户端走 refreshLearningContextFromServer。
+      // 用户本人操作（IntentDialog bio/目标卡、设置页学习档案）仍走 useAuth.saveLearnerProfile 特权通道。
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      if (isAuthenticated) {
-        const base = profileRef.current ?? ({ stage: 'unknown' } as LearnerProfile);
-        const profile = {
-          ...base,
-          memories: next.memories,
-          recentLearningActivities: next.recentActivities,
-          courseContextPreferences: next.coursePreferences || [],
-          activeLearningThread: next.activeThread,
-        } as LearnerProfile;
-        const ok = await saveLearnerProfile(profile);
-        if (!ok) throw new Error('学习上下文暂时没有同步成功');
-        profileRef.current = profile;
-      } else {
-        await setPreference(GUEST_CONTEXT_KEY, next);
-      }
+      await setPreference(GUEST_CONTEXT_KEY, next);
     } catch (persistError) {
       setError(persistError instanceof Error ? persistError.message : '学习上下文暂时没有同步成功');
     } finally {
       setSaving(false);
     }
-  }, [isAuthenticated, ownerKey, saveLearnerProfile]);
+  }, [isAuthenticated, ownerKey]);
 
   const addMemory = useCallback(async (draft: MemoryDraft) => {
     const now = new Date().toISOString();

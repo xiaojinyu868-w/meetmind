@@ -58,6 +58,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/tutor/agent` | POST | AI 同桌 agent-native 工具调用流 |
 | `/api/tutor/intent` | POST | 深度学习开始前生成可编辑意图计划；游客也可按 Tutor 限流调用；只提出计划，不写长期记忆 |
 | `/api/tutor/memory` | POST | 全局学习问答持久化后静默整理最多 2 条学习理解；访客与登录用户都可使用，route 内限流；支持替换近义旧理解，失败返回空结果且不影响最近学习现场 |
+| `/api/memory/events` | POST | 学习记忆事件入口（P0 事件化，详见 `memory/DOMAIN.md`）：Bearer 登录限定；落 `LearningEvent` 后服务端异步蒸馏合并回画像，立即返回 `{ ok, eventId }`；幂等键撞 unique 静默返回已有 |
 | `/api/classroom/foresight` | POST | 课堂预知气泡生成（qwen3.7-plus） |
 | `/api/classroom/flow` | POST | 课中课堂脉络：请求体用 `newSegments` 只提交上次成功更新后新增的实时转录，并携 `priorFlow` 工作记忆；模型返回 upsert/remove 增量，服务端合并成稳定渲染 JSON；生成失败返回 5xx，让客户端保留未消费游标重试 |
 | `/api/classroom/lesson-digest` | POST | 课堂结构化分段总结生成（飞书妙记形态，segments + 图片锚点 → 分段 digest） |
