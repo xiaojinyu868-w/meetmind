@@ -2424,6 +2424,10 @@ export const COPY = {
     entryBody: '把孔子，或你信任的老师，请进你的课堂。',
     entrySectionTitle: '请一位听过这节课的老师',
     shelfTitle: '分身架',
+    /** 架子副标题（带课时）：兑现「听过这节课的老师」契约，课在旅程里始终在场 */
+    shelfLessonBody: (lessonTitle: string): string => `请谁来和你一起复习《${lessonTitle}》？`,
+    /** 对话头部常驻 chip：明示分身此刻正在读哪节课 */
+    chatLessonChip: (lessonTitle: string): string => `正在陪你复习《${lessonTitle}》`,
     shelfEmpty: '架上还空着。请一位听过你课的老师，慢慢聊。',
     invite: '请一个分身',
     back: '返回分身架',
@@ -2434,6 +2438,11 @@ export const COPY = {
     progressLedger: (count: number): string => `分身在学习 · ${count} 条进展`,
     sourceLabel: (sourceType: 'hall' | 'bilibili' | 'upload'): string =>
       sourceType === 'hall' ? '名人堂' : sourceType === 'bilibili' ? 'B 站课程' : '上传录音',
+    /** 同名分身区分：创建日期（M月d日） */
+    egoCreatedAt: (iso: string): string => {
+      const d = new Date(iso);
+      return `${d.getMonth() + 1}月${d.getDate()}日请来`;
+    },
     onboardTitle: '请一个分身',
     onboardBody: '分身在后台读完语料、备好课，再来和你聊这节课。',
     tabHall: '名人堂',

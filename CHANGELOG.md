@@ -5,6 +5,35 @@
 
 ---
 
+## 2026-09-05 — 分身线旅程修复：课在旅程里始终在场
+
+背景：分身↔课的关联此前只在发消息时隐式生效（sessionId 物化），UI 全程无表达——
+从复习页点入口落到全局分身架，课这个上下文瞬间消失；实现违背了 copy 契约
+（入口区标题本就是「请一位听过这节课的老师」）。
+
+- **架子副标题带课名**：有 lessonTitle 时显示「请谁来和你一起复习《X》」（shelfLessonBody）
+- **对话头部常驻课名 chip**：「正在陪你复习《X》」（chatLessonChip）——分身此刻在读
+  哪节课从隐式变显式
+- **单就绪分身直进对话**：架上只有一位就绪分身时跳过架子（零提问原则），返回键可回架子
+- 链路：两个入口（WorkshopYellowPage card / ClassroomCompanionPanel chip）统一透传
+  sessionId + lessonTitle（课名来自 contextTitle / useClassroomLessons 按会话反查，
+  占位标题不显示）
+- 产品判断记录在案：对话记录**不**按课切段——分身是长期关系（跨课连续是价值而非污染），
+  混课感的正确修法是可见性而非切段
+
+---
+
+## 2026-09-04 — 分身线加固：课堂入口按课物化收口 + 服务拆分
+
+- **课堂同桌分身入口接上 sessionId**：`ClassroomView`（useSessionStore）→
+  `ClassroomCompanionPanel` → `ListeningStarterCard` → `FenshenEntryChip`，课中 chip
+  入口与应用矩阵入口行为一致——分身从哪节课打开就听哪节课，不再回退全库最新 capture
+- **`fenshen-session-service.ts` 拆分**（569 → 314 行，回 500 硬限制内）：课后上下文
+  物化（buildContextFiles / parseLessonSnapshot / materializeLessonContext）独立为
+  `lesson-context-service.ts`（266 行），测试同步拆分
+
+---
+
 ## 2026-08-26 — 「请一个分身」线 v1（nuwa skill × codex harness）+ 教练语音输入
 
 > 把任何人"蒸馏"成可对话的分身：上传你喜欢老师的讲课录音/B站链接（或从名人堂请孔子），

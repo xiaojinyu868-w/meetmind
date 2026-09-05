@@ -44,10 +44,11 @@
 | `fenshen-config.ts` | 目录布局（egoPaths：distill-home / chat-home / work）、事件日志目录、nuwa 模板源（assets/fenshen/huashu-nuwa）、私有轨判定 |
 | `event-bus.ts` | 按分身 pub/sub + 契约事件类型（SSE 唯一事实源，含 distill-progress / ego-ready） |
 | `thread-store.ts` | FenshenEgo prisma CRUD + 事件日志落盘/读取（data/fenshen-events/*.jsonl）+ FenshenServiceError |
-| `distill-service.ts` | 蒸馏编排：workspace 准备（nuwa 原文落位 + 私有轨 sources/transcripts/）→ config.toml（shim + Firecrawl MCP）→ thread/start（workspace-write）→ 启动消息（Phase 0A 答案全集）→ exec/MCP 通知映射 distill-progress → 完成检测 + skill 镜像；`requestDistillRevision` 重蒸馏 turn |
+| `distill-service.ts` | 蒸馏编排：workspace 准备（nuwa 原文落位 + 私有轨 sources/transcripts/）→ config.toml（shim + Firecrawl MCP）→ thread/start（workspace-write）→ 启动消息（Phase 0A 答案全集）→ exec/MCP 通知映射 distill-progress（**固定人话短语 + 相邻去重**，raw 命令/文件名/Phase 一律丢弃；agent 叙述 text-delta 蒸馏期不下发）→ 完成检测 + skill 镜像；`requestDistillRevision` 重蒸馏 turn |
 | `corpus-service.ts` | 私有轨语料管线（P2）：bilibili（官方字幕完整则直接用，否则下载音频 → ffmpeg 转 mp3 → DashScope filetrans 转写）/ upload（复用 /api/upload-audio 产物 → 转写）→ txt 落 `work/sources/transcripts/`；`runPrivateCorpusPipeline` 后台编排（语料就绪→起蒸馏；失败置 failed + failReason + error 事件） |
-| `fenshen-session-service.ts` | 对话编排：ensureChatSession（**每次重刷物化文件** + skill 镜像 → config.toml 无 MCP → thread/start，read-only + persona baseInstructions）→ turn/start / turn/interrupt；`buildContextFiles`（纯函数）与 `materializeLessonContext`（prisma → lesson/* + learner/profile.md） |
-| `*.test.ts` | event-bus / thread-store / corpus-service / persona prompt / 上下文物化（vitest） |
+| `fenshen-session-service.ts` | 对话编排：ensureChatSession（**每次重刷物化文件** + skill 镜像 → config.toml 无 MCP → thread/start，read-only + persona baseInstructions）→ turn/start / turn/interrupt；空轮静默重试（`emptyTurnAction` 纯函数） |
+| `lesson-context-service.ts` | 课后上下文物化（从 session-service 拆出）：`buildContextFiles`（纯函数）、`parseLessonSnapshot`、`materializeLessonContext`（prisma / 前端快照 → lesson/* + learner/profile.md） |
+| `*.test.ts` | event-bus / thread-store / corpus-service / persona prompt / 上下文物化（lesson-context-service）/ 空轮重试判定（vitest） |
 
 配套：`src/lib/prompts/fenshen-persona-prompt.ts`（对话线程 baseInstructions：
 场景设定 + skill 挂载指令）；`assets/fenshen/huashu-nuwa/`（nuwa skill 原文
@@ -55,12 +56,19 @@
 
 ## 上下文数据源
 
-- `WorkspaceTranscriptSegment`（按最新有分段的 capture）→ `lesson/transcript.txt`
+- `materializeLessonContext(workDir, scope?)`（lesson-context-service）：`scope.sessionId` 给了就按
+  「该会话最新分段反查 capture」取这节课（防跨课污染）；查不到用
+  `scope.lessonSnapshot`（前端快照，guest/demo 未持久化场景）物化，快照也没有
+  就是空课占位——**绝不回落无关 capture**；没给 sessionId 才回退全库最新（旧行为）。
+  `ensureChatSession` 每次调用都重刷物化（含已有会话）。
+- `WorkspaceTranscriptSegment`（按 capture）→ `lesson/transcript.txt`
   （`[mm:ss] speaker text` 逐段）；无分段退回 capture.normalizedText。
 - capture title/previewText + 分段统计 → `lesson/outline.md`。
 - `WorkspaceCaptureArtifact` kind='anchor' 且 payload.type='confusion' →
   `lesson/confusions.md`（按时间排序）。
-- `User.learnerProfileJson`（bio/goals）→ `learner/profile.md`。
+- `User.learnerProfileJson`（bio/goals）→ `learner/profile.md`；
+  **只取 capture.userId 归属用户的画像**（capture 归属未知则不取，防跨用户
+  画像泄漏）。
 
 ## 边界
 

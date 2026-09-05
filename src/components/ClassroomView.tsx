@@ -439,6 +439,13 @@ export function ClassroomView({
     return title;
   }, [lessons]);
 
+  // 当前会话的课名（分身入口的架子副标题 / 对话头部 chip 用；占位标题不显示）
+  const activeLessonTitle = useMemo(() => {
+    const title = lessons.find((lesson) => lesson.id === activeSessionId)?.title?.trim();
+    if (!title || /^正在录|^课堂$|^新课堂/.test(title)) return undefined;
+    return title;
+  }, [lessons, activeSessionId]);
+
   const {
     flow: generatedClassroomFlow,
     newItemIds: generatedClassroomFlowNewIds,
@@ -636,10 +643,12 @@ export function ClassroomView({
         onAfterClassAction={handleOpenDemoReview}
         onMarkMoment={handleMarkMoment}
         dynamicChips={dynamicChips}
+        sessionId={activeSessionId}
+        lessonTitle={activeLessonTitle}
         adminInspector={adminInspector}
       />
     ),
-    [companionMode, messages, streamingMessage, isThinking, handleSend, onOpenApp, foresights, handleForesightAccept, dismissForesight, handleInlineAction, handleInlineAppInteraction, retryInlineApp, isDemoRecordingPane, demoSuggestedPrompts, demoComplete, handleOpenDemoReview, handleMarkMoment, dynamicChips, adminInspector],
+    [companionMode, messages, streamingMessage, isThinking, handleSend, onOpenApp, foresights, handleForesightAccept, dismissForesight, handleInlineAction, handleInlineAppInteraction, retryInlineApp, isDemoRecordingPane, demoSuggestedPrompts, demoComplete, handleOpenDemoReview, handleMarkMoment, dynamicChips, activeSessionId, activeLessonTitle, adminInspector],
   );
 
   return (

@@ -20,11 +20,11 @@
 | `fenshen-events.ts` | 前端事件契约 + 纯状态机（applyFenshenEvent / replayFenshenEvents，无 React/fetch 依赖，node 可直接测） |
 | `fenshen-client.ts` | 与 `/api/fenshen/*` 的唯一收口：list/create/upload/events/stream/messages/interrupt/feedback（ack 型 POST） |
 | `useFenshenSession.ts` | 事件流状态机 hook：open = GET events 全量回放 + EventSource 订阅续接；断线自愈靠浏览器自动重连 + 重放追齐（幂等）；streaming 中发送 = interrupt 附带 text（打断续讲一步） |
-| `FenshenShelf.tsx` | 分身架全屏层（fixed inset-0，IntentDialog 模式）：shelf（卡列表 + 请分身入口）→ onboard → chat 三视图 |
+| `FenshenShelf.tsx` | 分身架：FenshenShelfViews（shelf 卡列表 + 请分身入口 → onboard → chat 三视图，容器无关，充满父级）+ FenshenShelf（fixed inset-0 全屏层外壳，课中 chip 入口用）。列表排序就绪优先（其后学习中、失败，同状态 updatedAt 倒序）；同名分身副标题补创建日期（COPY.fenshen.egoCreatedAt）区分。课在旅程里始终在场：带 lessonTitle 时架子副标题变为「请谁来和你一起复习《X》」（shelfLessonBody）；**首次加载架上只有一位就绪分身时直接进对话**（零提问原则，对话头部返回键可回架子换一位，用户主动返回后不再跳） |
 | `FenshenOnboardFlow.tsx` | 请分身三选一：名人堂（首发只有孔子）/ 贴 B 站链接 / 上传录音（先走 /api/upload-audio 拿 sourceRef） |
-| `FenshenChatPanel.tsx` | 分身对话：AI Elements（Conversation/Message/MessageResponse 流式 markdown/Loader）+ 试听引导条 +「像/不像他」反馈条（unlike 带 note → 重蒸馏，状态回 learning 等 ego-ready）+ 打断 |
+| `FenshenChatPanel.tsx` | 分身对话：AI Elements（Conversation/Message/MessageResponse 流式 markdown/Loader）+ 试听引导条 +「像/不像他」反馈条（unlike 带 note → 重蒸馏，状态回 learning 等 ego-ready）+ 打断；头部下方常驻课名 chip「正在陪你复习《X》」（chatLessonChip，有 lessonTitle 时显示）——把原本隐式的「分身在读这节课」摆到明面 |
 | `DistillProgressView.tsx` | 账本式蒸馏进度（AI Elements Tool 容器，可折叠默认收起） |
-| `FenshenEntryChip.tsx` | 「请一个分身」固定入口（自包含 shelf 层状态），两种形态：card（课后应用矩阵 WorkshopYellowPage 独立区块，用户可发现性主入口）/ chip（ClassroomCompanionPanel 课后 starter 卡）；不进 WORKSHOP_APP_CATALOG |
+| `FenshenEntryChip.tsx` | 「请一个分身」固定入口（自包含展开状态），两种形态：card（课后应用矩阵 WorkshopYellowPage，点击在矩阵列**内联展开**分身面板，与产物型应用同呈现习惯）/ chip（ClassroomCompanionPanel 课后 starter 卡，打开全屏架层）；两个入口都带 sessionId + lessonTitle（分身按当前这节课物化上下文，课名贯穿架子与对话头部）；不进 WORKSHOP_APP_CATALOG |
 
 ## 关键设计
 

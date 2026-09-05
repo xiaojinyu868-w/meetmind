@@ -949,14 +949,14 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         <ClassroomFlowMatrixEntry sessionId={sessionId} onOpen={props.onOpenClassroomFlow} />
       ) : null}
 
-      {/* 「请一个分身」固定入口（非产物型应用，不进 catalog；架层在 chip 内部） */}
+      {/* 「请一个分身」固定入口（非产物型应用，不进 catalog；点击在矩阵列内联展开分身面板） */}
       <section className={styles.matrixSection} aria-labelledby="fenshen-entry-title">
         <div className={styles.sectionHeading}>
           <h3 id="fenshen-entry-title" className={styles.sectionTitle}>
             {COPY.fenshen.entrySectionTitle}
           </h3>
         </div>
-        <FenshenEntryChip variant="card" />
+        <FenshenEntryChip variant="card" sessionId={sessionId} lessonTitle={props.contextTitle} />
       </section>
 
       {recommendedApp ? (

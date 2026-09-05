@@ -8,8 +8,10 @@
 
 ```
 {type:'thread',threadId}          订阅建立时的首个事件（threadId = egoId）
-{type:'text-delta',text}          分身/蒸馏 agent 说的话（流式增量）
-{type:'distill-progress',note}    账本式蒸馏进度（codex 内置 exec/MCP 动作文案化）
+{type:'text-delta',text}          分身对话 agent 说的话（流式增量；蒸馏期不下发）
+{type:'distill-progress',note}    账本式蒸馏进度（服务端固定人话短语：翻阅讲课素材/
+                                  提炼语言习惯/…/检索公开资料；命令/文件名/Phase 等
+                                  内部机制一律不进 note——skill 永不对用户可见）
 {type:'ego-ready',skillPath}      蒸馏完成（SKILL.md 已落盘），分身可对话
 {type:'turn-complete'}            一轮结束
 {type:'interrupted'}              当前 turn 被打断
@@ -28,8 +30,8 @@ text-delta 流（同一条 SSE 连接，不断线）。
 | `/api/fenshen/egos` | POST | 请分身 `{name, sourceType, sourceRef?}`（name ≤50字；sourceType ∈ hall/bilibili/upload，非 hall 需 sourceRef）→ `{ego}`；建行后立即起蒸馏线程，启动失败置 status=failed（failReason 人可读）并 500 |
 | `/api/fenshen/egos/[id]/stream` | GET | SSE 订阅（EventSource 友好；25s 心跳；首事件 `thread`） |
 | `/api/fenshen/egos/[id]/events` | GET | 事件日志全量回放 `{events}`（含 user-message 记录；打开分身/断线重连时先拉这里重建历史，再订阅 stream 续接） |
-| `/api/fenshen/egos/[id]/messages` | POST | 与分身对话 `{text}`（≤2000字）→ `{ok:true}`；分身未 ready 或 turn 进行中 409 |
-| `/api/fenshen/egos/[id]/interrupt` | POST | 打断 `{text?}`；附带 text 时 interrupted 落地后同线程续讲 |
+| `/api/fenshen/egos/[id]/messages` | POST | 与分身对话 `{text, sessionId?, lessonSnapshot?}`（≤2000字）→ `{ok:true}`；分身未 ready 或 turn 进行中 409。`sessionId` = 当前课程会话：分身按这节课物化；服务端查不到该会话（guest/demo 未持久化）时用 `lessonSnapshot`（前端这节课的转录快照）物化，**不回落无关 capture**；两者都没给才回退全库最新 |
+| `/api/fenshen/egos/[id]/interrupt` | POST | 打断 `{text?, sessionId?, lessonSnapshot?}`（scope 语义同 messages）；附带 text 时 interrupted 落地后同线程续讲 |
 | `/api/fenshen/egos/[id]/feedback` | POST | 试听反馈 `{verdict:'like'|'unlike', note?}`；unlike 触发重蒸馏 turn（带 note 重听），状态回 learning，修订落盘后再发 ego-ready |
 
 设计决定与 teach 一致：**一条长连接 SSE 订阅 + POST 回 ack**（interrupt 附带
