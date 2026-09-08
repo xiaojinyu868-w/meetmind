@@ -99,6 +99,7 @@ export function GlobalAskPanel({
   const { busy: intentBusy, requestIntent } = useLearningIntentFlow();
   const distillAndApplyLearningMemory = useLearningMemoryDistillation({
     accessToken: accessToken ?? undefined,
+    userId: user?.id,
     memories: learning.memories,
     activeThread: learning.activeThread,
     activeIntent,
