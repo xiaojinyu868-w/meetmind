@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowRight, Download, ExternalLink } from 'lucide-react';
+import { ArrowDown, ArrowRight, Download, ExternalLink } from 'lucide-react';
 import { useEffect } from 'react';
 import { COPY } from '@/lib/ui/copy';
 import { DESKTOP_DOWNLOAD } from '@/lib/config/desktop-download.config';
@@ -106,7 +106,7 @@ export function LandingPage() {
               <Link className={styles.heroPrimary} href="/app?guest=1&entry=demo">
                 {copy.hero.primaryAction}<ArrowRight size={16} />
               </Link>
-              <a className={styles.heroSecondary} href="#classroom">{copy.hero.secondaryAction}</a>
+              <a className={styles.heroSecondary} href="#classroom">{copy.hero.secondaryAction}<ArrowDown size={14} /></a>
             </div>
           </div>
           {/* 首屏右侧：产品在工作的样子（示例课真实原话 → 同桌听懂了 [00:06]），取代此前"场景上下文 / 先收下 / 个人上下文"三张内部词浮片 */}

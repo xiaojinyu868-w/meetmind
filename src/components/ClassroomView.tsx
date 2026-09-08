@@ -235,23 +235,46 @@ export function ClassroomView({
   const liveInterimText = useCaptureEditorStore((s) => s.liveInterimText);
 
   // ── 试听课音频：demo 不是无声假课。自动播放如果被浏览器拦截，UI 会露出“播放声音”。
-  const demoAudioRef = useRef<HTMLAudioElement | null>(null);
+  const demoAudioRef = useRef<HTMLVideoElement | null>(null);
   const demoAutoplayAttemptedRef = useRef(false);
   const [demoAudioPlaying, setDemoAudioPlaying] = useState(false);
   const [demoAudioNeedsGesture, setDemoAudioNeedsGesture] = useState(false);
+  /** 出声被拦截时先静音播放（浏览器允许），转录照样流进来；首次交互再打开声音 */
+  const [demoAudioMuted, setDemoAudioMuted] = useState(false);
   const [demoComplete, setDemoComplete] = useState(false);
 
   const playDemoAudio = useCallback(async () => {
     const audio = demoAudioRef.current;
     if (!audio) return;
     try {
+      audio.muted = false;
       await audio.play();
       setDemoAudioPlaying(true);
+      setDemoAudioMuted(false);
       setDemoAudioNeedsGesture(false);
     } catch {
-      setDemoAudioPlaying(false);
-      setDemoAudioNeedsGesture(true);
+      // 无手势禁音策略（landing 里的内嵌试听、直接打开的链接）：静音也比一屏"等老师开口"强——
+      // 示例课的转录、脉络、同桌 chip 都跟着音频时钟走，静音播放让它们照常出现
+      try {
+        audio.muted = true;
+        await audio.play();
+        setDemoAudioPlaying(true);
+        setDemoAudioMuted(true);
+        setDemoAudioNeedsGesture(true);
+      } catch {
+        setDemoAudioPlaying(false);
+        setDemoAudioMuted(false);
+        setDemoAudioNeedsGesture(true);
+      }
     }
+  }, []);
+
+  const unmuteDemoAudio = useCallback(() => {
+    const audio = demoAudioRef.current;
+    if (!audio) return;
+    audio.muted = false;
+    setDemoAudioMuted(false);
+    setDemoAudioNeedsGesture(false);
   }, []);
 
   const handleToggleDemoAudio = useCallback(() => {
@@ -259,17 +282,20 @@ export function ClassroomView({
     if (!audio) return;
     if (audio.paused) {
       void playDemoAudio();
+    } else if (audio.muted) {
+      unmuteDemoAudio();
     } else {
       audio.pause();
       setDemoAudioPlaying(false);
     }
-  }, [playDemoAudio]);
+  }, [playDemoAudio, unmuteDemoAudio]);
 
   useEffect(() => {
     if (!isDemoRecordingPane) {
       demoAutoplayAttemptedRef.current = false;
       demoAudioRef.current?.pause();
       setDemoAudioPlaying(false);
+      setDemoAudioMuted(false);
       setDemoAudioNeedsGesture(false);
       setDemoComplete(false);
       return;
@@ -287,13 +313,15 @@ export function ClassroomView({
     return () => window.clearTimeout(timer);
   }, [isDemoRecordingPane, playDemoAudio]);
 
-  // 自动播放被浏览器拦截（无手势禁音策略）时，借用户首次任意交互续播一次，
-  // 避免首屏三栏干等、还要自己找「播放声音」按钮。
+  // 自动播放被浏览器拦截（无手势禁音策略）时，借用户首次任意交互补上：静音在播就打开声音，
+  // 没播起来就播——避免首屏三栏干等、还要自己找「播放声音」按钮。
   useEffect(() => {
     if (!isDemoRecordingPane || !demoAudioNeedsGesture || demoComplete) return;
     const resume = () => {
       const audio = demoAudioRef.current;
-      if (audio && audio.paused) void playDemoAudio();
+      if (!audio) return;
+      if (audio.paused) void playDemoAudio();
+      else if (audio.muted) unmuteDemoAudio();
     };
     window.addEventListener('pointerdown', resume, { once: true });
     window.addEventListener('keydown', resume, { once: true });
@@ -301,7 +329,7 @@ export function ClassroomView({
       window.removeEventListener('pointerdown', resume);
       window.removeEventListener('keydown', resume);
     };
-  }, [isDemoRecordingPane, demoAudioNeedsGesture, demoComplete, playDemoAudio]);
+  }, [isDemoRecordingPane, demoAudioNeedsGesture, demoComplete, playDemoAudio, unmuteDemoAudio]);
 
   const handleReplayDemo = useCallback(() => {
     const audio = demoAudioRef.current;
@@ -605,6 +633,7 @@ export function ClassroomView({
         onBackToList={handleBackToList}
         isDemoPlayback={isDemoRecordingPane}
         demoAudioPlaying={demoAudioPlaying}
+        demoAudioMuted={demoAudioMuted}
         demoAudioNeedsGesture={demoAudioNeedsGesture}
         onToggleDemoAudio={handleToggleDemoAudio}
         defaultTranslationMode={isDemoRecordingPane ? 'en-zh' : undefined}
@@ -621,7 +650,7 @@ export function ClassroomView({
         onSearch={onSearch}
       />
     ),
-    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, handleBackToList, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, classroomFlow, classroomFlowNewIds, isUnderstandingClassroomFlow, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, onOpenApp, onRenameLesson, onQuickPhoto, onCaptureFrame, onAddMaterial, onSearch],
+    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, handleBackToList, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, classroomFlow, classroomFlowNewIds, isUnderstandingClassroomFlow, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, demoAudioMuted, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, onOpenApp, onRenameLesson, onQuickPhoto, onCaptureFrame, onAddMaterial, onSearch],
   );
 
   const demoSuggestedPrompts = useMemo(
@@ -670,13 +699,20 @@ export function ClassroomView({
   return (
     <>
       {isDemoRecordingPane ? (
-        <audio
+        // 用 <video> 放 mp3 而不是 <audio>：Chrome 只对 video 元素放行"静音自动播放"（audio 即使 muted 也要手势）。
+        // 出声被拦时先静音播，转录 / 脉络 / 同桌 chip 照常跟着音频时钟出现，首次交互再打开声音。
+        <video
           ref={demoAudioRef}
           src={DEMO_AUDIO_URL}
           preload="auto"
-          onPlay={() => {
+          playsInline
+          aria-hidden
+          tabIndex={-1}
+          style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+          onPlay={(event) => {
             setDemoAudioPlaying(true);
-            setDemoAudioNeedsGesture(false);
+            // 静音在播仍算"需要手势"——按钮要提示「打开声音」
+            setDemoAudioNeedsGesture(event.currentTarget.muted);
           }}
           onPause={() => setDemoAudioPlaying(false)}
           onEnded={(event) => {

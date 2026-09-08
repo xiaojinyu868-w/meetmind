@@ -1411,6 +1411,8 @@ export const COPY = {
     demoPause: '暂停',
     demoPlay: '播放',
     demoPlayNeedsGesture: '播放声音',
+    /** 出声被浏览器拦截、正在静音播放：点一下才有声音 */
+    demoUnmute: '打开声音',
     endLesson: '结束这节课',
     /** 示例课音频播完后的收尾卡（此前硬编码，且把内部词"应用矩阵"说给了用户） */
     afterClass: {

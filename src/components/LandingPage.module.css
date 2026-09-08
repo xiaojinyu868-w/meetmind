@@ -178,22 +178,23 @@
   transition: transform 160ms ease, box-shadow 160ms ease;
 }
 .heroPrimary:hover { transform: translateY(-1px); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3); }
+/* 首屏只有一个按钮（先试听一节课）。"看看它怎么工作"是往下翻的安静文字链，不与主动作争夺 */
 .heroSecondary {
   display: inline-flex;
   min-height: 50px;
   align-items: center;
-  padding: 0 20px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  gap: 6px;
+  padding: 0 8px;
+  color: rgba(255, 255, 255, 0.78);
   font-size: 13px;
-  font-weight: 640;
+  font-weight: 560;
   text-decoration: none;
-  backdrop-filter: blur(10px);
-  transition: background 160ms ease;
+  text-underline-offset: 4px;
+  transition: color 160ms ease;
 }
-.heroSecondary:hover { background: rgba(255, 255, 255, 0.18); }
+.heroSecondary:hover { color: #fff; text-decoration: underline; }
+.heroSecondary svg { transition: transform 200ms ease; }
+.heroSecondary:hover svg { transform: translateY(2px); }
 
 /* 主按钮 shine 扫光 */
 .heroPrimary,

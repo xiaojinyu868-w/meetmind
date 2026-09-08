@@ -12,7 +12,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Square, Languages, Play, Pause, Camera, ChevronLeft } from 'lucide-react';
+import { Square, Languages, Play, Pause, Camera, ChevronLeft, VolumeX } from 'lucide-react';
 import { ClassroomFlowCanvas } from './ClassroomFlowCanvas';
 import { OctoBuddySprite } from './OctoBuddy';
 import type { ClassroomFlowState } from '@/types/classroom-flow';
@@ -57,6 +57,7 @@ export interface ClassroomRecordingViewProps {
   /** 试听课音频播放控制：浏览器自动播放失败时，这个按钮就是用户手势入口 */
   isDemoPlayback?: boolean;
   demoAudioPlaying?: boolean;
+  demoAudioMuted?: boolean;
   demoAudioNeedsGesture?: boolean;
   onToggleDemoAudio?: () => void;
   /** 英文试听课默认开启 EN→中，但不写入用户长期偏好 */
@@ -90,6 +91,7 @@ function LiveTranscriptPanel({
   onBack,
   isDemoPlayback,
   demoAudioPlaying,
+  demoAudioMuted = false,
   demoAudioNeedsGesture,
   onToggleDemoAudio,
   listening = true,
@@ -104,6 +106,8 @@ function LiveTranscriptPanel({
   onBack?: () => void;
   isDemoPlayback?: boolean;
   demoAudioPlaying?: boolean;
+  /** 静音自动播放中（出声被浏览器拦截）：按钮变成「打开声音」 */
+  demoAudioMuted?: boolean;
   demoAudioNeedsGesture?: boolean;
   onToggleDemoAudio?: () => void;
   /** 仍在听课 → 头部呼吸球仪式；停止 / 试听结束即消散 */
@@ -272,18 +276,23 @@ function LiveTranscriptPanel({
                   type="button"
                   onClick={onToggleDemoAudio}
                   className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-full text-[12px] font-medium transition active:scale-95 ${
-                    demoAudioNeedsGesture && !demoAudioPlaying ? 'px-3' : 'w-9'
+                    demoAudioNeedsGesture && (!demoAudioPlaying || demoAudioMuted) ? 'px-3' : 'w-9'
                   } ${
-                    demoAudioPlaying
+                    demoAudioPlaying && !demoAudioMuted
                       ? 'bg-paper-warm text-ink-secondary hover:text-ink'
                       : 'bg-ink text-white shadow-soft hover:opacity-90'
                   }`}
-                  title={demoAudioPlaying ? COPY.recording.demoPause : COPY.recording.demoPlay}
-                  aria-label={demoAudioPlaying ? COPY.recording.demoPause : COPY.recording.demoPlay}
+                  title={demoAudioMuted ? COPY.recording.demoUnmute : demoAudioPlaying ? COPY.recording.demoPause : COPY.recording.demoPlay}
+                  aria-label={demoAudioMuted ? COPY.recording.demoUnmute : demoAudioPlaying ? COPY.recording.demoPause : COPY.recording.demoPlay}
                 >
-                  {demoAudioPlaying ? <Pause size={12} strokeWidth={2} /> : <Play size={12} strokeWidth={2} fill="currentColor" />}
-                  {/* 窄栏里只在"需要手势才能出声"时露文字，其余时候图标即可——把宽度让给左边的状态 */}
+                  {demoAudioMuted
+                    ? <VolumeX size={12} strokeWidth={2} />
+                    : demoAudioPlaying
+                      ? <Pause size={12} strokeWidth={2} />
+                      : <Play size={12} strokeWidth={2} fill="currentColor" />}
+                  {/* 窄栏里只在"需要手势才能出声"时露文字（没播起来 / 静音在播），其余时候图标即可——把宽度让给左边的状态 */}
                   {demoAudioNeedsGesture && !demoAudioPlaying ? <span>{COPY.recording.demoPlayNeedsGesture}</span> : null}
+                  {demoAudioMuted ? <span>{COPY.recording.demoUnmute}</span> : null}
                 </button>
               ) : null}
               <button
@@ -556,6 +565,7 @@ export function ClassroomRecordingView({
   isUnderstandingClassroomFlow = false,
   isDemoPlayback = false,
   demoAudioPlaying = false,
+  demoAudioMuted = false,
   demoAudioNeedsGesture = false,
   onToggleDemoAudio,
   defaultTranslationMode,
@@ -609,6 +619,7 @@ export function ClassroomRecordingView({
               onBack={onBack}
               isDemoPlayback={isDemoPlayback}
               demoAudioPlaying={demoAudioPlaying}
+              demoAudioMuted={demoAudioMuted}
               demoAudioNeedsGesture={demoAudioNeedsGesture}
               onToggleDemoAudio={onToggleDemoAudio}
               listening={!isDemoComplete}

@@ -95,6 +95,7 @@ export interface ClassroomLeftPanelProps {
   /** 试听课音频播放控制 */
   isDemoPlayback?: boolean;
   demoAudioPlaying?: boolean;
+  demoAudioMuted?: boolean;
   demoAudioNeedsGesture?: boolean;
   onToggleDemoAudio?: () => void;
   /** 英文试听课默认开启 EN→中 */
@@ -602,6 +603,7 @@ export function ClassroomLeftPanel({
   onBackToList,
   isDemoPlayback,
   demoAudioPlaying,
+  demoAudioMuted,
   demoAudioNeedsGesture,
   onToggleDemoAudio,
   defaultTranslationMode,
@@ -695,6 +697,7 @@ export function ClassroomLeftPanel({
             isUnderstandingClassroomFlow={isUnderstandingClassroomFlow}
             isDemoPlayback={isDemoPlayback}
             demoAudioPlaying={demoAudioPlaying}
+            demoAudioMuted={demoAudioMuted}
             demoAudioNeedsGesture={demoAudioNeedsGesture}
             onToggleDemoAudio={onToggleDemoAudio}
             defaultTranslationMode={defaultTranslationMode}
