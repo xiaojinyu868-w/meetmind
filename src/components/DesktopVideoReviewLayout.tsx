@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useMemo, useState, type RefObject } from 'react';
+import { describeMoment } from '@/lib/learning/moment-title';
+import { COPY } from '@/lib/ui/copy';
 import dynamic from 'next/dynamic';
 import { MessageCircle, AlertCircle, Clock, Boxes, FileText } from 'lucide-react';
 import { useUIStore, useUIActions } from '@/stores/ui-store';
@@ -172,7 +174,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
   const segments = useCaptureEditorStore((s) => s.segments);
   const anchors = useCaptureEditorStore((s) => s.anchors);
   // 同桌开场点名学生留下的标记时刻（review-starters.ts），不再是"同学在这里。"
-  const reviewOpening = useMemo(() => buildReviewOpening({ anchors }), [anchors]);
+  const reviewOpening = useMemo(() => buildReviewOpening({ anchors, segments }), [anchors, segments]);
   const confusionChatAnchor = useCaptureEditorStore((s) => s.confusionChatAnchor);
   const videoInsightItems = useCaptureEditorStore((s) => s.videoInsightItems);
   const activeVideoInsightId = useCaptureEditorStore((s) => s.activeVideoInsightId);
@@ -427,7 +429,10 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                               <span className="text-xs text-ink-secondary">{anchors.filter(a => !a.resolved).length} 个待解决</span>
                             )}
                           </div>
-                          {anchors.map((anchor, index) => (
+                          {anchors.map((anchor) => {
+                            // 时刻的名字：学生备注 → 老师那一刻的原话首句；"困惑点 #N" 对人没有意义
+                            const moment = describeMoment(anchor, segments);
+                            return (
                             <button
                               key={anchor.id}
                               onClick={() => {
@@ -444,18 +449,19 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                               <div className="flex items-center gap-2">
                                 <span className={`w-2 h-2 rounded-full shrink-0 ${anchor.resolved ? 'bg-ink-muted' : 'bg-vermilion/55'}`} />
                                 <span className="text-xs font-mono text-ink-muted">{formatTime(anchor.timestamp)}</span>
-                                <span className="text-xs text-ink-secondary">困惑点 #{index + 1}</span>
+                                <span className="min-w-0 truncate text-[12.5px] text-ink">{moment.title || COPY.reviewTutor.confusionUnnamed}</span>
                                 {anchor.resolved ? (
-                                  <span className="text-xs text-ink-muted ml-auto">已解决</span>
+                                  <span className="ml-auto shrink-0 text-xs text-ink-muted">已解决</span>
                                 ) : (
-                                <span className="ml-auto text-xs text-ink-secondary">点击对话</span>
+                                <span className="ml-auto shrink-0 text-xs text-ink-secondary">点击对话</span>
                                 )}
                               </div>
-                              {anchor.note && (
+                              {anchor.note && moment.source !== 'note' && (
                                 <p className="mt-1.5 text-[13px] text-ink-secondary line-clamp-2 pl-4">{anchor.note}</p>
                               )}
                             </button>
-                          ))}
+                            );
+                          })}
                         </div>
                       ) : (
                         <div className="py-10 text-center">

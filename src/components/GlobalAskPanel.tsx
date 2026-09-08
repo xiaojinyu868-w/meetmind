@@ -390,6 +390,7 @@ export function GlobalAskPanel({
   }, [learning.recentActivities, segments, sessionId]);
   const deskGroups = React.useMemo(() => buildAskDesk({
     hasCurrentTranscript: currentTranscript.length > 0,
+    segments,
     currentLessonTitle,
     materialTitles: [
       ...sourceItems.filter((item) => item.status !== 'failed').slice(-6).reverse().map((item) => item.title),
@@ -399,7 +400,7 @@ export function GlobalAskPanel({
     recentActivities: learning.recentActivities,
     trail: masteryTrail,
     memories: learning.memories,
-  }), [anchors, currentLessonTitle, currentTranscript.length, fileUpload.attachedFiles, learning.memories, learning.recentActivities, masteryTrail, sourceItems]);
+  }), [anchors, currentLessonTitle, currentTranscript.length, fileUpload.attachedFiles, learning.memories, learning.recentActivities, masteryTrail, segments, sourceItems]);
   // 空桌面的试听入口：只给访客（entry=demo 只在 guest=1 下自动灌课；登录用户从课堂 tab 进）
   const startDemoLesson = React.useCallback(() => {
     resetDemoEntryConsumed();

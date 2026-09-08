@@ -19,6 +19,14 @@ describe('buildReviewOpening', () => {
     ]);
   });
 
+  it('有转录时 chip 带上那一刻老师的原话——同桌和学生都知道在说哪一句', () => {
+    const opening = buildReviewOpening({
+      anchors: [{ timestamp: 30_500, cancelled: false, resolved: false }],
+      segments: [{ startMs: 30_000, endMs: 34_000, text: 'My name is Jane, Jane Bond.' }],
+    });
+    expect(opening.prompts[0]).toBe('0:30「My name is Jane, Jane Bond」那里我没跟上，帮我讲一下');
+  });
+
   it('没有标记但有难点：开场说难点，chip 带难点名', () => {
     const opening = buildReviewOpening({ anchors: [], keyDifficulties: ['贝叶斯定理的分母到底是什么意思'] });
     expect(opening.lead).toBe('听完了。这节课有 1 个地方值得多说两句——从哪里开始？');

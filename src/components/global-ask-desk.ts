@@ -13,6 +13,7 @@ import type { LearningActivityEntry, LearningMemoryEntry } from '@/types/user';
 import { conceptLabel, type MasteryTrailEntry } from '@/components/mastery-trail';
 import { COPY } from '@/lib/ui/copy';
 import { formatTimestamp } from '@/lib/utils/time-utils';
+import { clipDisplay, describeMoment, type MomentSegment } from '@/lib/learning/moment-title';
 
 export type DeskGroupId = 'reading' | 'moments' | 'unstable' | 'recent' | 'memory';
 
@@ -46,6 +47,8 @@ export interface DeskAnchor {
 export interface AskDeskInput {
   /** 当前课堂有转录（capture editor 里有 segments） */
   hasCurrentTranscript: boolean;
+  /** 当前课堂的转录段：给「你标的」每个时刻起名（老师那一刻的原话），chip 不再只是一个时间 */
+  segments?: readonly MomentSegment[];
   /** 当前课堂标题（可得时点名；不可得用"这节课"） */
   currentLessonTitle?: string;
   /** 当前会带进对话的材料标题（不含转录） */
@@ -113,15 +116,20 @@ export function buildAskDesk(input: AskDeskInput): DeskGroup[] {
     const moments: DeskItem[] = ordered.slice(0, MOMENTS_MAX).map((anchor) => {
       const time = formatTimestamp(anchor.timestamp);
       const note = anchor.note?.trim();
+      // 时刻的名字：学生备注 → 老师那一刻的原话首句（moment-title，与复习页困惑点列表、同桌开场同一套命名）
+      const named = describeMoment(anchor, input.segments ?? []);
+      const quoteTitle = named.source === 'quote' ? clipDisplay(named.title) : '';
       return {
         id: `moment:${anchor.id}`,
-        label: time,
+        label: quoteTitle ? `${time} · ${quoteTitle}` : time,
         meta: note ? shortTitle(note, 24) : copy.anchorType[anchor.type],
         prompt: anchor.type === 'important'
           ? copy.promptFromImportant(time)
           : note
             ? copy.promptFromNotedMoment(time, shortTitle(note, TITLE_MAX))
-            : copy.promptFromMoment(time),
+            : named.title
+              ? copy.promptFromNamedMoment(time, named.title)
+              : copy.promptFromMoment(time),
         tone: anchor.type === 'confusion' && !anchor.resolved ? 'vermilion' : undefined,
       };
     });

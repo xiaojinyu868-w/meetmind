@@ -145,6 +145,8 @@ export const COPY = {
       promptFromLesson: (title: string): string => `帮我讲清《${title}》里最难的地方`,
       promptFromMaterial: (title: string): string => `帮我讲清《${title}》里最难的地方`,
       promptFromMoment: (time: string): string => `${time} 那里我没跟上，从这讲一下`,
+      /** 时刻有名字（老师原话）时带上 */
+      promptFromNamedMoment: (time: string, title: string): string => `${time}「${title}」那里我没跟上，从这讲一下`,
       promptFromNotedMoment: (time: string, note: string): string => `${time} 那里我写了「${note}」，帮我把这段讲清楚`,
       promptFromImportant: (time: string): string => `${time} 那里老师强调的是什么？帮我讲透`,
       promptFromUnstable: (concept: string): string => `再讲一遍「${concept}」，换一个新的例子`,
@@ -338,6 +340,8 @@ export const COPY = {
       ),
       leadWithDifficulties: (count: number): string => `听完了。这节课有 ${count} 个地方值得多说两句——从哪里开始？`,
       anchorPrompt: (time: string): string => `${time} 那里我没跟上，帮我讲一下`,
+      /** 时刻有名字（老师原话 / 学生备注）时带上，同桌和学生都知道在说哪一句 */
+      anchorPromptNamed: (time: string, title: string): string => `${time}「${title}」那里我没跟上，帮我讲一下`,
       difficultyPrompt: (name: string): string => `帮我讲清「${name}」`,
     },
   },
@@ -933,6 +937,16 @@ export const COPY = {
     wholeLesson: '整节课',
     wholeLessonTitle: '基于整节课内容对话',
     confusion: '困惑点',
+    /** 时刻起不出名字（没有转录也没有备注）时的兜底 */
+    confusionUnnamed: '这里没跟上',
+    /** 「困惑点」tab 没选中时的列表（MomentList）：每一刻按名字列出 */
+    moments: {
+      title: (count: number): string => `你标的 ${count} 处`,
+      hint: '点一处，回到那一句',
+      resolved: '已解决',
+      emptyTitle: '这节课还没有标记。',
+      emptyBody: '听到没跟上的地方点一下「标记困惑」，下课后就从这里接着问。',
+    },
     backToWholeLesson: '返回整节课对话',
   },
 

@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { MomentList } from '@/components/review/MomentList';
 import { TimelineView } from '@/components/TimelineView';
 import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
@@ -174,7 +175,11 @@ export function ReviewWorkspacePanel({
           </div>
         )}
 
-        {reviewTab === 'anchor-detail' && (
+        {reviewTab === 'anchor-detail' && !selectedAnchor && (
+          // 没选中任何一处：按名字列出这节课标下的每一刻（此前是让人去波形上找红点的空态）
+          <MomentList anchors={anchors} segments={segments} onSelect={onBreakpointSelect} />
+        )}
+        {reviewTab === 'anchor-detail' && selectedAnchor && (
           <AnchorDetailPanel
             anchor={selectedAnchor}
             segments={segments}

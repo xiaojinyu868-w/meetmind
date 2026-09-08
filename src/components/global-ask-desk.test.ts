@@ -62,6 +62,21 @@ describe('buildAskDesk', () => {
     expect(groups.find((g) => g.id === 'recent')).toBeUndefined();
   });
 
+  it('有转录时「你标的」chip 带上那一刻老师的原话，问句也点名那句话（同一套时刻命名）', () => {
+    const groups = buildAskDesk({
+      ...base,
+      hasCurrentTranscript: true,
+      segments: [
+        { startMs: 0, endMs: 5000, text: "Good morning ma'am and welcome." },
+        { startMs: 30000, endMs: 34000, text: 'My name is Jane, Jane Bond.' },
+      ],
+      anchors: [anchor({ id: 'a1', timestamp: 30_500 })],
+    });
+    const moment = groups.find((g) => g.id === 'moments')?.items[0];
+    expect(moment?.label).toBe('00:30 · My name is Jane, Jane Bond');
+    expect(moment?.prompt).toBe('00:30「My name is Jane, Jane Bond」那里我没跟上，从这讲一下');
+  });
+
   it('没有当前课堂：用最近学过把人接回上一节，同名去重、最多两件', () => {
     const groups = buildAskDesk({
       ...base,

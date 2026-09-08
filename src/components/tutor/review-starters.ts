@@ -7,10 +7,13 @@
 
 import type { Anchor } from '@/types';
 import { COPY } from '@/lib/ui/copy';
+import { describeMoment, type MomentSegment } from '@/lib/learning/moment-title';
 
 export interface ReviewStarterInput {
-  anchors: ReadonlyArray<Pick<Anchor, 'timestamp' | 'cancelled' | 'resolved'>>;
+  anchors: ReadonlyArray<Pick<Anchor, 'timestamp' | 'cancelled' | 'resolved'> & { note?: string | null }>;
   keyDifficulties?: readonly string[];
+  /** 有转录就能给每个时刻起名（老师那一刻的原话 / 学生备注），chip 不再只是一个时间 */
+  segments?: readonly MomentSegment[];
 }
 
 export interface ReviewOpening {
@@ -33,7 +36,8 @@ export function buildReviewOpening(input: ReviewStarterInput): ReviewOpening {
   const prompts: string[] = [];
 
   for (const anchor of active.slice(0, 2)) {
-    prompts.push(copy.anchorPrompt(fmtTime(anchor.timestamp)));
+    const named = describeMoment(anchor, input.segments ?? []);
+    prompts.push(named.title ? copy.anchorPromptNamed(fmtTime(anchor.timestamp), named.title) : copy.anchorPrompt(fmtTime(anchor.timestamp)));
   }
   if (prompts.length < 3 && difficulties[0]) {
     prompts.push(copy.difficultyPrompt(difficulties[0].slice(0, 16)));
