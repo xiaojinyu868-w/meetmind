@@ -1219,9 +1219,11 @@ export const COPY = {
 
   demo: {
     reviewBannerTitle: '这是示例课',
-    reviewBannerBody: '你的课堂会出现在课堂列表里，随时可以录自己的第一节。',
+    /** 访客看完试听落在复习页：说清"你的课也会长成这样"，而不是解释课堂列表在哪 */
+    reviewBannerBody: '你的每一节课都会长成这样——录下第一节就开始。',
     reviewBannerAction: '去录我自己的课',
-    reviewBannerLoginAction: '登录，留住这节课',
+    /** 示例课不是访客自己的课，"留住这节课"留不住；登录的理由是记自己的课 */
+    reviewBannerLoginAction: '登录，记自己的课',
     reviewBannerDismiss: '继续看示例课',
   },
 

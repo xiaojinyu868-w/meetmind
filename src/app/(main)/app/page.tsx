@@ -16,6 +16,7 @@ import { useMobileAIStore } from '@/stores/mobile-ai-store';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
 import { DesktopSidebar } from '@/components/DesktopSidebar';
+import { LessonEndRitualHost } from '@/components/classroom/LessonEndRitual';
 
 import { GUEST_DEMO_LESSON_TITLE, isDemoEntryConsumed, markDemoEntryConsumed, resolveGuestDemoEntry } from '@/components/classroom/guest-demo-entry';
 import { DEMO_SESSION_ID } from '@/fixtures/demo-data';
@@ -3062,6 +3063,9 @@ function StudentAppContent({
         }}
         isMobile={isMobile}
       />
+
+      {/* ── 结课收尾仪式（合上笔记本）：挂在根部，谁结束都能放 ── */}
+      <LessonEndRitualHost />
 
       {/* ── 回声分享卡弹窗 ── */}
       {sharingEcho && (

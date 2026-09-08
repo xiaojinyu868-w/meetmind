@@ -62,6 +62,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 - **试听课必须有生长感**：左侧音频和转录、中间课堂脉络、右侧同桌轻问题要同步出现；中间不能等后端或长期停在空态，示例课用本地脉络随音频秒数推进；音频结束后必须由 Octo Buddy 提醒用户点击“结束这节课”进入既有课后复习页 / 应用矩阵，而不是在课中页面承载完整课后学习，也不能回到“原声已保留”的失败卡片
 - **示例课出声被拦时先静音播，不许三栏干等**（2026-09-08）：Chrome 只对 `<video>` 放行静音自动播放（`<audio>` 即使 muted 也要手势），所以示例音频用隐藏 `<video>` 放 mp3。`playDemoAudio` 先试出声，被拒就静音播（`demoAudioMuted`），按钮变「打开声音」，首次任意交互自动打开声音。landing 内嵌 iframe 与直接打开链接都靠这条兜底才是"活"的
 - **转录卡自动跟随的判定只来自用户滚动**（2026-09-08）：此前在新行渲染后才量"离底部多远"，一句带翻译的新行就超过 96px 阈值，被误判成"用户上滚了"，自动跟随从此失效、露着「回到底部」。现在 `onScroll` 记录用户意图，内容变化（新句或半句变长）时贴底；程序滚动期间的 scroll 事件不算意图。真实录课时 LIVE 旁显示录音来源图标（麦克风 / 电脑声音 / 两路），试听课不显示
+- **结课收尾仪式**（2026-09-08，PRODUCT_TASTE 仪式时刻 #4）：`LessonEndRitual.tsx` 的 `announceLessonEnd` 在 `ClassroomView.handleStopRecording` 触发，`LessonEndRitualHost` 挂在 page 根部——示例课结束的同一帧 ClassroomView 就被复习布局替换，挂在它里面活不过第一帧。一页纸浮起「这节课我听完了。共 N 句，标了 M 处」→ 沿左边合上 → 消散，≈1.3s，pointer-events none，不承担等待；示例课提前结束句数取整节课
 - **Octo Buddy 是 IP，不是图标**：内嵌在右侧同桌里的章鱼也必须动起来（呼吸 / 听课 / 开心），不能只作为静态头像
 
 ## 关键接入点

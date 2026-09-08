@@ -37,6 +37,7 @@ import type {
 import type { CompanionMode } from './classroom';
 import { useClassroomLessons } from '@/hooks/useClassroomLessons';
 import { useClassroomCompanion } from '@/hooks/useClassroomCompanion';
+import { announceLessonEnd } from '@/components/classroom/LessonEndRitual';
 import { useClassroomForesight } from '@/hooks/useClassroomForesight';
 import { useClassroomFlow } from '@/hooks/useClassroomFlow';
 import { usePersistClassroomFlow } from '@/hooks/usePersistedClassroomFlow';
@@ -588,8 +589,20 @@ export function ClassroomView({
     onStartRecording();
   }, [onStartRecording, onStopRecording]);
 
+  // 结课收尾仪式（合上笔记本）：只在真的有一节课可以合上时放——试听课或正在录的课。
+  // 仪式本体挂在 page 根部（LessonEndRitualHost）：示例课结束的同一帧本组件就被复习布局替换
+  const storeAnchors = useCaptureEditorStore((s) => s.anchors);
+
   const handleStopRecording = useCallback((lessonId?: string) => {
-    if (shouldOpenDemoReviewOnStop({ autoLoadDemo: demoSessionActive, isRecording, paneState })) {
+    const closingDemo = shouldOpenDemoReviewOnStop({ autoLoadDemo: demoSessionActive, isRecording, paneState });
+    if (closingDemo || isRecording) {
+      announceLessonEnd({
+        // 示例课提前结束也进完整复习页（16 句都在），合上的是整节课；真实录课是听到哪算哪
+        sentences: closingDemo ? DEMO_SEGMENTS.length : activeRecordingSegments.length,
+        confusions: storeAnchors.filter((anchor) => !anchor.cancelled && anchor.type === 'confusion').length,
+      });
+    }
+    if (closingDemo) {
       handleOpenDemoReview();
       return;
     }
@@ -598,7 +611,7 @@ export function ClassroomView({
     } else {
       setLocalPaneState('list');
     }
-  }, [demoSessionActive, isRecording, paneState, handleOpenDemoReview, onStopRecording]);
+  }, [activeRecordingSegments.length, demoSessionActive, isRecording, paneState, handleOpenDemoReview, onStopRecording, storeAnchors]);
 
   // 返回课程列表（录课入口页）：试听课先暂停音频；真实录音在后台继续，
   // 由列表顶部的活动条承接，随时可以回到录课态。
