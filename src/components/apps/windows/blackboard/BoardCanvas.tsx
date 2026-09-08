@@ -48,6 +48,7 @@ import { BoardAnnotation } from './BoardAnnotation';
 import { BoardFlow } from './BoardFlow';
 import type { FlowItem } from './BoardFlow';
 import { emitBoardTiming } from './board-timing';
+import { BOARD_CANVAS_CSS } from './board-canvas-styles';
 
 export { BOARD_WIDTH, BOARD_HEIGHT };
 export type { ExtraWrite };
@@ -228,13 +229,16 @@ export function BoardCanvas({
     });
 
   // v33 坐标系归一：circle/underline/mark 按目标 wN 分组下发给 BoardFlow 块内渲染；
-  // 只有 arrow（跨块）留在覆盖层走 DOM 实测
+  // 只有 arrow（跨块）留在覆盖层走 DOM 实测。
+  // P3：spotlight 也可指向结构化块（shape/table/line/code 的 elementId）——
+  // 非 wN 目标以原始 target 字符串作 key（BoardFlow 按块 elementId 命中）
   const annotationsByWn = useMemo(() => {
     const map = new Map<string, Array<Extract<BoardAction, { type: 'circle' | 'underline' | 'mark' }>>>();
     for (const { action } of visible) {
       if (action.type !== 'circle' && action.type !== 'underline' && action.type !== 'mark') continue;
       const refs = targetRefsOf(action);
-      const wn = refs.length > 0 ? `w${refs[0]}` : null;
+      const raw = Array.isArray(action.target) ? action.target[0] : action.target;
+      const wn = refs.length > 0 ? `w${refs[0]}` : typeof raw === 'string' && raw ? raw : null;
       if (!wn) continue;
       const list = map.get(wn) ?? [];
       list.push(action);
@@ -244,14 +248,21 @@ export function BoardCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible.length, pageIndex, extraAnnotations]);
 
-  // v31 流式内容分栏：write/image 成块，new_column 折成分栏标记
+  // v31 流式内容分栏：write/image/结构化块（P3 shape/table/line/code）成块，
+  // new_column 折成分栏标记
   const flowItems: FlowItem[] = [];
   for (const { key, action } of visible) {
     if (action.type === 'new_column') {
       flowItems.push({ key, isColumnBreak: true });
     } else if (action.type === 'write') {
       flowItems.push({ key, role: action.role, isColumnBreak: false, action });
-    } else if (action.type === 'image') {
+    } else if (
+      action.type === 'image' ||
+      action.type === 'shape' ||
+      action.type === 'table' ||
+      action.type === 'line' ||
+      action.type === 'code'
+    ) {
       flowItems.push({ key, isColumnBreak: false, action });
     }
   }
@@ -464,46 +475,7 @@ export function BoardCanvas({
 
         {/* v32：字幕区退役（BoardCaption 删除）——讲的话看右栏对话 */}
 
-        <style>{`
-          .mm-chalk-char {
-            display: inline-block;
-            opacity: 0;
-            animation: mm-chalk-in 0.22s ease-out forwards;
-          }
-          @keyframes mm-chalk-in {
-            from { opacity: 0; transform: translateY(calc(var(--mm-y, 0px) + 3px)) scale(1.04); }
-            to { opacity: var(--mm-jitter, 1); transform: translateY(var(--mm-y, 0px)) scale(1); }
-          }
-          .mm-board-page { animation: mm-page-in 0.45s ease-out; }
-          .mm-board-paused .mm-chalk-char { animation-play-state: paused; }
-          /* v31 块级公式：KaTeX 无法逐字接力，整块快速淡入 */
-          .mm-formula-in { animation: mm-formula-in 0.4s ease-out; }
-          @keyframes mm-formula-in {
-            from { opacity: 0; transform: translateY(4px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-          /* KaTeX display 默认 1em 上下外边距：8 个公式就白丢 ~300px 内容高度，
-             会把整页逼进收缩兜底——块距由 roleBlockStyle 统一给，这里清零 */
-          .mm-board-page .katex-display { margin: 0; }
-          /* 马克笔高亮：从左到右横扫一挥 */
-          .mm-hl-mark, .mm-hl-mark-instant {
-            background-image: linear-gradient(${PAPER.marker}, ${PAPER.marker});
-            background-repeat: no-repeat;
-            background-position: 0 62%;
-          }
-          .mm-hl-mark {
-            background-size: 0% 78%;
-            animation: mm-hl-sweep 0.35s ease-out forwards;
-          }
-          .mm-hl-mark-instant { background-size: 100% 78%; }
-          @keyframes mm-hl-sweep { to { background-size: 100% 78%; } }
-          .mm-board-paused .mm-formula-in,
-          .mm-board-paused .mm-hl-mark { animation-play-state: paused; }
-          @keyframes mm-page-in {
-            from { opacity: 0; }
-            to { opacity: 1; }
-          }
-        `}</style>
+        <style>{BOARD_CANVAS_CSS}</style>
       </div>
     </div>
   );

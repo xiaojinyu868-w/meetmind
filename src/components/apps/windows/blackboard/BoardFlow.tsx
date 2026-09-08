@@ -26,9 +26,10 @@ import { estimateWriteMs, paceScaleFor } from './board-model';
 import { BoardWrite } from './BoardWrite';
 import { BoardFormula } from './BoardFormula';
 import { BoardImage } from './BoardImage';
+import { BoardCodeBlock, BoardLineBlock, BoardShapeBlock, BoardTableBlock } from './BoardBlocks';
 import { BlockAnnotation } from './BlockAnnotation';
 
-/** 流式内容项：write/image 成块；new_column 折成分栏标记；标注不进流 */
+/** 流式内容项：write/image/结构化块成块；new_column 折成分栏标记；标注不进流 */
 export interface FlowItem extends LectureFlowItem {
   action?: BoardAction;
   extra?: ExtraWrite;
@@ -80,12 +81,34 @@ export function BoardFlow({
   firstColumnRef,
   annotationsByWn,
 }: BoardFlowProps) {
-  /** 单个流式块（write / formula / image / checkpoint 追加 write）渲染 */
+  /** 单个流式块（write / formula / image / 结构化块 / checkpoint 追加 write）渲染 */
   const renderFlowItem = (item: FlowItem) => {
     const action: BoardAction = item.extra
       ? { type: 'write', text: item.extra.text, role: item.extra.role }
       : (item.action as BoardAction);
     if (action.type === 'image') return <BoardImage key={item.key} action={action} />;
+    // P3 结构化块（teach-engine 全量词表）：无书写动画，触发即整块上板；
+    // spotlight 圈注按 elementId 命中（annotationsByWn 的非 wN 键）
+    if (action.type === 'shape' || action.type === 'table' || action.type === 'line' || action.type === 'code') {
+      const elementId = action.elementId;
+      const blockAnnotations = elementId ? (annotationsByWn?.get(elementId) ?? []) : [];
+      return (
+        <div key={item.key} data-element-id={elementId} style={{ position: 'relative' }}>
+          {action.type === 'shape' ? (
+            <BoardShapeBlock action={action} />
+          ) : action.type === 'table' ? (
+            <BoardTableBlock action={action} />
+          ) : action.type === 'line' ? (
+            <BoardLineBlock action={action} />
+          ) : (
+            <BoardCodeBlock action={action} />
+          )}
+          {blockAnnotations.map((annotation, index) => (
+            <BlockAnnotation key={`${item.key}-ann${index}`} action={annotation} paused={paused} />
+          ))}
+        </div>
+      );
+    }
     if (action.type !== 'write') return null;
     const role = action.role;
     const active = instant || doneWrites.has(item.key) || activeWriteKey === item.key;

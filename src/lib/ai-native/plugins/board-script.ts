@@ -22,6 +22,16 @@ export const HINT_COUNT = 3;
 /** target 引用：'w3'（wN = 本页第 N 个 write，从 1 开始） */
 const TARGET_RE = /^w([1-9]\d*)$/;
 
+// P3 结构化块动作（shape/table/line/code）定义在 board-blocks.ts（行数限制）
+import type {
+  BoardCodeAction,
+  BoardLineAction,
+  BoardShapeAction,
+  BoardTableAction,
+} from './board-blocks';
+export type { BoardCodeAction, BoardCodeLine, BoardLineAction, BoardShapeAction, BoardTableAction } from './board-blocks';
+export { codeTextToLines } from './board-blocks';
+
 /**
  * v31 讲义字阶：title=课题（页首） term=节标题（紫底高亮块） step=正文短句
  * note=缩进注释 formula=块级公式（text 为 LaTeX，KaTeX 排版，不走手写接力）。
@@ -113,7 +123,11 @@ export type BoardAction =
   | BoardNewColumnAction
   | BoardRefAction
   | BoardImageAction
-  | BoardClearAction;
+  | BoardClearAction
+  | BoardShapeAction
+  | BoardTableAction
+  | BoardLineAction
+  | BoardCodeAction;
 
 // ── 段型（v3 联合类型） ────────────────────────────────────────────────────
 

@@ -25,11 +25,24 @@ function measureLocalInk(block: HTMLElement): Rect | null {
   const leaves = block.querySelectorAll('.mm-chalk-char, .mm-struct, [aria-label]');
   const inkNodes: Element[] =
     leaves.length > 0 ? Array.from(leaves) : Array.from(block.querySelectorAll('.katex-html > *'));
-  if (inkNodes.length === 0) return null;
   const blockBox = block.getBoundingClientRect();
   // 当前缩放（flowScale/整板 scale 都含在内）：渲染坐标差 ÷ 缩放 = 布局空间局部坐标
   const scale = block.offsetWidth > 0 ? blockBox.width / block.offsetWidth : 1;
   if (scale <= 0) return null;
+  if (inkNodes.length === 0) {
+    // P3 结构化块（shape/table/line/code）：无字墨叶子，圈注以块内容为兜底
+    // （注意块内 svg 自带 aria-label，会被 leaves 捕获——量出来的是图形包围盒，天然正确）
+    const host = block.querySelector('[data-board-block]');
+    if (!host) return null;
+    const box = host.getBoundingClientRect();
+    if (box.width === 0 || box.height === 0) return null;
+    return {
+      x: (box.x - blockBox.x) / scale,
+      y: (box.y - blockBox.y) / scale,
+      width: box.width / scale,
+      height: box.height / scale,
+    };
+  }
   let x1 = Number.POSITIVE_INFINITY;
   let y1 = Number.POSITIVE_INFINITY;
   let x2 = Number.NEGATIVE_INFINITY;
