@@ -2241,13 +2241,13 @@
     ]
   },
   "app/(main)/app/page.tsx -> @/components/ClassroomView": {
-    "id": 90845,
+    "id": 57787,
     "files": [
       "static/chunks/2154-454fa8c8cc8aba3d.js",
       "static/chunks/7363.96e8e47d94ce44c9.js",
       "static/chunks/720.90c347f09cbdd8b0.js",
       "static/chunks/1581.20279f4328241a4e.js",
-      "static/chunks/845.d50cd6f4d400e6ab.js"
+      "static/chunks/7787.09ded94633e870d9.js"
     ]
   },
   "app/(main)/app/page.tsx -> @/components/CollectionComposerBar": {
@@ -2292,7 +2292,7 @@
       "static/chunks/7379.3c49cb65fea1547c.js",
       "static/chunks/7119.1c0175025eac5243.js",
       "static/chunks/7650.08c87e078bb33973.js",
-      "static/chunks/4479.b6fdc8803ffed117.js"
+      "static/chunks/4479.622823a2bf3e4fb1.js"
     ]
   },
   "app/(main)/app/page.tsx -> @/components/LessonDigestCard": {

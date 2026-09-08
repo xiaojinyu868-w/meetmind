@@ -44,7 +44,7 @@ components/
 
 | 文件 | 职责 |
 |------|------|
-| `LandingPage.tsx` / `LandingPage.module.css` | 消费级主域 `/` 默认交付的落地页（React + COPY 驱动，metadata/OG 生效）。视觉语言继承原概念版：暖纸颗粒底、悬浮玻璃导航、深色电影感 Hero（`classroom-hero.webp`）、上下文公式带、成果纯色卡、可交互试听 iframe、深绿收尾 CTA。课堂线 / 应用矩阵 / 收集线 / 上下文段已拆为独立组件（见下四行）。动效层（React Bits / Aceternity 风格）：Hero 标题 BlurText 逐字揭示、全局 reveal 模糊纵深、主按钮 shine 扫光、成果卡 SpotlightCard 聚光灯。按迭代原则不使用真实产品截图/录屏，真实影像只保留给未来验收后的产品宣传片；设计参考存档在 `public/landing-concept-v1.html` |
+| `LandingPage.tsx` / `LandingPage.module.css` | 消费级主域 `/` 默认交付的落地页（React + COPY 驱动，metadata/OG 生效）。2026-09-08：首屏右侧改放 `classroom/HeroLiveProof`（示例课真实原话 → 同桌听懂了，活的），取代"场景上下文 / 先收下 / 个人上下文"三张内部词浮片；导航与三条线的 eyebrow 改用户词（上课 / 下课以后 / 随手收）。视觉语言继承原概念版：暖纸颗粒底、悬浮玻璃导航、深色电影感 Hero（`classroom-hero.webp`）、上下文公式带、成果纯色卡、可交互试听 iframe、深绿收尾 CTA。课堂线 / 应用矩阵 / 收集线 / 上下文段已拆为独立组件（见下四行）。动效层（React Bits / Aceternity 风格）：Hero 标题 BlurText 逐字揭示、全局 reveal 模糊纵深、主按钮 shine 扫光、成果卡 SpotlightCard 聚光灯。按迭代原则不使用真实产品截图/录屏，真实影像只保留给未来验收后的产品宣传片；设计参考存档在 `public/landing-concept-v1.html` |
 | `landing-spotlight.ts` | SpotlightCard 鼠标聚光灯共享钩子：mousemove 写入 `--mx` / `--my` CSS 变量，配合各卡片 CSS 里的 `radial-gradient(circle at var(--mx) var(--my))`（成果卡 / 应用 tabs 与舞台 / 上下文记忆卡） |
 | `LandingClassroomLine.tsx` / `.module.css` | 落地页课堂线段（`#classroom`）：一节课的真实时间线（上课中→课中→下课→复习→考前），卡片头部时间刻度连成时间轴，中间是该时刻的 HTML 产品 mock（LIVE 转录 / 问同桌 / 闪卡 / 证据锚点 / 速查表）；scroll-snap 轨道 + 自动轮播（悬停/触摸暂停） |
 | `LandingAppsLine.tsx` / `.module.css` | 落地页应用矩阵段（`#apps`）：左侧 7 应用 tab + 右侧可交互舞台——闪卡真翻面、测验真作答并出证据锚点、导图真展开、播客章节切换、讲给同桌听盲区可点开；自动轮播悬停暂停、手动选择后停止 |

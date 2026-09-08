@@ -16,6 +16,7 @@ import { TeachBackSpeakPanel } from '@/components/apps/windows/TeachBackSpeakPan
 import { useTeachBackVoice } from '@/components/apps/windows/use-teach-back-voice';
 import { formatTeachBackCompleteActivity } from '@/components/review-learning-activity';
 import { buildTeachBackAssessment, type AssessmentDraft } from './assessment-events';
+import { NextStepCard, type NextStepCardProps } from './NextStepCard';
 import { COPY } from '@/lib/ui/copy';
 import {
   buildTeachBackResultView,
@@ -32,6 +33,8 @@ interface TeachBackWindowProps {
   onLearningActivity?: (line: string) => void;
   /** 评估完成后把每个目标点的象限 + 证据交给记忆（结构化） */
   onAssessment?: (draft: AssessmentDraft) => void;
+  /** 完成态里同桌接着说的下一步 */
+  nextStep?: NextStepCardProps;
 }
 
 // 2026-09：半双工语音版——学生用嘴分段讲（VoiceMicButton → /api/asr/oneshot，
@@ -71,7 +74,7 @@ function EvidenceButton({ item, onSeek }: { item: TeachBackEvaluationItem; onSee
   );
 }
 
-export function TeachBackWindow({ result, transcript, contentContext, onSeek, onLearningActivity, onAssessment }: TeachBackWindowProps) {
+export function TeachBackWindow({ result, transcript, contentContext, onSeek, onLearningActivity, onAssessment, nextStep }: TeachBackWindowProps) {
   const targets = useMemo(() => normalizeTeachBackTargets(result), [result]);
   const [phase, setPhase] = useState<Phase>('targets');
   const [typedText, setTypedText] = useState('');
@@ -361,6 +364,7 @@ export function TeachBackWindow({ result, transcript, contentContext, onSeek, on
               </section>
             ))}
           </div>
+          {nextStep ? <NextStepCard {...nextStep} /> : null}
         </div>
         <div className="flex flex-shrink-0 items-center justify-between border-t border-divider bg-card px-5 py-3">
           <button type="button" onClick={handleRetry} className="text-[12px] text-ink-muted transition-colors hover:text-ink">

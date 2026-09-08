@@ -249,24 +249,19 @@ function LiveTranscriptPanel({
                   <span className="h-2 w-2 rounded-full bg-ink-muted/45" />
                 </span>
               )}
-              <div className="min-w-0">
-                <div className="flex items-baseline gap-2">
-                  <p className="truncate text-[13px] font-semibold tracking-[-0.01em] text-ink">课堂文字</p>
-                  <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-pine/85">
-                    LIVE
-                  </span>
-                </div>
-                <p className="mt-0.5 text-[12px] text-ink-muted">
+              {/* 一行状态：LIVE 徽标 + 正在听 / 已记 N 句 / 等老师开口。
+                  此前是两行（"课堂文字" + 状态），窄栏里标题被截成"课堂…"、LIVE 逐字换行——标签本身也和下面的"实时文字"重复 */}
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0 whitespace-nowrap font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-pine/85">
+                  {COPY.recording.liveBadge}
+                </span>
+                <p className="truncate text-[12.5px] text-ink-secondary">
                   {hasDraftRow ? (
-                    <span className="font-serif italic text-pine/85">正在听这一句…</span>
+                    <span className="font-serif italic text-pine/85">{COPY.recording.listeningSentence}</span>
                   ) : stableSentenceCount > 0 ? (
-                    <span>
-                      已记
-                      <span className="font-mono mx-1 tabular-nums text-pine font-medium">{stableSentenceCount}</span>
-                      句
-                    </span>
+                    <span className="tabular-nums">{COPY.recording.recordedSentences(stableSentenceCount)}</span>
                   ) : (
-                    <span className="font-serif italic">等老师开口</span>
+                    <span className="font-serif italic">{COPY.recording.waitingTeacher}</span>
                   )}
                 </p>
               </div>
@@ -276,24 +271,27 @@ function LiveTranscriptPanel({
                 <button
                   type="button"
                   onClick={onToggleDemoAudio}
-                  className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-medium transition active:scale-95 ${
+                  className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-full text-[12px] font-medium transition active:scale-95 ${
+                    demoAudioNeedsGesture && !demoAudioPlaying ? 'px-3' : 'w-9'
+                  } ${
                     demoAudioPlaying
                       ? 'bg-paper-warm text-ink-secondary hover:text-ink'
                       : 'bg-ink text-white shadow-soft hover:opacity-90'
                   }`}
-                  title={demoAudioPlaying ? '暂停试听音频' : '播放试听音频'}
-                  aria-label={demoAudioPlaying ? '暂停试听音频' : '播放试听音频'}
+                  title={demoAudioPlaying ? COPY.recording.demoPause : COPY.recording.demoPlay}
+                  aria-label={demoAudioPlaying ? COPY.recording.demoPause : COPY.recording.demoPlay}
                 >
                   {demoAudioPlaying ? <Pause size={12} strokeWidth={2} /> : <Play size={12} strokeWidth={2} fill="currentColor" />}
-                  <span>{demoAudioPlaying ? '暂停' : demoAudioNeedsGesture ? '播放声音' : '播放'}</span>
+                  {/* 窄栏里只在"需要手势才能出声"时露文字，其余时候图标即可——把宽度让给左边的状态 */}
+                  {demoAudioNeedsGesture && !demoAudioPlaying ? <span>{COPY.recording.demoPlayNeedsGesture}</span> : null}
                 </button>
               ) : null}
               <button
                 type="button"
                 onClick={onStop}
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-ink text-white shadow-soft transition hover:opacity-90 active:scale-95"
-                title="结束这节课"
-                aria-label="结束这节课"
+                title={COPY.recording.endLesson}
+                aria-label={COPY.recording.endLesson}
               >
                 <Square size={11} strokeWidth={2} fill="currentColor" />
               </button>
@@ -441,12 +439,12 @@ function DemoAfterClassPanel({
         <div className="relative flex items-start gap-4">
           <OctoBuddySprite mood="happy" size="lg" className="-ml-2 -mt-3 flex-shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-pine">课后</p>
+            <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-pine">{COPY.recording.afterClass.eyebrow}</p>
             <h2 className="mt-2 text-[26px] font-semibold leading-tight tracking-[-0.04em] text-ink">
-              这节试听课听完了。
+              {COPY.recording.afterClass.title}
             </h2>
             <p className="mt-3 max-w-[28rem] text-[13px] leading-[1.75] text-ink-secondary">
-              课堂里先停在这里。点“结束这节课”，我带你去课后复习页，那里有完整应用矩阵。
+              {COPY.recording.afterClass.body}
             </p>
           </div>
         </div>
@@ -458,15 +456,15 @@ function DemoAfterClassPanel({
           onClick={onFinish}
           className="rounded-[20px] border border-pine bg-pine px-5 py-4 text-left text-white shadow-soft transition hover:bg-pine-deep active:scale-[0.99]"
         >
-          <p className="text-[15px] font-semibold tracking-[-0.02em]">结束这节课</p>
-          <p className="mt-2 text-[12px] leading-relaxed text-white/70">进入课后复习和应用矩阵</p>
+          <p className="text-[15px] font-semibold tracking-[-0.02em]">{COPY.recording.afterClass.finish}</p>
+          <p className="mt-2 text-[12px] leading-relaxed text-white/70">{COPY.recording.afterClass.finishHint}</p>
         </button>
         <button
           type="button"
           onClick={onReplay}
           className="rounded-[20px] border border-divider bg-card px-4 py-4 text-left text-[13px] font-medium text-ink-secondary transition hover:border-ink-muted hover:text-ink"
         >
-          再听一遍
+          {COPY.recording.afterClass.replay}
         </button>
       </div>
     </div>

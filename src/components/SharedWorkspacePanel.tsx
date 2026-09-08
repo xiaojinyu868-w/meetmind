@@ -78,6 +78,7 @@ export function SharedWorkspacePanel({
         onSeek={onSeek}
         onBack={() => onActiveAppChange?.(null)}
         onLearningActivity={onLearningActivity}
+        onOpenApp={onActiveAppChange ? (appKey) => onActiveAppChange(appKey) : undefined}
       />
     );
   }

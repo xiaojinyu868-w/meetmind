@@ -15,6 +15,7 @@ import {
   normalizeFlashcards,
 } from './flashcards-window-model';
 import { buildFlashcardsAssessment, type AssessmentDraft } from './assessment-events';
+import { NextStepCard, type NextStepCardProps } from './NextStepCard';
 
 interface FlashcardsWindowProps {
   result: AppExecutionResult | null;
@@ -23,11 +24,13 @@ interface FlashcardsWindowProps {
   onLearningActivity?: (line: string) => void;
   /** 全部打完分时把每张卡的 got / missed + 证据交给记忆（结构化） */
   onAssessment?: (draft: AssessmentDraft) => void;
+  /** 完成态里同桌接着说的下一步 */
+  nextStep?: NextStepCardProps;
 }
 
 type MasteryScore = 'missed' | 'got';
 
-export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessment }: FlashcardsWindowProps) {
+export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessment, nextStep }: FlashcardsWindowProps) {
   const cards = useMemo(() => normalizeFlashcards(result), [result]);
   const fallbackMessage = useMemo(() => getFlashcardsFallbackMessage(result), [result]);
   const [reviewCardIds, setReviewCardIds] = useState<string[] | null>(null);
@@ -268,6 +271,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessm
               {COPY.apps.flashcards.restart}
             </button>
           </div>
+          {nextStep ? <NextStepCard {...nextStep} /> : null}
         </div>
       </div>
     );

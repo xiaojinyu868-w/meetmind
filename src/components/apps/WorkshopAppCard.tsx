@@ -105,6 +105,8 @@ export function WorkshopAppCard({
     status === 'error' ? styles.cardFailed : '',
   ].filter(Boolean).join(' ');
   const primaryClass = featured ? styles.primaryAction : styles.ghostAction;
+  // 同一应用可能同时出现在「先做这一件」与路径里：featured 用独立 test id，避免测试选择器撞车
+  const tid = (base: string) => (featured ? `workshop-featured-${base}` : `workshop-${base}`);
   const openLabel = app.key === 'infographic' ? COPY.apps.matrix.openImage : COPY.apps.matrix.open;
 
   const statusNode = status === 'running' && progressLabel
@@ -121,7 +123,7 @@ export function WorkshopAppCard({
           className={primaryClass}
           onClick={onProgress}
           aria-label={`${app.name}，${COPY.apps.matrix.progress}`}
-          data-testid={`workshop-inline-progress-${app.key}`}
+          data-testid={tid(`inline-progress-${app.key}`)}
         >
           <ListTodo size={13} strokeWidth={1.75} />
           {COPY.apps.matrix.progress}
@@ -132,7 +134,7 @@ export function WorkshopAppCard({
           className={primaryClass}
           onClick={onRetry}
           aria-label={`${app.name}，${COPY.apps.matrix.retry}`}
-          data-testid={`workshop-inline-retry-${app.key}`}
+          data-testid={tid(`inline-retry-${app.key}`)}
         >
           <RotateCcw size={13} strokeWidth={1.75} />
           {COPY.apps.matrix.retry}
@@ -144,7 +146,7 @@ export function WorkshopAppCard({
             className={primaryClass}
             onClick={onOpen}
             aria-label={`${app.name}，${openLabel}`}
-            data-testid={`workshop-open-result-${app.key}`}
+            data-testid={tid(`open-result-${app.key}`)}
           >
             <ArrowUpRight size={13} strokeWidth={1.75} />
             {openLabel}
@@ -156,7 +158,7 @@ export function WorkshopAppCard({
               className={styles.secondaryAction}
               onClick={onRemake}
               title={redoHint ?? COPY.apps.matrix.remake}
-              data-testid={`workshop-bg-generate-${app.key}`}
+              data-testid={tid(`bg-generate-${app.key}`)}
             >
               <RotateCw size={13} strokeWidth={1.75} />
               {redoHint ?? COPY.apps.matrix.remake}
@@ -169,7 +171,7 @@ export function WorkshopAppCard({
           className={primaryClass}
           onClick={onStart}
           aria-label={`${app.name}，${COPY.apps.matrix.start}`}
-          data-testid={`workshop-bg-generate-${app.key}`}
+          data-testid={tid(`bg-generate-${app.key}`)}
         >
           <Play size={13} strokeWidth={1.75} />
           {COPY.apps.matrix.start}
@@ -181,7 +183,7 @@ export function WorkshopAppCard({
 
   if (variant === 'quiet') {
     return (
-      <article className={cardClassName} data-app={app.key} data-testid={`workshop-card-${app.key}`}>
+      <article className={cardClassName} data-app={app.key} data-testid={tid(`card-${app.key}`)}>
         <div className={styles.quietIcon} aria-hidden><Icon size={18} strokeWidth={1.6} /></div>
         <div className={styles.quietBody}>
           <p className={styles.quietTitle}>
@@ -200,7 +202,7 @@ export function WorkshopAppCard({
   }
 
   return (
-    <article className={cardClassName} data-app={app.key} data-testid={`workshop-card-${app.key}`}>
+    <article className={cardClassName} data-app={app.key} data-testid={tid(`card-${app.key}`)}>
       {step ? (
         <div className={styles.stepHead}>
           <span className={styles.stepIndex}>{stepIndex}</span>

@@ -17,6 +17,7 @@ import {
   stripQuizOptionPrefix,
 } from './quiz-window-model';
 import { buildQuizAssessment, type AssessmentDraft } from './assessment-events';
+import { NextStepCard, type NextStepCardProps } from './NextStepCard';
 
 interface QuizWindowProps {
   result: AppExecutionResult | null;
@@ -25,12 +26,14 @@ interface QuizWindowProps {
   onLearningActivity?: (line: string) => void;
   /** 交卷时把每题的对错 + 证据交给记忆（结构化，见 assessment-events.ts） */
   onAssessment?: (draft: AssessmentDraft) => void;
+  /** 完成态里同桌接着说的下一步 */
+  nextStep?: NextStepCardProps;
 }
 
 /* 测验保持安静平涂：用排版和状态区分，不用题目环境光。 */
 const QUIZ_SUCCESS = 'var(--mm-pine)';
 
-export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment }: QuizWindowProps) {
+export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, nextStep }: QuizWindowProps) {
   const questions = useMemo(() => normalizeQuizQuestions(result), [result]);
   const [reviewQuestionIds, setReviewQuestionIds] = useState<string[] | null>(null);
   const activeQuestions = useMemo(
@@ -220,6 +223,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment }:
               {COPY.apps.quiz.restart}
             </button>
           </div>
+          {nextStep ? <NextStepCard {...nextStep} /> : null}
         </div>
       </div>
     );

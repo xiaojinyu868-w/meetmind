@@ -73,7 +73,7 @@ export const COPY = {
       lineB: '它真的听过课，也知道你正在学什么。',
     },
     classroomLine: {
-      eyebrow: '课堂线',
+      eyebrow: '上课',
       title: '从一节真实的课，\n一直陪到考试。',
       body: '录、问、练、证、考——五个动作发生在同一个现场里，不需要在四个工具之间搬运。',
       previous: '查看上一个阶段',
@@ -136,7 +136,7 @@ export const COPY = {
       ] as const,
     },
     appsLine: {
-      eyebrow: '应用矩阵',
+      eyebrow: '下课以后',
       title: '一节课，\n长出七种学法。',
       body: '不是模板生成。每个应用都从老师真正讲过的内容里长出来，练完还能跳回原话对答案。',
       ariaLabel: '七种学习应用，可直接上手试',
@@ -211,7 +211,7 @@ export const COPY = {
       ] as const,
     },
     collectionLine: {
-      eyebrow: '收集线',
+      eyebrow: '随手收',
       title: '像发消息一样，\n先把它收下。',
       body: '在微信公众号里，像发给朋友一样发给它——好文章、板书照片、一闪而过的想法。不用分类，不用打标签，收藏就这么自然地发生了。',
       silentNote: '模型在后台判断它属于哪门课、哪个目标、哪个问题，再悄悄回流到课堂和你的长期上下文。',
@@ -1335,6 +1335,24 @@ export const COPY = {
   },
 
   recording: {
+    /** 课中转录卡头部（2026-09-08）：一行状态 + LIVE 徽标，不再放"课堂文字"这种重复标签 */
+    liveBadge: 'LIVE',
+    listeningSentence: '正在听这一句…',
+    recordedSentences: (count: number): string => `已记 ${count} 句`,
+    waitingTeacher: '等老师开口',
+    demoPause: '暂停',
+    demoPlay: '播放',
+    demoPlayNeedsGesture: '播放声音',
+    endLesson: '结束这节课',
+    /** 示例课音频播完后的收尾卡（此前硬编码，且把内部词"应用矩阵"说给了用户） */
+    afterClass: {
+      eyebrow: '课后',
+      title: '这节试听课听完了。',
+      body: '课堂先停在这里。点「结束这节课」，我带你去复习页——那里有这节课的整理，和接下来怎么学。',
+      finish: '结束这节课',
+      finishHint: '进入课后复习',
+      replay: '再听一遍',
+    },
     sourcePrompt: '这节课的声音从哪里来？',
     backToLessons: '返回课程列表',
     sourceMic: '麦克风',
@@ -1483,6 +1501,9 @@ export const COPY = {
         infographic: '带走',
       } as Record<string, string>,
       quietTitle: '还可以这样学',
+      /** 应用完成态里的下一步卡（2026-09-08）：一步做完，同桌接着说 */
+      nextInWindowTitle: '接下来',
+      nextInWindowAction: (action: string): string => `去${action}`,
       notStarted: '还没开始',
       running: '正在做',
       ready: '做好了',

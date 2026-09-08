@@ -11,7 +11,10 @@ import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 import { COPY } from '@/lib/ui/copy';
 import { useAppLearningActivity } from '@/hooks/useAppLearningActivity';
 import { recordSessionAssessment, useSessionOutcomes } from '@/components/apps/review-session-outcomes';
-import { buildOutcomeAnchors, summarizeSessionOutcomes } from '@/components/apps/lesson-path-model';
+import { LEARNING_PATH, buildOutcomeAnchors, recommendNextStep, summarizeSessionOutcomes } from '@/components/apps/lesson-path-model';
+import { readCachedAppResult } from '@/components/apps/hooks/useAppExecution';
+import { WORKSHOP_APP_CATALOG } from '@/lib/ai-native/app-catalog';
+import type { NextStepCardProps } from '@/components/apps/windows/NextStepCard';
 import type { LearningAssessmentDraft } from '@/types/learning-event';
 import { buildAppResultActivityDetail } from '@/lib/utils/app-learning-activity';
 
@@ -28,6 +31,8 @@ interface ReviewLearningWorkspaceProps {
   onSeek?: (timeMs: number) => void;
   onBack: () => void;
   onLearningActivity?: (line: string) => void;
+  /** 打开另一个应用（完成态的「接下来」卡用）；不传则完成态不出下一步 */
+  onOpenApp?: (appKey: WorkshopAppKey) => void;
 }
 
 function buildInfographicContentContext(summaryOverview: string | undefined, transcript: TranscriptSegment[]): string {
@@ -53,6 +58,7 @@ export function ReviewLearningWorkspace({
   onSeek,
   onBack,
   onLearningActivity,
+  onOpenApp,
 }: ReviewLearningWorkspaceProps) {
   const app = getWorkshopAppByKey(appKey) || getWorkshopAppByKey('flashcards')!;
   const isImmersiveApp = app.key === 'flashcards';
@@ -99,29 +105,45 @@ export function ReviewLearningWorkspace({
     recordAssessmentEvent(draft); // 长期记忆：LearningEvent（登录用户）
   }, [recordAssessmentEvent, sessionId]);
 
+  // 完成态里同桌接着说的下一步：与课后学习页同一份判断（上一步的结果 > 课堂事实）。
+  // generated 从产物缓存读——本窗口刚做完的结果在 sessionOutcomes 变化时重新算。
+  const nextStep = useMemo<NextStepCardProps | undefined>(() => {
+    if (!onOpenApp) return undefined;
+    const outcomes = summarizeSessionOutcomes(sessionOutcomes);
+    const generated = new Set(LEARNING_PATH.filter((key) => key === app.key || Boolean(readCachedAppResult(sessionId, key))));
+    const allowed = new Set(LEARNING_PATH);
+    const rec = recommendNextStep({ anchors, keyDifficulties, transcript, outcomes, generated, allowed });
+    if (!rec.key || rec.key === app.key) return undefined;
+    const target = WORKSHOP_APP_CATALOG.find((item) => item.key === rec.key);
+    if (!target) return undefined;
+    const targetKey = rec.key;
+    return { action: target.learningAction, appName: target.name, reason: rec.reason, onOpen: () => onOpenApp(targetKey) };
+  }, [anchors, app.key, keyDifficulties, onOpenApp, sessionId, sessionOutcomes, transcript]);
+
   return (
     <section className={`flex h-full min-h-0 flex-col ${isImmersiveApp ? 'bg-[var(--mm-immersive)]' : 'bg-canvas'}`} data-testid="review-learning-workspace">
-      <header className={`flex shrink-0 items-center gap-3 border-b px-4 py-3 ${isImmersiveApp ? 'border-white/[0.08] bg-ink-secondary text-white' : 'border-divider bg-white'}`}>
+      {/* 头部一律纸面：此前闪卡用深色头 + 浅色舞台，整页只有这一条深色带，像两套皮肤 */}
+      <header className="flex shrink-0 items-center gap-3 border-b border-divider bg-white px-4 py-3">
         <button
           type="button"
           onClick={onBack}
-          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition ${isImmersiveApp ? 'border-white/[0.10] bg-white/[0.04] text-white/62 hover:border-white/[0.18] hover:text-white' : 'border-divider bg-white text-ink-secondary hover:border-ink-muted hover:text-ink'}`}
+          className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition border-divider bg-white text-ink-secondary hover:border-ink-muted hover:text-ink"
         >
           <ArrowLeft size={13} strokeWidth={1.8} />
           {COPY.apps.matrix.backToMatrix}
         </button>
         <div className="min-w-0 flex-1">
-          <p className={`truncate text-[14px] font-semibold tracking-[-0.01em] ${isImmersiveApp ? 'text-white/92' : 'text-ink'}`}>{app.name}</p>
-          <p className={`truncate text-[12px] ${isImmersiveApp ? 'text-white/42' : 'text-ink-muted'}`}>{COPY.apps.matrix.workspaceSubtitle(app.learningAction, app.bestFor)}</p>
+          <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">{app.name}</p>
+          <p className="truncate text-[12px] text-ink-muted">{COPY.apps.matrix.workspaceSubtitle(app.learningAction, app.bestFor)}</p>
         </div>
-        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] ${isImmersiveApp ? 'border-white/[0.10] bg-white/[0.04] text-white/45' : 'border-divider bg-white text-ink-muted'}`}>
+        <span className="shrink-0 rounded-full border border-divider bg-white px-2.5 py-1 text-[11px] text-ink-muted">
           {execution.taskState.status === 'running' ? COPY.apps.matrix.running : execution.taskState.status === 'success' ? COPY.apps.matrix.ready : execution.taskState.status === 'error' ? COPY.apps.matrix.failed : COPY.apps.matrix.waiting}
         </span>
         <button
           type="button"
           onClick={() => void execution.rerun()}
           disabled={execution.taskState.status === 'running'}
-          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition ${isImmersiveApp ? 'border-white/[0.10] bg-white/[0.04] text-white/62 hover:border-white/[0.18] hover:text-white' : 'border-divider bg-white text-ink-secondary hover:border-ink-muted hover:text-ink'}`}
+          className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition border-divider bg-white text-ink-secondary hover:border-ink-muted hover:text-ink"
         >
           <RotateCw size={12} strokeWidth={1.8} />
           {COPY.apps.matrix.remake}
@@ -141,6 +163,7 @@ export function ReviewLearningWorkspace({
           onResultUpdate={execution.updateResult}
           onLearningActivity={recordInteraction}
           onAssessment={recordAssessment}
+          nextStep={nextStep}
         />
       </div>
     </section>

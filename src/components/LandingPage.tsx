@@ -11,6 +11,7 @@ import { LandingClassroomLine } from './LandingClassroomLine';
 import { LandingCollectionLine } from './LandingCollectionLine';
 import { LandingContextLine } from './LandingContextLine';
 import { handleSpotlightMove } from './landing-spotlight';
+import { HeroLiveProof } from './classroom/HeroLiveProof';
 import styles from './LandingPage.module.css';
 
 function Brand() {
@@ -108,11 +109,9 @@ export function LandingPage() {
               <a className={styles.heroSecondary} href="#classroom">{copy.hero.secondaryAction}</a>
             </div>
           </div>
-          <div className={styles.heroContext} aria-hidden="true">
-            <span className={styles.heroSheet} data-depth="1">{copy.bridge.parts[1]}</span>
-            <span className={styles.heroSheet} data-depth="2">{copy.collectionLine.sinkLabel}</span>
-            <span className={styles.heroSheet} data-depth="3">{copy.bridge.parts[0]}</span>
-            <span className={styles.heroCore}><Image src="/images/octo-buddy/original.png" alt="" width={44} height={44} /></span>
+          {/* 首屏右侧：产品在工作的样子（示例课真实原话 → 同桌听懂了 [00:06]），取代此前"场景上下文 / 先收下 / 个人上下文"三张内部词浮片 */}
+          <div className={styles.heroProof}>
+            <HeroLiveProof href="/app?guest=1&entry=demo" tone="onDark" />
           </div>
         </div>
       </section>
