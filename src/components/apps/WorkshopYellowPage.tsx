@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PodcastPlayerBar } from '@/components/apps/windows/PodcastPlayerBar';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
@@ -1313,13 +1314,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
               <p className={styles.podcastTitle}>{podcastPreview.title}</p>
               {/* autoPlay 是尽力而为：异步完成后浏览器多半已收回用户手势，
                   被拦时用户点一下播放键即可，不会再被带去别的页面等 */}
-              <audio
-                className={styles.podcastAudio}
-                src={podcastPreview.url}
-                controls
-                autoPlay
-                preload="auto"
-              />
+              <PodcastPlayerBar src={podcastPreview.url} autoPlay />
             </div>
             <div className={styles.previewActions}>
               <button

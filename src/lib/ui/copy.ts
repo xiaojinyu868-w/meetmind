@@ -1939,6 +1939,11 @@ export const COPY = {
     },
     podcast: {
       appName: '课堂播客',
+      /** 播放条（PodcastPlayerBar）：取代浏览器原生控件 */
+      play: '播放',
+      pause: '暂停',
+      seek: '进度',
+      rate: (rate: number): string => `播放速度 ${rate}x`,
       emptyBody: '开始整理后，会直接得到一版可以播放的课堂播客。',
       scriptCopied: '脚本已复制',
       copyFailed: '复制失败，请手动选择脚本内容',

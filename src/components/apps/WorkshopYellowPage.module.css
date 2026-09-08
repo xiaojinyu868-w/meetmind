@@ -731,11 +731,6 @@
   color: #1c1b19;
 }
 
-.podcastAudio {
-  width: 100%;
-  display: block;
-}
-
 .previewActions {
   display: flex;
   align-items: center;

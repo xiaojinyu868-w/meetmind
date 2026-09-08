@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PodcastPlayerBar } from './PodcastPlayerBar';
 import { toast } from 'sonner';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { AppTaskState } from '@/components/apps/hooks/useAppExecution';
@@ -57,18 +58,10 @@ function normalizeSpeaker(raw: string | undefined, index: number, mapping: Map<s
   return speaker;
 }
 
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
-
 export function PodcastWindow({ result, transcript, taskState, onSeek, onRegenerate }: PodcastWindowProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const scriptContainerRef = useRef<HTMLDivElement>(null);
   const [activeLineIndex, setActiveLineIndex] = useState(-1);
-  const [audioDuration, setAudioDuration] = useState(0);
-  const [audioTime, setAudioTime] = useState(0);
   const payload = (result?.render?.payload || {}) as PodcastPayload;
   const isRegenerating = taskState?.status === 'running';
   const sections = Array.isArray(payload.sections)
@@ -99,7 +92,6 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
   const handleTimeUpdate = useCallback(() => {
     if (!audioRef.current) return;
     const currentTime = audioRef.current.currentTime;
-    setAudioTime(currentTime);
 
     if (scriptLines.length === 0) return;
     const duration = audioRef.current.duration || 1;
@@ -116,11 +108,8 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
     const audio = audioRef.current;
     if (!audio) return;
     audio.addEventListener('timeupdate', handleTimeUpdate);
-    const onMeta = () => setAudioDuration(audio.duration || 0);
-    audio.addEventListener('loadedmetadata', onMeta);
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
-      audio.removeEventListener('loadedmetadata', onMeta);
     };
   }, [handleTimeUpdate]);
 
@@ -262,13 +251,8 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
       <div className="rounded-2xl border border-divider bg-white p-4 sm:p-5">
         {payload.audioUrl ? (
           <>
-            {/* 生成成功：首页就是一条播放条，其他都收起来 */}
-            <audio ref={audioRef} controls src={payload.audioUrl} className="w-full rounded-lg" />
-            {audioDuration > 0 ? (
-              <p className="mt-2 text-xs tabular-nums text-ink-muted">
-                {formatDuration(audioTime)} / {formatDuration(audioDuration)}
-              </p>
-            ) : null}
+            {/* 生成成功：首页就是一条播放条（v7 皮肤，不再是浏览器原生控件），其他都收起来 */}
+            <PodcastPlayerBar ref={audioRef} src={payload.audioUrl} title={result?.render?.title || undefined} />
 
             {supportingMaterial}
           </>
