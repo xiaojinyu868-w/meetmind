@@ -28,6 +28,7 @@ src/components/apps/windows/
 ├── TeachBackClassroom.tsx      # 像素小教室（纯视觉场景）：黑板粉笔目标 + 前后两排 Octo 学生（窄屏自动减员防叠桌）；2026-08 起不再连语音、不做覆盖检测
 ├── TeachBackQuadrantMap.tsx    # 结果揭示仪式：自信×有据四象限地图，目标棋子错峰落位，盲区朱批脉冲，没讲到的虚线单列
 ├── teach-back-window-model.ts  # 目标正规化、四象限分组视图（盲区优先）、时间戳 helper
+├── assessment-events.ts        # 应用交互 → 记忆事件载荷（纯函数，2026-09-08）：buildQuizAssessment（已提交题的 correct/wrong，主观题按自评）/ buildFlashcardsAssessment（got/missed）/ buildTeachBackAssessment（四象限 + uncovered）；各应用判定词表原样进事件，不在这里抹平成稳/不稳。窗口通过 `onAssessment` prop 交给 useAppLearningActivity.recordAssessment
 ├── PodcastWindow.tsx           # 音频概览：优先播放、折叠制作详情与稳定失败兜底
 ├── podcast-window-model.ts     # 播客前端纯 helper：过滤 provider/HTTP 原始失败章节
 ├── ExplainerWindow.tsx         # 板书精讲：BoardScript → blackboard/BlackboardPlayer（v31 白纸讲义画布实时书写），头部显示标题与老师原话核对统计

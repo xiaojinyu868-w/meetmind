@@ -12,6 +12,7 @@ import { InfographicWindow } from './InfographicWindow';
 import { CheatsheetWindow } from './CheatsheetWindow';
 import { TeachBackWindow } from './TeachBackWindow';
 import { ExplainerWindow } from './ExplainerWindow';
+import type { AssessmentDraft } from './assessment-events';
 
 export interface AppRenderSurfaceProps {
   appKey: WorkshopAppKey;
@@ -25,6 +26,8 @@ export interface AppRenderSurfaceProps {
   onGenerateDraft?: () => Promise<AppExecutionResult | null>;
   onResultUpdate?: (next: AppExecutionResult) => void;
   onLearningActivity?: (line: string) => void;
+  /** 结构化检验结果（测验 / 闪卡 / 讲给同桌听）→ 记忆事件；不传则只走 onLearningActivity 的人话通道 */
+  onAssessment?: (draft: AssessmentDraft) => void;
   /** 移动端结果页先展示大纲；桌面工作区默认导图。 */
   mindmapDefaultViewMode?: 'mindmap' | 'outline';
 }
@@ -41,6 +44,7 @@ export function AppRenderSurface({
   onGenerateDraft,
   onResultUpdate,
   onLearningActivity,
+  onAssessment,
   mindmapDefaultViewMode = 'mindmap',
 }: AppRenderSurfaceProps) {
   if (appKey === 'audio-overview') {
@@ -48,11 +52,11 @@ export function AppRenderSurface({
   }
 
   if (appKey === 'flashcards') {
-    return <FlashcardsWindow result={result} transcript={transcript} onSeek={onSeek} onLearningActivity={onLearningActivity} />;
+    return <FlashcardsWindow result={result} transcript={transcript} onSeek={onSeek} onLearningActivity={onLearningActivity} onAssessment={onAssessment} />;
   }
 
   if (appKey === 'quiz') {
-    return <QuizWindow result={result} transcript={transcript} onSeek={onSeek} onLearningActivity={onLearningActivity} />;
+    return <QuizWindow result={result} transcript={transcript} onSeek={onSeek} onLearningActivity={onLearningActivity} onAssessment={onAssessment} />;
   }
 
   if (appKey === 'mindmap') {
@@ -85,6 +89,7 @@ export function AppRenderSurface({
         contentContext={contentContext}
         onSeek={onSeek}
         onLearningActivity={onLearningActivity}
+        onAssessment={onAssessment}
       />
     );
   }

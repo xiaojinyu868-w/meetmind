@@ -8,6 +8,8 @@
  *   纯函数）→ 写回 `learnerProfileJson`（物化视图，仍保留 24 条上限）
  * - `triggerLearningEventProcessing`：按用户串行的 fire-and-forget 处理队列；
  *   蒸馏/合并失败只 log.warn，事件仍在表内可回放（沿用现有静默降级哲学）
+ * - `assessment` 事件（应用矩阵的结构化检验结果，2026-09-08）：只校验并留史，
+ *   不改画像——掌握轨迹的物化与读侧一起设计（见 docs/plans/2026-09-08-product-renewal-plan.md §2.3）
  *
  * 访客一期不进服务端记忆（route 层要求 Bearer 登录）。
  */
@@ -42,6 +44,25 @@ const ActivityPayloadSchema = z.object({
   appKey: z.string().max(60).optional(),
 });
 
+const AssessmentPayloadSchema = z.object({
+  v: z.literal(1),
+  appKey: z.string().min(1).max(60),
+  sessionId: z.string().max(120).optional(),
+  lessonTitle: z.string().max(120).optional(),
+  items: z.array(z.object({
+    concept: z.string().min(1).max(240),
+    outcome: z.enum([
+      'correct', 'wrong',
+      'got', 'missed',
+      'mastery', 'productive-struggle', 'aware-gap', 'blind-spot', 'uncovered',
+    ]),
+    evidence: z.object({
+      startMs: z.number().int().nonnegative(),
+      endMs: z.number().int().nonnegative().optional(),
+    }).optional(),
+  })).min(1).max(80),
+});
+
 const EventBaseShape = {
   appId: z.string().min(1).max(40),
   sourceId: z.string().min(1).max(160).optional(),
@@ -58,6 +79,11 @@ const EventInputSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('activity'),
     payload: ActivityPayloadSchema,
+    ...EventBaseShape,
+  }),
+  z.object({
+    type: z.literal('assessment'),
+    payload: AssessmentPayloadSchema,
     ...EventBaseShape,
   }),
 ]);
@@ -163,6 +189,31 @@ export async function processLearningEvent(event: LearningEvent): Promise<void> 
   });
   if (!user) {
     log.warn('learning event user missing', { eventId: event.id, userId: event.userId });
+    return;
+  }
+
+  if (event.type === 'assessment') {
+    // 应用矩阵的结构化检验结果：先全量留史，不在这里改画像。
+    // 理由：「掌握轨迹」的物化形态（按概念聚合、保留时间序列、稳/不稳的状态迁移）
+    // 要和读侧（闪卡优先薄弱、测验避开已稳、课中同桌读上节课的坑）一起设计才不会
+    // 定错；事件是原始材料，随时可回放重建。应用窗口仍通过既有 activity 通道
+    // 给同桌一行"做了什么"，所以这里不重复合并，避免最近学习现场双写。
+    let rawPayload: unknown;
+    try {
+      rawPayload = JSON.parse(event.payloadJson);
+    } catch {
+      rawPayload = null;
+    }
+    const payload = AssessmentPayloadSchema.safeParse(rawPayload);
+    if (!payload.success) {
+      log.warn('learning event assessment payload invalid', { eventId: event.id });
+      return;
+    }
+    log.info('assessment event recorded', {
+      eventId: event.id,
+      appKey: payload.data.appKey,
+      items: payload.data.items.length,
+    });
     return;
   }
 

@@ -74,13 +74,14 @@ export function ReviewLearningWorkspace({
     execution.result,
     COPY.globalAsk.appResultSummary,
   );
-  const { recordInteraction } = useAppLearningActivity({
+  const { recordInteraction, recordAssessment } = useAppLearningActivity({
     appKey: app.key,
     sessionId,
     resultReady: Boolean(execution.result) && execution.taskState.status === 'success',
     resultUpdatedAt: execution.taskState.updatedAt,
     resultDetail: resultActivityDetail,
     activityTitle: COPY.globalAsk.appActivity(app.name),
+    lessonTitle: contextTitle,
     onLearningActivity,
   });
 
@@ -125,6 +126,7 @@ export function ReviewLearningWorkspace({
           onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
           onResultUpdate={execution.updateResult}
           onLearningActivity={recordInteraction}
+          onAssessment={recordAssessment}
         />
       </div>
     </section>

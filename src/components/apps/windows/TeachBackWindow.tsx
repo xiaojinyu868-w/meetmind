@@ -15,6 +15,7 @@ import { TeachBackQuadrantMap } from '@/components/apps/windows/TeachBackQuadran
 import { TeachBackSpeakPanel } from '@/components/apps/windows/TeachBackSpeakPanel';
 import { useTeachBackVoice } from '@/components/apps/windows/use-teach-back-voice';
 import { formatTeachBackCompleteActivity } from '@/components/review-learning-activity';
+import { buildTeachBackAssessment, type AssessmentDraft } from './assessment-events';
 import { COPY } from '@/lib/ui/copy';
 import {
   buildTeachBackResultView,
@@ -29,6 +30,8 @@ interface TeachBackWindowProps {
   contentContext?: string;
   onSeek?: (startMs: number) => void;
   onLearningActivity?: (line: string) => void;
+  /** 评估完成后把每个目标点的象限 + 证据交给记忆（结构化） */
+  onAssessment?: (draft: AssessmentDraft) => void;
 }
 
 // 2026-09：半双工语音版——学生用嘴分段讲（VoiceMicButton → /api/asr/oneshot，
@@ -68,7 +71,7 @@ function EvidenceButton({ item, onSeek }: { item: TeachBackEvaluationItem; onSee
   );
 }
 
-export function TeachBackWindow({ result, transcript, contentContext, onSeek, onLearningActivity }: TeachBackWindowProps) {
+export function TeachBackWindow({ result, transcript, contentContext, onSeek, onLearningActivity, onAssessment }: TeachBackWindowProps) {
   const targets = useMemo(() => normalizeTeachBackTargets(result), [result]);
   const [phase, setPhase] = useState<Phase>('targets');
   const [typedText, setTypedText] = useState('');
@@ -183,7 +186,9 @@ export function TeachBackWindow({ result, transcript, contentContext, onSeek, on
       uncovered: view.counts.uncovered,
       blindSpotPoints: view.groups.find((group) => group.key === 'blind-spot')?.items.map((item) => item.point) ?? [],
     }));
-  }, [phase, evaluation, onLearningActivity, voice]);
+    const assessment = buildTeachBackAssessment(evaluation.items);
+    if (assessment) onAssessment?.(assessment);
+  }, [phase, evaluation, onAssessment, onLearningActivity, voice]);
 
   /* ── 核对：讲完进入 evaluating 阶段 ── */
 

@@ -5,6 +5,27 @@
 
 ---
 
+## 2026-09-08 — 产品新生方案 + 应用矩阵开始向共享记忆回流（写侧）
+
+背景：生产库只读盘点——73 个用户、近 30 天 3 个登录用户产生课堂、9 个应用各被用过 2–30 次、
+`LearningEvent` 1 条。功能面远远跑在用户基础前面，而"从第二次开始更懂你"在代码里没有闭环。
+完整诊断与分级路线见 `docs/plans/2026-09-08-product-renewal-plan.md`（应用矩阵五个结构性问题、
+各线状态、P0/P1/P2、判据 = 第二次会话率 + Context Lift）。
+
+- **`assessment` 记忆事件**：应用矩阵的结构化检验结果按「概念 × 结果 × 课堂证据」留史——
+  测验交卷（每题 correct/wrong，主观题按自评）、闪卡全部打分（got/missed）、讲给同桌听评估完成
+  （四象限 + uncovered）。各应用词表原样进事件，不在写侧抹平成"稳/不稳"
+- 链路：窗口 `onAssessment` → `assessment-events.ts` 纯函数 → `useAppLearningActivity.recordAssessment`
+  → `POST /api/memory/events`（登录用户；幂等键 = sessionId + 结果时间 + 内容签名）→
+  `learning-event-service` 校验留史。既有的一行人话 `recordInteraction` 通道不变，同桌当场仍读得到
+- **刻意不做**：服务端不改画像。掌握轨迹（按概念聚合、保留时间序列、状态迁移）的物化形态要和
+  读侧——闪卡优先薄弱、测验避开已稳、课中同桌读上节课的坑——一起设计才不会定错；事件是原始材料，
+  随时可回放重建。访客一期不发 assessment（本地同构结构留待记忆线下一步）
+- 桌面复习工作区与移动端 `MobileAppRunner` 同时接线；单测：`assessment-events.test.ts` +
+  `learning-event-service.test.ts` 新增 assessment 校验 / 留史不改画像两例
+
+---
+
 ## 2026-09-08 — 约束文档面向强模型重写：把「Less Structure, More Intelligence」用到 agent 自己身上
 
 背景：产品对自己模型的信条是少结构多智能，但管 coding agent 的 `AGENTS.md` / `skills/*` 却是

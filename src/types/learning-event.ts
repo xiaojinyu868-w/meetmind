@@ -21,7 +21,13 @@ export type LearningEventType =
   /** 可核验的学习进展（完成 checkpoint / 通过测验等） */
   | 'progress'
   /** 客观学习活动（课后理解完成、应用产物等），只进最近学习现场，不升级为长期理解 */
-  | 'activity';
+  | 'activity'
+  /**
+   * 应用内的结构化检验结果（测验作答 / 闪卡打分 / 讲给同桌听评估）：按「概念 × 结果 × 课堂证据」
+   * 逐项留史。这是应用矩阵回流到共享记忆的原始材料——物化成「掌握轨迹」（按概念聚合、保留
+   * 时间序列而非覆盖）在读侧（应用消费记忆）一起设计；事件先全量留史，可回放重建。
+   */
+  | 'assessment';
 
 /**
  * 对话类事件（confusion/mastery/error/preference/progress）的载荷。
@@ -44,7 +50,45 @@ export interface LearningActivityPayload {
   appKey?: string;
 }
 
-export type LearningEventPayload = LearningConversationPayload | LearningActivityPayload;
+/**
+ * 单条检验结果。outcome 沿用各应用自己的判定词表，不在这里抹平——
+ * 测验：correct / wrong；闪卡：got / missed；讲给同桌听：mastery / productive-struggle / aware-gap / blind-spot / uncovered。
+ * 物化层再决定它们如何映射到「稳 / 不稳」。
+ */
+export type LearningAssessmentOutcome =
+  | 'correct'
+  | 'wrong'
+  | 'got'
+  | 'missed'
+  | 'mastery'
+  | 'productive-struggle'
+  | 'aware-gap'
+  | 'blind-spot'
+  | 'uncovered';
+
+export interface LearningAssessmentItem {
+  /** 被检验的概念 / 知识点（测验用题面、闪卡用正面、讲给同桌听用目标点） */
+  concept: string;
+  outcome: LearningAssessmentOutcome;
+  /** 课堂证据（毫秒），有则回锚到原话 */
+  evidence?: { startMs: number; endMs?: number };
+}
+
+/** assessment 事件的载荷：一次应用交互的完整结果。 */
+export interface LearningAssessmentPayload {
+  v: 1;
+  /** WorkshopAppKey（quiz / flashcards / teach-back …） */
+  appKey: string;
+  sessionId?: string;
+  /** 课堂标题快照，便于回放时不查库就能读懂 */
+  lessonTitle?: string;
+  items: LearningAssessmentItem[];
+}
+
+/** 应用窗口交给 hook 的草稿：只有 appKey + items，sessionId / lessonTitle / v 由 hook 补齐。 */
+export type LearningAssessmentDraft = Pick<LearningAssessmentPayload, 'appKey' | 'items'>;
+
+export type LearningEventPayload = LearningConversationPayload | LearningActivityPayload | LearningAssessmentPayload;
 
 /** `POST /api/memory/events` 的请求体（zod 校验在 route / service 层，这里只给契约）。 */
 export interface LearningEventInput {

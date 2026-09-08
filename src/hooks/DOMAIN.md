@@ -73,7 +73,7 @@ hooks → stores + types + lib/db + lib/utils
 | `useGlobalAskHistory.ts` | ~205 | 全局 Ask 的 IndexedDB 对话恢复/增量持久化 adapter；只恢复 `metadata.scope='global-ask'`，避免误接课堂复习对话；`authReady`（auth 初始化完成）前不恢复/不持久化，防止 anonymous→真实 userId 切换清空对话；恢复跳过 0 条消息的空壳对话回退到最近有内容的一条；登录态找不到时回退捞 anonymous 名下的旧对话并 `claimConversation` 迁移归属；恢复期间用户已发言则不覆盖；`restoredTitle` 仅真实恢复时设置 |
 | `useLearningIntentFlow.ts` | ~120 | 全局 Ask 的意图确认与线程转换：高置信且无关键分歧时直接开始，并把最终计划同步放进第一次 Tutor 请求；只有真实歧义或低置信计划才停下来确认 |
 | `useLearningMemoryDistillation.ts` | ~90 | 全局学习问答持久化后的静默学习理解管理：调用 `/api/tutor/memory` 获取少量候选，按 `replaceId` 更新或新增长期理解并同步活跃学习线索；是否值得保留由证据约束模型判断，网络或模型失败不影响客观学习现场与主回答 |
-| `useAppLearningActivity.ts` | ~80 | 桌面与移动应用共用的学习活动回写：记录应用生成结果及闪卡/测验交互到最近学习现场，使用稳定 sourceId 去重，不直接升级为长期记忆 |
+| `useAppLearningActivity.ts` | ~110 | 桌面与移动应用共用的学习活动回写，两条通道：`recordInteraction` 把一行人话进最近学习现场（同桌当场读到，访客走本地，稳定 sourceId 去重，不升级为长期记忆）；`recordAssessment`（2026-09-08）把测验 / 闪卡 / 讲给同桌听的结构化结果（概念 × 结果 × 证据）以 `assessment` 事件 POST `/api/memory/events`（登录用户；幂等键 = sessionId + 结果时间 + 内容签名，连点两次不双写；失败只 warn 不重试）。访客一期不发 assessment |
 
 ### data/ — API 数据 hooks
 

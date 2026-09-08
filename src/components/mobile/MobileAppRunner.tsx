@@ -69,7 +69,7 @@ export function MobileAppRunner({
     result,
     COPY.globalAsk.appResultSummary,
   );
-  const { recordInteraction } = useAppLearningActivity({
+  const { recordInteraction, recordAssessment } = useAppLearningActivity({
     appKey,
     sessionId: sessionId || 'mobile-session',
     resultReady: Boolean(result) && taskState.status === 'success',
@@ -156,6 +156,7 @@ export function MobileAppRunner({
               onGenerateDraft={() => (hasResult ? rerun() : execute())}
               onResultUpdate={updateResult}
               onLearningActivity={recordInteraction}
+              onAssessment={recordAssessment}
               mindmapDefaultViewMode="outline"
             />
           </div>

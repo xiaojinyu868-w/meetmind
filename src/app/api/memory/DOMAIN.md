@@ -15,12 +15,15 @@
 ```jsonc
 {
   "appId": "global-ask",            // 来源应用：global-ask | classroom | wechat | teach...
-  "type": "confusion",              // confusion | mastery | error | preference | progress | activity
+  "type": "confusion",              // confusion | mastery | error | preference | progress | activity | assessment
   "payload": {                      // 契约见 src/types/learning-event.ts，含版本字段 v
     "v": 1,
     "userText": "…",                // 对话类事件（confusion/mastery/error/preference/progress）
     "assistantText": "…"
     // activity 事件：{ v:1, kind, title, detail?, sessionId?, appKey? }
+    // assessment 事件（2026-09-08，应用矩阵回流）：{ v:1, appKey, sessionId?, lessonTitle?, items:[{ concept, outcome, evidence?:{startMs,endMs?} }] }
+    //   outcome 沿用各应用词表：correct|wrong（测验）、got|missed（闪卡）、mastery|productive-struggle|aware-gap|blind-spot|uncovered（讲给同桌听）
+    //   服务端只校验并留史、不改画像；掌握轨迹的物化与读侧（应用消费记忆）一起设计，见 docs/plans/2026-09-08-product-renewal-plan.md §2.3
   },
   "sourceId": "conv-1",             // 可选，业务对象ID（溯源）
   "idempotencyKey": "global-understanding:conv-1", // 可选，撞 unique 静默返回已有事件

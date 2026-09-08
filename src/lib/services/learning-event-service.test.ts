@@ -120,6 +120,25 @@ function activityInput(idempotencyKey?: string) {
   };
 }
 
+function assessmentInput(idempotencyKey?: string) {
+  return {
+    appId: 'apps',
+    type: 'assessment' as const,
+    payload: {
+      v: 1 as const,
+      appKey: 'quiz',
+      sessionId: 'sess-1',
+      lessonTitle: '贝叶斯定理入门',
+      items: [
+        { concept: '先验概率是什么', outcome: 'correct' as const, evidence: { startMs: 12000 } },
+        { concept: '为什么要归一化', outcome: 'wrong' as const },
+      ],
+    },
+    sourceId: 'app-result:sess-1:quiz:1',
+    idempotencyKey,
+  };
+}
+
 function conversationInput(idempotencyKey?: string) {
   return {
     appId: 'global-ask',
@@ -163,9 +182,33 @@ describe('appendLearningEvent', () => {
     expect(event).toBeNull();
     expect(fake.events).toHaveLength(0);
   });
+
+  it('assessment 事件按 概念 × 结果 × 证据 落库；未知 outcome 拒绝', async () => {
+    const event = await appendLearningEvent(USER_ID, assessmentInput('app-assessment:sess-1:1:quiz-2-abc'));
+    expect(event?.type).toBe('assessment');
+    expect(JSON.parse(event!.payloadJson).items).toHaveLength(2);
+
+    const rejected = await appendLearningEvent(USER_ID, {
+      ...assessmentInput(),
+      payload: { ...assessmentInput().payload, items: [{ concept: 'x', outcome: 'meh' as unknown as 'correct' }] },
+    });
+    expect(rejected).toBeNull();
+    expect(fake.events).toHaveLength(1);
+  });
 });
 
 describe('processLearningEvent', () => {
+  it('assessment 事件只留史不改画像（物化留给读侧一起设计）', async () => {
+    const event = (await appendLearningEvent(USER_ID, assessmentInput()))!;
+    const before = fake.users.get(USER_ID)?.learnerProfileJson;
+
+    await processLearningEvent(event);
+
+    expect(fake.users.get(USER_ID)?.learnerProfileJson).toBe(before);
+    expect(fake.prisma.user.update).not.toHaveBeenCalled();
+    expect(fake.events).toHaveLength(1);
+  });
+
   it('activity 事件合并进最近学习活动，重放不双写', async () => {
     const event = (await appendLearningEvent(USER_ID, activityInput('lesson-understanding:cap-1')))!;
 

@@ -14,17 +14,20 @@ import {
   getFlashcardsFallbackMessage,
   normalizeFlashcards,
 } from './flashcards-window-model';
+import { buildFlashcardsAssessment, type AssessmentDraft } from './assessment-events';
 
 interface FlashcardsWindowProps {
   result: AppExecutionResult | null;
   transcript: TranscriptSegment[];
   onSeek?: (startMs: number) => void;
   onLearningActivity?: (line: string) => void;
+  /** 全部打完分时把每张卡的 got / missed + 证据交给记忆（结构化） */
+  onAssessment?: (draft: AssessmentDraft) => void;
 }
 
 type MasteryScore = 'missed' | 'got';
 
-export function FlashcardsWindow({ result, onSeek, onLearningActivity }: FlashcardsWindowProps) {
+export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessment }: FlashcardsWindowProps) {
   const cards = useMemo(() => normalizeFlashcards(result), [result]);
   const fallbackMessage = useMemo(() => getFlashcardsFallbackMessage(result), [result]);
   const [reviewCardIds, setReviewCardIds] = useState<string[] | null>(null);
@@ -118,13 +121,15 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity }: Flashca
     if (Object.keys(nextScores).length === activeCards.length) {
       const got = Object.values(nextScores).filter((score) => score === 'got').length;
       onLearningActivity?.(formatFlashcardCompleteActivity({ got, total: activeCards.length }));
+      const assessment = buildFlashcardsAssessment(activeCards, nextScores);
+      if (assessment) onAssessment?.(assessment);
     }
     if (index < activeCards.length - 1) {
       navigateTo(index + 1, 'left');
     } else {
       setFlipped(false);
     }
-  }, [activeCards, index, isAnimating, navigateTo, onLearningActivity, scores]);
+  }, [activeCards, index, isAnimating, navigateTo, onAssessment, onLearningActivity, scores]);
 
   // Keyboard
   useEffect(() => {

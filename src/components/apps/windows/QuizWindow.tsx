@@ -16,18 +16,21 @@ import {
   QUIZ_SELF_WRONG,
   stripQuizOptionPrefix,
 } from './quiz-window-model';
+import { buildQuizAssessment, type AssessmentDraft } from './assessment-events';
 
 interface QuizWindowProps {
   result: AppExecutionResult | null;
   transcript: TranscriptSegment[];
   onSeek?: (startMs: number) => void;
   onLearningActivity?: (line: string) => void;
+  /** 交卷时把每题的对错 + 证据交给记忆（结构化，见 assessment-events.ts） */
+  onAssessment?: (draft: AssessmentDraft) => void;
 }
 
 /* 测验保持安静平涂：用排版和状态区分，不用题目环境光。 */
 const QUIZ_SUCCESS = 'var(--mm-pine)';
 
-export function QuizWindow({ result, onSeek, onLearningActivity }: QuizWindowProps) {
+export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment }: QuizWindowProps) {
   const questions = useMemo(() => normalizeQuizQuestions(result), [result]);
   const [reviewQuestionIds, setReviewQuestionIds] = useState<string[] | null>(null);
   const activeQuestions = useMemo(
@@ -486,6 +489,8 @@ export function QuizWindow({ result, onSeek, onLearningActivity }: QuizWindowPro
                   onClick={() => {
                     setShowReport(true);
                     onLearningActivity?.(formatQuizCompleteActivity({ correct: correctCount, total: activeQuestions.length }));
+                    const assessment = buildQuizAssessment(activeQuestions, selected, submitted);
+                    if (assessment) onAssessment?.(assessment);
                   }}
                   className="rounded-full bg-ink px-8 py-2.5 text-sm font-medium text-white transition hover:opacity-85 active:scale-95"
                 >
