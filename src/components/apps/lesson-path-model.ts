@@ -11,6 +11,7 @@
  */
 
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
+import { conceptLabel } from '@/lib/utils/concept-label';
 import type { Anchor, TranscriptSegment } from '@/types';
 import type { LearningAssessmentDraft, LearningAssessmentItem } from '@/types/learning-event';
 import { COPY } from '@/lib/ui/copy';
@@ -128,10 +129,8 @@ function fmtTime(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-function shortConcept(text: string, max = 14): string {
-  const t = text.replace(/\s+/g, ' ').trim();
-  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
-}
+// 概念名：引号里的术语优先（"“up in the air” 在这段…" → up in the air），否则截断——与掌握轨迹、书桌同一规则
+const shortConcept = (text: string): string => conceptLabel(text, 14);
 
 /**
  * 「先做这一件」——按顺序看事实：
