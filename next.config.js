@@ -6,7 +6,13 @@ const ignoreTypeErrors = process.env.NEXT_IGNORE_TYPE_ERRORS === '1';
 const configuredBuildCpus = Number.parseInt(process.env.NEXT_BUILD_CPUS || (isProduction ? '1' : ''), 10);
 
 const nextConfig = {
-  distDir: isProduction ? '.next' : devDistDir,
+  // 生产构建可指定旁路目录（scripts/deploy.sh 用 .next-staging 构建后原子切换到 .next），
+  // 运行时 server.js 固定读 .next，所以这里只影响 build。
+  distDir: isProduction ? (process.env.NEXT_DIST_DIR || '.next') : devDistDir,
+  // 2026-09-08 构建 trace 实测：1810s 里 1643s 是 node-file-trace-plugin——为每条路由追踪运行时
+  // 文件依赖（teach/fenshen 路由各 21MB .nft.json，hanzi-writer-data 9000 个文件全被扫）。
+  // 追踪只服务于 output:'standalone'；本仓库 PM2 直接跑仓库目录 + 完整 node_modules，追踪零价值。
+  outputFileTracing: false,
   eslint: {
     ignoreDuringBuilds: ignoreBuildLint,
   },
@@ -18,6 +24,10 @@ const nextConfig = {
     ...(Number.isFinite(configuredBuildCpus) && configuredBuildCpus > 0
       ? { cpus: configuredBuildCpus }
       : {}),
+    // 2026-09-08 构建提速：有自定义 webpack 配置时 Next 14 默认关闭 build worker，
+    // client / server / edge 三套编译在同一个 5GB 堆里串行跑，顶着上限疯狂 GC（实测 29 分钟）。
+    // 显式打开后各编译器独立进程、独立堆，配合 Makefile 里放宽的堆与 cpus。
+    webpackBuildWorker: true,
     serverActions: {
       bodySizeLimit: '500mb',
     },

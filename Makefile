@@ -37,14 +37,18 @@ check: ## 类型检查（最常用，每次改完必跑）
 	npx tsc --noEmit
 
 .PHONY: build
-build: ## 生产构建
-	# 堆上限 5120：v32 后 webpack compile 峰值越过 1536（2026-08-21），v34 又越过
-	# 2560（2026-08-22），fenshen+ai-elements 后再越过 3072（2026-08-26），2026-09-03
-	# 越过 4096；机器 14G RAM + swap。长期解法是把 teach/demo 页从主 bundle 拆开
-	NEXT_BUILD_CPUS=1 NODE_OPTIONS="--max-old-space-size=5120" npm run build
+build: ## 生产构建（多核 + 大堆 + build worker；类型与 lint 由 make check / CI 单独把关）
+	# 2026-09-08 之前：单核 + 5GB 堆，编译进程 RSS 顶着堆上限跑，GC 把 29 分钟的构建大半耗在垃圾回收上。
+	# 现在：机器 4 核 14GB，堆放到 7GB（是上限不是占用），cpus=3 给静态页生成与 SWC 线程池留一核给生产进程；
+	# next.config 显式开 webpackBuildWorker，三套编译器各自独立进程与堆。
+	# next build 自带的 tsc + eslint 阶段跳过：tsc 由 make check（deploy 前置）与 CI 负责，eslint 目前有历史 warning 本就不作门禁。
+	NEXT_BUILD_CPUS=$${NEXT_BUILD_CPUS:-3} \
+	NODE_OPTIONS="--max-old-space-size=$${NEXT_BUILD_HEAP_MB:-7168}" \
+	NEXT_IGNORE_BUILD_LINT=1 NEXT_IGNORE_TYPE_ERRORS=1 \
+	npm run build
 
 .PHONY: deploy
-deploy: build ## 构建 + PM2 优雅停机后重启 + 健康检查
+deploy: check build ## 类型检查 + 构建 + PM2 优雅停机后重启 + 健康检查
 	./scripts/deploy.sh --quick
 
 # === 代码质量 ===

@@ -56,8 +56,8 @@
 # 日常
 make dev            # 开发服务器（默认 3001，PORT 可覆盖；生产 PM2 跑在 3002）
 make check          # 类型检查（改了 .ts/.tsx 就跑）
-make build          # 生产构建（限单核 + 5GB 堆防 OOM，见 Makefile 注释）
-make deploy         # 构建 + PM2 优雅重启 + /api/health 验证
+make build          # 生产构建（≈1.5 分钟；outputFileTracing 已关，此前 30 分钟里 27 分钟是文件追踪）
+make deploy         # tsc + 旁路构建（.next-staging）→ 原子切换 → PM2 重载 → 健康与静态资源检查，失败自动回滚；构建期间线上不受影响
 
 # 质量
 make test           # Vitest 单测（src/）
