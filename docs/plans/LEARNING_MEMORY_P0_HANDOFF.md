@@ -43,13 +43,13 @@ MeetMind 正在从"录课工具"转向**应用矩阵 + 共享学习记忆**。�
 ## 4. 仓库现状与边界
 
 - **半成品**：上一个 agent 被中断，留下未经验证的草稿——`LearningEvent` model（`prisma/schema.prisma`）、`src/types/learning-event.ts`、`src/lib/services/learning-event-service.ts`（+测试）、`src/app/api/memory/events/route.ts`、hooks 与 `lesson-understanding-service.ts` 的改动；评测骨架未做。你可以续作、修正或推翻重写——先读一遍再定。
-- **多 agent 并发**：工作区有大量其他工作线的未提交改动（teach-engine、podcast、infographic、fenshen 等）。不要碰、不要回退与本任务无关的文件。
-- 不执行任何 `git commit / push`。
-- 项目规约见根目录 `AGENTS.md`（铁律、命令、文档同步要求、架构护栏），务必遵守。
+- **多 agent 并发**：工作区可能有其他工作线的未提交改动。不要回退与本任务无关的文件；自己的改动按线分开提交，别人的留在工作树里并在汇报中说明。（2026-09-08：此前的 teach-engine / podcast / infographic / fenshen 改动已全部入库，工作树当时是干净的。）
+- git 按 `AGENTS.md` §1 的边界：在当前特性分支原子提交并推送是默认动作；动 `main`、改历史需要明确指令。半成品也要提交——"只活在一台机器的工作树里"是这条线上一次被中断时最大的损失。
+- 项目规约见根目录 `AGENTS.md`（工作方式、命令、文档同步、架构护栏），务必遵守。
 
 ## 5. 验收标准
 
-- `make db-push && make check && make test && make lint` 全绿（含你新写的测试；注意运行时必须 Node 24，`nvm use`，本机默认 22）；
+- `make db-push && make check && make test` 全绿（含你新写的测试；运行时 Node 24——`make` 会自动探测 `/usr/local/bin` 里的 24，本机默认 shell 是 22 不影响）；`make lint` 目前有 178 条历史 warning 本来就是红的，要求是**你改过的文件不新增 warning**，不要求你去清别人的账；
 - 记忆评测 dry-run 跑通并产出 baseline，接入 CI 门禁；
 - 手工验证闭环：登录用户全局问答一轮 → 事件有留痕、画像由服务端更新；未登录路径不回归；
 - 代码与文档同步交付（对应 DOMAIN.md 等，按 AGENTS.md 的文档同步检查表）。

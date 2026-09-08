@@ -81,7 +81,7 @@ src/components/apps/windows/
 - 插件 citation 必须经 `flashcards-window-model.ts` 保留到卡片背面；在复习工作区有 seek 能力时可一键回到课堂原声。
 - 3D 翻面时不可见卡面必须同步退出无障碍树，隐藏答案面的证据按钮也不能获得焦点，避免读屏提前泄题。
 - 卡片整面仍可点击，但“想好后翻面”必须是真实可聚焦按钮，不能要求学生先猜出隐藏手势或只靠空格键。
-- 长时间练习使用米白画布 + 白纸卡片，答案面用极淡松墨绿区分；松墨绿 / 朱批红只表达掌握状态，禁止整页纯黑、彩虹渐变、emoji 和装饰性光晕。
+- 长时间练习使用米白画布 + 白纸卡片，答案面用极淡松墨绿区分；松墨绿 / 朱批红只表达掌握状态。不用整页纯黑、彩虹渐变、emoji 和装饰性光晕——长时间主动回忆的页面要安静，装饰会和"掌握状态"这一层语义抢注意力（taste 原则见 `docs/PRODUCT_TASTE.md`）。
 
 ### InfographicWindow（信息图）
 
@@ -89,13 +89,13 @@ src/components/apps/windows/
 - 数据文件：`infographic-window-data.ts` — 场景预设/风格预设/数据转换
 - 信息图是结果型应用：进入后由 AI 直接生成并先展示完整成品，不把配置表单当作首屏。
 - 只有用户主动点“调整”后，才展开尺寸、视觉感觉与一句补充要求；其余版式、语言和信息密度继续由模型判断。
-- 结果与调整态统一使用米白纸感 / 松墨绿体系，禁止深色工作台、装饰渐变和解释设计决策的开发者文案。
+- 结果与调整态统一使用米白纸感 / 松墨绿体系；不做深色工作台、装饰渐变和解释设计决策的开发者文案——结果型应用要像一张做好的成品，不像控制台。
 - 图片 provider 未配置或单次生成失败时，不能把用户悄悄丢进配置表单；先用已生成的草案交付一张米白纸感的可读信息图，保留复制要点、重试图片和主动调整三个出口。
 - 首次没有 `AppExecutionResult` 时，“生成信息图”必须先调用 `onGenerateDraft` 走 `/api/apps/execute` 形成有课堂依据的智能草案，再请求图片；禁止直接拿截断原文拼一个通用 fallback 当正式生成结果。
 
 ### 速查表 / 音频概览 / 共用状态
 
-- `CheatsheetWindow` 只有一种形态，对齐学术 cheat sheet 传统（LaTeX 排印）：A4 纵向 · 3 栏 · 正文衬线密排（Georgia / 宋体栈，展示衬线只留给首页大标题，小字号下展示体笔画会让整页文字显歪）· 首页居中衬线标题带粗线 · booktabs 表格 · 居中展示公式。**默认黑白 + 荧光笔高亮**（strong 术语像被黄色马克笔划过，黑白打印呈浅灰依然可读）；彩色语义引导词（粉=定义 / 藏青=公式 / 青=流程 / 紫=对比 / 红=易错 / 绿=例题）是唯一可选开关。**没有其他排版选项**——密度恒定，内容少就留白，绝不把少量内容拉松铺满页面；顶栏只保留标题统计和「复制文字 / 打印 PDF」两个成品出口。学生直接在纸面预览上改、删、收起条目（这是内容编辑，不是排版选择），触屏端每条内容通过可见的更多按钮展开“编辑 / 不打印”，长文档底部持续保留“复制 / 打印 PDF”动作条。
+- `CheatsheetWindow` 当前刻意只有一种形态（产品判断：学生要的是一张能直接打印的纸，不是排版工作台；何时升级为双栏编辑器的触发条件记录在 `docs/LEARNING_CONTEXT_PRODUCT.md` §5），对齐学术 cheat sheet 传统（LaTeX 排印）：A4 纵向 · 3 栏 · 正文衬线密排（Georgia / 宋体栈，展示衬线只留给首页大标题，小字号下展示体笔画会让整页文字显歪）· 首页居中衬线标题带粗线 · booktabs 表格 · 居中展示公式。**默认黑白 + 荧光笔高亮**（strong 术语像被黄色马克笔划过，黑白打印呈浅灰依然可读）；彩色语义引导词（粉=定义 / 藏青=公式 / 青=流程 / 紫=对比 / 红=易错 / 绿=例题）是唯一可选开关。**没有其他排版选项**——密度恒定，内容少就留白，绝不把少量内容拉松铺满页面；顶栏只保留标题统计和「复制文字 / 打印 PDF」两个成品出口。学生直接在纸面预览上改、删、收起条目（这是内容编辑，不是排版选择），触屏端每条内容通过可见的更多按钮展开“编辑 / 不打印”，长文档底部持续保留“复制 / 打印 PDF”动作条。
 - 条目排版对齐学术 cheat sheet 的密排传统：单行正文与术语同段自然折行（黑白模式术语墨色、彩色模式引导词着色，正文均为端正衬线），多行（列表 / 表格 / 图）条目保持上下结构；strong 条目用荧光笔高亮术语（`.cs-hl`），不整行铺色。
 - 分页必须由 `cheatsheet-window-model.ts` 的同一“页 → 栏 → 语义区块”容量模型驱动屏幕和打印；页内按均衡栏高装栏（像 LaTeX multicols，栏满到均衡高度即换栏），容量系数按 A4 纵向 3 栏衬线的真实行高校准。速查表是纸面优先产物：条目不逐条展示时间戳，只在首页页首标注一行来源清单（课次 / 大纲 / 真题）；每条的证据回锚仍保留在产物数据里作为防编造质量门槛，不在纸面露出。
 - 条目正文由 `CheatsheetRichText` 渲染 GFM（标题 / 列表 / 引用 / 代码 / 表格）、行内与块级 KaTeX、紧凑 Mermaid 图；表格和图表必须避免跨栏断裂，打印时隐藏图表工具栏并限制高度。富文本是为了压缩关系，不得把普通定义装饰成大图。
@@ -131,7 +131,7 @@ src/components/apps/windows/
   - `ink-grading.ts` — v12 板演批改客户端：网格契约（6 列 × 4 行，行 A-D 列 1-6，与服务端 ink-grading-service 一致）、`cellCenter`（cell → 960×540 虚拟坐标）、`rasterizeInkForGrading`（板面底色 + 标注网格 + 粉笔蓝笔迹 → 2× PNG dataURL 送 VLM）。
   - `BoardAnnotation.tsx` — 标注渲染（circle/underline/arrow/mark），从 BoardCanvas 拆出。
   - `BoardBlocks.tsx` — 结构化板书块（shape / table / line / code，teach 新引擎全量词表）的栏内流式渲染：vendor 绝对坐标不进版面（shape 只取宽高比、line 归一端点到块内包围盒），触发即整块上板、无书写动画；块外层 `data-board-block` 供 BlockAnnotation 在无字块上兜底测量，laser 的 DOM 锚点走 BoardFlow 外层 `data-element-id`。BoardFlow 按 action.type 分发到四个块组件，spotlight 圈注按 elementId（annotationsByWn 的非 wN 键）命中。
-  - `board-canvas-styles.ts` — BoardCanvas 的 `<style>` 块（`BOARD_CANVAS_CSS`，从组件拆出守 500 行限制）。
+  - `board-canvas-styles.ts` — BoardCanvas 的 `<style>` 块（`BOARD_CANVAS_CSS`；静态 CSS 与组件逻辑分开，组件回到 500 行预算内）。
 
 **板面字体**：**v32 起统一系统屏显栈**（`BOARD_FONT`，见 BoardWrite.tsx；globals.css 的 HongleiBanShu @font-face 已删）。以下为 v31 及更早的手写体时代记录（已作废，留档）：鸿雷板书简体（`HongleiBanShu`，子集 `public/fonts/HongleiBanShu-subset.woff2` 1.8MB，GB2312 一级汉字 + ASCII + 全角标点；出处/授权待办/可复现命令见 `public/fonts/README.md`——作者声明免费商用，网页嵌入授权待联系鸿雷字记确认留证，当前为临时使用）——用户拍板的决赛胜出者，粉笔书写感复刻；栈尾保留站酷快乐体兜底（webfont 加载失败时）。**拉丁字符与半角标点统一分流到 Caveat（`@fontsource/caveat`，OFL）**——`isLatinBoardChar`（字母/数字）+ `isAsciiBoardPunct`（半角标点）分流：中文手写体的内置拉丁与半角标点（又小又浮）都拉胯，Caveat 是马克笔手写感最优解（x-height 小故字号 ×1.12——原 1.18 笔画粗重会压住同行鸿雷中文，2026-08-19 实拍下调）——这是生产行为。曾用字体：Ma Shan Zheng（毛笔楷书，笔画带锋显"刺"）、站酷快乐体（偏卡通）。hanzi-writer 笔顺动画渲染文鼎楷书字形（Arphic Public License），与字体文件无关。**度量按鸿雷+Caveat 校准**：Caveat 标点与笔顺字形混排时 `--mm-y` 0.1em（v11 复核：全角冒号转半角走 Caveat——但双点贴基线夹 CJK 间读作句号，v22 起 `--mm-y` -0.22em 上提到字腰，stroke/非 stroke 两条路径同修正；鸿雷全角冒号双点低位像句号，不用）、Caveat 字母 0.1em、FontChar 路径 CJK 标点 0.3em、笔顺路径 CJK 标点 0.55em；空格 span 显式补宽 **0.55em**（v15 修正：0.35 在纯英文词组里≈一个字母宽，"name and address" 词界被吃掉连成串；手写英文词间距需≥一个字母宽）；**笔顺模式未写字占位按字符类型给宽**（CJK 整字宽 / 拉丁 0.55em / 空格 0.55em——全字宽占位会让拉丁字符写成时后半行逐个左跳）；note 4.6% 板高。
 

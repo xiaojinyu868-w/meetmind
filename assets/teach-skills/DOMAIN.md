@@ -6,7 +6,8 @@
 
 Agent Skills 标准目录：每个 skill 一个子目录，`SKILL.md` + 可选 `references/`。
 frontmatter `name` 必须等于目录名（pi 校验，不一致进 diagnostics）。模型首轮只看到
-name/description/location，正文由 read 工具按需加载——**description 决定被选中率，改写须谨慎**。
+name/description/location，正文由 read 工具按需加载——**description 决定被选中率**：改写后跑
+`npx tsx scripts/teach-engine-bench.ts` 看 read 命中与动作序列有没有变，用数据判断，不必请示。
 
 ## 清单
 
@@ -53,12 +54,13 @@ name/description/location，正文由 read 工具按需加载——**description
 
 - **eval 门禁**（对齐设计文档 §5.2/§8，2026-09-05 已接线）：quiz-maker 出题闭环
   与判分准确率落 `tests/eval/teach/`（dry-run 出题 e2e + regression-guard teach 段，
-  `make eval-teach`；判分准确率容忍 -5pp），不合格禁用
-  （frontmatter 加 `disable-model-invocation: true` 即摘出模型视野）。
+  `make eval-teach`；判分准确率容忍 -5pp）。不合格先修（skill 正文 / `buildTeachEngineInstructions`），
+  修不动再用 frontmatter `disable-model-invocation: true` 摘出模型视野，并在 CHANGELOG 记一笔为什么。
   通用冒烟仍跑 `npx tsx scripts/teach-engine-bench.ts`（检查 read 命中与动作序列）。
 - 单测门禁：`src/lib/services/teach-engine/__tests__/skills.test.ts` 断言本目录
-  全量加载零诊断、name 唯一、lab-sim 不可见——新增 skill 须同步 EXPECTED_BUILTIN。
-- vendor 内容修订：只改裁剪声明允许的范围；上游整体更新时按文件重裁，不做局部追新。
+  全量加载零诊断、name 唯一、lab-sim 不可见——新增 skill 同步 EXPECTED_BUILTIN。
+- vendor 内容修订：每个文件头部的裁剪声明是与上游 diff 的锚点。改 vendor skill 正文可以，
+  但要同步更新裁剪声明，让下次上游更新仍能按文件重裁；不做无声的局部追新（会让上游对齐失效）。
 
 ## 人物人格 skill（不在本目录）
 

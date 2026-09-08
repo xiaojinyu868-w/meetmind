@@ -2,14 +2,14 @@
 
 > 2026-09-05。给下一个 coding agent：读完 AGENTS.md §1 铁律 + 本文件 + `docs/TEACH_TUTOR_ENGINE.md`，再动手。
 
-## 0. 第一优先级：工作树未提交
+## 0. 入库状态（2026-09-08 更新）
 
-teach-engine 这条线的**全部代码此刻只在 working tree 里，没有任何 commit**：
+teach-engine 线的全部代码已入库并推送：`feat/settings-redesign` 上的 `9b85da9`（黑板 blocks 渲染器）
+与 `98e5bbe`（引擎 P1/P2 + skill 体系 + eval 门禁 + 文档）。`out/tutor-engine-spike/` 按约定不入 git
+（`out/` 在 .gitignore），spike 结论以 `REPORT.md` 为事实源，在服务器上可读。
 
-- untracked：`src/lib/services/teach-engine/`（整个服务）、`docs/TEACH_TUTOR_ENGINE.md`、`assets/teach-skills/`（10 个 skill）、`tests/eval/teach/`（eval 门禁）、`out/tutor-engine-spike/`
-- dirty modified：`src/app/api/teach/threads/**`（双引擎分发）、`prisma/schema.prisma`（TeachThread.engine）、`src/lib/config/teach.config.ts`、`src/components/teach/teach-events.ts`（双词表）、`next.config.js`、`Makefile`、`tests/eval/regression-guard.ts` 等
-
-**不换机器/分支之前必须先整理提交**，否则"P1/P2 已完成"在其他环境不存在。接手第一件事：`git status` 确认这批文件是否已入库；没入库就先提交（用户明确要求时才 commit）。
+接手时按 AGENTS.md §1 的 git 边界工作：在特性分支上原子提交并推送是默认动作，不需要请示；
+只有动 `main`、改历史、删远端分支需要明确指令。会话结束前工作树应当是干净的。
 
 ## 1. 这条线是什么
 
@@ -38,7 +38,7 @@ P4（codex 退役评估、CHANGELOG、给上游 OpenMAIC 提解析器修复 PR�
 ## 4. 关键命令
 
 ```bash
-nvm use && npm ci          # Node 24 铁律（.nvmrc）
+pnpm install --frozen-lockfile   # Node 24（.nvmrc；make 自动探测）+ pnpm
 make check                 # 每次改完必跑（tsc）
 make eval-teach            # 出题闭环 dry-run 门禁（改 prompt/skill/teach-engine 必跑）
 make eval-teach-real       # 真实链路（烧额度，验收锚点纪律用）

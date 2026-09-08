@@ -1,7 +1,8 @@
 # API Routes — 服务端接口层
 
 > API 路由是**薄壳**：解析请求 → 鉴权 → 调用 services → 返回响应。
-> 业务逻辑必须放在 `lib/services/`，不要在 route.ts 里写复杂逻辑。
+> 业务逻辑放 `lib/services/`——理由是同一段逻辑常被多条路由、server.js、脚本与 eval 复用，
+> 写在 route 里就只有 HTTP 一条路能到达它，也没法单测。
 
 ## 依赖规则
 

@@ -14,7 +14,7 @@ SharedAgent client UI for creating and rendering share links.
 
 ## Product Rule
 
-Sharing is link-first. Do not reintroduce generated share images, save-image actions, or a multi-action share modal for SharedAgent creation.
+Sharing is link-first: the thing being shared is a living SharedAgent (someone can keep asking it), not a static picture. That is why generated share images, save-image actions and the multi-action share modal were removed in v3.0 — they made people share a dead artifact instead of the agent. Don't bring them back for that reason; if a future product decision wants a poster, it should complement the link, not replace it.
 
 Sharing is also object-local: the action must sit beside the completed artifact. Do not move it into a separate bottom-of-page ceremony or require users to return to the matrix to find it. Flashcards and audio overview remain private/non-shareable here; only cheatsheet, mindmap, quiz, and infographic produce SharedAgent snapshots.
 

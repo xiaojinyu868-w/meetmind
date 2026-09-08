@@ -124,13 +124,17 @@ export function MyChatAdapter({ sessionId, authToken, ... }) {
 - `AITutor.tsx`（2400 行 legacy） → 删 ✓（M12）
 - `AIChat.tsx`（独立栈） → 删 ✓（M12）
 
-## 设计原则（铁律）
+## 设计原则（每条都有理由；理由不成立时可以改，先改本节）
 
-1. **底座不引入业务逻辑** — 任何 `if (mode === 'review')` 都是错的，应该移到 adapter
-2. **底座 props 极简** — 不要 30 个 boolean flag，用 slot / capability 对象
-3. **底座 variant 只 2-3 个** — paper / glass / minimal，不再扩
-4. **marker pipeline 通过类型扩展** — 加新 marker 走 `ChatMarkerKind` 类型 + `extractXxx` helper
-5. **TTFT 优先** — useChat 自带乐观更新，不要自己包 setState 队列拖慢首字符
+1. **底座不引入业务逻辑** — 任何 `if (mode === 'review')` 都是错的，应该移到 adapter。
+   理由：6 个面板共用一个底座，一个业务分叉会把所有面板的行为耦合在一起。
+2. **底座 props 极简** — 不要 30 个 boolean flag，用 slot / capability 对象。
+   理由：boolean 组合爆炸后没人知道哪些组合被实际使用。
+3. **底座 variant 少而稳** — 目前 paper / glass / minimal 三个。新增一个要说清为什么
+   现有三个都不够，而不是为某个面板的一次视觉需求加分叉；面板级差异优先走 adapter / className。
+4. **marker pipeline 通过类型扩展** — 加新 marker 走 `ChatMarkerKind` 类型 + `extractXxx` helper，
+   这样所有面板自动获得解析而不需要各自处理。
+5. **TTFT 优先** — useChat 自带乐观更新，不要自己包 setState 队列拖慢首字符。
 
 ## V2 路线图（不阻塞 V1 deploy）
 

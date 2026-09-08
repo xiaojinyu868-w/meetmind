@@ -33,7 +33,7 @@ teach-session-service（codex app-server 底座）的继任编排：每线程一
 ```
 teach-engine/
 ├── teach-engine-service.ts   # 编排服务（对外契约见下）
-├── runtime/                  # 自研接缝（全部 ≤500 行）
+├── runtime/                  # 自研接缝（每个文件一个职责，行数预算 500）
 │   ├── stream-fn.ts          # pi StreamFn → AI SDK v6 streamText 桥（晋升 spike，
 │   │                         # 主仓库 @ai-sdk/openai v3 下实测，加 providerOptions 透传）
 │   ├── engine-runner.ts      # text_delta 增量喂 vendor 解析器 → 闭合动作立即执行；
@@ -52,7 +52,7 @@ teach-engine/
 └── __tests__/                # vitest（parser 回归 / action-map / runner 集成 / service mock / jsonrepair 兜底）
 ```
 
-## 对外契约（路由层按此接线，不得擅改）
+## 对外契约（路由层按此接线；改契约 = 同时改路由、前端 `teach-events.ts` 与本节，并考虑旧事件日志的回放）
 
 ```ts
 preflightTeachEngine(): { ok: true } | { ok: false; error: string }
@@ -107,11 +107,12 @@ appendThreadEvent（与旧服务同一 `data/teach-events/<threadId>.jsonl`，�
 - fenshen 边界：本目录与 fenshen 零耦合；teach-codex 通用件（shim-server /
   codex-app-server / teach.config provider 注册表）原样保留，fenshen 继续消费。
 
-## 500 行铁律豁免声明
+## vendor 树与行数预算
 
-`vendor/openmaic/` 整树豁免文件大小硬限制（设计文档 §7「vendor 一次、当自有
-代码维护」；engine.ts 909 行为上游单文件，拆分会偏离上游 diff 可维护性）。
-runtime/* 与 teach-engine-service.ts 不豁免，均 ≤500 行。
+`vendor/openmaic/` 整树不受行数预算约束（设计文档 §7「vendor 一次、当自有代码维护」；
+engine.ts 909 行为上游单文件，拆分会偏离上游 diff 可维护性）。vendor 内必要的 bug 修复以
+`[FIX vs upstream]` 注释标注，攒够就提上游 PR（已有一处：解析器吞口播）。
+runtime/* 与 teach-engine-service.ts 按 500 行预算写；超了先看是不是职责混了，不是机械拆。
 
 ## 运维
 
@@ -122,4 +123,4 @@ runtime/* 与 teach-engine-service.ts 不豁免，均 ≤500 行。
   （`TEACH_ENGINE_SIM_SPEED` 加速口播估时）。
 - Next/webpack 兼容（P1-B 实测修复）：vendor dsl 内部用 ESM 风格 `.js` 后缀
   import 同目录 `.ts`，webpack 默认解析不了 → `next.config.js` 加了
-  `resolve.extensionAlias { '.js': ['.ts', '.js'] }`（vendor 树零改动）。
+  `resolve.extensionAlias { '.js': ['.ts', '.js'] }`（在构建层解决，vendor 树不用为此改写）。

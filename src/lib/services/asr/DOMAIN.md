@@ -30,5 +30,5 @@
 ## 修改注意
 
 - `server/asr/text-utils.js` 还承担代理协议解析和短噪声幻觉过滤；只有两边共有的归一化 / 去重算法需要保持行为一致，不能把它当作 TS 文件的 re-export。
-- 改本目录前后**必跑** `make eval-asr`（dry-run）或 `make eval-asr-real`（真实调用），数字波动 = 回归信号。
-- `post-edit.ts` 2026-08 起默认开启（`ASR_POST_EDIT_ENABLED=false` 关闭），模型 DeepSeek V4 Flash，改模型/阈值需确认成本影响。
+- 改了本目录的算法或阈值就跑 `make eval-asr`（dry-run，几十秒）；改到真实链路再跑 `make eval-asr-real`。数字波动 = 回归信号，波动要在提交说明里解释。注释 / 文档级改动不用跑。
+- `post-edit.ts` 2026-08 起默认开启（`ASR_POST_EDIT_ENABLED=false` 关闭），模型 DeepSeek V4 Flash。改模型 / 阈值时顺手估一下成本影响（每节课最多 5 批 × ≤6000 字符，按 token 计费）写进提交说明——是估算与记录，不是请示。

@@ -28,4 +28,4 @@
 - 这里只放不依赖 Next / 浏览器的纯函数。
 - 协议字段必须以阿里云官方 API reference 为准（[实时用户指南](https://help.aliyun.com/zh/model-studio/real-time-speech-recognition-user-guide) / [duplex 客户端事件](https://help.aliyun.com/en/model-studio/fun-asr-client-events)）；不要发明 `prompt` 等未定义字段。
 - `server_vad` 模式禁止发送 `input_audio_buffer.commit`；停止录音必须等 FIFO 排空后发 `session.finish`（旧族）或 `finish-task`（新族），并以 `session.finished` / `task-finished` 作为尾句完成信号。
-- 修改后运行 `make test-server` 与 `make eval-asr`。
+- 改了算法就跑 `make test-server`；动到协议或去重 / 幻觉过滤逻辑再加 `make eval-asr`，数字波动写进提交说明。

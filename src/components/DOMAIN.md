@@ -19,7 +19,7 @@ components → hooks + stores + types + lib/utils
 components/
 ├── *.tsx              # 顶层核心组件（~45 个）
 ├── chat/DOMAIN.md     # M11：全局对话底座（ChatBubble/Composer/MessageList/Renderer + 3 hooks + 2 markers）
-│                      # 任何新对话面板必须基于此底座做 adapter，禁止重新写输入条/气泡
+│                      # 新对话面板做 adapter 接底座（6 个面板共享流式/失败自愈/等待设计，重写输入条/气泡等于放弃这些）
 ├── tutor/DOMAIN.md    # AITutor 拆分子模块（TutorAgentPanel 已迁底座）
 ├── recorder/DOMAIN.md # Recorder 拆分子模块（类型/工具函数）
 ├── apps/DOMAIN.md     # 应用系统（黄页/浮窗/证据标签/执行 hook）
@@ -71,7 +71,7 @@ components/
 | `AIChat.tsx` | 691 | AI 对话组件 |
 | `GlobalAskPanel.tsx` / `GlobalAskWelcome.tsx` / `GlobalAskContextDrawer.tsx` | ~660 | 全局 Ask MeetMind：基于 ChatBase 的多轮问答；空态（v9 呼吸森林：光场 + 涟漪 Octo + 毛玻璃 hero composer + 玻璃建议卡，基元在 globals.css `v9-*`）把输入作为唯一主动作，在输入内轻量选择"直接回答 / 陪我学会"（免费档"陪我学会"带 Pro 标识，提交直接唤起会员页，服务端 402 membership_required 兜底）；参考范围按需从右侧打开，深度学习仅在答案会改变路线时逐题追问；管理员额外看到"查看本次 AI"轻入口，将当前真实上下文带到独立控制中心，普通用户完全不可见 |
 | `LearningIntentConfirmationCard.tsx` / `learning-intent-confirmation-model.ts` | ~210 | 深度学习的轻确认：若学习路径确有歧义，逐步显现模型动态生成的 1-3 个选择问题；学习理解在回答结束后静默整理，不把内部记忆标记塞进消息流 |
-| `LearningProgressMemoryCard.tsx` | ~50 | 旧学习进展 marker 的反馈卡，当前 `GlobalAskPanel` 不再使用；保留仅供迁移期兼容，勿在新链路继续扩展 |
+| `LearningProgressMemoryCard.tsx` | ~50 | 旧学习进展 marker 的反馈卡，当前 `GlobalAskPanel` 不再使用；保留仅供迁移期兼容（旧对话回放），新链路不用它——记忆反馈已收进服务端事件化管线 |
 | `LearningMemoryPanel.tsx` / `CourseContextSection.tsx` / `CourseAssessmentCard.tsx` / `CourseCheatsheetWorkspace.tsx` / `ContextRecoveryCard.tsx` | ~1100 | 「我的上下文」采用消费级总览→具体内容层级：总览只展开模型对用户的长期理解，并以两条安静入口进入“课程与考试”或“最近学习现场”，不再把三类内容一次性纵向铺满；从复习页进入考试速查表时直接打开范围选择，返回时也直接回到原应用矩阵，不绕经上下文总览。范围选择支持跨课程与课次级多选；桌面为课程侧栏 + 课次画布，手机为横向课程选择带 + 仅展开已选课次，避免表单长页。课程支持可信名称、用户标签与边界纠正，再进入可打印速查表 |
 | `AISearchPanel.tsx` | ~740 | 旧单轮 Workspace AI 搜索面板；主入口已由 `GlobalAskPanel` 替代，保留作迁移参考 |
 | `WordExplainer.tsx` | ~580 | 术语解释器；管理员透镜复用本次选区、附近语境和最近提问 |
@@ -85,7 +85,7 @@ components/
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `EchoCard.tsx` | ~180 | 回声卡片（设计系统原住民：无渐变/无阴影） |
+| `EchoCard.tsx` | ~180 | 回声卡片（设计系统原住民：按 `docs/DESIGN_SYSTEM.md` 当前版走，克制投影 + 双签名色） |
 | `EchoShareCard.tsx` | ~300 | 分享图（纯 Canvas 绘制，微信兼容；提供保存图片 / 系统分享 / 复制文案） |
 | `echo-share-actions.ts` | ~60 | 分享图外传 helper（分享文案、文件名、data URL → File） |
 
@@ -147,24 +147,23 @@ components/
 | `windows/AppWindowPlaceholder.tsx` | ~100 | 六类应用共用的整理中 / 空结果 / 失败状态 |
 | `hooks/useAppExecution.ts` | ~370 | 应用执行 hook |
 
-## ⚠️ 超标文件（>500 行）
+## 超预算文件（>500 行）
 
-- `AITutor.tsx` (1940) — 最大组件，子模块已拆到 `tutor/`
-- `Recorder.tsx` (1694) — 录音逻辑 + UI 混合，子模块已拆到 `recorder/`
-- `WorkshopYellowPage.tsx` (900) — 黄页
-- `TranscriptFlowView.tsx` (778) — 转录流
-- `AISearchPanel.tsx` (720) — 搜索面板
-- `VideoReviewPlayer.tsx` (823) — 视频复习（点击画面控制 + visibilitychange 倍速恢复 + 键盘快捷键）
-- `AIChat.tsx` (691) — 对话
-- `WaveformPlayer.tsx` (638) — 波形播放器
-- `WordExplainer.tsx` (562) — 术语解释
-- `DesktopVideoReviewLayout.tsx` (537) — 桌面端复习布局
-- `desktop-video-review-layout-model.ts` — 桌面视频复习布局纯 helper（播放时间 ms → agent 秒级 context）
+实时清单跑 `make stats`（文档里写死的行数一周就过期，此前这里列着两个早已删除的文件）。
+已知的大件：`Recorder.tsx`（录音逻辑 + UI，子模块在 `recorder/`）、`mobile/MobileAppShell.tsx`、
+`apps/WorkshopYellowPage.tsx`、`VideoReviewPlayer.tsx`、`TranscriptFlowView.tsx`、
+`classroom/ClassroomCompanionPanel.tsx`。改到它们时顺手提取 ≥50 行的独立模块，不一次拆完。
 
-## 设计系统约束
+## 设计系统
 
-改动任何组件必须遵守：
+视觉真相源是 `docs/DESIGN_SYSTEM.md`（当前 v7，皮肤层，会换代）和 `docs/PRODUCT_TASTE.md`（原则层）。
+改组件时对齐它们，要点：
 
-- **v7 设计宪法：95% 克制 + 5% 仪式时刻情绪化（shadow-soft / shadow-card / shadow-ai-glow）**
-- 只用系统 token：`canvas(#F6F8F6)`, `card(#fff)`, `ink(#20312A)`, `ink-secondary(#53645C)`, `ink-muted(#819087)`, `divider(#DCE5DF)`；大面积纯黑不属于“科技感”，主交互优先使用 `pine(#2F6B55)`。
-- 禁止：`bg-gradient-*`, `shadow-*`, `ring-*` 装饰
+- **95% 克制 + 少数仪式时刻情绪化**：日常界面米白纸感 + 双签名色（`pine` 是 AI 沉淀，`vermilion` 是学生此刻）；
+  仪式时刻见 PRODUCT_TASTE 当前清单。
+- **用 token，不写裸色值**：`paper` / `card` / `ink` / `ink-secondary` / `ink-muted` / `divider` / `pine` / `vermilion`
+  及 `surface-ai` / `cite-ts` / `cite-src` 工具类；大面积纯黑不是"科技感"。
+- **投影是有体系的**：`shadow-soft` / `shadow-card` / `shadow-float` / `shadow-modal` / `shadow-ai-glow`——用体系里的档位，
+  不自造 `shadow-[...]`；`surface-ai` 的 1px pine ring 是 AI 在场的语义。旧文档里"零阴影 / 禁止 shadow-*"是 v6 时代的说法，已作废。
+- **渐变只出现在允许的仪式时刻**（分享落地页等），按钮不用渐变填充。
+- 想要新的视觉方向：去 `design-demo/` 建 showcase，成型后整体翻页设计系统，而不是在组件里散写。

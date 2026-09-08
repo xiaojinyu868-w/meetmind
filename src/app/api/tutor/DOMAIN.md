@@ -9,8 +9,8 @@
 | `agent/route.ts` | **M10 主入口** `POST /api/tutor/agent`：mode-driven 单一 endpoint，AI SDK v6 `streamText` + `createUIMessageStreamResponse`。详见下方 mode 矩阵与 provider 说明 |
 | `intent/route.ts` | `POST /api/tutor/intent`：将原始问题与学习上下文整理为 `LearningIntentPlan`；当前表达优先，历史上下文不能静默收窄宽泛愿望；没有真实歧义就直接开始，不展示内部置信度或额外确认卡。只有答案会改变学习路径时才返回动态选择题（通常 1 个，最多 2 个），前端回传 `answers[{questionId, question, optionIds, optionLabels}]` 后得到最终计划；不持久化、不替用户确认。system/user input 基线来自 `learning-understanding-prompts.ts`，运行时可由管理员追加受约束指令或覆盖注册模型。 |
 | `memory/route.ts` | `POST /api/tutor/memory`：全局学习问答持久化后的静默学习理解整理；输入本轮用户表达、助手回答和最多 12 条既有理解，返回最多 2 条新增或带 `replaceId` 的更新；不接收、不改写 `recentLearningActivities`，与 Tutor 主链路一致允许访客请求并在 route 内限流。system/user input 基线与控制中心共用，用户证据、敏感信息和 JSON 合同不可被管理员覆盖。 |
-| `route.ts` | Legacy SSE 路径（M10 前的主路由）。flag off 时仍可用，但**不在上面加新功能**；非语音对话应迁移到 `agent/route.ts` |
-| `tutor-prompts.ts` | **Legacy** System Prompt 模板（M10 前的旧实现）。当前 5 mode 唯一 prompt 源在 `@/lib/prompts/tutor-prompts.ts` 的 `buildTutorSystemPrompt`，本文件勿再扩展 |
+| `route.ts` | Legacy SSE 路径（M10 前的主路由）。flag off 时仍可用。新功能长在 `agent/route.ts` 上，这里只接受修复与迁移——理由是避免两条主链再次分叉，不是这个文件不能碰 |
+| `tutor-prompts.ts` | **Legacy** System Prompt 模板（M10 前的旧实现）。六 mode 的 prompt 唯一源是 `@/lib/prompts/tutor-prompts.ts` 的 `buildTutorSystemPrompt`；本文件只随 legacy 路由存亡，改 prompt 去那边 |
 | `tutor-types.ts` | 共享类型定义 |
 | `tutor-citations.ts` | 引用处理（从转录中定位引用，legacy 路径用） |
 | `tutor-guidance.ts` | 引导问题生成（legacy 路径用） |

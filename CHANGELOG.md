@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-09-08 — 约束文档面向强模型重写：把「Less Structure, More Intelligence」用到 agent 自己身上
+
+背景：产品对自己模型的信条是少结构多智能，但管 coding agent 的 `AGENTS.md` / `skills/*` 却是
+"过度结构化"写法——硬行数限制（72 个文件早已违反）、固定步骤仪式、CodeBuddy 专有工具名、
+"不主动 commit"（直接导致 09-05 一周一万六千行工作只活在一台机器的工作树里）、与 v7 设计系统
+自相矛盾的"零阴影"、常年红灯的 lint 被写成验收标准。
+
+- **AGENTS.md §1**：「铁律」→「工作方式（写给强模型）」：默认行动做完汇报（只有不可逆操作 /
+  范围变更 / taste 分歧才停下问）；地图与真相（源码优先，顺手修 DOMAIN.md）；规则分为**不变量**
+  （依赖方向、契约、隐私、COPY、vendor、git 边界）与**默认做法**（验证成比例、尺度是预算不是禁令、
+  lint 现实）；git 改为特性分支提交并推送是默认，动 `main` / 改历史才需指令
+- **四份 agent skill 重写**：判断优先、工具无关、每条规则带理由；域表补齐 teach / fenshen / memory /
+  apps / share / compat / desktop；修掉全部过时事实与设计矛盾
+- **Makefile**：Node 24 由硬拦截改为自动探测（`/usr/local/bin`、nvm），找不到才报错
+- **CI**：所有 PR + `main` / `feat/**` / `feature/**` / `milestone/**` 触发；切 pnpm；补 `eval-teach`；
+  lint 因 178 条历史 warning 暂不进门禁并注明
+- **DOMAIN.md 体系**（约 20 份）：过程性硬规则（`replace_in_file` 仪式、"需确认成本影响"、
+  "必跑 eval"、写死的超标行数清单）改为带理由的判断；"禁止 shadow-*"等与设计系统矛盾的死规则
+  修正；产品运行时不变量（隐私 / 回放 / 证据 / 密钥）原样保留
+- `docs/PRODUCT_TASTE.md` 白名单 → 带判断标准的当前清单；`提示词设计哲学.md` 新增
+  "同一哲学也适用于给 coding agent 写的约束"
+
+---
+
 ## 2026-09-05 — AI 家教引擎迁移 P1/P2 落地：pi + vendor OpenMAIC 新引擎与 codex 底座双线并存
 
 > teach 上课线的编排层换底：codex app-server（每线程一进程）→ 进程内 pi agent loop +

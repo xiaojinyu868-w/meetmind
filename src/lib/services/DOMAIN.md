@@ -155,17 +155,12 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `file-parse-service.ts` | 220 | M11：把 File（pdf/docx/ppt/图片/音频/视频/纯文本）解析成纯文本，给「聊聊你想要的」/全局对话注入 supportMaterials 用。内部按 MIME/后缀分流到 `/api/sources/ingest` / `/api/sources/ingest-image` / `/api/transcribe`。**不写 IndexedDB / 不动 collection** —— 是 `useSourceImport` 的轻量 helper 表亲。 |
 | `index.ts` | 13 | barrel 导出 |
 
-## ⚠️ 超标文件（>500 行）
+## 超预算文件（>500 行）
 
-改动这些文件时必须格外小心，优先考虑能否拆分：
+实时清单跑 `make stats`（写死的行数很快过期）。已知的大件：`workspace-echo-service.ts`（Echo 数据管线）、
+`classroom-data-service.ts`、`auth-service.ts`、`workspace-context-service.ts`（Capture 管线）、
+`llm-service.ts`（多 provider 调用）、`dashscope-asr-service.ts`、`ai-control-service.ts`、`feed-service.ts`。
 
-- `workspace-echo-service.ts` (1303) — Echo 数据管线
-- `classroom-data-service.ts` (1007) — 课堂数据
-- `auth-service.ts` (998) — 认证
-- `workspace-context-service.ts` (947) — Capture 管线
-- `qwen-asr-service.ts` (709) — ASR
-- `highlight-service.ts` (675) — 精选片段
-- `analytics-service.ts` (626) — 数据分析
-- `volc-podcast.ts` (582) — 播客 TTS
-- `rate-limit-service.ts` (550) — 速率限制
-- `llm-service.ts` (603) — LLM 调用（DeepSeek / DashScope / Ark / Relay）
+改到它们时：读足够上下文，改动自然形成 ≥50 行的独立职责就顺手提取成新 service（例如 2026-09
+`fenshen-session-service.ts` 拆出 `lesson-context-service.ts`），每次提取后 `make check`。
+不要为了行数机械拆——这些文件大多是历史堆积，拆分要以职责边界为准，整体拆分是独立任务。

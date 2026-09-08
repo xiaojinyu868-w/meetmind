@@ -22,8 +22,9 @@
 ## 验证
 
 ```bash
-make test-server
+make test-server   # 改了 server/ 下的运行时或 ASR 纯函数
 make check
 ```
 
-修改 ASR 主链路时额外运行 `make eval-asr`。
+改到 ASR 主链路（协议解析 / 去重 / 幻觉过滤 / 分片缝合）时加跑 `make eval-asr`；只改日志、注释或代理配置不用。
+生产上 `server.js` 由 PM2 直接运行，改完 `make deploy` 才生效，部署后看 `/api/health` 与 `/root/.pm2/logs/`。

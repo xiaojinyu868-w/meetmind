@@ -5,7 +5,7 @@
 ## 设计系统 v7（图书馆台灯 + 朱批红笔）
 
 **核心理念**：双签名色 = 产品架构。墨松绿 (`pine`) 是 AI 沉淀，朱批红 (`vermilion`) 是学生此刻。
-**铁律**：95% 中性色 + 双签名 < 8% 面积；投影必须存在但克制；AI 时刻可见但不打断。
+**原则**（理由在 `docs/PRODUCT_TASTE.md`）：95% 中性色 + 双签名 < 8% 面积——签名色稀缺才有语义；投影存在但克制——层级靠布局，投影只做物理暗示；AI 时刻可见但不打断。
 
 所有组件使用 `tailwind.config.js` v7 token：
 - 中性：`paper` / `paper-warm` / `card` / `ink` / `ink-secondary` / `ink-muted` / `divider`
@@ -49,8 +49,8 @@
 
 ## 使用规则
 
-- 业务组件应该从 `components/ui/` 组合，而不是直接写 Tailwind 样式
-- 新增 ui 组件时，必须符合 v7 设计系统 token
+- 业务组件优先从 `components/ui/` 组合；ui 没覆盖的局部直接写 Tailwind 没问题，但别复制出第二个按钮 / 卡片实现——那会让设计系统翻页时漏掉它
+- 新增 ui 组件用 v7 token（`tailwind.config.js`），这样暗色模式与未来换代自动生效
 - 组件 Props 类型定义在同文件，不单独抽 type 文件
 - 优先用 v7 一等公民 class（`pine` / `vermilion` / `paper` / `surface-ai` / `cite-ts` / `cite-src`），不要再写 v6 别名（`mint` / `coral` / `canvas`）
 

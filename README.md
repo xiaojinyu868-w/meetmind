@@ -305,12 +305,12 @@ Agent-native 在这里不是“让 Agent 随便改代码”，而是让每次修
 ```bash
 git clone https://github.com/xiaojinyu868-w/meetmind.git
 cd meetmind
-nvm use        # 读取仓库 .nvmrc，切到 Node.js 24
-npm ci
+nvm use                          # 读取仓库 .nvmrc，切到 Node.js 24（make 也会自动探测已装的 24）
+pnpm install --frozen-lockfile   # 包管理器是 pnpm；pnpm-lock.yaml 是唯一有效锁文件
 cp .env.example .env
 
 make dev       # 默认 http://localhost:3001
-make check     # 每次改动后必跑
+make check     # 改了代码就跑（增量 tsc，十几秒）
 ```
 
 环境变量、模型选择、ASR、微信接入和部署说明以 [`.env.example`](./.env.example)、[`AGENTS.md`](./AGENTS.md) 及对应 `DOMAIN.md` 为准，README 不重复维护易过期的配置清单。

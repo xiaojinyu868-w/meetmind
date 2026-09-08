@@ -1,49 +1,62 @@
 # AGENTS.md — MeetMind 全局入口（LLM Wiki）
 
-> 你是接手 MeetMind 的 AI 开发者。本文件只做四件事：**铁律、命令、路由、索引**。
-> 深知识全部在 wiki 页面里——按 §4 路由表找到该读的页面再动手，不要通读本文件以外的文档。
+> 你是接手 MeetMind 的 AI 开发者。本文件只做四件事：**工作方式、命令、路由、索引**。
+> 深知识在 wiki 页面里——按 §4 路由表找到该读的页面，再读源码确认，然后动手。
 
-**产品一句话**：用户像发微信一样把学习现场发给 MeetMind；先收下，后台慢慢理解，长出一个真正听过课、懂你在学什么的 AI 同学。两条主线：收集线（随手收下一切）与课堂线（录一节课，课中同桌、课后复习、应用矩阵）。
+**产品一句话**：用户像发微信一样把学习现场发给 MeetMind；先收下，后台慢慢理解，长出一个真正听过课、懂你在学什么的 AI 同学。两条主线：收集线（随手收下一切）与课堂线（录一节课，课中同桌、课后复习、应用矩阵）。**好的输出 = 个人上下文 + 场景上下文 + 好的模型智能**——产品层给上下文、工具和渲染契约，不用硬规则替模型判断。
 
-**阅读顺序**：本文件 §1 铁律 → §2 命令 → §4 按任务类型查路由 → 对应 `DOMAIN.md` / wiki 页面。
+**阅读顺序**：本文件 §1 工作方式 → §2 命令 → §4 按任务类型查路由 → 对应 `DOMAIN.md` → 源码。
 
 ---
 
-## 1. 铁律（每次动手前）
+## 1. 工作方式（写给强模型）
 
-- **每次改完必跑 `make check`**（tsc 类型检查）；改 ASR / Tutor 前后必跑 `make eval-asr` / `make eval-tutor`（数字波动 = 回归信号）
-- **只读 DOMAIN.md，不确定的再读源码**；不要发明新脚本，只用 Makefile 里的命令
-- **代码和文档必须一起交付**：改了配置、模型、路由契约、目录结构、关键文件、依赖边界、默认行为或用户可见流程，必须同步对应 `DOMAIN.md` / `docs/*` / `.env.example`；新增目录含 3+ 源码文件或承担独立职责必须补 `DOMAIN.md`
-- **用户面字符串必须 `import { COPY } from '@/lib/ui/copy'`**；禁用词：回声卡 / 酿 / 预知气泡 / 工坊 / 研判 / 引擎 / 引导
-- **不主动 git commit / push**，用户明确要求时才做
-- **日志用 `src/lib/logger.ts`（pino），不要 console.log**
+产品对自己模型的信条是 **Less Structure, More Intelligence**（`项目开发文档/提示词设计哲学.md`）：给真实上下文、必要契约和判断权，不用规则替它思考，"prompt 永远不为最弱的模型降级设计"。这条信条对你同样成立——本文件与 `skills/*` 给你的是上下文、不变量和验证手段，步骤由你判断。写成规则的地方都带理由；理由不成立的场合可以偏离，把理由写进提交说明或文件头注。
 
-### 文档同步检查（改完先想这张表，再 `make check`）
+**默认行动，做完汇报。** 产品对用户是"零提问"的（机器 act，不 ask），你对用户也一样：范围内的可逆决定自己拿，用资深同事的常识补齐模糊处并说明假设；发现问题就修，不写"建议后续处理"。只有三种情况停下来问：不可逆的破坏性动作（删数据、改已推送历史、动 `main`）、真正的范围变更、产品 taste 层面的分歧。会话结束时要么工作树干净（已提交并推送到特性分支），要么在汇报里写明什么没提交、为什么。
 
-| 变更类型 | 必须同步 |
-|---------|---------|
+**地图与真相。** `DOMAIN.md` 是地图（上一个 agent 写的，会过期），源码是真相。要动的东西读源码；读到地图与代码不一致，顺手改对地图。不要因为"节省上下文"而只读地图就动手。
+
+### 不变量（破了会伤产品、数据或下一个人）
+
+- **依赖方向单向**：`app/api → lib/services → lib/utils, lib/db, lib/config`；`app/pages → components → hooks → stores → types`。API 路由是薄壳（转换 + 鉴权 + 调 service）；组件不直接 import services（走 hooks / props）；utils 不 import services / components
+- **契约不破**：SSE 事件名、stream marker、`/api/apps/execute` 渲染契约、偏好 key、IndexedDB schema 版本、旧数据回放（teach 的 legacy 词表分支永久保留）——改之前找全消费方，字符串契约类型系统抓不到
+- **隐私铁律**：个人上下文默认私有；分享态不出时间戳、不出 marker、不注入访客画像；微信扫码事件只更新登录挑战，不进收集流
+- **用户面字符串走 `import { COPY } from '@/lib/ui/copy'`**——这是口吻审查的单一入口；内部黑话不进 UI（回声卡 / 酿 / 预知气泡 / 工坊 / 研判 / 引擎 / 引导）
+- **日志用 `src/lib/logger.ts`（pino）**，不要 console.log
+- **vendor 树不改写**（`src/lib/services/teach-engine/vendor/`、`assets/fenshen/huashu-nuwa/`）：只随上游整体替换，必要修复标 `[FIX vs upstream]`
+- **git 边界**：默认在当前特性分支做原子提交并推送同名远端分支；推送或合并 `main`、force-push、改写已推送历史、删远端分支、开 PR 合并——这些要明确指令
+
+### 默认做法（有理由可偏离）
+
+- **验证与改动成比例**：改了 `.ts/.tsx` 跑 `make check`（增量 tsc，十几秒）；改到哪条链路跑哪条门禁——ASR `make eval-asr`、Tutor `make eval-tutor`、teach-engine / teach-skills / teach prompt `make eval-teach`、prompt / smoothStream / provider `make ttft`（数字波动 = 回归信号）；文档-only 改动不跑 eval
+- **代码和文档一起交付**：判断标准是"下一个 agent 读旧文档会不会被误导"。下表是常见对应关系；`DOMAIN.md` 写不变量与理由，不写步骤脚本和一周就过期的行数
+- **尺度是预算，不是禁令**：页面/组件/hook/路由/服务 ≤500 行、prompt/工具/类型 ≤300 行是拆分信号。内聚边界清楚才拆；不清楚就先做任务，在头注写一句为什么暂不拆。老的超标文件（实时清单 `make stats`）改到时顺手提取 ≥50 行的独立模块，不企图一次拆完
+- **Makefile 是共用命令接口**：可复现、会重复的流程收进去成为新命令；一次性验证脚本放仓库外（`/tmp`），不在仓库里堆临时文件与截图
+- **lint 的现实**：`make lint`（`--max-warnings 0`）目前有 178 条历史 warning，是红的，所以不在 CI 门禁里。要求是**你改过的文件不新增 warning**（`npx eslint <文件>` 定向查）；清零历史 warning 是一个独立任务，不要顺手做
+
+### 文档同步对照表
+
+| 变更类型 | 通常要同步 |
+|---------|-----------|
 | 新增 / 删除 / 重命名文件、目录、关键职责 | 对应目录 `DOMAIN.md` + 必要时本文件 §3/§4 |
-| 新增 API 路由、请求体字段、响应契约、stream marker | `src/app/api/**/DOMAIN.md` + 相关 `docs/*` |
-| 新增模型 provider、默认模型、API key、环境变量 | `src/lib/config/DOMAIN.md` + `.env.example` + `docs/TUTOR_AGENT.md` |
-| 改 Tutor / ASR / AI-Native 主链路 | 对应 `DOMAIN.md` + `docs/TUTOR_AGENT.md` / `docs/ASR_PIPELINE.md` |
+| 新增 API 路由、请求体字段、响应契约、stream marker、事件名 | `src/app/api/**/DOMAIN.md` + 相关 `docs/*` |
+| 新增模型 provider、默认模型、API key、环境变量 | `src/lib/config/DOMAIN.md` + `.env.example`（涉 Tutor 再加 `docs/TUTOR_AGENT.md`） |
+| 改 Tutor / ASR / teach / fenshen / 记忆 主链路 | 对应 `DOMAIN.md` + `docs/TUTOR_AGENT.md` / `docs/ASR_PIPELINE.md` / `docs/TEACH_TUTOR_ENGINE.md` |
 | 改用户面文案或设置项 | `src/lib/ui/copy.ts` 或设置页说明 + 偏好 key 所在 `DOMAIN.md` |
-
-### 架构护栏（skills/architecture-enforcement 摘要）
-
-- **文件大小硬限制**：页面/组件/hook/路由/服务 ≤ 500 行；prompt/工具/类型 ≤ 300 行。新文件不得超过；修改导致超标必须先拆分。实时超标清单跑 `make stats`
-- **依赖方向（单向）**：`app/api → lib/services → lib/utils, lib/db, lib/config`；`app/pages → components → hooks → stores → types`。禁止：services→components、components→services（走 hooks/props）、utils→services/components、API 路由写业务逻辑、文案散落组件
+| 交付里程碑 | `CHANGELOG.md` 一条（可追到 commit）+ `make ledger` |
 
 ---
 
 ## 2. Golden Commands
 
-**运行时：Node.js 24 LTS（`.nvmrc`）。** 切换运行时先 `nvm use && npm ci`，不要复用其他 Node 主版本的 `node_modules`。
+**运行时：Node.js 24 LTS（`.nvmrc`）；包管理器 pnpm（`pnpm-lock.yaml` 是唯一有效锁文件，`package-lock.json` 已过时）。** `make` 会自动探测 Node 24（`/usr/local/bin`、nvm 目录），找不到才报错；换过 Node 主版本后 `pnpm install --frozen-lockfile` 重装（原生模块按 ABI 编译，不能复用）。
 
 ```bash
 # 日常
-make dev            # 开发服务器（默认 3001，PORT 可覆盖）
-make check          # 类型检查（每次改完必跑）
-make build          # 生产构建（限单核 + 1.5GB 防 OOM）
+make dev            # 开发服务器（默认 3001，PORT 可覆盖；生产 PM2 跑在 3002）
+make check          # 类型检查（改了 .ts/.tsx 就跑）
+make build          # 生产构建（限单核 + 5GB 堆防 OOM，见 Makefile 注释）
 make deploy         # 构建 + PM2 优雅重启 + /api/health 验证
 
 # 质量
@@ -51,16 +64,16 @@ make test           # Vitest 单测（src/）
 make test-server    # server/ 运行时与 ASR 单测
 make lint           # ESLint（--max-warnings 0）
 make smoke-all      # 4 个 Tutor mode 的 e2e smoke
-make ttft           # 首 token 延迟（改 prompt/smoothStream/provider 后必跑）
+make ttft           # 首 token 延迟（改 prompt/smoothStream/provider 后跑）
 make stats          # 项目统计（超标文件、console.log 残留）
 
 # Eval（SWE-Bench 风格）
 make eval           # 完整套件
-make eval-asr       # ASR dry-run（改 ASR 必跑）
-make eval-tutor     # Tutor dry-run（改 Tutor 必跑）
+make eval-asr       # ASR dry-run（改 ASR 链路后跑）
+make eval-tutor     # Tutor dry-run（改 Tutor prompt/工具后跑）
 make eval-guard     # CI gate：baseline 在 tests/eval/baselines/
-make eval-teach     # Teach 引擎出题闭环评测（dry-run；改 teach-engine / teach-skills 必跑）
-make ledger         # 生成能力台账（交付里程碑 / 新增底座资产后必跑，产物在 design-demo/capability-board/）
+make eval-teach     # Teach 引擎出题闭环评测（dry-run；改 teach-engine / teach-skills / teach prompt 后跑）
+make ledger         # 生成能力台账（交付里程碑 / 新增底座资产后跑，产物在 design-demo/capability-board/）
 
 # 数据库
 make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
@@ -156,12 +169,14 @@ make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
 
 | Skill | 何时读 |
 |-------|--------|
-| `skills/architecture-enforcement/SKILL.md` | 创建/修改文件时 |
-| `skills/making-changes/SKILL.md` | 每次写代码时（Plan→Execute→Document→Verify→Review→Commit） |
-| `skills/code-review/SKILL.md` | 完成变更后自审 |
-| `skills/debugging/SKILL.md` | 遇到 bug 时 |
+| `skills/architecture-enforcement/SKILL.md` | 创建/修改文件、加依赖、开路由时——不变量 vs 尺度预算、域划分 |
+| `skills/making-changes/SKILL.md` | 每次写代码时——判断优先的变更方式、文档同步、验证比例、提交与推送边界 |
+| `skills/code-review/SKILL.md` | 完成变更后自审——三问 + 严重等级 |
+| `skills/debugging/SKILL.md` | 遇到 bug 时——假设驱动、证据优先，不能复现也能修 |
 
-**技术栈速记**：Next.js 14 + 自定义 `server.js`（ASR WS 代理）+ TS 5.3 · Tailwind 3.4 · Prisma + SQLite · Dexie · Zustand · AI SDK v6 · Motion（营销页动效，`motion/react`）· PM2 · Electron（`desktop/`）
+（`skills/rehearsal-coach/`、`skills/thu-slide-deck/` 是给清小搭「上场前」智能体用的产品 skill，不是 agent 工作规范。）
+
+**技术栈速记**：Next.js 14 + 自定义 `server.js`（ASR WS 代理）+ TS 5.3 · Tailwind 3.4 · Prisma + SQLite · Dexie · Zustand · AI SDK v6 · Motion（营销页动效，`motion/react`）· PM2 · Electron（`desktop/`）· pnpm · Node 24
 
 ---
 

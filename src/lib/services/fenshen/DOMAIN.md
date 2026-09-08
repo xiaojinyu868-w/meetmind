@@ -3,7 +3,9 @@
 > 用 nuwa skill 原文（女娲·Skill造人术，assets/fenshen/huashu-nuwa/，一个字
 > 不改）把一个人蒸馏成分身 skill，再以「课后完整学习上下文 + harness agent」
 > 形态与学生对话。复用 teach-codex 已验证的通用件（codex-app-server /
-> shim-server / teach.config provider 注册表），零改动 teach 主链路。
+> shim-server / teach.config provider 注册表）；v1 刻意没有改 teach 主链路（纯增量，
+> 便于独立回滚）。往后若两条线确实需要共同演进通用件，改就是了——改完两边的
+> 冒烟（teach 与 fenshen 的 `scripts/ui-visual-audit-*.ts`）都跑一遍。
 > 计划事实源：`docs/../roadmap` 外的实现计划与 spike 在 `out/fenshen-spike/`。
 
 ## 架构

@@ -51,9 +51,13 @@ src/app/
 | Store 订阅 | ~200-350 | useUIActions / useSessionStore 等 |
 | 核心函数 | ~350-1200 | restoreReviewSession / openReviewFromCollection 等 |
 | 数据处理 | ~1200-2200 | ingestTranscriptSegments / handleRecordingStop 等 |
-| 事件处理 + 渲染 | ~2200-2302 | 各种 UI 事件回调 + JSX 组件树 |
+| 事件处理 + 渲染 | ~2200-末尾 | 各种 UI 事件回调 + JSX 组件树 |
 
-**修改策略**：任何改动前，先用 `replace_in_file`，一次只改一个精确区块（10-30行），改完立刻 `make check`。
+（区间是地图不是坐标，文件在持续提取中会漂移；实时行数 `make stats`。）
+
+**修改策略**：读足够上下文再改，精确编辑而不是重写大段；改完 `make check`。改动自然形成
+≥50 行的独立模块就顺手提取到 hooks / 组件（这是 God File 分阶段瓦解的方式）；不要企图一次拆完，
+整体拆分是独立任务。
 
 全局 `showAISearch` 状态名为历史兼容名，当前实际动态挂载的是 `GlobalAskPanel`：桌面与移动共用同一全屏 Ask MeetMind，不再挂旧单轮 `AISearchPanel`。
 

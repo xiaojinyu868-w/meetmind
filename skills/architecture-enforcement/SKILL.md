@@ -1,110 +1,106 @@
 # Architecture Enforcement
 
-> 本 skill 定义 MeetMind 代码库的架构边界。每次变更前必须检查。
+> 本 skill 定义 MeetMind 代码库的架构边界：哪些是**不变量**（破了会伤产品），哪些是**预算**
+> （超了要有理由）。创建/修改文件、加依赖、开新路由、加配置或公共契约时读它。
 
-## 触发条件
+## 不变量（硬）
 
-- 创建新文件时
-- 修改现有文件时
-- 添加新依赖时
-- 创建新 API 路由时
-- 新增配置项、模型 provider、环境变量或公共契约时
+这些规则背后都是已经踩过的坑，破坏它们的代价是数据、隐私或旧数据回放：
 
-## 文件大小硬限制
+- **依赖方向单向**：`app/api → lib/services → lib/utils | lib/db | lib/config`；
+  `app/pages → components → hooks → stores → types`。services 不 import components；
+  components 不直接 import services（走 hooks / props）；utils 不 import services / components；
+  `types/` 纯类型，谁都可以 import。
+- **API 路由是薄壳**：请求/响应转换 + 鉴权 + 调 service。业务逻辑、数据库操作都在 `lib/services/`。
+- **用户面字符串走 `src/lib/ui/copy.ts`**，日志走 `src/lib/logger.ts`。
+- **契约不破**：SSE 事件名、stream marker、`/api/apps/execute` 渲染契约、偏好 key、IndexedDB
+  schema 版本——改之前找到所有消费方（含前端旧数据回放：teach 的 legacy 词表分支永久保留）。
+- **vendor 树不改写**：`src/lib/services/teach-engine/vendor/`、`assets/fenshen/huashu-nuwa/`
+  只随上游整体替换；必要的修复以 `[FIX vs upstream]` 标注，准备提回上游。
+- **可变服务端状态挂 `globalThis`**（Next dev 每路由独立编译 entry，模块级 Map 会被复制）。
 
-| 类型 | 上限 | 当前超标文件 |
-|------|------|-------------|
-| 页面/组件 | 500 行 | `page.tsx`(2302), `AITutor.tsx`(~2357), `Recorder.tsx`(~1781) |
-| API 路由 | 500 行 | `video/import/route.ts`(1212), `tutor/route.ts`(886) |
-| 服务文件 | 500 行 | `workspace-echo-service.ts`(1297), `classroom-data-service.ts`(1009) |
-| 工具/类型 | 300 行 | — |
+## 尺度预算（软）
 
-**规则**：
-- 新文件不得超过 500 行（组件/路由/服务）或 300 行（工具/类型）
-- 如果修改使文件超标，必须先拆分再修改
-- 超标文件有偿还计划（见下方「遗留债务」）
+| 类型 | 预算 | 含义 |
+|------|------|------|
+| 页面 / 组件 / hook / 路由 / 服务 | 500 行 | 超过 = 该检查内聚性的信号 |
+| prompt / 工具 / 类型 | 300 行 | 同上 |
+| vendor 树 | 豁免 | 不改写上游 |
+
+- **预算不是禁令**。判断标准是内聚：一个 600 行的状态机好过三个互相偷看内部状态的文件。
+  拆分只在边界清楚、拆出来的东西能独立命名和测试时做。
+- 超预算的新文件或明显变大的老文件，在头注写一句为什么（或拆分计划）。不写理由的超标才是问题。
+- 已超标的老文件（`make stats` 列出实时清单，不要相信任何文档里写死的行数）：**不要企图一次拆完**。
+  先完成当前任务；改动自然形成 ≥50 行独立模块就顺手提取；每次提取后 `make check`。
+  整体拆分是独立任务，需要独立的意图和验证。
 
 ## 模块边界
 
 ```
 src/
-├── app/                    # Next.js 路由层（薄层，只做请求/响应转换）
-│   ├── (main)/app/         # 主页面（待拆分的 God File）
-│   └── api/                # API 路由（薄层，调用 services）
-├── components/             # UI 组件（纯渲染 + 本地状态）
-├── hooks/                  # 客户端 hooks
-├── lib/
-│   ├── services/           # 业务逻辑层（核心）
-│   ├── utils/              # 纯工具函数（无副作用）
-│   └── logger.ts           # 统一日志
-├── stores/                 # Zustand 状态管理
-└── types/                  # 共享类型定义
+├── app/                    # Next.js 路由层（薄层）
+│   ├── (main)/app/         # 主页面 page.tsx（God File，按域分阶段提取中）
+│   ├── api/                # ~125 条 API 路由（薄壳）
+│   └── teach/ share/ …     # 独立页面
+├── components/             # UI（纯渲染 + 本地状态）；chat/ 是 6 面板共用的 ChatBase 底座
+├── hooks/                  # 客户端 hooks（组件与 services 之间的唯一桥）
+├── stores/                 # Zustand
+├── types/                  # 共享类型
+└── lib/
+    ├── services/           # 业务逻辑（核心）；子域 asr/ keyframe/ classroom/ teach-codex/ teach-engine/ fenshen/
+    ├── ai-native/          # 应用矩阵插件系统（catalog + plugins）
+    ├── prompts/            # 所有 prompt 的唯一源
+    ├── db/                 # IndexedDB（Dexie）schema + CRUD
+    ├── config/             # app.config.ts 模型注册表（env 驱动）
+    ├── ui/copy.ts          # 用户面文案
+    ├── utils/              # 纯函数
+    └── logger.ts
+server/                     # 自定义 server.js 的运行时 + ASR WS 代理
+desktop/                    # Electron 壳
+assets/                     # teach-skills / fenshen nuwa 模板（数据，非代码）
+tests/eval/                 # SWE-Bench 风格 harness + baselines
 ```
 
-**依赖方向规则**（单向，不可反向）：
-```
-app/api → lib/services → lib/utils/, lib/db/, lib/config/
-app/pages → components → hooks → stores → types
-```
+## 域划分（放对地方）
 
-**禁止**：
-- services/ 不得 import components/
-- components/ 不得直接 import services/（通过 hooks 或 props）
-- utils/ 不得 import services/ 或 components/
-- API 路由不得包含业务逻辑（必须委托给 services/）
+| 域 | 入口 | 主要位置 |
+|----|------|---------|
+| **capture** 收集线 | `page.tsx` + context-reach | `lib/context-reach/`、`hooks/useSourceImport`、`api/sources/*` |
+| **classroom** 课中同桌 | `/app` 课堂态 | `components/classroom/`、`hooks/useClassroomCompanion`、`services/classroom/` |
+| **asr** | `server.js` WS 代理 + `/api/asr/*`、`/api/transcribe*` | `services/asr/`、`server/asr/`、`docs/ASR_PIPELINE.md` |
+| **tutor** 六模式对话 | `POST /api/tutor/agent` | `api/tutor/`、`prompts/tutor-prompts.ts`、`components/tutor/` |
+| **apps** 应用矩阵 | `/api/apps/execute` | `lib/ai-native/`、`components/apps/`、`docs/APPLICATION_MATRIX_PRD.md` |
+| **teach** AI 家教上课线 | `/api/teach/*`（按 `TeachThread.engine` 分发） | `services/teach-codex/`（codex 底座）、`services/teach-engine/`（pi + OpenMAIC）、`components/teach/` |
+| **fenshen** 请一个分身 | `/api/fenshen/*` | `services/fenshen/`、`components/fenshen/`、`assets/fenshen/` |
+| **memory** 学习记忆 | `/api/memory/*`、`/api/tutor/memory` | `services/learning-event-service.ts`、`hooks/useLearningContext`、`docs/plans/LEARNING_MEMORY_P0_HANDOFF.md` |
+| **workspace** 工作区 / 证据 | `/api/workspace/*` | `services/workspace-*`、`workspace-evidence-service.ts` |
+| **auth + wechat** | `/api/auth/*`、`/api/wechat/*` | `services/auth-service.ts`、`wechat-*` |
+| **share** 分享裂变 | `/api/share/*`、`/share/[token]` | `roadmap/v3.0-virality-agent.md` |
+| **compat** 清小搭 OpenAI 兼容层 | `/api/compat/*` | `api/compat/DOMAIN.md`、`prompts/rehearsal-prompts.ts` |
+| **desktop** | Electron | `desktop/DOMAIN.md`、`services/keyframe/` |
 
-## 域划分
+不确定归哪个域时，读对应 `DOMAIN.md`；两个域都沾边的逻辑放 services 并让两边通过明确的接口调用，
+不要在一个域里偷读另一个域的内部状态。
 
-MeetMind 的业务域：
+## 变更影响评估（改之前回答三个问题）
 
-| 域 | 服务文件 | 说明 |
-|----|---------|------|
-| **capture** | 无独立服务，逻辑在 page.tsx | 收集流（录音、链接、文件上传） |
-| **echo** | commonstack-echo-service, workspace-echo-service | 回声生成与展示 |
-| **import-pipeline** | video/import, article/import, bilibili, xiaoyuzhou | 多平台导入管线 |
-| **tutor** | tutor-service, tutor/route | AI 私教 |
-| **transcript** | qwen-asr-service, dashscope-asr-service, transcript-enhancer | ASR 转录 |
-| **auth** | auth-service, wechat-auth-service, sms-service | 认证与微信 |
-| **workspace** | workspace-service, workspace-context-service, workspace-search-service | 工作区管理 |
+1. **影响范围**：这个文件 / 符号被谁 import？（grep；字符串契约类型系统抓不到）
+2. **类型安全**：改了接口后，所有消费方会自动报错吗？不会的话手工列出消费方。
+3. **可回滚**：这次变更能用 `git revert` 安全撤销吗？（数据迁移、schema 变更要额外想）
 
-## 变更影响评估
+## 文档同步
 
-修改任何文件前，回答：
-
-1. **影响范围**：这个文件被谁 import？（用 grep 确认）
-2. **类型安全**：改了接口/类型后，所有消费方是否自动报错？
-3. **可回滚**：这次变更能用 `git revert` 安全撤销吗？
-
-## 文档同步规则
-
-架构边界变化必须同步事实来源：
+架构边界变了就同步事实来源，判断标准是"下一个 agent 读旧文档会不会被误导"：
 
 - 目录 / 文件职责变化 → 对应 `DOMAIN.md`
-- 推荐阅读路径、关键文件、默认模型或主链路变化 → `AGENTS.md`
-- API 请求 / 响应 / stream marker 变化 → 对应 `src/app/api/**/DOMAIN.md` 和相关 `docs/*`
+- 阅读路径、关键文件、默认模型、主链路变化 → `AGENTS.md`
+- API 请求 / 响应 / marker / 事件名变化 → `src/app/api/**/DOMAIN.md` + 相关 `docs/*`
 - 环境变量 / provider / 默认配置变化 → `src/lib/config/DOMAIN.md` + `.env.example`
 
-没有“自动更新文档”的命令；这是每次变更的人工 gate，必须在验证和提交前完成。
+`DOMAIN.md` 写不变量与理由，不写步骤脚本和行数。
 
-## 新依赖添加规则
+## 新依赖
 
-添加 npm 包前必须满足：
-- 有明确的使用场景（不是「以后可能用到」）
-- 没有现有依赖能替代
-- 包大小合理（用 bundlephobia.com 检查）
-- 不是仅用一次的工具（考虑复制核心代码）
-
-## 遗留债务偿还计划
-
-以下文件是已知超标的遗留债务，不是新增的：
-
-- `page.tsx` (2302行) — 最高优先级拆分目标，按域拆为 hooks + sub-components
-- `video/import/route.ts` (1212行) — 按 stage 拆分（xiaoyuzhou/bilibili/ytdlp 各自独立）
-- `tutor/route.ts` (886行) — 拆分 intent handling / stream / context building
-- `AITutor.tsx` (~2357行) — 拆分为 chat/input/history sub-components
-- `Recorder.tsx` (~1781行) — 拆分为 recording/playback/upload sub-components
-
-agent 在修改这些文件时**不要企图一次性拆分**，而是：
-1. 先完成当前任务
-2. 如果修改自然产生了可提取的模块（≥50行的独立函数/组件），就顺手提取
-3. 每次提取后立即 `make check` 验证
+加 npm 包前想清楚：有明确的使用场景；没有现有依赖能替代；体积与维护状态说得过去；
+不是只用一次的小工具（那就抄核心几十行）。想清楚了就加，不需要走审批流程。
+包管理器是 **pnpm**（`pnpm-lock.yaml` 是唯一有效的锁文件）。
