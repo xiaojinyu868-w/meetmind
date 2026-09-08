@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PodcastPlayerBar } from '@/components/apps/windows/PodcastPlayerBar';
+import { buildLocalLearnerContext } from '@/components/learner-context-local';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
@@ -693,6 +694,8 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
             summary: summaryOverview,
             keyDifficulties,
           },
+          // 「这个学习者」读槽的本机供给（跨课掌握状态）；登录用户在服务端会优先问外部 context 系统
+          learner: buildLocalLearnerContext({ appId: app.key, sessionId }),
         });
         const yhHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
         if (accessToken) {

@@ -1,4 +1,5 @@
 import type { TranscriptSegment } from '@/types';
+import { formatLearnerContextForPrompt } from '@/lib/services/learner-context-service';
 import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
@@ -139,6 +140,7 @@ async function generateDeckWithLLM(
           transcriptContext,
           anchorContext,
           terminologyHint: context.memory.terminologyHint,
+          learnerContext: formatLearnerContextForPrompt(context.learner),
         }),
       },
     ],

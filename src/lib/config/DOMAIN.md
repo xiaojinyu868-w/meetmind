@@ -30,6 +30,7 @@ AppConfig {
 - 所有环境变量在 `.env` 中定义
 - `app.config.ts` 统一读取，不要在其他地方直接 `process.env.XXX`
 - 新增配置项必须在 `app.config.ts` 中注册
+- `ContextSystemConfig`（2026-09-08）：外部 context 系统（`CONTEXT_SYSTEM_URL` / `CONTEXT_SYSTEM_API_KEY`），「这个学习者」读槽的远端供给方；url 为空 = 未接入，读槽只用本机切片。唯一消费方 `lib/services/learner-context-service.ts`
 
 ### 模型注册表（单一真相源，环境变量驱动）
 

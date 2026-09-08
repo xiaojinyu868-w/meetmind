@@ -1,4 +1,5 @@
 import { parseJsonResponse } from '@/lib/utils/json-utils';
+import { formatLearnerContextForPrompt } from '@/lib/services/learner-context-service';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import { createLogger } from '@/lib/logger';
 import type {
@@ -118,6 +119,7 @@ export const teachBackPlugin: AppPlugin = {
               transcriptContext: promptContext.text,
               anchorContext,
               terminologyHint: context.memory.terminologyHint,
+              learnerContext: formatLearnerContextForPrompt(context.learner),
             }),
           },
         ],

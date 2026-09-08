@@ -5,6 +5,19 @@
 
 ---
 
+## 2026-09-08 — 「这个学习者」读槽落地：LearnerContext 读契约 + 三个应用先用上
+
+- **契约**（`types/learner-context.ts`）：`LearnerContextRequest`（应用声明"为完成这个任务我需要知道这个学习者的什么"）→ `LearnerContext`
+  （掌握状态 / 最近学过 / 没过去的困惑 / 在学 / 偏好 / 目标 + 可溯源证据 id），v=1 与写侧 LearningEvent 对齐。
+  MemoryLayerSnapshot 仍是"这节课"的，learner 是"这个人"的
+- **供给**：远端 = 外部 context 系统（`CONTEXT_SYSTEM_URL`，POST `/v1/learner-context`，1.5 s 超时静默回落）；本机 = 会话层检验结果 →
+  掌握状态 + 最近现场 + 长期理解（与问同学书桌、掌握轨迹同一份事实）。今天就有真实数据在槽里流，接远端只是换供给方
+- **消费**：`/api/apps/execute` 注入 `context.learner`，闪卡 / 测验 / 讲给同桌听的 user prompt 多一段「关于这个学习者」——
+  做完一轮闪卡再出测验，模型已知道哪几个概念还没稳；`trace` 含 `learner_context=local|remote:N`
+- 下一批消费方：课中同桌 / 复习 Tutor prompt（替代 learnerProfile 散文）、teach 引擎；接口形态待与 context 系统对齐（plan §6）
+
+---
+
 ## 2026-09-08 — `/app` 首屏 JS 330 → 298 KB gzip（目标 <300 达成）+ 体积账本
 
 - **先做账**：`make bundle-report` 用归因构建（`NEXT_BUNDLE_ATTRIBUTION=1`：模块 id = 源码路径、关 scope hoisting）把首屏 JS

@@ -16,6 +16,14 @@ export interface StructuredAppPromptContext {
   transcriptContext: string;
   anchorContext?: string;
   terminologyHint?: string;
+  /** formatLearnerContextForPrompt 的输出：这个学习者跨课的掌握状态 / 困惑 / 最近学过（空串 = 不写） */
+  learnerContext?: string;
+}
+
+/** 学习者段落：各应用 user prompt 里"这个人"的那一段（"这节课"的在 transcriptContext / anchorContext） */
+export function buildLearnerContextParagraph(learnerContext: string | undefined): string {
+  if (!learnerContext?.trim()) return '';
+  return `关于这个学习者（来自他此前真实做过的检验与他自己确认过的话，跨课；还没稳的地方值得在本课相关处多覆盖，已经稳的不必再重复）：\n${learnerContext.trim()}\n\n`;
 }
 
 export interface CheatsheetPromptContext extends StructuredAppPromptContext {
@@ -72,7 +80,7 @@ export function buildFlashcardsSystemPrompt(): string {
 }
 
 export function buildFlashcardsUserPrompt(context: StructuredAppPromptContext): string {
-  return `${context.goalIntent ? `他的学习目标：${context.goalIntent}\n\n` : ''}${context.anchorContext ? `他听课时的困惑点（这些地方更容易出问题，值得多覆盖）：\n${context.anchorContext}\n\n` : ''}课堂原文：
+  return `${context.goalIntent ? `他的学习目标：${context.goalIntent}\n\n` : ''}${context.anchorContext ? `他听课时的困惑点（这些地方更容易出问题，值得多覆盖）：\n${context.anchorContext}\n\n` : ''}${buildLearnerContextParagraph(context.learnerContext)}课堂原文：
 ${context.transcriptContext}
 
 输出 JSON：
@@ -102,7 +110,7 @@ export function buildQuizSystemPrompt(): string {
 }
 
 export function buildQuizUserPrompt(context: StructuredAppPromptContext): string {
-  return `${context.goalIntent ? `他的学习目标：${context.goalIntent}\n\n` : ''}${context.anchorContext ? `他听课时的困惑点（这些地方更容易出问题，值得重点检验）：\n${context.anchorContext}\n\n` : ''}课堂原文：
+  return `${context.goalIntent ? `他的学习目标：${context.goalIntent}\n\n` : ''}${context.anchorContext ? `他听课时的困惑点（这些地方更容易出问题，值得重点检验）：\n${context.anchorContext}\n\n` : ''}${buildLearnerContextParagraph(context.learnerContext)}课堂原文：
 ${context.transcriptContext}
 
 输出 JSON：

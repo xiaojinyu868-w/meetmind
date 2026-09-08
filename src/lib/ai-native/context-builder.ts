@@ -90,6 +90,7 @@ export function buildExecutionContext(payload: AppExecuteRequest): AppExecutionC
       metadata: payload.input?.metadata,
     },
     memory,
+    // learner 不在这里接：请求里的切片是未校验的原始值，由 execute 入口 resolveLearnerContext 校验后注入
     goal: normalizeGoal(payload.goal, appKey),
     model: resolvedModel,
     contextTier: payload.contextTier ?? 'class',

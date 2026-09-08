@@ -248,6 +248,14 @@ context 系统在另一台服务器上开发，新版本即将合并。为了合
   合并方式二选一：context 系统直接读这张表作为 outbox；或本仓库在 `triggerLearningEventProcessing` 里转发。**本侧不再做物化**（P0-1 已刻意留空），避免两套画像。
 - **读契约（待与 context 系统对齐）**：每个 Application 声明一个 `LearnerContextRequest`（"为完成这个任务我需要知道这个学习者的什么"：相关概念的掌握轨迹、近期在学什么、偏好、目标），
   context 系统返回一个可直接进 prompt 的 `LearnerContext` 切片 + 可溯源的证据 id。现有 `MemoryLayerSnapshot`（这节课的）与 `learnerProfile` 文本（这个人的）会被它取代，迁移期两者并存。
+- **读契约本侧已落地（2026-09-08 晚）**：`src/types/learner-context.ts`（`LearnerContextRequest` / `LearnerContext`，v=1，与 LearningEvent 的 v 对齐）；
+  `src/lib/services/learner-context-service.ts`（`resolveLearnerContext`：登录用户且配置了 `CONTEXT_SYSTEM_URL` 就 POST `/v1/learner-context`，
+  1.5 s 超时、失败静默回落到请求方带来的本机切片；`formatLearnerContextForPrompt`：切片 → ≤600 字事实段落）；
+  `src/components/learner-context-local.ts`（本机供给：会话层检验结果 → 掌握状态、最近学习现场、长期理解的困惑 / 主题 / 偏好 / 进度——
+  与问同学书桌、「我的上下文」掌握轨迹同一份事实）。已接消费方：`/api/apps/execute` 注入 `context.learner`，闪卡 / 测验 / 讲给同桌听的
+  user prompt 多一段「关于这个学习者」（还没稳的多覆盖、已经稳的不重复）；`trace` 里有 `learner_context=local|remote:N`。
+  **今天就有真实数据在这条槽里流**（访客做完一轮闪卡，再出测验时模型已知道哪几个概念还没稳）；接上远端只是换供给方。
+  下一批消费方：课中同桌 / 复习 Tutor prompt（替代 learnerProfile 散文）、teach 引擎。
 - **需要从 context 系统那边确认的**：接口形态（HTTP / 同进程库）、鉴权与用户 id 对齐（本仓库 `User.id` + 访客无 id）、访客数据如何在登录后合并、状态迁移（曾经困惑 → 已掌握）是否由它保留时间序列、以及它是否消费本仓库的 `LearningEvent` 载荷格式。
   这几个答案决定 §2.5 步骤 4 的工作量，建议合并前先对一次。
 

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveLearnerContext } from '@/lib/services/learner-context-service';
+import { LEARNER_CONTEXT_VERSION } from '@/types/learner-context';
 import { applyRateLimit, getUserIdFromRequest } from '@/lib/utils/rate-limit';
 import { meterUserIdFromRequest, runWithMeterContext } from '@/lib/services/point-meter';
 import { getAppExecPrice } from '@/lib/config/pricing';
@@ -174,6 +176,21 @@ export async function POST(request: NextRequest) {
     if (isGovernedAppKey(appKey)) {
       context.runtimeControl = await buildControlledAppPrompt(appKey);
     }
+    // 「这个学习者」读槽（renewal plan §6）：登录用户问外部 context 系统，访客 / 未接入用请求方带来的本机切片。
+    // 任何失败都回落到空切片——多知道一点是加分项，不是执行前提
+    const learnerId = getUserIdFromRequest(request) || undefined;
+    context.learner = await resolveLearnerContext({
+      request: {
+        v: LEARNER_CONTEXT_VERSION,
+        appId: appKey || 'unknown',
+        learnerId,
+        sessionId: context.input.sessionId,
+        need: ['mastery', 'recent', 'challenges', 'topics', 'goals'],
+        limit: 8,
+      },
+      local: payload.learner,
+    });
+    traceHints.push(`learner_context=${context.learner.source}:${context.learner.mastery.length}`);
     const readiness = await assessWorkshopReadiness({
       transcript: context.input.transcript,
       contextTitle: typeof context.input.metadata?.title === 'string' ? context.input.metadata.title : undefined,

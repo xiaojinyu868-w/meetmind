@@ -1,4 +1,5 @@
 import type { Anchor, TranscriptSegment } from '@/types';
+import type { LearnerContext } from '@/types/learner-context';
 
 export type DataSourceType = 'live' | 'video' | 'demo' | 'unknown';
 
@@ -84,6 +85,11 @@ export interface ApplicationGoal {
 export interface AppExecutionContext {
   input: InputLayerContext;
   memory: MemoryLayerSnapshot;
+  /**
+   * 「这个学习者」的读槽（renewal plan §6）：跨课的掌握状态 / 最近学过 / 没过去的困惑。
+   * memory 是这节课的，learner 是这个人的。由服务端执行入口 resolveLearnerContext 注入；插件只读。
+   */
+  learner?: LearnerContext;
   goal: ApplicationGoal;
   model?: string;
   /** 当前学习对象层级；旧调用缺省为 class。 */
@@ -210,6 +216,8 @@ export interface AppExecuteRequest {
     metadata?: InputLayerContext['metadata'];
   };
   memory?: Partial<MemoryLayerSnapshot>;
+  /** 请求方随身带来的本机 LearnerContext 切片（访客 / 远端未接入时的供给）；服务端校验后用 */
+  learner?: LearnerContext;
 }
 
 // ─────────────────────────────────────────────────────────────────────────

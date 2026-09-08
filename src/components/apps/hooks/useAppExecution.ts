@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { buildLocalLearnerContext } from '@/components/learner-context-local';
 import { toast } from 'sonner';
 import type { Anchor, TranscriptSegment } from '@/types';
 import type { AppExecutionResult, ContextPack, DataSourceType } from '@/lib/ai-native/types';
@@ -424,6 +425,8 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
                 keyDifficulties,
                 terminologyHint: terminologyHint || undefined,
               },
+              // 「这个学习者」读槽的本机供给（跨课掌握状态）
+              learner: buildLocalLearnerContext({ appId: app.key, sessionId }),
             }),
           });
         } finally {

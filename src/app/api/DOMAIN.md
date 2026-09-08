@@ -84,7 +84,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 
 | 路由 | 方法 | 职责 |
 |------|------|------|
-| `/api/apps/execute` | POST | 执行 AI-Native 应用插件；单课可传 legacy `input`，unit/exam 传 `contextPack`。服务端校验 tier、课数与 catalog 白名单；考试速查表必须有至少两节课，或 exam tier 的大纲/真题范围 |
+| `/api/apps/execute` | POST | 执行 AI-Native 应用插件；单课可传 legacy `input`，unit/exam 传 `contextPack`。服务端校验 tier、课数与 catalog 白名单；考试速查表必须有至少两节课，或 exam tier 的大纲/真题范围。**learner 读槽（2026-09-08）**：请求可带 `learner: LearnerContext`（本机切片，zod 校验不过就当没有）；服务端 `resolveLearnerContext` 对登录用户优先问外部 context 系统（`CONTEXT_SYSTEM_URL`），失败回落本机切片，注入 `context.learner` 供插件 prompt（闪卡 / 测验 / 讲给同桌听多一段「关于这个学习者」）；`trace` 含 `learner_context=local|remote:N` |
 | `/api/apps/plugins` | GET | 获取已注册插件列表 |
 | `/api/apps/catalog` | GET | 获取应用目录 |
 | `/api/apps/readiness` | POST | 结合真实原文、场景标题/来源、学习信号与 `contextTier` 给出应用推荐；模型判断只影响推荐与提示语气，`allowedAppKeys` 始终是该层 catalog 白名单（单课不含考试速查表），只有空内容 / 极短碎片（<2 段或 <80 字或 <20 秒）才返回 `not_ready`。游客复习也会调用，已在 `public-routes.ts` 放行并由 route 自身限流 |

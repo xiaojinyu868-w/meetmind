@@ -1,4 +1,5 @@
 import type { TeachBackTarget } from './types';
+import { buildLearnerContextParagraph } from './app-prompts';
 import { buildTerminologyHintBlock } from './prompt-context';
 
 /**
@@ -25,8 +26,10 @@ export function buildTeachBackTargetsUserPrompt(context: {
   transcriptContext: string;
   anchorContext?: string;
   terminologyHint?: string;
+  /** formatLearnerContextForPrompt 的输出（这个学习者跨课的掌握状态） */
+  learnerContext?: string;
 }): string {
-  return `${context.goalIntent ? `学习目标：${context.goalIntent}\n\n` : ''}${context.anchorContext ? `他听课时的困惑点（这些位置值得优先选）：\n${context.anchorContext}\n\n` : ''}课堂原文：
+  return `${context.goalIntent ? `学习目标：${context.goalIntent}\n\n` : ''}${context.anchorContext ? `他听课时的困惑点（这些位置值得优先选）：\n${context.anchorContext}\n\n` : ''}${buildLearnerContextParagraph(context.learnerContext)}课堂原文：
 ${context.transcriptContext}
 
 输出 JSON：
