@@ -9,7 +9,8 @@
 | `tutor-types.ts` | Tutor 共享类型定义 |
 | `tutor-utils.ts` | Tutor 工具函数（纯函数） |
 | `TutorWidgets.tsx` | Tutor 小组件集合 |
-| `TutorAgentPanel.tsx` | M10 复习态 AI 同桌面板（AI SDK v6；结构化应用只交给中间学习工作区，右栏空态仅保留“讲主线 / 从标记开始”两个对话动作，不再复制应用矩阵；管理员顶栏轻入口可将本次真实 review / in-class 上下文带到 AI 控制中心）。历史持久化 `type: 'global-chat'` + `metadata.scope: 'review-tutor'`；自动接回只认本 scope 且有消息的对话（不捡同会话材料问答等其他 global-chat），手动从「历史」选择不受限 |
+| `TutorAgentPanel.tsx` | M10 复习态 AI 同桌面板（AI SDK v6；结构化应用只交给中间学习工作区；右栏空态由宿主传 `reviewOpening`（review-starters.ts：有标记则开场点名时刻并给「0:17 那里我没跟上」这类 chip，不传退回“讲主线 / 从标记开始”），不复制应用矩阵；管理员顶栏轻入口可将本次真实 review / in-class 上下文带到 AI 控制中心）。历史持久化 `type: 'global-chat'` + `metadata.scope: 'review-tutor'`；自动接回只认本 scope 且有消息的对话（不捡同会话材料问答等其他 global-chat），手动从「历史」选择不受限 |
+| `review-starters.ts` | 复习态同桌开场（纯函数）：按未解决标记时刻 / 难点生成 lead 与最多 3 个 chip；同桌是听过这节课的人，开场必须点名学生能核对的事实 |
 | `tutor-inline-app-cache.ts` | 复习对话内联应用缓存桥接：读取 / 写入应用矩阵同一份 `app_workspace_result:*` 缓存，并用 running 状态避免同一 app 重复并发执行 |
 | `tutor-agent-history.ts` | TutorAgentPanel 历史消息转换与状态文案 helper |
 | `tutor-agent-adapter.ts` | SafeAITutor / TutorAgentPanel 的 context / launchQuestion / learnerProfile / recent learning activity 纯适配 helper；个人画像、近期对话和应用交互动态只作为模型上下文，不做硬规则 |

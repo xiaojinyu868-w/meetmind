@@ -7,13 +7,15 @@
  * 可以一行调用。自动执行 + 缓存 + 渲染。
  */
 
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { useAppExecution } from '@/components/apps/hooks/useAppExecution';
 import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 import { WORKSHOP_APP_CATALOG, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import type { TranscriptSegment, Anchor } from '@/types';
 import { COPY } from '@/lib/ui/copy';
 import { useAppLearningActivity } from '@/hooks/useAppLearningActivity';
+import { recordSessionAssessment } from '@/components/apps/review-session-outcomes';
+import type { LearningAssessmentDraft } from '@/types/learning-event';
 import { buildAppResultActivityDetail } from '@/lib/utils/app-learning-activity';
 import type { DataSourceType } from '@/lib/ai-native/types';
 import { ShareArtifactAction } from '@/components/share/ShareArtifactAction';
@@ -69,7 +71,7 @@ export function MobileAppRunner({
     result,
     COPY.globalAsk.appResultSummary,
   );
-  const { recordInteraction, recordAssessment } = useAppLearningActivity({
+  const { recordInteraction, recordAssessment: recordAssessmentEvent } = useAppLearningActivity({
     appKey,
     sessionId: sessionId || 'mobile-session',
     resultReady: Boolean(result) && taskState.status === 'success',
@@ -77,6 +79,10 @@ export function MobileAppRunner({
     resultDetail: resultActivityDetail,
     activityTitle: COPY.globalAsk.appActivity(app?.name || appKey),
   });
+  const recordAssessment = useCallback((draft: LearningAssessmentDraft) => {
+    recordSessionAssessment(sessionId || 'mobile-session', draft);
+    recordAssessmentEvent(draft);
+  }, [recordAssessmentEvent, sessionId]);
 
   // 挂载时自动执行
   useEffect(() => {

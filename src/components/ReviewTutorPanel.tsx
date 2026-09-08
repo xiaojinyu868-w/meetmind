@@ -1,7 +1,8 @@
 'use client';
 
 import type { MutableRefObject } from 'react';
-import { useState, useCallback } from 'react';
+import { buildReviewOpening } from '@/components/tutor/review-starters';
+import { useState, useCallback, useMemo } from 'react';
 import { SafeAITutor } from '@/components/SafeAITutor';
 import { ConversationList } from '@/components/ConversationHistory/ConversationList';
 import { WaveformPlayer, type WaveformAnchor, type WaveformPlayerRef } from '@/components/WaveformPlayer';
@@ -81,6 +82,8 @@ export function ReviewTutorPanel({
   onOpenAppInWorkspace,
   learningActivityContext,
 }: ReviewTutorPanelProps) {
+  // 同桌开场点名学生留下的标记时刻（review-starters.ts），不再是"同学在这里。"
+  const reviewOpening = useMemo(() => buildReviewOpening({ anchors }), [anchors]);
   // M10：把当前播放位置注入给 SafeAITutor（视频/录音复习 AI 同桌会用它做
   // "此刻在听的那段"锚点，无需用户手动引用时间戳）。
   // 截流到秒级，避免每 ~100ms 的 onTimeUpdate 触发无意义 re-render。
@@ -246,6 +249,7 @@ export function ReviewTutorPanel({
               onResolve={onResolve}
               onActionItemsUpdate={onActionItemsUpdate}
               sessionId={sessionId}
+              reviewOpening={reviewOpening}
               supportContextText={tutorSupportContextText}
               preferSupportContext={preferSupportContext}
               launchQuestion={launchQuestion}

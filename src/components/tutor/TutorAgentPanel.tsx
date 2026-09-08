@@ -74,6 +74,8 @@ export interface TutorAgentPanelProps {
    * 不走这个 Panel——但接口留着给未来课堂嵌 AITutor 时用。
    */
   mode?: 'in-class' | 'review';
+  /** 复习态开场（宿主按标记 / 难点算好；不传用通用起手） */
+  reviewOpening?: { lead: string; prompts: string[] };
   /**
    * M10：复习态可选能力（两个默认关）。
    * - returnTimestamps：回答里附 [MM:SS] chip（点击跳转）
@@ -187,6 +189,7 @@ export function TutorAgentPanel({
   authToken,
   onSeek,
   mode = 'review',
+  reviewOpening,
   options,
   context,
   selectedConversationId,
@@ -586,10 +589,10 @@ export function TutorAgentPanel({
             <OctoAvatar mood="listening" size="lg" aura className="mb-4" />
             <div className="mx-auto max-w-[20rem] text-[15px] leading-[1.75] text-ink-secondary">
               <span className="font-serif italic text-pine">{COPY.identity.name}</span>
-              {COPY.tutor.emptyAfterName}
+              {reviewOpening?.lead ?? COPY.tutor.emptyAfterName}
             </div>
             <div className="mt-4 grid w-full max-w-[20rem] gap-2">
-              {COPY.tutor.reviewStarters.map((prompt) => (
+              {(reviewOpening?.prompts ?? COPY.tutor.reviewStarters).map((prompt) => (
                 <button
                   key={prompt}
                   type="button"

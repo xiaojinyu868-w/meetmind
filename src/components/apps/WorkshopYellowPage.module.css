@@ -925,3 +925,374 @@
     transform: none;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   课后学习页 v2（2026-09-08）：三级重量——先做这一件 / 学习路径 / 还可以这样学
+   写在文件末尾覆盖上方同名规则；旧 .cardCompact / .recommendedGrid 保留给其他调用方。
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.lessonHead {
+  margin-bottom: 20px;
+}
+.lessonTitle {
+  margin: 4px 0 0;
+  color: var(--mm-ink);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+}
+.lessonMeta {
+  margin: 8px 0 0;
+  color: var(--mm-ink-muted);
+  font-family: 'JetBrains Mono', 'Roboto Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+.lessonSummary {
+  position: relative;
+  max-width: 640px;
+  margin: 14px 0 0;
+  padding-left: 12px;
+  color: var(--mm-ink-secondary);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+.lessonSummary::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--mm-pine);
+  opacity: 0.55;
+}
+
+/* 先做这一件 */
+.cardFeatured {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  min-height: 0;
+  padding: 16px 18px;
+  border-radius: 18px;
+}
+.cardFeatured .cardMain {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+.cardFeatured .appName {
+  font-size: 17px;
+  white-space: normal;
+}
+.cardFeatured .recommendationReason {
+  margin-top: 8px;
+  border-left: 2px solid var(--mm-vermilion);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.cardFeatured .actionRow {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.cardFeatured .primaryAction {
+  min-height: 38px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 650;
+  border-radius: 999px;
+}
+
+/* 学习路径 */
+.pathGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.pathHint {
+  margin: 2px 0 0;
+  color: var(--mm-ink-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.cardStep {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+}
+.cardStep .cardMain {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+}
+.cardStep .coverWrap {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+}
+.cardStep .appName {
+  font-size: 14px;
+}
+.cardStep .rowTop {
+  flex-direction: column;
+  gap: 4px;
+}
+.cardStep .fitLine {
+  -webkit-line-clamp: 2;
+  font-size: 11px;
+}
+.cardStep .actionRow {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+}
+.stepHead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.stepIndex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--mm-divider);
+  border-radius: 999px;
+  color: var(--mm-ink-muted);
+  font-family: 'JetBrains Mono', 'Roboto Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+}
+.cardGenerated .stepIndex {
+  border-color: var(--mm-pine);
+  background: var(--mm-pine);
+  color: var(--mm-ink-inverse);
+}
+.stepLabel {
+  color: var(--mm-ink);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.stepNow {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--mm-pine);
+  font-family: 'JetBrains Mono', 'Roboto Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.stepNow::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--mm-pine);
+}
+.outcomeText {
+  color: var(--mm-pine);
+  font-family: 'JetBrains Mono', 'Roboto Mono', ui-monospace, monospace;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* 还可以这样学 */
+.quietList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cardQuiet {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 13px;
+  box-shadow: none;
+}
+.cardQuiet:hover {
+  border-color: color-mix(in srgb, var(--mm-pine) 30%, var(--mm-divider));
+}
+.quietIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--mm-paper-warm);
+  color: var(--mm-ink-secondary);
+}
+.quietBody {
+  min-width: 0;
+}
+.quietTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  min-width: 0;
+}
+.quietAction {
+  flex-shrink: 0;
+  color: var(--mm-ink);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.quietName {
+  overflow: hidden;
+  color: var(--mm-ink-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quietFit {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--mm-ink-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cardQuiet .actionRow {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ghost 主按钮：非推荐项一律不饱和，签名色留给「先做这一件」 */
+.ghostAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  border: 1px solid var(--mm-divider);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: var(--mm-card);
+  color: var(--mm-ink);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
+}
+.ghostAction:hover {
+  border-color: var(--mm-pine);
+  color: var(--mm-pine);
+}
+.ghostAction:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* 走完了 */
+.wrapCard {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin-top: 18px;
+  border: 1px solid color-mix(in srgb, var(--mm-pine) 30%, var(--mm-divider));
+  border-radius: 18px;
+  padding: 16px 18px;
+  background: var(--mm-pine-fog);
+}
+.wrapCheck {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--mm-pine);
+  color: var(--mm-ink-inverse);
+}
+.wrapTitle {
+  margin: 0;
+  color: var(--mm-ink);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.wrapBody {
+  margin: 4px 0 0;
+  color: var(--mm-ink-secondary);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.wrapOutcomes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--mm-pine);
+  font-family: 'JetBrains Mono', 'Roboto Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+@container (max-width: 760px) {
+  .pathGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (max-width: 600px) {
+  .cardFeatured {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cardFeatured .actionRow {
+    justify-content: flex-start;
+  }
+  .cardQuiet {
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+  }
+  .cardQuiet .statusDot {
+    display: none;
+  }
+  .lessonTitle {
+    font-size: 21px;
+  }
+}
+@container (max-width: 410px) {
+  .pathGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .quietFit {
+    display: none;
+  }
+}
+
+/* 跨课入口的按钮也走 ghost：页面只保留「先做这一件」一个饱和主按钮 */
+.contextAppAction {
+  border: 1px solid var(--mm-divider);
+  background: var(--mm-card);
+  color: var(--mm-ink);
+  font-weight: 600;
+  transition: border-color 150ms ease, color 150ms ease;
+}
+.contextAppCard:hover .contextAppAction {
+  border-color: var(--mm-pine);
+  color: var(--mm-pine);
+}

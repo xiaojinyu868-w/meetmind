@@ -96,7 +96,7 @@ components/
 | `WorkspaceCaptureList.tsx` | ~900 | 工作空间 capture 列表 |
 | `DesktopVideoReviewLayout.tsx` | ~647 | 桌面端课后复习三栏布局：左=视频/音频证据 + 时间轴，中=转录/困惑点/学习工作区，右=同桌；接入可拖拽三栏并持有课后学习黑板。音频态默认让中间学习区最宽，视频态仍以可观看的原件为第一权重；矩阵和具体应用自带标题，不再叠加重复的“学习工作区”栏头；未解决困惑点用 vermilion-fog 语义底，波形条色走 pine token |
 | `ReviewThreePaneLayout.tsx` | ~156 | 课后复习可拖拽三栏容器：两条边界都可拖拽；音频默认比例 27/49/24，视频默认 46/34/20；学习区 / 同桌被挤到阈值后折叠成窄 rail，左证据栏不自动折叠；左证据栏用 paper-warm 底与中/右分层，拖拽缝 hover 用 pine |
-| `ReviewLearningWorkspace.tsx` | ~165 | 课后中间学习工作区：用 `AppRenderSurface` 承载完整应用；应用生成结果与闪卡/测验交互同时写入课后黑板和“最近学习现场”，但不自动升级为长期记忆；闪卡沉浸底统一 `var(--mm-immersive)` |
+| `ReviewLearningWorkspace.tsx` | ~185 | 课后中间学习工作区：用 `AppRenderSurface` 承载完整应用；应用生成结果与闪卡/测验交互同时写入课后黑板和“最近学习现场”；结构化结果同时进会话层（review-session-outcomes，路径卡摘要 + 下一步的困惑锚点）与长期记忆（assessment 事件）；执行时把会话内结果合成的困惑锚点并入 anchors，闪卡因此知道你刚在测验里错了什么，但不自动升级为长期记忆；闪卡沉浸底统一 `var(--mm-immersive)` |
 | `review-learning-blackboard.ts` | ~131 | 课后学习黑板：轻结构自然语言便签；只记录当前中间应用和最近学习现场事实，不写“应该/提醒/建议”等模型指令，中间应用和右侧同桌通过它解耦 |
 | `WorkspaceCaptureEditorModal.tsx` | ~105 | 工作空间 capture 编辑弹窗，从 page.tsx 提取 |
 | `VideoReviewPlayer.tsx` | 823 | 视频复习播放器（pauseNonce/playNonce/seekNonce 命令式控制，点击画面暂停/播放+指示器动画，visibilitychange 倍速恢复，空格/箭头键盘快捷键，B站 Dash 双轨同步，B站封面代理） |

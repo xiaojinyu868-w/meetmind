@@ -113,6 +113,7 @@ export function SafeAITutor(props: AITutorProps) {
             authToken={accessToken ?? undefined}
             onSeek={props.onSeek}
             mode="review"
+            reviewOpening={props.reviewOpening}
             selectedConversationId={props.selectedConversationId}
             selectedConversationTitle={props.selectedConversationTitle}
             onShowHistory={props.onShowHistory}

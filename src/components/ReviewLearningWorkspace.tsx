@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { ArrowLeft, RotateCw } from 'lucide-react';
 import type { TranscriptSegment } from '@/types';
 import type { Anchor } from '@/lib/services/anchor-service';
@@ -10,6 +10,9 @@ import { useAppExecution } from '@/components/apps/hooks/useAppExecution';
 import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 import { COPY } from '@/lib/ui/copy';
 import { useAppLearningActivity } from '@/hooks/useAppLearningActivity';
+import { recordSessionAssessment, useSessionOutcomes } from '@/components/apps/review-session-outcomes';
+import { buildOutcomeAnchors, summarizeSessionOutcomes } from '@/components/apps/lesson-path-model';
+import type { LearningAssessmentDraft } from '@/types/learning-event';
 import { buildAppResultActivityDetail } from '@/lib/utils/app-learning-activity';
 
 interface ReviewLearningWorkspaceProps {
@@ -57,12 +60,19 @@ export function ReviewLearningWorkspace({
     () => buildInfographicContentContext(summaryOverview, transcript),
     [summaryOverview, transcript],
   );
+  // 会话内结果（测验错的点 / 闪卡没记住的 / 讲给同桌听没讲清的）→ 合成困惑锚点进本应用的 prompt，
+  // 让闪卡知道你刚在测验里错了什么。刷新不丢（localStorage 按 sessionId）。
+  const sessionOutcomes = useSessionOutcomes(sessionId);
+  const anchorsWithOutcomes = useMemo(
+    () => [...anchors, ...buildOutcomeAnchors(sessionId, app.key, summarizeSessionOutcomes(sessionOutcomes))],
+    [anchors, app.key, sessionId, sessionOutcomes],
+  );
   const execution = useAppExecution({
     app,
     sessionId,
     dataSource,
     transcript,
-    anchors,
+    anchors: anchorsWithOutcomes,
     summaryOverview,
     keyDifficulties,
     terminologyHint,
@@ -74,7 +84,7 @@ export function ReviewLearningWorkspace({
     execution.result,
     COPY.globalAsk.appResultSummary,
   );
-  const { recordInteraction, recordAssessment } = useAppLearningActivity({
+  const { recordInteraction, recordAssessment: recordAssessmentEvent } = useAppLearningActivity({
     appKey: app.key,
     sessionId,
     resultReady: Boolean(execution.result) && execution.taskState.status === 'success',
@@ -84,6 +94,10 @@ export function ReviewLearningWorkspace({
     lessonTitle: contextTitle,
     onLearningActivity,
   });
+  const recordAssessment = useCallback((draft: LearningAssessmentDraft) => {
+    recordSessionAssessment(sessionId, draft); // 会话层：路径卡摘要 + 下一步的困惑上下文
+    recordAssessmentEvent(draft); // 长期记忆：LearningEvent（登录用户）
+  }, [recordAssessmentEvent, sessionId]);
 
   return (
     <section className={`flex h-full min-h-0 flex-col ${isImmersiveApp ? 'bg-[var(--mm-immersive)]' : 'bg-canvas'}`} data-testid="review-learning-workspace">

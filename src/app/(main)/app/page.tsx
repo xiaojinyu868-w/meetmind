@@ -18,6 +18,7 @@ import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
 import { DesktopSidebar } from '@/components/DesktopSidebar';
 
 import { GUEST_DEMO_LESSON_TITLE, isDemoEntryConsumed, markDemoEntryConsumed, resolveGuestDemoEntry } from '@/components/classroom/guest-demo-entry';
+import { DEMO_SESSION_ID } from '@/fixtures/demo-data';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { type Anchor } from '@/lib/services/anchor-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
@@ -522,7 +523,9 @@ function StudentAppContent({
   const recorderRef = useRef<RecorderHandle | null>(null);
   // 记录当前进入复习态的 sourceItem，用于非音视频类型（文章/笔记）展示原文
   const [selectedReviewItem, setSelectedReviewItem] = useState<SourceIngestItem | null>(null);
-  const reviewContextTitle = selectedReviewItem?.title || (effectiveAutoLoadDemo ? GUEST_DEMO_LESSON_TITLE : undefined);
+  // 示例课结束进复习后 effectiveAutoLoadDemo 已被消费掉，标题按会话兜底，否则课后学习页头部没有课名
+  const reviewContextTitle = selectedReviewItem?.title
+    || (effectiveAutoLoadDemo || sessionId === DEMO_SESSION_ID ? GUEST_DEMO_LESSON_TITLE : undefined);
   // Ref bridge: importVideoLinkIntoSourceItem is returned by useSourceImport (defined after
   // ingestTranscriptSegments), but consumed by openReviewFromCollection (defined before).
   // We use a ref so the callback always reads the latest function at call time.

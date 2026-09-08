@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   BookMarked,
+  Check,
   ChevronRight,
   ListTodo,
   Download,
@@ -35,7 +36,16 @@ import { parsePointsBlock, describePointsBlock } from '@/hooks/points-guard';
 import { openPaywallGlobal } from '@/hooks/usePaywall';
 import { notifyPointsChanged } from '@/hooks/usePointsSummary';
 import { createLogger } from '@/lib/logger';
-import { recommendWorkshopApp } from './workshop-recommendation';
+import {
+  LEARNING_PATH,
+  buildOutcomeAnchors,
+  formatLessonMeta,
+  formatOutcomeLine,
+  isPathApp,
+  recommendNextStep,
+  summarizeSessionOutcomes,
+} from './lesson-path-model';
+import { useSessionOutcomes } from './review-session-outcomes';
 import { useWorkshopReadiness } from './hooks/useWorkshopReadiness';
 import { AdminAiInspectorLink } from '@/components/admin/AdminAiInspectorLink';
 import { ClassroomFlowMatrixEntry } from './ClassroomFlowArtifact';
@@ -379,24 +389,48 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
   // 不再替用户决定「能不能用」：所有应用始终可用，材料撑不住时由插件执行后诚实空态。
   // readiness 只负责「现在最适合」的推荐和材料不足的提示横幅。
 
-  const fallbackRecommendation = useMemo(() => recommendWorkshopApp({
-    activeAnchorCount,
-    difficultyCount: keyDifficulties?.length ?? 0,
-    segmentCount: transcript.length,
-  }), [activeAnchorCount, keyDifficulties?.length, transcript.length]);
-
-  // 模型明确返回 null 也是判断结果：说明当前没有一项值得被强推。
-  // 旧逻辑会在 ready 时用前端规则补一个“现在最适合”，把模型的克制覆盖掉。
-  const recommendationKey = assessment
+  // ── 课后学习页 v2：一件事优先 + 学习路径 + 结果跟着人走 ──
+  // 会话内结果（测验对错 / 闪卡记住没 / 讲给同桌听的象限）驱动「先做这一件」：
+  // 上一步的结果比任何启发式都更有资格决定下一步。还没开始时，用学生能核对的
+  // 课堂事实（标记时刻、难点、时长）排第一步；模型 readiness 的推荐只在此时优先——
+  // 它读过内容，但没看过学生做题。
+  const sessionOutcomes = useSessionOutcomes(sessionId);
+  const outcomeSummary = useMemo(() => summarizeSessionOutcomes(sessionOutcomes), [sessionOutcomes]);
+  const hasAnyOutcome = sessionOutcomes.length > 0;
+  const generatedSet = useMemo(
+    () => new Set(visibleApps.filter((app) => generatedMap[app.key]).map((app) => app.key)),
+    [generatedMap, visibleApps],
+  );
+  const allowedSet = useMemo(() => new Set(visibleApps.map((app) => app.key)), [visibleApps]);
+  const nextStep = useMemo(() => recommendNextStep({
+    anchors,
+    keyDifficulties,
+    transcript,
+    outcomes: outcomeSummary,
+    generated: generatedSet,
+    allowed: allowedSet,
+  }), [allowedSet, anchors, generatedSet, keyDifficulties, outcomeSummary, transcript]);
+  const modelPick = !hasAnyOutcome && assessment?.recommendedAppKey && allowedSet.has(assessment.recommendedAppKey)
+    && !generatedSet.has(assessment.recommendedAppKey)
     ? assessment.recommendedAppKey
-    : fallbackRecommendation.key;
-  const recommendationReason = fallbackRecommendation.key === recommendationKey
-    ? fallbackRecommendation.reason
-    : '';
+    : null;
+  const recommendationKey = modelPick ?? nextStep.key;
+  const recommendationReason = recommendationKey === nextStep.key
+    ? nextStep.reason
+    : COPY.apps.matrix.recommendedByContent;
   const recommendedApp = recommendationKey
     ? visibleApps.find((app) => app.key === recommendationKey)
     : undefined;
-  const otherApps = visibleApps.filter((app) => app.key !== recommendedApp?.key);
+  const pathApps = useMemo(
+    () => LEARNING_PATH.map((key) => visibleApps.find((app) => app.key === key)).filter((app): app is WorkshopAppCatalogItem => Boolean(app)),
+    [visibleApps],
+  );
+  const quietApps = useMemo(() => visibleApps.filter((app) => !isPathApp(app.key)), [visibleApps]);
+  const pathCompleted = nextStep.completed;
+  const lessonMeta = useMemo(
+    () => formatLessonMeta(transcript, anchors, keyDifficulties?.length ?? 0),
+    [anchors, keyDifficulties?.length, transcript],
+  );
   const blockedCopy = assessment?.status === 'not_ready'
     ? readinessMessage(assessment.reason)
     : null;
@@ -639,7 +673,8 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
             sessionId,
             dataSource,
             transcript,
-            anchors,
+            // 会话内结果 → 合成困惑锚点：测验错的点进闪卡 / 讲给同桌听的 prompt，应用之间因此知道彼此
+            anchors: [...anchors, ...buildOutcomeAnchors(sessionId, app.key, outcomeSummary)],
             metadata: {
               title: props.contextTitle,
               contextType: dataSource,
@@ -833,6 +868,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       generatedMap,
       keyDifficulties,
       onOpenAppWindow,
+      outcomeSummary,
       props.contextTitle,
       runningMap,
       router,
@@ -926,7 +962,11 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
   );
 
   const completedCount = useMemo(() => dockList.filter((task) => task.status === 'success').length, [dockList]);
-  const renderAppCard = (app: WorkshopAppCatalogItem, isRecommended = false) => {
+  const renderAppCard = (
+    app: WorkshopAppCatalogItem,
+    options: { variant: 'featured' | 'step' | 'quiet'; stepIndex?: number } = { variant: 'quiet' },
+  ) => {
+    const isRecommended = recommendedApp?.key === app.key;
     const generated = Boolean(generatedMap[app.key]);
     const taskState = taskMap[app.key];
     const isRunning = Boolean(runningMap[app.key]) || taskState?.status === 'running';
@@ -939,20 +979,25 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           : 'idle';
     const dockTask = dockTasks[app.key];
     const cachedResult = generated ? readCachedAppResult(sessionId, app.key) : null;
+    const outcomeAnchorCount = buildOutcomeAnchors(sessionId, app.key, outcomeSummary).length;
     return (
       <WorkshopAppCard
         key={app.key}
         app={app}
         status={status}
+        variant={options.variant}
+        stepIndex={options.stepIndex}
+        stepLabel={COPY.apps.path.stepLabels[app.key]}
         recommended={isRecommended}
         recommendationReason={isRecommended ? recommendationReason : undefined}
+        outcomeLine={formatOutcomeLine(app.key, outcomeSummary)}
+        redoHint={generated && outcomeAnchorCount > 0 ? COPY.apps.path.redoWithOutcomes(outcomeAnchorCount) : undefined}
         progressLabel={dockTask ? <ElapsedTimer startMs={dockTask.startedAt} /> : undefined}
         onStart={() => void runInBackground(app)}
         onOpen={() => openTaskResult(app.key)}
         onRetry={() => retryTask(app.key)}
         onRemake={() => void runInBackground(app)}
         onProgress={() => setDockOpen(true)}
-        compact={!isRecommended}
         shareAction={cachedResult && isShareableArtifactAppKey(app.key) ? (
           <ShareArtifactAction
             appKey={app.key}
@@ -981,15 +1026,15 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       data-testid="workshop-yellow-page"
       data-readiness-state={readinessFailed ? 'fallback' : isAssessing ? 'assessing' : assessment ? 'remote' : 'none'}
     >
-      <header className={styles.header}>
-        <div className={styles.headerTop}>
-          <div>
-            <p className={styles.eyebrow}>{COPY.apps.matrix.eyebrow}</p>
-            <h2 className={styles.title}>{blockedCopy?.title ?? COPY.apps.matrix.title}</h2>
-          </div>
-          <p className={styles.contextBasis}>{COPY.apps.matrix.contextBasis(transcript.length, activeAnchorCount, keyDifficulties?.length ?? 0)}</p>
-        </div>
-        {blockedCopy?.body ? <p className={styles.subTitle}>{blockedCopy.body}</p> : null}
+      <header className={`${styles.header} ${styles.lessonHead}`}>
+        <p className={styles.eyebrow}>{COPY.apps.path.lessonEyebrow}</p>
+        <h2 className={styles.lessonTitle}>{blockedCopy?.title ?? props.contextTitle ?? COPY.apps.matrix.title}</h2>
+        <p className={styles.lessonMeta}>{lessonMeta}</p>
+        {blockedCopy?.body ? (
+          <p className={styles.subTitle}>{blockedCopy.body}</p>
+        ) : (
+          <p className={styles.lessonSummary}>{summaryOverview?.trim() || COPY.apps.path.summaryFallback}</p>
+        )}
         {assessment?.status !== 'not_ready' && (runningCount > 0 || failedCount > 0) ? (
           <p className={styles.subStatus} data-testid="workshop-task-summary">
             {COPY.apps.matrix.summary(visibleApps.length, generatedCount, runningCount, failedCount)}
@@ -1004,8 +1049,60 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         </div>
       ) : null}
 
+      {/* 先做这一件：页面唯一饱和主按钮，理由是学生能核对的事实 */}
+      {recommendedApp && !pathCompleted ? (
+        <section className={styles.matrixSection} aria-labelledby="workshop-recommended-title">
+          <div className={styles.sectionHeading}>
+            <h3 id="workshop-recommended-title" className={styles.sectionTitle}>{COPY.apps.path.nextTitle}</h3>
+          </div>
+          {renderAppCard(recommendedApp, { variant: 'featured' })}
+        </section>
+      ) : null}
+
+      {/* 走完了：四步都有结果 */}
+      {pathCompleted ? (
+        <section className={styles.wrapCard} aria-labelledby="workshop-wrap-title" data-testid="workshop-path-complete">
+          <span className={styles.wrapCheck} aria-hidden><Check size={18} strokeWidth={2.4} /></span>
+          <div>
+            <h3 id="workshop-wrap-title" className={styles.wrapTitle}>{COPY.apps.path.wrap.title}</h3>
+            <p className={styles.wrapBody}>{COPY.apps.path.wrap.body}</p>
+            <ul className={styles.wrapOutcomes}>
+              {pathApps.map((app) => {
+                const line = formatOutcomeLine(app.key, outcomeSummary);
+                return line ? <li key={app.key}>{app.learningAction} · {line}</li> : null;
+              })}
+            </ul>
+          </div>
+        </section>
+      ) : null}
+
+      {/* 学习路径：检验 → 记住 → 讲出来 → 带走 */}
+      {pathApps.length > 0 ? (
+        <section className={styles.matrixSection} aria-labelledby="workshop-path-title">
+          <div className={styles.sectionHeading}>
+            <h3 id="workshop-path-title" className={styles.sectionTitle}>{COPY.apps.path.pathTitle}</h3>
+            <p className={styles.pathHint}>{COPY.apps.path.pathHint}</p>
+          </div>
+          <div className={styles.pathGrid}>
+            {pathApps.map((app, index) => renderAppCard(app, { variant: 'step', stepIndex: index + 1 }))}
+          </div>
+        </section>
+      ) : null}
+
       {tier === 'class' && props.onOpenClassroomFlow ? (
         <ClassroomFlowMatrixEntry sessionId={sessionId} onOpen={props.onOpenClassroomFlow} />
+      ) : null}
+
+      {/* 还可以这样学：安静列表，签名色留给上面 */}
+      {quietApps.length > 0 ? (
+        <section className={styles.matrixSection} aria-labelledby="workshop-all-title">
+          <div className={styles.sectionHeading}>
+            <h3 id="workshop-all-title" className={styles.sectionTitle}>
+              {assessment?.status === 'not_ready' ? COPY.apps.matrix.previewTitle : COPY.apps.path.quietTitle}
+            </h3>
+          </div>
+          <div className={styles.quietList}>{quietApps.map((app) => renderAppCard(app, { variant: 'quiet' }))}</div>
+        </section>
       ) : null}
 
       {/* 「请一个分身」固定入口（非产物型应用，不进 catalog；点击在矩阵列内联展开分身面板） */}
@@ -1017,30 +1114,6 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         </div>
         <FenshenEntryChip variant="card" sessionId={sessionId} lessonTitle={props.contextTitle} />
       </section>
-
-      {recommendedApp ? (
-        <section className={styles.matrixSection} aria-labelledby="workshop-recommended-title">
-          <div className={styles.sectionHeading}>
-            <h3 id="workshop-recommended-title" className={styles.sectionTitle}>{COPY.apps.matrix.recommendedTitle}</h3>
-          </div>
-          <div className={`${styles.grid} ${styles.recommendedGrid}`}>{renderAppCard(recommendedApp, true)}</div>
-        </section>
-      ) : null}
-
-      {otherApps.length > 0 ? (
-        <section className={styles.matrixSection} aria-labelledby="workshop-all-title">
-          <div className={styles.sectionHeading}>
-            <h3 id="workshop-all-title" className={styles.sectionTitle}>
-              {assessment?.status === 'not_ready'
-                ? COPY.apps.matrix.previewTitle
-                : recommendedApp
-                  ? COPY.apps.matrix.allTitle
-                  : COPY.apps.matrix.availableTitle}
-            </h3>
-          </div>
-          <div className={styles.grid}>{otherApps.map((app) => renderAppCard(app))}</div>
-        </section>
-      ) : null}
 
       {tier === 'class' ? (
         <section className={styles.matrixSection} aria-labelledby="course-cheatsheet-entry-title">

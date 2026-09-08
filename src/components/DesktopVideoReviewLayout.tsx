@@ -12,6 +12,7 @@ import { ReviewThreePaneLayout } from '@/components/ReviewThreePaneLayout';
 import { formatTime } from '@/lib/utils/page-utils';
 import { useSessionKeyframes } from '@/hooks/useSessionKeyframes';
 import { toReviewCurrentTimeSec } from './desktop-video-review-layout-model';
+import { buildReviewOpening } from '@/components/tutor/review-starters';
 import {
   appendReviewLearningActivity,
   closeReviewLearningApp,
@@ -170,6 +171,8 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
   const videoSource = useCaptureEditorStore((s) => s.videoSource);
   const segments = useCaptureEditorStore((s) => s.segments);
   const anchors = useCaptureEditorStore((s) => s.anchors);
+  // 同桌开场点名学生留下的标记时刻（review-starters.ts），不再是"同学在这里。"
+  const reviewOpening = useMemo(() => buildReviewOpening({ anchors }), [anchors]);
   const confusionChatAnchor = useCaptureEditorStore((s) => s.confusionChatAnchor);
   const videoInsightItems = useCaptureEditorStore((s) => s.videoInsightItems);
   const activeVideoInsightId = useCaptureEditorStore((s) => s.activeVideoInsightId);
@@ -484,6 +487,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
               isLoading={false}
               onResolve={() => {}}
               sessionId={sessionId}
+              reviewOpening={reviewOpening}
               supportContextText={tutorSupportContextText}
               preferSupportContext={mobileAILaunchTarget === 'video-chat' ? mobileAIPreferSelectedContext : false}
               launchQuestion={mobileAILaunchTarget === 'video-chat' && mobileAIConsumedQuestionNonce !== mobileAIQuestionNonce ? mobileAIQuestion : ''}

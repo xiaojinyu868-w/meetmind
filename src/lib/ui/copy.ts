@@ -846,6 +846,15 @@ export const COPY = {
   tutor: {
     emptyAfterName: '在这里。',
     reviewStarters: ['先讲清这节课的主线', '从我标记的地方开始'] as const,
+    /** 复习态开场（2026-09-08）：同桌听过这节课，开场点名学生能核对的时刻 */
+    reviewOpening: {
+      leadWithAnchors: (count: number, times: string[]): string => (
+        `听完了。你在 ${times.join('、')} 留了标记${count > times.length ? `（共 ${count} 处）` : ''}——从哪里开始？`
+      ),
+      leadWithDifficulties: (count: number): string => `听完了。这节课有 ${count} 个地方值得多说两句——从哪里开始？`,
+      anchorPrompt: (time: string): string => `${time} 那里我没跟上，帮我讲一下`,
+      difficultyPrompt: (name: string): string => `帮我讲清「${name}」`,
+    },
   },
 
   actionList: {
@@ -1412,6 +1421,70 @@ export const COPY = {
 
   apps: {
     inlineSource: '已放进对话',
+    /**
+     * 课后学习页 v2（2026-09-08）：一件事优先 + 学习路径 + 结果跟着人走。
+     * 口吻：同桌陈述事实，不下命令；理由必须是学生能核对的（时刻、难点、上一步的结果）。
+     */
+    path: {
+      lessonEyebrow: '这节课',
+      lessonMeta: (minutes: number, anchors: number, difficulties: number): string => {
+        const parts = [`${minutes} 分钟`];
+        if (anchors > 0) parts.push(`你标记了 ${anchors} 处`);
+        if (difficulties > 0) parts.push(`${difficulties} 个难点`);
+        return parts.join(' · ');
+      },
+      summaryFallback: '同桌听完了这节课。下面是接着学的几种方式，先从一件开始。',
+      nextTitle: '先做这一件',
+      nextSwitch: '换一个',
+      pathTitle: '这节课的学习路径',
+      pathHint: '先暴露问题，再记牢，再讲出来，最后带走。顺序只是建议。',
+      stepLabels: {
+        quiz: '检验',
+        flashcards: '记住',
+        'teach-back': '讲出来',
+        infographic: '带走',
+      } as Record<string, string>,
+      quietTitle: '还可以这样学',
+      notStarted: '还没开始',
+      running: '正在做',
+      ready: '做好了',
+      failed: '没做好',
+      redoWithOutcomes: (count: number): string => `再做一版，带上刚错的 ${count} 处`,
+      outcome: {
+        quiz: (total: number, correct: number): string => `${total} 题对 ${correct}`,
+        flashcards: (total: number, got: number): string => `${total} 张记住 ${got}`,
+        teachBack: (mastery: number, weak: number): string => (
+          weak > 0 ? `讲透 ${mastery} 个 · ${weak} 个还没讲清` : `${mastery} 个都讲透了`
+        ),
+      },
+      reason: {
+        fromAnchors: (count: number, times: string[]): string => (
+          `你在 ${times.join('、')} 留了标记${count > times.length ? `（共 ${count} 处）` : ''}。先做几道题，看看那几处跟上了没有。`
+        ),
+        fromDifficulties: (count: number, names: string[]): string => (
+          `这节课有 ${count} 个难点${names.length ? `（${names.join('、')}）` : ''}。先把它们练到看到题就能想起来。`
+        ),
+        fromLength: (minutes: number): string => `这节课有 ${minutes} 分钟，内容不少。先看清主干和分支，再决定往哪里深挖。`,
+        afterQuizWrong: (count: number, names: string[]): string => (
+          `测验里错了 ${count} 处${names.length ? `（${names.join('、')}）` : ''}。先把这几处记牢，再往下走。`
+        ),
+        afterQuizPerfect: (total: number): string => `${total} 题全对。真懂还是看懂，讲一遍给同桌听就知道了。`,
+        afterFlashcardsMissed: (count: number): string => `还有 ${count} 张没记住。讲给同桌听最能暴露卡在哪里。`,
+        afterTeachBackGaps: (count: number): string => `有 ${count} 个点还没讲清。做成一张图带走，下次回来先看它。`,
+        afterTeachBackClear: '都讲透了。做成一张图，这节课就可以带走了。',
+        completed: '这节课的四步都走完了。',
+        defaultStart: '先从这里开始，几分钟就有结果。',
+      },
+      wrap: {
+        title: '这节课，你走完了',
+        body: '检验过、记牢了、讲出来了。结果都在这里，同桌下次会记得。',
+      },
+      anchorPrefix: {
+        quizWrong: '测验答错：',
+        flashcardsMissed: '闪卡没记住：',
+        teachBackWeak: '讲给同桌听时没讲清：',
+      },
+    },
     classroomFlowArtifact: {
       sectionTitle: '录课时已经整理好',
       name: '课堂脉络',
@@ -1478,15 +1551,15 @@ export const COPY = {
       recommendedForDifficulty: (count: number): string => `这节课有 ${count} 个难点，先把关键概念练到能回忆。`,
       recommendedForStructure: '这节课内容较长，先看清主干和分支。',
       recommendedDefault: '先把这节课压成一页，最快建立整体印象。',
-      start: '先做一版',
-      open: '继续使用',
+      start: '开始',
+      open: '打开',
       openImage: '查看图片',
-      progress: '查看进度',
+      progress: '正在做…',
       retry: '再试一次',
       tryAnother: '看看其他方式',
       remake: '再做一版',
       ready: '做好了',
-      waiting: '待开始',
+      waiting: '还没开始',
       notAvailable: '暂不可用',
       failed: '没做好',
       running: '正在做',

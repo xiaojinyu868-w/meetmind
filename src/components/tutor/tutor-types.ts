@@ -91,6 +91,8 @@ export interface AITutorProps {
   onOpenAppInWorkspace?: (appKey: import('@/lib/ai-native/app-catalog').WorkshopAppKey) => void;
   /** 当前课后学习黑板快照，供同桌理解中间应用、测验/闪卡进度和最近学习动态。 */
   learningActivityContext?: string;
+  /** 复习态同桌开场：宿主按标记 / 难点算好（review-starters.ts） */
+  reviewOpening?: { lead: string; prompts: string[] };
 }
 
 export interface TutorCacheEnvelopeV1 {
