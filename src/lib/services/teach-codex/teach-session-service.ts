@@ -116,7 +116,7 @@ function threadParams(row: store.TeachThreadRow, codexHome: string) {
     cwd: path.join(codexHome, 'work'),
     approvalPolicy: 'never',
     sandbox: 'read-only',
-    baseInstructions: buildTeachBaseInstructions(row.topic),
+    baseInstructions: buildTeachBaseInstructions(row.topic, store.learnerFactsFromRow(row)),
   };
 }
 

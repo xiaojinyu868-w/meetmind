@@ -1,12 +1,16 @@
+import type { NextRequest } from 'next/server';
 import { createLogger } from '@/lib/logger';
 import { resolveTeachProvider, TeachConfig } from '@/lib/config/teach.config';
 import { createThread, listThreads } from '@/lib/services/teach-codex/thread-store';
 import { preflightTeach } from '@/lib/services/teach-codex/teach-session-service';
 import { preflightTeachEngine } from '@/lib/services/teach-engine/teach-engine-service';
+import { resolveLearnerContext } from '@/lib/services/learner-context-service';
+import { LEARNER_CONTEXT_VERSION, isLearnerContextEmpty } from '@/types/learner-context';
+import { getUserIdFromRequest } from '@/lib/utils/rate-limit';
 
 /**
  * GET  /api/teach/threads —— 历史课程列表（updatedAt 倒序）
- * POST /api/teach/threads —— 新建课程 {topic}（≤100字；先只支持文本课题）
+ * POST /api/teach/threads —— 新建课程 {topic, learner?}（≤100字；先只支持文本课题；learner 为「这个学习者」本机切片，可选）
  *
  * 引擎分发（P1-B）：创建时按 TEACH_ENGINE 快照写入 TeachThread.engine
  * （codex | engine），此后该线程所有路由按此归属分发；engine=null 的
@@ -29,14 +33,14 @@ export async function GET() {
   });
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   const engine = TeachConfig.engine === 'engine' ? 'engine' : 'codex';
   const preflight = engine === 'engine' ? preflightTeachEngine() : preflightTeach();
   if (!preflight.ok) {
     return Response.json({ error: preflight.error }, { status: 500 });
   }
 
-  let body: { topic?: unknown };
+  let body: { topic?: unknown; learner?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -48,7 +52,13 @@ export async function POST(request: Request) {
   }
 
   const provider = resolveTeachProvider();
-  const thread = await createThread({ topic, model: provider.model, engine });
+  // 「这个学习者」读槽：开课时带来的本机切片（不合法当没有）；登录用户优先问外部 context 系统
+  const learnerId = getUserIdFromRequest(request) || undefined;
+  const learner = await resolveLearnerContext({
+    request: { v: LEARNER_CONTEXT_VERSION, appId: 'teach', learnerId, need: ['mastery', 'challenges', 'topics', 'goals'], limit: 8 },
+    local: body.learner,
+  });
+  const thread = await createThread({ topic, model: provider.model, engine, learner: isLearnerContextEmpty(learner) ? null : learner });
   log.info('teach thread created', { threadId: thread.id, topic, model: provider.model, engine });
   return Response.json({
     thread: {

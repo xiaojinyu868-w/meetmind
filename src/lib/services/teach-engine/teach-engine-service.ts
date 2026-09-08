@@ -258,7 +258,7 @@ async function ensureSession(row: store.TeachThreadRow): Promise<EngineSession> 
     const engine = new ActionEngine(stage, pacer, null, stores);
     const agent = new Agent({
       initialState: {
-        systemPrompt: buildTeachEngineInstructions(row.topic, skills.systemPromptBlock),
+        systemPrompt: buildTeachEngineInstructions(row.topic, skills.systemPromptBlock, store.learnerFactsFromRow(row)),
         model: bridgeModel(),
         thinkingLevel: 'off',
         tools: [skills.readTool],

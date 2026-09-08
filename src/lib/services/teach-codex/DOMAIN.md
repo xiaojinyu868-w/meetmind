@@ -67,3 +67,5 @@ gemini-commonstack 默认 / glm-dashscope、gemini-openai-next 备选，
 - 单实例部署假设：事件总线/进程注册表是进程内的（与现有 ASR WS 同构）。
 - codex 面向编码的能力（沙箱/apply_patch/goals）靠 `sandbox=read-only` +
   `approval_policy=never` + baseInstructions 压住，版本升级需回归冒烟。
+
+- **「这个学习者」读槽（2026-09-08）**：`thread-store.createThread` 接已校验的 `LearnerContext` 存 `TeachThread.learnerJson`；`learnerFactsFromRow` 把它变成 prompt 段落，codex 线（`teach-session-service` 的 baseInstructions）与 engine 线（`teach-engine-service` 的 systemPrompt）在会话建立时都拼「关于这位学生」——同一节课两条线读同一份事实。旧线程 learnerJson=null → 一字不加。

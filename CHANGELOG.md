@@ -17,7 +17,9 @@
 - **Tutor 也用上了**（同日晚）：除 `shared` 外六模式的 system prompt 多一段「他此前真实做过的检验（跨课）」——还没稳的多停一下、
   已经稳的不重复、没问起不报清单；课中同桌 / 复习同桌 / 问同学三个入口发送时现算本机切片（memo 会停在挂载那一刻，实测踩过）；
   shared 态服务端强制抹掉（隐私铁律，有用例）。生产实测：做完闪卡后问 "up in the air"，请求里 mastery=3、该概念 unstable；TTFT p50 ≈ 0.9 s 不变
-- 剩 teach 引擎待接；接口形态待与 context 系统对齐（plan §6）
+- **teach 两条线也接上了**：开课 `POST /api/teach/threads` 可带切片，存 `TeachThread.learnerJson`（新列，nullable，`make db-push` 已同步线上）；
+  codex 线 baseInstructions 与 engine 线 systemPrompt 在会话建立时拼「关于这位学生」，旧线程一字不加。生产直打：开课带
+  "判别式还没稳" → 落库成功。读契约本侧的消费方至此齐了（应用矩阵 / Tutor / teach），只等外部供给方对齐接口（plan §6）
 
 ---
 

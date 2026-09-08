@@ -693,6 +693,8 @@ model TeachThread {
   model         String
   codexThreadId String?
   engine        String?
+  /// 开课时随身带来的「这个学习者」切片（LearnerContext JSON，renewal plan §6）；老师据此知道哪些概念还没稳。null = 没带
+  learnerJson   String?
   status        String   @default("active") // active | archived
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

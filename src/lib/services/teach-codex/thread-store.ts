@@ -7,6 +7,8 @@
  */
 
 import { appendFile, mkdir, readFile } from 'node:fs/promises';
+import type { LearnerContext } from '@/types/learner-context';
+import { formatLearnerContextForPrompt, parseLearnerContext } from '@/lib/services/learner-context-service';
 import path from 'node:path';
 import { prisma } from '@/lib/prisma';
 import { TeachConfig } from '@/lib/config/teach.config';
@@ -20,6 +22,8 @@ export interface TeachThreadRow {
   codexThreadId: string | null;
   /** 创建时按 TEACH_ENGINE 快照的引擎归属（codex | engine）；null = 旧线程按 codex */
   engine: string | null;
+  /** 开课时带来的 LearnerContext（JSON 字符串）；null = 没带。两条线在会话建立时都据此拼「关于这位学生」 */
+  learnerJson: string | null;
   status: string;
   createdAt: Date;
   updatedAt: Date;
@@ -29,6 +33,8 @@ export async function createThread(params: {
   topic: string;
   model: string;
   engine?: string;
+  /** 已校验的 LearnerContext（route 层 parseLearnerContext 过） */
+  learner?: LearnerContext | null;
 }): Promise<TeachThreadRow> {
   const topic = params.topic.trim();
   return prisma.teachThread.create({
@@ -37,8 +43,19 @@ export async function createThread(params: {
       title: topic.slice(0, 30) || '教学课',
       model: params.model,
       engine: params.engine ?? null,
+      learnerJson: params.learner ? JSON.stringify(params.learner) : null,
     },
   });
+}
+
+/** 行上的切片 → 可进 prompt 的事实段落（空 / 坏 JSON 都是 ''） */
+export function learnerFactsFromRow(row: Pick<TeachThreadRow, 'learnerJson'>): string {
+  if (!row.learnerJson) return '';
+  try {
+    return formatLearnerContextForPrompt(parseLearnerContext(JSON.parse(row.learnerJson)));
+  } catch {
+    return '';
+  }
 }
 
 export async function listThreads(limit = 50): Promise<TeachThreadRow[]> {

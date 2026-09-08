@@ -14,6 +14,7 @@
  */
 
 import type { BoardScript } from '@/lib/ai-native/plugins/board-script';
+import { buildLocalLearnerContext } from '@/components/learner-context-local';
 import { sanitizeBoardScript } from '@/lib/ai-native/plugins/board-script';
 import type { TeachEvent } from './teach-events';
 import { MockTeachSession } from './mockTeachStream';
@@ -128,7 +129,8 @@ export async function teachCreateThread(topic: string, pace?: MockPace): Promise
   const response = await fetch('/api/teach/threads', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ topic }),
+    // 「这个学习者」读槽：开课时带上本机切片（跨课掌握状态），老师知道哪些概念还没稳；服务端对登录用户优先问外部 context 系统
+    body: JSON.stringify({ topic, learner: buildLocalLearnerContext({ appId: 'teach' }) }),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = (await response.json()) as { thread: ServerThreadRow };

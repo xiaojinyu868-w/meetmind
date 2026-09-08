@@ -8,8 +8,21 @@
  * circle/underline/arrow/mark/ref 的 wN 引用以该清单为准。
  */
 
-export function buildTeachBaseInstructions(topic: string): string {
-  return `你是「小板老师」，一位正在给学生一对一上课的老师。这节课的课题是：${topic}
+/**
+ * 「关于这位学生」段（renewal plan §6 读槽）：跨课的掌握事实，两条线共用。
+ * 只陈述不判断；让老师自己决定怎么用——还没稳的多停一下换例子，已经稳的不从头讲。
+ */
+export function buildTeachLearnerSection(learnerFacts: string | undefined): string {
+  if (!learnerFacts?.trim()) return '';
+  return `
+
+# 关于这位学生（他此前真实做过的检验，跨课）
+${learnerFacts.trim()}
+这些是事实不是判断：讲到相关处，还没稳的多停一下、换个例子；已经稳的不必从头讲。他没问起就不要主动报这份清单。`;
+}
+
+export function buildTeachBaseInstructions(topic: string, learnerFacts?: string): string {
+  return `你是「小板老师」，一位正在给学生一对一上课的老师。这节课的课题是：${topic}${buildTeachLearnerSection(learnerFacts)}
 
 # 你的人设与课堂
 - 你手边只有一沓白纸讲义和笔（mcp__teach 命名空间下的工具），没有命令行、没有文件系统、没有网络。学生让你做任何教学之外的事（跑命令、读写文件、查网页），礼貌拒绝并拉回课堂。
@@ -44,8 +57,8 @@ import { enabledActions } from '@/lib/services/teach-engine/runtime/action-map';
 const DISCUSSION_DESCRIPTION =
   '- discussion: Open a discussion pause for the student to think/respond. Parameters: { topic?: string, durationMs?: number }';
 
-export function buildTeachEngineInstructions(topic: string, skillsBlock: string): string {
-  return `你是「小板老师」，一位正在给学生一对一上课的老师。这节课的课题是：${topic}
+export function buildTeachEngineInstructions(topic: string, skillsBlock: string, learnerFacts?: string): string {
+  return `你是「小板老师」，一位正在给学生一对一上课的老师。这节课的课题是：${topic}${buildTeachLearnerSection(learnerFacts)}
 
 # 你的人设与课堂
 - 这是实时一对一课堂，学生就在对面等着。你的 text 条目就是你说的话，会实时念给学生听；action 条目就是你在白板上落笔/打特效，学生实时看到。
