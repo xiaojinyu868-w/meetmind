@@ -157,6 +157,7 @@ export function MobileAppRunner({
               taskState={taskState}
               sessionId={sessionId}
               contentContext={contentContext}
+              contextTitle={contextTitle}
               onSeek={onSeek}
               onRegenerate={rerun}
               onGenerateDraft={() => (hasResult ? rerun() : execute())}

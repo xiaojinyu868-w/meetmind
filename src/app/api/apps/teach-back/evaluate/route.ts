@@ -47,6 +47,8 @@ export async function POST(request: NextRequest) {
   try {
     const parsed = BodySchema.safeParse(await request.json());
     if (!parsed.success) {
+      // 400 不能是哑的：2026-09-08 讲给同桌听在所有宿主里静默失败了很久，根因是 metadata.title 被塞了整段转录
+      log.warn('teach-back.evaluate.invalid_body', { issues: parsed.error.issues.slice(0, 5).map((issue) => ({ path: issue.path.join('.'), code: issue.code, message: issue.message })) });
       return NextResponse.json({ ok: false, error: '请求内容不完整' }, { status: 400 });
     }
     const evaluation = await evaluateTeachBack({

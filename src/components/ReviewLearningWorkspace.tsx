@@ -157,6 +157,7 @@ export function ReviewLearningWorkspace({
           taskState={execution.taskState}
           sessionId={sessionId}
           contentContext={infographicContentContext}
+          contextTitle={contextTitle}
           onSeek={onSeek}
           onRegenerate={() => void execution.rerun()}
           onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}

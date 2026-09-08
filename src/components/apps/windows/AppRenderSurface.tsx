@@ -21,7 +21,10 @@ export interface AppRenderSurfaceProps {
   transcript?: TranscriptSegment[];
   taskState?: AppTaskState;
   sessionId?: string;
+  /** 给信息图的正文上下文（转录前 1400 字）——不是标题，别当标题传给别的窗口 */
   contentContext?: string;
+  /** 课名（讲给同桌听的黑板抬头与请求 metadata.title） */
+  contextTitle?: string;
   onSeek?: (startMs: number) => void;
   onRegenerate?: () => void;
   onGenerateDraft?: () => Promise<AppExecutionResult | null>;
@@ -42,6 +45,7 @@ export function AppRenderSurface({
   taskState,
   sessionId = 'inline-session',
   contentContext,
+  contextTitle,
   onSeek,
   onRegenerate,
   onGenerateDraft,
@@ -90,7 +94,7 @@ export function AppRenderSurface({
       <TeachBackWindow
         result={result}
         transcript={transcript}
-        contentContext={contentContext}
+        contextTitle={contextTitle}
         onSeek={onSeek}
         onLearningActivity={onLearningActivity}
         onAssessment={onAssessment}

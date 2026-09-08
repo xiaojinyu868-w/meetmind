@@ -28,7 +28,12 @@ import {
 interface TeachBackWindowProps {
   result: AppExecutionResult | null;
   transcript: TranscriptSegment[];
-  contentContext?: string;
+  /**
+   * 课名（黑板抬头 + 请求 metadata.title）。此前这里接的是 AppRenderSurface 的信息图正文上下文——
+   * 1400 字转录正文——黑板抬头滚着整段转录，metadata.title 也超过接口 200 字上限，
+   * respond / evaluate 全部 400「请求内容不完整」，讲给同桌听在所有宿主里都核对不了。
+   */
+  contextTitle?: string;
   onSeek?: (startMs: number) => void;
   onLearningActivity?: (line: string) => void;
   /** 评估完成后把每个目标点的象限 + 证据交给记忆（结构化） */
@@ -74,7 +79,9 @@ function EvidenceButton({ item, onSeek }: { item: TeachBackEvaluationItem; onSee
   );
 }
 
-export function TeachBackWindow({ result, transcript, contentContext, onSeek, onLearningActivity, onAssessment, nextStep }: TeachBackWindowProps) {
+export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLearningActivity, onAssessment, nextStep }: TeachBackWindowProps) {
+  // 接口 metadata.title 上限 200 字；课名再长也只取这么多
+  const lessonTitle = contextTitle?.trim().slice(0, 200) || undefined;
   const targets = useMemo(() => normalizeTeachBackTargets(result), [result]);
   const [phase, setPhase] = useState<Phase>('targets');
   const [typedText, setTypedText] = useState('');
@@ -100,7 +107,7 @@ export function TeachBackWindow({ result, transcript, contentContext, onSeek, on
   const voice = useTeachBackVoice({
     turnsRef,
     targets: activeTargets,
-    metadata: contentContext ? { title: contentContext } : undefined,
+    metadata: lessonTitle ? { title: lessonTitle } : undefined,
   });
   const silenceRef = useRef(voice.silence);
   silenceRef.current = voice.silence;
@@ -141,7 +148,7 @@ export function TeachBackWindow({ result, transcript, contentContext, onSeek, on
             targets: activeTargets,
             teachingTurns: turns,
             transcript: slimTranscript,
-            metadata: contentContext ? { title: contentContext } : undefined,
+            metadata: lessonTitle ? { title: lessonTitle } : undefined,
           }),
         });
         if (response.status === 429) {
@@ -168,7 +175,7 @@ export function TeachBackWindow({ result, transcript, contentContext, onSeek, on
         setEvalFailed(true);
       }
     })();
-  }, [phase, evalAttempt, activeTargets, transcript, contentContext]);
+  }, [phase, evalAttempt, activeTargets, transcript, lessonTitle]);
 
   /* ── 评估成功：写一次课后学习黑板（同时进客观学习动态流） ── */
 
@@ -240,7 +247,7 @@ export function TeachBackWindow({ result, transcript, contentContext, onSeek, on
     return (
       <div className="relative h-full min-h-0">
         <TeachBackClassroom
-          lessonTitle={contentContext}
+          lessonTitle={lessonTitle}
           targets={activeTargets}
         />
 
@@ -396,7 +403,7 @@ export function TeachBackWindow({ result, transcript, contentContext, onSeek, on
   return (
     <div className="relative h-full min-h-0">
       <TeachBackClassroom
-        lessonTitle={contentContext}
+        lessonTitle={lessonTitle}
         targets={activeTargets}
       />
 
