@@ -43,7 +43,7 @@ text-delta 流（同一条 SSE 连接，不断线）。image-ready 是异步回�
 | 路由 | 方法 | 说明 |
 |------|------|------|
 | `/api/teach/threads` | GET | 历史课程列表（updatedAt 倒序，status=active） |
-| `/api/teach/threads` | POST | 新建课程 `{topic}`（≤100字，先只支持文本课题）→ `{thread}`；按 `TEACH_ENGINE` 快照 `engine` 字段，preflight 按目标引擎分发。**learner 读槽（2026-09-08）**：body 可带 `learner: LearnerContext`（本机切片，不合法当没有），服务端 `resolveLearnerContext`（登录用户优先外部 context 系统）后存 `TeachThread.learnerJson`；两条线在会话建立时用 `learnerFactsFromRow` 拼「关于这位学生」段，旧线程 null 一字不加 |
+| `/api/teach/threads` | POST | 新建课程 `{topic}`（≤100字，先只支持文本课题）→ `{thread}`；按 `TEACH_ENGINE` 快照 `engine` 字段，preflight 按目标引擎分发。**learner 读槽（2026-09-08）**：body 可带 `learner: LearnerContext`（本机切片，不合法当没有），服务端 `resolveLearnerContext`（登录用户：外部 context 系统 → 本仓库服务端事件表切片 `learner-context-provider` → 本机切片）后存 `TeachThread.learnerJson`；两条线在会话建立时用 `learnerFactsFromRow` 拼「关于这位学生」段，旧线程 null 一字不加 |
 | `/api/teach/threads/[id]/stream` | GET | SSE 订阅（EventSource 友好；25s 心跳；首事件 `thread`） |
 | `/api/teach/threads/[id]/events` | GET | 事件日志回放（含 student-message 落盘记录；历史课程恢复用，前端按序重建对话+画布）；顺带触发缺配图 image 调用的后台生图回填（不阻塞响应，完成追加 image-ready；engine 线程无 image 调用，自然空转） |
 | `/api/teach/threads/[id]/messages` | POST | 发学生消息/开课 `{text}`（≤2000字）→ `{ok:true}`；turn 进行中 409；按 `TeachThread.engine` 分发到 teach-session-service / teach-engine-service（404/409 语义与响应形状两侧一致） |
