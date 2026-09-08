@@ -1,7 +1,7 @@
 /**
  * Harness regression guard (M5 T5.7)
  *
- * 读取 tests/eval/{asr,tutor}/baselines/*.json 作为"应达到的下限"，
+ * 读取 tests/eval/baselines/{asr,tutor,teach}.json 作为"应达到的下限"，
  * 跑完 harness 后对比当前数字，退化则非零退出码（CI 卡 PR）。
  *
  * 用法：
@@ -13,6 +13,8 @@
  * 判断规则：
  *   - ASR: 当前 avg_cer / p95_cer 不能超过 baseline * 1.1（10% 容忍）
  *   - Tutor: pass rate 不能低于 baseline - 0.05（5pp 容忍）
+ *   - Teach: pass rate 与判分准确率（gradingAccuracy，逐题 score 平均）
+ *     均不能低于 baseline - 0.05（5pp 容忍）
  */
 
 import { writeFileSync, existsSync, readdirSync, mkdirSync, createReadStream } from 'node:fs';
@@ -39,6 +41,14 @@ interface TutorBaseline {
   updatedAt: string;
 }
 
+interface TeachBaseline {
+  passRate: number;
+  loopPassRate: number | null;
+  /** 判分准确率：各 case gradingAccuracy score 平均（保留粒度，不是 pass 率） */
+  gradingAccuracy: number | null;
+  updatedAt: string;
+}
+
 // ──────────────────────────────────────────────────────────────
 // 配置：baseline 文件与容忍度
 // ──────────────────────────────────────────────────────────────
@@ -46,12 +56,15 @@ interface TutorBaseline {
 const BASELINES_DIR = resolve(__dirname, 'baselines');
 const ASR_BASELINE_FILE = resolve(BASELINES_DIR, 'asr.json');
 const TUTOR_BASELINE_FILE = resolve(BASELINES_DIR, 'tutor.json');
+const TEACH_BASELINE_FILE = resolve(BASELINES_DIR, 'teach.json');
 
 const ASR_RUNS_DIR = resolve(__dirname, 'asr', 'runs');
 const TUTOR_RUNS_DIR = resolve(__dirname, 'tutor', 'runs');
+const TEACH_RUNS_DIR = resolve(__dirname, 'teach', 'runs');
 
 const ASR_CER_TOLERANCE = 1.1; // current <= baseline * 1.1
 const TUTOR_PASS_TOLERANCE = 0.05; // current >= baseline - 0.05
+const TEACH_PASS_TOLERANCE = 0.05; // current >= baseline - 0.05（passRate 与 gradingAccuracy 同容忍）
 
 // ──────────────────────────────────────────────────────────────
 // 读 run 文件
@@ -99,6 +112,15 @@ interface TutorRecord {
   };
 }
 
+interface TeachRecord {
+  id: string;
+  pass: boolean;
+  scores: {
+    quizLoop?: { pass: boolean };
+    gradingAccuracy?: { pass: boolean; score: number };
+  };
+}
+
 function summarizeAsr(records: AsrRecord[]): AsrBaseline | null {
   if (records.length === 0) return null;
   const cers = records.map((r) => r.cer.cer).sort((a, b) => a - b);
@@ -131,6 +153,28 @@ function summarizeTutor(records: TutorRecord[]): TutorBaseline | null {
     rubricPassRate: pct(
       records.filter((r) => r.scores.learningRubric).map((r) => r.scores.learningRubric!.pass),
     ),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function summarizeTeach(records: TeachRecord[]): TeachBaseline | null {
+  if (records.length === 0) return null;
+  const total = records.length;
+  const passed = records.filter((r) => r.pass).length;
+  const loopFlags = records
+    .filter((r) => r.scores.quizLoop)
+    .map((r) => r.scores.quizLoop!.pass);
+  const gradingScores = records
+    .filter((r) => r.scores.gradingAccuracy)
+    .map((r) => r.scores.gradingAccuracy!.score);
+  return {
+    passRate: passed / total,
+    loopPassRate:
+      loopFlags.length === 0 ? null : loopFlags.filter(Boolean).length / loopFlags.length,
+    gradingAccuracy:
+      gradingScores.length === 0
+        ? null
+        : gradingScores.reduce((a, b) => a + b, 0) / gradingScores.length,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -206,6 +250,36 @@ async function main() {
         `[tutor] ${mark} pass ${(current.passRate * 100).toFixed(1)}% (baseline ${(baseline.passRate * 100).toFixed(1)}% - ${TUTOR_PASS_TOLERANCE * 100}pp)`,
       );
       if (!ok) exitCode = 1;
+    }
+  }
+
+  // ─ Teach
+  const teachRuns = await readLatestRun(TEACH_RUNS_DIR);
+  if (!teachRuns) {
+    report.push('[teach] no runs found; skipping (run `make eval-teach` first)');
+  } else {
+    const current = summarizeTeach(teachRuns as TeachRecord[]);
+    const baseline = await readBaseline<TeachBaseline>(TEACH_BASELINE_FILE);
+    const fmt = (x: number | null) => (x === null ? 'n/a' : `${(x * 100).toFixed(1)}%`);
+
+    if (!current) {
+      report.push('[teach] empty run file');
+    } else if (update || !baseline) {
+      writeBaseline(TEACH_BASELINE_FILE, current);
+      report.push(
+        `[teach] ${baseline ? 'updated' : 'created'} baseline → pass=${fmt(current.passRate)} | grading-accuracy ${fmt(current.gradingAccuracy)}`,
+      );
+    } else {
+      const passOk = current.passRate >= baseline.passRate - TEACH_PASS_TOLERANCE;
+      const gradingOk =
+        current.gradingAccuracy === null ||
+        baseline.gradingAccuracy === null ||
+        current.gradingAccuracy >= baseline.gradingAccuracy - TEACH_PASS_TOLERANCE;
+      const mark = passOk && gradingOk ? '✓' : '✗';
+      report.push(
+        `[teach] ${mark} pass ${fmt(current.passRate)} (baseline ${fmt(baseline.passRate)} - ${TEACH_PASS_TOLERANCE * 100}pp) | grading-accuracy ${fmt(current.gradingAccuracy)} (baseline ${fmt(baseline.gradingAccuracy)} - ${TEACH_PASS_TOLERANCE * 100}pp)`,
+      );
+      if (!passOk || !gradingOk) exitCode = 1;
     }
   }
 

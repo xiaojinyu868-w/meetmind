@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>teach 课堂 v1 · 交互形态重设计 — P3 设计稿</title>
+<style>
+  @font-face { font-family: 'Inter'; src: url('../../public/fonts/inter-var-latin.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+  @font-face { font-family: 'Instrument Serif'; src: url('../../public/fonts/instrument-serif-400-italic.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+  @font-face { font-family: 'JetBrains Mono'; src: url('../../public/fonts/jetbrains-mono-var-latin.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+
+  :root {
+    --bg: #14110D; --pine: #6B9080; --vermilion: #E07A5F;
+    --chalk: #f0ead6; --muted: #7d7668; --line: rgba(240,234,214,0.1);
+    --serif: 'Instrument Serif', Georgia, serif;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif;
+    background:
+      radial-gradient(70% 50% at 50% -10%, rgba(107, 144, 128, 0.09), transparent 65%),
+      var(--bg);
+    color: var(--chalk);
+    min-height: 100vh; padding: 72px 28px 90px;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 940px; margin: 0 auto; }
+
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 9px;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.22em;
+    text-transform: uppercase; color: var(--pine);
+  }
+  .eyebrow::before { content: ''; width: 6px; height: 6px; border-radius: 2px; background: var(--vermilion); }
+
+  h1 { margin-top: 18px; font-size: clamp(28px, 4vw, 42px); font-weight: 650; letter-spacing: -0.01em; line-height: 1.3; }
+  h1 em { font-family: var(--serif); font-style: italic; font-weight: 400; color: var(--vermilion); padding: 0 0.06em; }
+  .sub { margin-top: 14px; max-width: 44em; font-size: 13.5px; line-height: 1.95; color: var(--muted); }
+  .sub code { font-family: var(--mono); font-size: 11px; color: var(--pine); background: rgba(107,144,128,0.1); padding: 1px 6px; border-radius: 5px; }
+
+  .principles { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .principles span {
+    padding: 5px 13px; border-radius: 999px; font-size: 11.5px;
+    border: 1px solid rgba(107, 144, 128, 0.35); color: var(--pine);
+  }
+
+  .grid { margin-top: 44px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  a.card {
+    position: relative; display: block; padding: 24px 22px 20px;
+    background: rgba(29, 38, 28, 0.5);
+    border: 1px solid var(--line); border-radius: 18px;
+    color: inherit; text-decoration: none; overflow: hidden;
+    transition: transform 0.35s var(--ease-out), border-color 0.35s, box-shadow 0.35s;
+  }
+  a.card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: var(--pine); transform: scaleX(0); transform-origin: left;
+    transition: transform 0.45s var(--ease-out);
+  }
+  a.card:hover { transform: translateY(-3px); border-color: rgba(240,234,214,0.24); box-shadow: 0 18px 44px rgba(0,0,0,0.4); }
+  a.card:hover::before { transform: scaleX(1); }
+  a.card .num { font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; color: var(--vermilion); }
+  a.card b { display: block; margin-top: 10px; font-size: 16px; font-weight: 650; }
+  a.card span { display: block; margin-top: 9px; font-size: 12px; line-height: 1.8; color: var(--muted); }
+  a.card .p { margin-top: 12px; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; color: var(--pine); }
+
+  .foot { margin-top: 46px; padding-top: 20px; border-top: 1px dashed var(--line); font-size: 11.5px; line-height: 1.9; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <p class="eyebrow">MeetMind · teach 课堂 · P3 交互形态重设计</p>
+  <h1>板书即<em>舞台</em>，老师是<em>声音</em>。</h1>
+  <p class="sub">
+    依据 <code>docs/TEACH_TUTOR_ENGINE.md §5.5</code> 六原则的可点击设计稿：黑板是绝对视觉中心，
+    老师无头像只有声音状态；插话、圈选、等待、学生产出、quiz/实验、课后沉淀各一页。
+    每页右上角「注记」里有场景说明、交互触发与状态转移。纯静态 mock，无后端。
+    流程约定：本稿过 Taste 评审后才进实现（vendor OpenMAIC classroom UI 换肤）。
+  </p>
+
+  <div class="principles">
+    <span>1 板书即舞台</span><span>2 语音优先双向</span><span>3 节奏可视化</span>
+    <span>4 学生产出进课堂</span><span>5 课后无缝沉淀</span><span>6 先设计稿后实现</span>
+  </div>
+
+  <div class="grid">
+    <a class="card" href="./live.html">
+      <span class="num">01</span>
+      <b>上课主界面</b>
+      <span>活黑板为绝对视觉中心；老师只有声音状态（波形/呼吸点），无头像。板书逐笔长出、聚光灯压到某个公式、激光笔瞬态光圈。</span>
+      <span class="p">原则 1 · 3</span>
+    </a>
+    <a class="card" href="./interrupt.html">
+      <span class="num">02</span>
+      <b>插话三拍</b>
+      <span>学生按住说话 → 老师停下、回应气泡锚定到被问的那个公式（引线指向，不是聊天列表）→ 气泡收成别针，自然衔回继续讲。</span>
+      <span class="p">原则 2</span>
+    </a>
+    <a class="card" href="./waiting.html">
+      <span class="num">03</span>
+      <b>等待在叙事里</b>
+      <span>老师要构造实验时先开口铺垫：「我构造个实验，稍等」。板上是实验台逐笔搭起来的建设中动画——永远没有 spinner 和「生成中」。</span>
+      <span class="p">原则 3</span>
+    </a>
+    <a class="card" href="./student-work.html">
+      <span class="num">04</span>
+      <b>学生产出上板</b>
+      <span>拍题照片贴上黑板，老师红笔圈出错误、写批注、给反馈——AI 讲的是学生自己的作业。</span>
+      <span class="p">原则 4</span>
+    </a>
+    <a class="card" href="./quiz-lab.html">
+      <span class="num">05</span>
+      <b>quiz 与实验</b>
+      <span>题目上板、学生作答、老师朱笔判分；自包含实验小部件（iframe 卡片）嵌在板上，可调参数边玩边学。</span>
+      <span class="p">原则 1 · 3</span>
+    </a>
+    <a class="card" href="./after-class.html">
+      <span class="num">06</span>
+      <b>课后沉淀</b>
+      <span>下课页：这堂课的板书 + 对话自动变成复习材料，回到 MeetMind 主线的入口样式——像合上一本笔记。</span>
+      <span class="p">原则 5</span>
+    </a>
+  </div>
+
+  <p class="foot">
+    设计依据：<code style="font-family:var(--mono);font-size:10.5px;color:var(--pine)">docs/TEACH_TUTOR_ENGINE.md §5.5</code> ·
+    <code style="font-family:var(--mono);font-size:10.5px;color:var(--pine)">docs/PRODUCT_TASTE.md</code> ·
+    <code style="font-family:var(--mono);font-size:10.5px;color:var(--pine)">docs/DESIGN_SYSTEM.md</code>（暗色 token · 双签名色）。
+    现状对照：<code style="font-family:var(--mono);font-size:10.5px;color:var(--pine)">src/components/teach/TeachBoard.tsx</code>（三栏布局）→ 本稿收敛为「板 + 声音」单舞台。
+  </p>
+</main>
+</body>
+</html>

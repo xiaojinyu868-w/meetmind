@@ -105,6 +105,13 @@ const nextConfig = {
   // 但被 src/lib/config.ts 间接导入到 client bundle。告诉 webpack 这些是
   // server-only fallback，client 不要尝试解析。
   webpack: (config, { isServer }) => {
+    // teach-engine vendor 树（OpenMAIC）内部用 ESM 风格 '.js' 后缀 import 同目录
+    // .ts 文件，webpack 默认解析不了——extensionAlias 把 '.js' 映射回 '.ts'
+    config.resolve = config.resolve || {};
+    config.resolve.extensionAlias = {
+      ...(config.resolve.extensionAlias || {}),
+      '.js': ['.ts', '.js'],
+    };
     if (!isServer) {
       config.resolve = config.resolve || {};
       config.resolve.fallback = {

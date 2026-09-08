@@ -59,6 +59,7 @@ make eval           # 完整套件
 make eval-asr       # ASR dry-run（改 ASR 必跑）
 make eval-tutor     # Tutor dry-run（改 Tutor 必跑）
 make eval-guard     # CI gate：baseline 在 tests/eval/baselines/
+make eval-teach     # Teach 引擎出题闭环评测（dry-run；改 teach-engine / teach-skills 必跑）
 make ledger         # 生成能力台账（交付里程碑 / 新增底座资产后必跑，产物在 design-demo/capability-board/）
 
 # 数据库
@@ -82,8 +83,9 @@ make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
 11. **God File**：`src/app/(main)/app/page.tsx` 按域分 6 阶段提取为 hooks；顺手提取 ≥50 行独立模块立即 `make check` → `src/app/DOMAIN.md`
 12. **ChatBase 底座**：6 个对话面板收口于薄底座 + adapter，底座不引入业务逻辑 → `src/components/chat/DOMAIN.md`
 13. **清小搭接入（2026-08）**：`src/app/api/compat/` OpenAI 兼容适配层（「上场前」智能体：语音试讲 → 追问诊断 → 讲稿 docx / 上场包 HTML），Bearer 自验（`XIAODA_API_KEY`，非 MeetMind JWT）+ 每日成本闸，纯增量不改主链路 → `src/app/api/compat/DOMAIN.md`
-14. **AI 家教「上课」线（2026-08，codex app-server 底座）**：`/api/teach/*`（SSE 事件契约 + 历史课程 TeachThread）→ `src/lib/services/teach-codex/` 编排 codex app-server（每线程一进程，CODEX_HOME 隔离 data/teach-codex/）←MCP stdio→ `server/teach/teach-mcp-server.mjs`（内部回调进事件总线）；模型经进程内 shim（Responses→Chat）调上游，`TEACH_PROVIDER` 一行切换（默认 gemini-commonstack）；工具 schema 单一事实源 `teach-agent/tools.ts`（11 个，无 ask 阻塞）→ `src/app/api/teach/DOMAIN.md` + `src/lib/services/teach-codex/DOMAIN.md`
+14. **AI 家教「上课」线（2026-08 起，迁移中双线并存：codex 底座 ↔ teach-engine）**：`/api/teach/*`（SSE 事件契约 + 历史课程 TeachThread）→ 薄壳路由按 `TeachThread.engine`（创建时按 `TEACH_ENGINE` 快照；null 旧线程 = codex）分发两套编排：codex 线 `src/lib/services/teach-codex/` 编排 codex app-server（每线程一进程，CODEX_HOME 隔离 data/teach-codex/）←MCP stdio→ `server/teach/teach-mcp-server.mjs`（内部回调进事件总线），模型经进程内 shim（Responses→Chat）调上游，`TEACH_PROVIDER` 一行切换（默认 gemini-commonstack），工具 schema 单一事实源 `teach-agent/tools.ts`（11 个，无 ask 阻塞）；engine 线见主线 16。前端 tool-call name 双词表（`teach-events.ts` boardEffectOf 双分支，legacy 分支永久保留供旧线程回放）→ `src/app/api/teach/DOMAIN.md` + `src/lib/services/teach-codex/DOMAIN.md`
 15. **「请一个分身」线（2026-08，nuwa skill × codex harness）**：`/api/fenshen/*`（SSE 事件契约与 teach 同构）→ `src/lib/services/fenshen/` 复用 teach-codex 通用件（进程封装/shim/provider 注册表）；蒸馏线程（workspace-write + Firecrawl 官方远端 MCP）跑原版 nuwa skill（`assets/fenshen/huashu-nuwa/` 原文，零改动）产人物 SKILL.md；对话线程（read-only、零 MCP）挂 skill  persona + 课后上下文物化文件（lesson/ learner/）；私有轨语料 `corpus-service.ts`（B站字幕捷径→ASR 兜底）；skill 永不对用户可见，确认走试听「像/不像」→ 重蒸馏；spike 事实源 `out/fenshen-spike/REPORT.md` → `src/app/api/fenshen/DOMAIN.md` + `src/lib/services/fenshen/DOMAIN.md`
+16. **teach 引擎迁移（2026-09，pi + vendor OpenMAIC，P1 已接线）**：主线 14 的 engine 侧——`src/lib/services/teach-engine/`（teach-engine-service 编排：每线程一个 pi Agent + StreamFn 桥 + 结构化动作直出边生成边执行；vendor 树豁免 500 行铁律）；`TEACH_ENGINE=codex|engine` 决定新建线程归属（TeachThread.engine 快照），事件契约与 codex 线一致（name 为新动作词表；v1 不发 image-ready）；与 codex 底座双线并存 → `src/lib/services/teach-engine/DOMAIN.md` + `docs/TEACH_TUTOR_ENGINE.md`
 
 ---
 
@@ -100,6 +102,7 @@ make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
 | **改 API 接口** | `src/app/api/DOMAIN.md` → 对应子目录 DOMAIN.md → route.ts |
 | **改清小搭接入 / 「上场前」** | `src/app/api/compat/DOMAIN.md` → 对应 route / `src/lib/prompts/rehearsal-prompts.ts` |
 | **改 AI 家教上课线（codex 底座）** | `src/app/api/teach/DOMAIN.md`（事件契约）→ `src/lib/services/teach-codex/DOMAIN.md` → 对应模块；工具 schema 改 `teach-agent/tools.ts` |
+| **改 teach 新引擎（pi + OpenMAIC，P1）** | `src/lib/services/teach-engine/DOMAIN.md` → teach-engine-service.ts / runtime/*；动作词表改 `runtime/action-map.ts`；prompt 改 `src/lib/prompts/teach-teacher-prompt.ts` 的 `buildTeachEngineInstructions` |
 | **改「请一个分身」线（蒸馏/对话）** | `src/app/api/fenshen/DOMAIN.md`（事件契约）→ `src/lib/services/fenshen/DOMAIN.md` → 对应模块；nuwa 模板在 `assets/fenshen/huashu-nuwa/`（只随上游版本整体替换，不做局部改写）；前端 `src/components/fenshen/DOMAIN.md` |
 | **改 Tutor 后端 / prompt** | `src/app/api/tutor/DOMAIN.md` + `src/lib/prompts/tutor-prompts.ts` + `项目开发文档/提示词设计哲学.md` |
 | **改管理员 AI 控制中心** | `src/components/admin/DOMAIN.md` → `src/lib/services/ai-control-service.ts` → `src/app/api/admin/ai-control/route.ts` |
@@ -136,6 +139,7 @@ make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
 **技术深潜**
 - `docs/ASR_PIPELINE.md` — ASR 飞书妙记级工艺总图
 - `docs/TUTOR_AGENT.md` — Tutor agent loop（AI SDK v6）
+- `docs/TEACH_TUTOR_ENGINE.md` — AI 家教课堂引擎设计（pi harness + vendor OpenMAIC 28 动作引擎 + skill 体系；选型实测见 `out/teach-harness-ab/REPORT.md`）
 - `docs/OBSERVABILITY.md` — pino + Sentry + track 埋点
 - `docs/MODEL_REGISTRY_REFACTOR.md` — 模型注册表
 - `项目开发文档/提示词设计哲学.md` — Less Structure, More Intelligence

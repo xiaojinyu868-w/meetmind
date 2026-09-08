@@ -18,18 +18,25 @@ export interface TeachThreadRow {
   topic: string;
   model: string;
   codexThreadId: string | null;
+  /** 创建时按 TEACH_ENGINE 快照的引擎归属（codex | engine）；null = 旧线程按 codex */
+  engine: string | null;
   status: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export async function createThread(params: { topic: string; model: string }): Promise<TeachThreadRow> {
+export async function createThread(params: {
+  topic: string;
+  model: string;
+  engine?: string;
+}): Promise<TeachThreadRow> {
   const topic = params.topic.trim();
   return prisma.teachThread.create({
     data: {
       topic,
       title: topic.slice(0, 30) || '教学课',
       model: params.model,
+      engine: params.engine ?? null,
     },
   });
 }

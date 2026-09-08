@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>02 · 插话三拍 — teach 课堂 v1</title>
+<link rel="stylesheet" href="./shared.css" />
+<style>
+  #title   { left: 7%; top: 9%; }
+  #title .chalk-tag { display: block; margin-bottom: 7px; }
+  #f1      { left: 9%; top: 30%; }
+  #f1 .lbl { font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; color: var(--chalk-faint); margin-bottom: 6px; }
+  #f2      { left: 9%; top: 52%; }
+  #f2 .lbl { font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; color: var(--chalk-faint); margin-bottom: 6px; }
+  /* 被打断的半笔：写到一半冻住 */
+  #f3      { left: 9%; top: 76%; transition: opacity .5s; }
+  #f3 .inner { clip-path: inset(-8% 46% -8% -2%); }
+  #f3.done .inner { clip-path: inset(-8% -2% -8% -2%); transition: clip-path 1s var(--ease-out); }
+  #f3 .caret { display: inline-block; width: 2px; height: 1em; background: var(--chalk); vertical-align: -2px; margin-left: 2px; animation: breathe .8s steps(2) infinite; }
+  #f3.done .caret { display: none; }
+
+  #askRing { opacity: 0; transition: opacity .45s var(--ease-out); }
+  #askRing.on { opacity: 1; }
+  #askRing.soft { border-color: rgba(232,148,122,0.35); }
+
+  #bubble { left: 47%; top: 38%; visibility: hidden; }
+  #bubble.show { visibility: visible; }
+  #leader { opacity: 0; transition: opacity .45s; }
+  #leader.on { opacity: 1; }
+
+  #pin { left: 9%; top: 66%; opacity: 0; transform: translateY(6px); transition: all .5s var(--ease-out); }
+  #pin.on { opacity: 1; transform: translateY(0); }
+
+  /* 学生波形（插话中） */
+  #studentWave { display: none; }
+  .holding-student #studentWave { display: flex; }
+  .holding-student #teacherLabel { opacity: 0.35; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <header class="topbar">
+    <div class="lesson">
+      <span class="live-dot"></span>
+      <b>匀变速直线运动</b><span>高中物理 · 第 3 讲</span>
+    </div>
+    <div class="clock" id="clock">11:07</div>
+  </header>
+
+  <div class="board-wrap">
+    <div class="board" id="board">
+
+      <div class="b-el" id="title">
+        <span class="chalk-tag">§ 2.2</span>
+        <div class="chalk chalk-title">匀变速直线运动的速度与位移</div>
+        <svg width="240" height="10" style="display:block;margin-top:8px"><path class="ink amber thin" d="M2 6 C 60 3, 160 8, 238 5"/></svg>
+      </div>
+
+      <div class="b-el" id="f1">
+        <div class="lbl">速度公式</div>
+        <div class="chalk chalk-formula">v = v<sub>0</sub> + at</div>
+      </div>
+
+      <div class="b-el" id="f2">
+        <div class="lbl">位移公式</div>
+        <div class="chalk chalk-formula">x = v<sub>0</sub>t + <span id="half" class="chalk amber" style="font-style:normal">½</span>at<sup>2</sup></div>
+      </div>
+
+      <div class="b-el" id="f3">
+        <div class="lbl" style="font-family:var(--mono);font-size:10px;letter-spacing:0.14em;color:var(--chalk-faint);margin-bottom:6px">推导 · 写到一半被打断</div>
+        <div class="inner chalk chalk-formula" style="font-size:23px">v̄ = (v<sub>0</sub> + v) / 2<span class="caret"></span></div>
+      </div>
+
+      <div class="ask-ring" id="askRing"></div>
+
+      <svg class="leader" id="leader"><path id="leaderPath" d=""/></svg>
+
+      <div class="reply-bubble bubble-in" id="bubble">
+        <div class="who"><i></i>老师 · 回应你的插话</div>
+        <p>问到点子上了。这个 <b>½</b> 不是凑出来的：位移是<b>平均速度 × 时间</b>，而匀变速的平均速度正好是 (v₀+v)/2。把 v = v₀+at 代进去，展开就得到这个 ½。</p>
+      </div>
+
+      <div class="pinned-chip" id="pin"><i></i>½ 的来历 · 已记下</div>
+    </div>
+  </div>
+
+  <footer class="voice-bar" id="voiceBar">
+    <div class="voice-pill">
+      <div class="wave" id="teacherWave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="wave vermilion" id="studentWave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <span class="label" id="teacherLabel"><b>老师</b> · 正在推导平均速度</span>
+    </div>
+    <div class="narration" id="narration"></div>
+    <div class="hold-talk" id="holdTalk">
+      <div class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></div>
+      <span class="hint">按住 插话</span>
+    </div>
+  </footer>
+</div>
+
+<button class="notes-toggle"><i></i>注记</button>
+<aside class="notes">
+  <p class="scene-tag">SCENE 02 · INTERRUPT</p>
+  <h2>插话三拍</h2>
+  <p>老师正写着「v̄ = (v₀+v)/2」推导到一半，学生按住说话问：「为什么是 ½？」——三拍走完，课不掉线。</p>
+
+  <h3>三拍状态转移</h3>
+  <ul>
+    <li><b>拍 1 · 打断</b>：按住说话 → 老师波形静默、板上的半笔<b>冻在原处</b>（不是消失），学生朱砂波形亮起</li>
+    <li><b>拍 2 · 回应</b>：被问的 ½ 被朱砂手绘圈圈出，回应气泡<b>锚定在公式旁</b>，一条虚引线指到元素——回应长在板上，不进聊天列表</li>
+    <li><b>拍 3 · 衔回</b>：气泡收成一枚「别针」留在公式下方（可点开重看），老师口播一句过渡，半笔继续写完</li>
+  </ul>
+
+  <h3>关键决策</h3>
+  <ul>
+    <li>打断不是 error 也不是 modal——课只是「停笔」，板上痕迹全保留</li>
+    <li>回应别针 = 课后复习的天然锚点（与 06 课后沉淀衔接）</li>
+    <li>备选：回应走右侧聊天列表（现 teach 页做法）——本稿否决，聊天列表让视线离开舞台</li>
+  </ul>
+
+  <h3>演示步骤</h3>
+  <div class="demo-steps">
+    <button id="btnHold"><b>按住下方麦克风</b>（或直接点这里模拟）——拍 1：老师停笔，学生开讲「为什么是 ½？」</button>
+    <button id="btnBeat2"><b>拍 2 · 老师回应</b> —— 圈出 ½，气泡锚定 + 引线</button>
+    <button id="btnBeat3"><b>拍 3 · 衔回</b> —— 气泡收别针，推导继续写完</button>
+    <button id="btnReset"><b>重置</b> —— 回到打断前的课上</button>
+  </div>
+
+  <h3>覆盖原则</h3>
+  <div class="principles"><span>2 语音优先双向</span><span>3 节奏可视化</span></div>
+
+  <div class="nav"><a href="./live.html">← 上一页</a> · <a href="./index.html">目录</a> · <a href="./waiting.html">下一页：等待在叙事里 →</a></div>
+</aside>
+
+<script src="./shared.js"></script>
+<script>
+  initNotes();
+  startClock(document.getElementById('clock'), 667);
+  const board = document.getElementById('board');
+  const teacherCtl = animateWave(document.getElementById('teacherWave'));
+  const studentCtl = animateWave(document.getElementById('studentWave'));
+  studentCtl.stop();
+  const ht = document.getElementById('holdTalk');
+  const voiceBar = document.getElementById('voiceBar');
+  const narrationEl = document.getElementById('narration');
+
+  function placeRing() {
+    const half = document.getElementById('half');
+    const b = board.getBoundingClientRect(), h = half.getBoundingClientRect();
+    const ring = document.getElementById('askRing');
+    ring.style.left = (h.left - b.left - 14) + 'px';
+    ring.style.top = (h.top - b.top - 10) + 'px';
+    ring.style.width = (h.width + 28) + 'px';
+    ring.style.height = (h.height + 20) + 'px';
+  }
+  function drawLeader() {
+    const b = board.getBoundingClientRect();
+    const ring = document.getElementById('askRing').getBoundingClientRect();
+    const bub = document.getElementById('bubble').getBoundingClientRect();
+    const x1 = bub.left - b.left + 8, y1 = bub.top - b.top + bub.height * 0.55;
+    const x2 = ring.left - b.left + ring.width + 4, y2 = ring.top - b.top + ring.height / 2;
+    const mx = (x1 + x2) / 2;
+    document.getElementById('leaderPath').setAttribute('d',
+      `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`);
+  }
+
+  let beat = 0;
+  function beat1() {
+    if (beat !== 0) return;
+    beat = 1;
+    ht.classList.add('holding');
+    voiceBar.classList.add('holding-student');
+    teacherCtl.stop(); studentCtl.start();
+    narrate(narrationEl, '「老师等一下——位移公式里那个 ½ 是怎么来的？」');
+  }
+  function beat2() {
+    if (beat > 1) return;
+    beat = 2;
+    ht.classList.remove('holding');
+    voiceBar.classList.remove('holding-student');
+    studentCtl.stop();
+    placeRing();
+    document.getElementById('askRing').classList.add('on');
+    document.getElementById('bubble').classList.add('show');
+    drawLeader();
+    document.getElementById('leader').classList.add('on');
+    teacherCtl.start();
+    narrate(narrationEl, '问到点子上了。这个 ½ 不是凑出来的——位移是平均速度乘时间……');
+  }
+  function beat3() {
+    if (beat !== 2) return;
+    beat = 3;
+    document.getElementById('bubble').classList.remove('show');
+    document.getElementById('leader').classList.remove('on');
+    document.getElementById('askRing').classList.add('soft');
+    document.getElementById('pin').classList.add('on');
+    document.getElementById('f3').classList.add('done');
+    narrate(narrationEl, '好，这个 ½ 我们就收下了。接着刚才的推导往下走——');
+  }
+  function reset() {
+    beat = 0;
+    ht.classList.remove('holding');
+    voiceBar.classList.remove('holding-student');
+    document.getElementById('askRing').classList.remove('on', 'soft');
+    document.getElementById('bubble').classList.remove('show');
+    document.getElementById('leader').classList.remove('on');
+    document.getElementById('pin').classList.remove('on');
+    document.getElementById('f3').classList.remove('done');
+    narrationEl.innerHTML = '';
+    teacherCtl.start(); studentCtl.stop();
+  }
+
+  document.getElementById('btnHold').addEventListener('click', beat1);
+  document.getElementById('btnBeat2').addEventListener('click', beat2);
+  document.getElementById('btnBeat3').addEventListener('click', beat3);
+  document.getElementById('btnReset').addEventListener('click', reset);
+
+  // 真实按住交互：按下=拍1，松开=拍2
+  ht.querySelector('.btn').addEventListener('pointerdown', e => { e.preventDefault(); if (beat === 0) beat1(); });
+  window.addEventListener('pointerup', () => { if (beat === 1) setTimeout(beat2, 500); });
+  window.addEventListener('resize', () => { if (beat >= 2) { placeRing(); drawLeader(); } });
+</script>
+</body>
+</html>

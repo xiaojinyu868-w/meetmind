@@ -14,6 +14,8 @@ import type { BoardPage } from '@/lib/ai-native/plugins/board-script';
 import { BoardCanvas } from '@/components/apps/windows/blackboard/BoardCanvas';
 import { flattenPage } from '@/components/apps/windows/blackboard/board-lecture';
 import { useTextSelection } from '@/hooks/useTextSelection';
+import { BoardLaser } from './BoardLaser';
+import type { LaserPointer } from './BoardLaser';
 import { QuoteAskPopover } from './QuoteAskPopover';
 
 interface TeachBoardProps {
@@ -27,9 +29,11 @@ interface TeachBoardProps {
   onQuote: (text: string) => void;
   /** 书写倍率（事件流画布无 TTS：按生成流速显现，如 0.3 ≈ 55ms/字） */
   writePaceScale?: number;
+  /** 激光笔瞬态指示（live 才由 useTeachSession 置位；回放为 null） */
+  laser?: LaserPointer | null;
 }
 
-export function TeachBoard({ page, pageIndex, instant = false, preparing = false, onQuote, writePaceScale }: TeachBoardProps) {
+export function TeachBoard({ page, pageIndex, instant = false, preparing = false, onQuote, writePaceScale, laser }: TeachBoardProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { selection, clearSelection } = useTextSelection(containerRef);
 
@@ -37,7 +41,7 @@ export function TeachBoard({ page, pageIndex, instant = false, preparing = false
   const triggered = useMemo(() => flattenPage(page).map(({ key }) => key), [page]);
 
   return (
-    <div ref={containerRef} className="w-full select-text">
+    <div ref={containerRef} className="relative w-full select-text">
       <BoardCanvas
         page={page}
         pageIndex={pageIndex}
@@ -46,6 +50,7 @@ export function TeachBoard({ page, pageIndex, instant = false, preparing = false
         preparing={preparing}
         writePaceScale={writePaceScale}
       />
+      {laser ? <BoardLaser laser={laser} containerRef={containerRef} /> : null}
       {selection ? (
         <QuoteAskPopover selection={selection} onQuote={onQuote} onDismiss={clearSelection} />
       ) : null}

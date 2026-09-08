@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BoardPage } from '@/lib/ai-native/plugins/board-script';
 import { COPY } from '@/lib/ui/copy';
-import { applyImageUrlToBoard, boardEffectOf, buildWireText, engineTitleFollow, isVisibleTool, parseWireText } from './teach-events';
+import { applyCodeEditToBoard, applyImageUrlToBoard, boardEffectOf, buildWireText, createElementIdResolver, engineTitleFollow, isVisibleTool, parseWireText } from './teach-events';
 import type { TeachChatMessage, TeachEvent } from './teach-events';
 import { useTeachBoardSync } from './useTeachBoardSync';
 import {
@@ -61,6 +61,8 @@ export interface UseTeachSessionResult {
   /** 课已讲完（finish 工具） */
   done: boolean;
   error: string | null;
+  /** 激光笔瞬态指示（teach-engine laser，P3 真渲染）：live 才置位，回放永远 null */
+  laser: { target: string; color?: string; at: number } | null;
   /** 老师正在出声（语音管线播放中） */
   speaking: boolean;
   /** 静音开关（静音即清空合成队列） */
@@ -83,6 +85,7 @@ export function useTeachSession(): UseTeachSessionResult {
   const [streaming, setStreaming] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [laser, setLaser] = useState<{ target: string; color?: string; at: number } | null>(null);
 
   // 当前在飞的 mock 流迭代器 / 真实模式订阅退订函数
   const activeStreamRef = useRef<AsyncGenerator<TeachEvent> | null>(null);
@@ -102,6 +105,8 @@ export function useTeachSession(): UseTeachSessionResult {
   const boundaryRef = useRef(false);
   // 新引擎标题跟随：本线程首条 wb_draw_text 是否已消费（prompt 契约 = 课题标题）
   const engineTitleSeenRef = useRef(false);
+  // spotlight 语义 elementId → 画布 wN 对应表（teach-events.ts:createElementIdResolver）
+  const elementIdResolverRef = useRef(createElementIdResolver());
 
   const setBothStreaming = useCallback((value: boolean) => {
     streamingRef.current = value;
@@ -142,7 +147,16 @@ export function useTeachSession(): UseTeachSessionResult {
 
   const applyBoardEffect = useCallback((name: string, args: Record<string, unknown>, callId?: string) => {
     const effect = boardEffectOf(name, args, callId);
-    if (effect.type === 'none') return;
+    if (effect.type === 'none' || effect.type === 'laser') return;
+    if (effect.type === 'edit-code') {
+      // wb_edit_code 行级编辑：按 elementId 定位画布 code 块更新（找不到 = 两侧同步降级）
+      const nextPages = applyCodeEditToBoard(pagesRef.current, effect.edit);
+      if (nextPages) {
+        pagesRef.current = nextPages;
+        setPages(nextPages);
+      }
+      return;
+    }
     if (effect.type === 'flip') {
       const nextPages = [...pagesRef.current, emptyPage()];
       pagesRef.current = nextPages;
@@ -179,6 +193,8 @@ export function useTeachSession(): UseTeachSessionResult {
         setBothStreaming(true);
         if (isVisibleTool(event.name)) appendChip(event.id, event.name);
         let args = event.args;
+        // spotlight 语义 elementId 翻译 + 写板编号登记（ wb_clear/flip_page 内部重置）
+        args = elementIdResolverRef.current.trackToolCall(event.name, args);
         // 标题跟随：agent 写下正式课题标题 → 页头同步（中途换题不滞留旧课题）
         if (event.name === 'write' && event.args.role === 'title' && typeof event.args.text === 'string') {
           setTitle(event.args.text);
@@ -194,7 +210,16 @@ export function useTeachSession(): UseTeachSessionResult {
         // "说完一句就落笔"：工具调用是自然断句点，半句也送合成；
         // 先断句再取闸门序号——板书锚到刚说完的这句
         if (live && event.name !== 'pause' && event.name !== 'new_column') feedBreak();
-        gateBoardEffect(event.name, args, live, event.id);
+        if (event.name === 'laser') {
+          // 瞬态特效（fire-and-forget）：不进语音闸门、不上板；live 才渲染，
+          // 事件日志回放不重演过期光圈（applyEvent(event, false) 路径天然跳过）
+          if (live) {
+            const effect = boardEffectOf(event.name, args, event.id);
+            if (effect.type === 'laser') setLaser({ target: effect.target, ...(effect.color ? { color: effect.color } : {}), at: Date.now() });
+          }
+        } else {
+          gateBoardEffect(event.name, args, live, event.id);
+        }
         // 句号闸门：上一段话说完了才分气泡；pause/new_column 不切碎话头
         if (event.name !== 'pause' && event.name !== 'new_column') {
           const last = messagesRef.current[messagesRef.current.length - 1];
@@ -288,12 +313,14 @@ export function useTeachSession(): UseTeachSessionResult {
           pageIndexRef.current = 0;
           boundaryRef.current = false;
           engineTitleSeenRef.current = false;
+          elementIdResolverRef.current.reset();
           setMessages([]);
           setPages(pagesRef.current);
           setPageIndex(0);
           for (const event of events) applyEvent(event, false); // 追齐重放不出声
           // 重放后 streaming 以日志末尾事件为准；崩溃中断的 turn 按不在讲处理
           setBothStreaming(false);
+          setLaser(null);
         } catch {
           // 重放失败保持现状，订阅仍在
         }
@@ -359,10 +386,12 @@ export function useTeachSession(): UseTeachSessionResult {
       pageIndexRef.current = 0;
       boundaryRef.current = false;
       engineTitleSeenRef.current = false;
+      elementIdResolverRef.current.reset();
       setMessages([]);
       setPages(pagesRef.current);
       setPageIndex(0);
       setDone(false);
+      setLaser(null);
       setError(null);
       const meta = await teachCreateThread(topic, pace);
       if (epochRef.current !== epoch) return; // 已被更新的会话取代
@@ -397,6 +426,7 @@ export function useTeachSession(): UseTeachSessionResult {
       threadIdRef.current = meta.id;
       boundaryRef.current = false;
       engineTitleSeenRef.current = false;
+      elementIdResolverRef.current.reset();
       if (!isMockMode()) {
         // 真实：事件日志回放重建对话与画布，再订阅续讲
         const events = await teachFetchEvents(meta.id);
@@ -408,6 +438,7 @@ export function useTeachSession(): UseTeachSessionResult {
         setPages(pagesRef.current);
         setPageIndex(0);
         setDone(false);
+        setLaser(null);
         for (const event of events) applyEvent(event, false); // 历史回放不出声
         setBothStreaming(false); // 回放末态不算在讲（崩溃中断的 turn 也按不在讲处理）
         subscribeReal(meta.id);
@@ -423,6 +454,7 @@ export function useTeachSession(): UseTeachSessionResult {
         setPages(pagesRef.current);
         setPageIndex(pageIndexRef.current);
         setDone(snapshot.done);
+        setLaser(null);
         // mock 会话按游标重建：继续提问/作答时从断点续播
         await attachMockSession(meta.id, snapshot.cursor, snapshot.pendingCheckpoint, pace);
       } else {
@@ -433,6 +465,7 @@ export function useTeachSession(): UseTeachSessionResult {
         setPages(pagesRef.current);
         setPageIndex(0);
         setDone(false);
+        setLaser(null);
       }
       setBothStreaming(false);
     },
@@ -505,6 +538,7 @@ export function useTeachSession(): UseTeachSessionResult {
       pageIndex,
       streaming,
       done,
+      laser,
       error,
       speaking,
       muted,
@@ -515,6 +549,6 @@ export function useTeachSession(): UseTeachSessionResult {
       send,
       stop,
     }),
-    [threadId, title, messages, pages, pageIndex, streaming, done, error, speaking, muted, setMuted, unlockAudio, newLesson, openThread, send, stop],
+    [threadId, title, messages, pages, pageIndex, streaming, done, laser, error, speaking, muted, setMuted, unlockAudio, newLesson, openThread, send, stop],
   );
 }

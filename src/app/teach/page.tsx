@@ -221,6 +221,7 @@ export default function TeachPage() {
               preparing={preparing}
               onQuote={(text) => setQuote(text)}
               writePaceScale={0.3}
+              laser={session.laser}
             />
             {session.error ? (
               <p className="mt-2 text-[13px] text-vermilion">流中断：{session.error}</p>

@@ -13,7 +13,8 @@
  *   POST /api/teach/threads/[id]/interrupt        打断
  */
 
-import type { BoardAction, BoardImageAction, BoardPage, BoardWriteRole } from '@/lib/ai-native/plugins/board-script';
+import type { BoardAction, BoardCodeAction, BoardImageAction, BoardPage, BoardWriteRole } from '@/lib/ai-native/plugins/board-script';
+import { codeTextToLines } from '@/lib/ai-native/plugins/board-script';
 
 export type TeachEvent =
   | { type: 'thread'; threadId: string }
@@ -92,19 +93,105 @@ export function engineTitleFollow(
 }
 
 /**
+ * 引擎 elementId → 画布定位键的对应表（P1 补丁；P3 扩展到结构化块）。
+ * prompt 契约鼓励模型用语义 id（title/formula/def1…），而画布元素按 write
+ * 序号编号为 w1..wN（board-lecture flattenPage：每页最后一次 clear 之后从 w1 起）。
+ * 逐事件跟踪 tool-call 流即可把 spotlight/laser 的语义 id 翻成 wN；
+ * 直播与日志回放走同一 applyEvent 路径，无需两处维护。
+ *
+ * P3 结构化块（shape/table/line/code）：不占 wN，登记为 `e:<id>` 前缀值——
+ * 否则自动 id a_N 会被 boardEffectOf 的 a_N→wN 兜底直译错号（a_3 是代码块
+ * 时绝不能翻成 w3）。boardEffectOf 认出 e: 前缀后剥掉，target = 块的
+ * elementId（渲染层 BoardFlow 按它命中块内圈注 / BoardLaser 按它 DOM 定位）。
+ */
+export type ElementIdResolver = {
+  /** 传入 tool-call 的 name/args，返回翻译后的 args（spotlight/laser 命中对应表时改写 elementId）。 */
+  trackToolCall: (name: string, args: Record<string, unknown>) => Record<string, unknown>;
+  reset: () => void;
+};
+
+/** 会产生 write 上板（占用一个 wN 编号）的新引擎动作。 */
+const WRITE_PRODUCING = new Set(['wb_draw_text', 'wb_draw_latex']);
+
+/** 落结构化块（不占 wN，登记 e: 前缀）的新引擎动作。 */
+const BLOCK_PRODUCING = new Set(['wb_draw_shape', 'wb_draw_table', 'wb_draw_line', 'wb_draw_code']);
+
+export function createElementIdResolver(): ElementIdResolver {
+  let writeCount = 0;
+  const map = new Map<string, string>();
+  return {
+    trackToolCall(name, args) {
+      if (name === 'wb_clear' || name === 'flip_page') {
+        writeCount = 0;
+        map.clear();
+        return args;
+      }
+      if (WRITE_PRODUCING.has(name)) {
+        writeCount += 1;
+        const elementId = typeof args.elementId === 'string' ? args.elementId : '';
+        if (elementId) map.set(elementId, `w${writeCount}`);
+        return args;
+      }
+      if (BLOCK_PRODUCING.has(name)) {
+        const elementId = typeof args.elementId === 'string' ? args.elementId : '';
+        if (elementId) map.set(elementId, `e:${elementId}`);
+        return args;
+      }
+      if (name === 'spotlight' || name === 'laser') {
+        const elementId = typeof args.elementId === 'string' ? args.elementId : '';
+        const resolved = map.get(elementId);
+        if (resolved) return { ...args, elementId: resolved };
+      }
+      return args;
+    },
+    reset() {
+      writeCount = 0;
+      map.clear();
+    },
+  };
+}
+
+/**
  * tool-call → 画布效果（纯函数）：
- * - append：write/circle/underline/arrow/mark/new_column/image 转成 BoardAction 追加到当前页
+ * - append：write/circle/underline/arrow/mark/new_column/image/结构化块 转成 BoardAction 追加到当前页
  * - flip：flip_page 开新页
+ * - laser：瞬态特效（指向某元素的光圈，2.4s 淡出，不留永久板书；
+ *   useTeachSession 只在 live 时渲染，回放跳过）
+ * - edit-code：wb_edit_code 的行级编辑（applyCodeEditToBoard 按 elementId 定位更新）
  * - none：pause/ref/ask/finish 不直接产生板面动作（ask 走对话，ref 二期）
  *
- * 双词汇（P1-B）：新引擎 teach-engine 的动作名（wb_draw_text/wb_draw_latex/
- * spotlight/laser/wb_clear/wb_open/wb_close/discussion/speech）在下方独立分支
- * 映射到同一套 BoardAction；legacy 词表分支永久保留（旧线程日志回放依赖它）。
+ * 双词汇（P1-B）：新引擎 teach-engine 的动作名在下方独立分支映射到同一套
+ * BoardAction；legacy 词表分支永久保留（旧线程日志回放依赖它）。
  */
 export type BoardEffect =
   | { type: 'append'; action: BoardAction }
   | { type: 'flip' }
+  | { type: 'laser'; target: string; color?: string }
+  | { type: 'edit-code'; edit: CodeEdit }
   | { type: 'none' };
+
+/** wb_edit_code 的行级编辑载荷（vendor WbEditCodeAction 同构）。 */
+export interface CodeEdit {
+  elementId: string;
+  operation: 'insert_after' | 'insert_before' | 'delete_lines' | 'replace_lines';
+  lineId?: string;
+  lineIds?: string[];
+  content?: string;
+}
+
+/** spotlight/laser 的 elementId → 画布 target：e: 前缀剥壳（结构化块）、
+ *  a_${n} 兜底直译 wN（引擎缺省 id 约定）、其余原样透传（找不到目标 = 不画）。 */
+function resolveElementTarget(elementId: string): string {
+  if (elementId.startsWith('e:')) return elementId.slice(2);
+  const match = /^a_(\d+)$/.exec(elementId);
+  if (match) return `w${match[1]}`;
+  return elementId;
+}
+
+/** 透传 args 里的字符串字段（存在才带上）。 */
+function pickString(args: Record<string, unknown>, key: string): string | undefined {
+  return typeof args[key] === 'string' && args[key] ? (args[key] as string) : undefined;
+}
 
 const WRITE_ROLES: ReadonlySet<string> = new Set(['title', 'term', 'step', 'note', 'formula']);
 
@@ -172,20 +259,119 @@ export function boardEffectOf(name: string, args: Record<string, unknown>, callI
       return { type: 'append', action: { type: 'write', text: latex, role: 'formula' } };
     }
     case 'spotlight': {
-      // 引擎元素 id 约定 a_${n}（单写者，action-map.ts ensureElementId），
-      // 映射到画布 wN 引用；自定义 id 无法对号时原样透传（渲染层找不到目标 = 不画）
+      // elementId 到画布 wN / 块 id 的翻译在 useTeachSession 经 createElementIdResolver
+      // 完成（语义 id 已在上游翻成 wN 或 e:<id>）；这里剥 e: 壳 + 兜底 a_${n} 直译，
+      // 其余原样透传（渲染层找不到目标 = 不画）
       const elementId = typeof args.elementId === 'string' ? args.elementId : '';
-      const match = /^a_(\d+)$/.exec(elementId);
-      return { type: 'append', action: { type: 'circle', target: match ? `w${match[1]}` : elementId || 'w1' } };
+      return { type: 'append', action: { type: 'circle', target: resolveElementTarget(elementId) || 'w1' } };
     }
-    case 'laser':
-      // P1 降级：画布无激光笔渲染原语，先不上板（P3 vendor UI 接入时换真渲染）
-      return { type: 'none' };
+    case 'laser': {
+      // P3 真渲染：瞬态光圈（BoardEffect.laser，useTeachSession 只在 live 落地，
+      // 回放跳过）；target 解析与 spotlight 同规则
+      const elementId = typeof args.elementId === 'string' ? args.elementId : '';
+      const target = resolveElementTarget(elementId);
+      if (!target) return { type: 'none' };
+      const color = pickString(args, 'color');
+      return { type: 'laser', target, ...(color ? { color } : {}) };
+    }
     case 'wb_clear':
       return { type: 'append', action: { type: 'clear' } };
-    // wb_open / wb_close / discussion：none——画布常开；气泡语义在 text-delta。
-    // v1 词表外动作（wb_draw_shape/table/line/code、wb_edit_code 等，仅
-    // TEACH_ACTIONS_FULL=1 时出现）走 default 降级 none，渲染器留待后续期。
+    // ── 全量词表（P3 渲染器补齐）：shape/table/line/code 成结构化块上板 ──
+    case 'wb_draw_shape': {
+      const shape = args.shape === 'circle' || args.shape === 'triangle' ? args.shape : 'rectangle';
+      const width = Number(args.width);
+      const height = Number(args.height);
+      const aspect = Number.isFinite(width) && Number.isFinite(height) && height > 0 && width > 0 ? width / height : undefined;
+      return {
+        type: 'append',
+        action: {
+          type: 'shape',
+          shape,
+          ...(aspect ? { aspect } : {}),
+          ...(pickString(args, 'fillColor') ? { fill: pickString(args, 'fillColor') } : {}),
+          ...(pickString(args, 'label') ? { label: pickString(args, 'label') } : {}),
+          ...(pickString(args, 'elementId') ? { elementId: pickString(args, 'elementId') } : {}),
+        },
+      };
+    }
+    case 'wb_draw_table': {
+      // data = string[][]（首行表头）；逐格 String() 归一，空行/空数据不上板
+      const raw = Array.isArray(args.data) ? args.data : [];
+      const data = raw
+        .filter((row): row is unknown[] => Array.isArray(row))
+        .map((row) => row.map((cell) => String(cell ?? '')))
+        .filter((row) => row.length > 0);
+      if (data.length === 0) return { type: 'none' };
+      return {
+        type: 'append',
+        action: {
+          type: 'table',
+          data,
+          ...(pickString(args, 'elementId') ? { elementId: pickString(args, 'elementId') } : {}),
+        },
+      };
+    }
+    case 'wb_draw_line': {
+      const nums = [args.startX, args.startY, args.endX, args.endY].map(Number);
+      if (nums.some((n) => !Number.isFinite(n))) return { type: 'none' };
+      const points = Array.isArray(args.points) ? args.points : [];
+      const arrowStart = points[0] === 'arrow';
+      const arrowEnd = points[1] === 'arrow';
+      return {
+        type: 'append',
+        action: {
+          type: 'line',
+          start: { x: nums[0], y: nums[1] },
+          end: { x: nums[2], y: nums[3] },
+          ...(args.style === 'dashed' ? { dashed: true } : {}),
+          ...(arrowStart || arrowEnd
+            ? { arrow: arrowStart && arrowEnd ? ('both' as const) : arrowStart ? ('start' as const) : ('end' as const) }
+            : {}),
+          ...(pickString(args, 'elementId') ? { elementId: pickString(args, 'elementId') } : {}),
+        },
+      };
+    }
+    case 'wb_draw_code': {
+      const code = typeof args.code === 'string' ? args.code.replace(/\r\n/g, '\n').replace(/\s+$/, '') : '';
+      if (!code.trim()) return { type: 'none' };
+      return {
+        type: 'append',
+        action: {
+          type: 'code',
+          language: pickString(args, 'language') ?? '',
+          ...(pickString(args, 'fileName') ? { fileName: pickString(args, 'fileName') } : {}),
+          lines: codeTextToLines(code),
+          ...(pickString(args, 'elementId') ? { elementId: pickString(args, 'elementId') } : {}),
+        },
+      };
+    }
+    case 'wb_edit_code': {
+      const elementId = pickString(args, 'elementId');
+      const operation = pickString(args, 'operation');
+      if (
+        !elementId ||
+        (operation !== 'insert_after' &&
+          operation !== 'insert_before' &&
+          operation !== 'delete_lines' &&
+          operation !== 'replace_lines')
+      ) {
+        return { type: 'none' };
+      }
+      const lineIds = Array.isArray(args.lineIds) ? args.lineIds.map(String) : undefined;
+      return {
+        type: 'edit-code',
+        edit: {
+          elementId,
+          operation,
+          ...(pickString(args, 'lineId') ? { lineId: pickString(args, 'lineId') } : {}),
+          ...(lineIds && lineIds.length > 0 ? { lineIds } : {}),
+          ...(pickString(args, 'content') ? { content: pickString(args, 'content') } : {}),
+        },
+      };
+    }
+    // wb_open / wb_close / discussion / speech：none——画布常开；气泡语义在 text-delta。
+    // wb_draw_chart / wb_delete / play_video / widget_*（全量词表内但无对应
+    // 渲染原语）走 default 降级 none，模型在板上的该次落笔不呈现、不炸板。
     default:
       return { type: 'none' };
   }
@@ -211,6 +397,74 @@ export function applyImageUrlToBoard(pages: BoardPage[], callId: string, url: st
     return nextPages;
   }
   return null;
+}
+
+/**
+ * wb_edit_code 落板（纯函数）：按 elementId 找到画布上的 code 块动作，行级
+ * 编辑（vendor executeWbEditCode 同规则：insert_after/before 按 lineId 定位、
+ * delete/replace 按 lineIds；新插入行分配新 id——模型拿不到新 id，与 vendor
+ * 引擎侧行为一致）。返回新 pages（不可变更新）；找不到目标 / 定位行不存在
+ * 返回 null（引擎侧同参数也会 no-op，两侧同步降级）。
+ */
+export function applyCodeEditToBoard(pages: BoardPage[], edit: CodeEdit): BoardPage[] | null {
+  for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
+    const segment = pages[pageIndex].segments[0];
+    if (!segment || segment.type !== 'narration') continue;
+    const actionIndex = segment.actions.findIndex(
+      (action) => action.type === 'code' && action.elementId === edit.elementId,
+    );
+    if (actionIndex < 0) continue;
+    const action = segment.actions[actionIndex];
+    if (action.type !== 'code') continue;
+    const nextLines = applyCodeEdit(action.lines, edit, `${pageIndex}_${actionIndex}`);
+    if (!nextLines) return null;
+    const nextActions = [...segment.actions];
+    nextActions[actionIndex] = { ...action, lines: nextLines };
+    const nextPages = [...pages];
+    nextPages[pageIndex] = { ...pages[pageIndex], segments: [{ ...segment, actions: nextActions }] };
+    return nextPages;
+  }
+  return null;
+}
+
+/** 行级编辑核心（vendor executeWbEditCode 的纯函数镜像）；定位失败返回 null。 */
+function applyCodeEdit(
+  lines: BoardCodeAction['lines'],
+  edit: CodeEdit,
+  scope: string,
+): BoardCodeAction['lines'] | null {
+  const newLines = (edit.content ?? '').replace(/\r\n/g, '\n').split('\n').map((content, index) => ({
+    // 新行 id：块内唯一即可（模型侧拿不到插入行 id，与 vendor 一致）
+    id: `e_${scope}_${index}_${Date.now().toString(36)}`,
+    content,
+  }));
+  const withContent = edit.content !== undefined && edit.content !== '' ? newLines : [];
+  switch (edit.operation) {
+    case 'insert_after':
+    case 'insert_before': {
+      const index = lines.findIndex((line) => line.id === edit.lineId);
+      if (index < 0 || withContent.length === 0) return null;
+      const at = edit.operation === 'insert_after' ? index + 1 : index;
+      return [...lines.slice(0, at), ...withContent, ...lines.slice(at)];
+    }
+    case 'delete_lines': {
+      if (!edit.lineIds?.length) return null;
+      const drop = new Set(edit.lineIds);
+      return lines.filter((line) => !drop.has(line.id));
+    }
+    case 'replace_lines': {
+      if (!edit.lineIds?.length) return null;
+      const firstIndex = lines.findIndex((line) => line.id === edit.lineIds![0]);
+      if (firstIndex < 0) return null;
+      const drop = new Set(edit.lineIds);
+      const rest = lines.filter((line) => !drop.has(line.id));
+      // 替换行沿用被替换行 id（模型后续引用不失效），多出的新行用新 id
+      const replacement = withContent.map((line, index) =>
+        index < edit.lineIds!.length ? { id: edit.lineIds![index], content: line.content } : line,
+      );
+      return [...rest.slice(0, firstIndex), ...replacement, ...rest.slice(firstIndex)];
+    }
+  }
 }
 
 /** tool-call（name+args）→ BoardAction（mock 把 BoardScript 动作翻译成事件时用） */

@@ -1,0 +1,42 @@
+# NOTICE — assets/teach-skills 第三方来源说明
+
+本目录以下 skill 改写自 **THU-MAIC/OpenMAIC**（上游仓库研究副本见本仓库
+`out/openmaic-study/skills/agent-runtime/`），上游许可证为 **MIT License**：
+
+- feynman-learning
+- understanding-by-design
+- social-emotional-learning
+- learning-to-learn
+- k12-core-literacy-planning（含 `references/` 目录原样保留）
+- lecture-style
+- workshop-style
+- fact-check
+
+各文件头部注明了具体裁剪处（统一原则：删除 stage-design/slide-dsl 等
+预编排课件工具链引用——本课堂是实时一对一活对话，无预制页面；教学法内核保留）。
+
+以下 skill 为本仓库自研，非上游内容：quiz-maker、lab-sim。
+
+---
+
+MIT License
+
+Copyright (c) 2026 THU-MAIC
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

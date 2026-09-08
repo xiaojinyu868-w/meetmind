@@ -34,6 +34,14 @@ tests/eval/
 │   │   └── transcripts/     # 冻结的课堂转写片段 .json
 │   ├── runs/
 │   └── runner.ts
+├── teach/
+│   ├── datasets/            # JSONL，{ id, topic, turns[{studentMessage, stubOutput}], expect{quizElementIds, verdicts, requireDiscussionPause} }
+│   ├── graders/
+│   │   ├── quiz-loop.ts       # 出题闭环结构断言（锚点落板 / discussion 暂停 / 讲评引用 quiz_qN）
+│   │   └── grading-accuracy.ts  # 判分准确率（门禁核心指标；parseVerdicts 三态提取逐题比对）
+│   ├── real-caller.ts       # --real 等效生产链路（skills + engine prompt + streamText 多轮）
+│   ├── runs/
+│   └── runner.ts            # dry-run 用生产真件跑冻结 DSL 输出 = 出题 e2e
 └── promptfooconfig.yaml     # CI 入口；上面的 graders 都通过 javascript: 断言接入
 ```
 
@@ -45,6 +53,8 @@ make eval-asr            # 冻结 hypothesis 的快速回归
 make eval-asr-real       # 本地短音频 batch / 公网 URL filetrans；自动读取 .env.local / .env
 ASR_EVAL_TRANSPORT=realtime make eval-asr-real  # 真实产品 WS 链路
 make eval-tutor
+make eval-teach          # Teach 引擎出题闭环评测（dry-run，生产真件跑冻结 DSL 输出）
+make eval-teach-real     # 真实链路（需 TEACH provider 的 key）
 ```
 
 ### 单条调试

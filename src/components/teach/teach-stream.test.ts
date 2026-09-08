@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyImageUrlToBoard, boardEffectOf, engineTitleFollow, isVisibleTool } from './teach-events';
+import { applyImageUrlToBoard, boardEffectOf, createElementIdResolver, engineTitleFollow, isVisibleTool } from './teach-events';
 import { MockTeachSession, flattenScript } from './mockTeachStream';
 import type { BoardPage, BoardScript } from '@/lib/ai-native/plugins/board-script';
 import type { TeachEvent } from './teach-events';
@@ -91,19 +91,32 @@ describe('boardEffectOf · 新引擎动作词表（teach-engine，P1-B）', () =
     });
   });
 
-  it('laser 降级 none（P3 vendor UI 换真渲染）；wb_clear → BoardClearAction', () => {
-    expect(boardEffectOf('laser', { elementId: 'a_1' }).type).toBe('none');
+  it('laser → 瞬态光圈效果（live 落地、回放跳过）；wb_clear → BoardClearAction', () => {
+    expect(boardEffectOf('laser', { elementId: 'a_1' })).toEqual({ type: 'laser', target: 'w1' });
+    expect(boardEffectOf('laser', { elementId: 'a_2', color: '#fff' })).toEqual({
+      type: 'laser',
+      target: 'w2',
+      color: '#fff',
+    });
+    expect(boardEffectOf('laser', {}).type).toBe('none');
     expect(boardEffectOf('wb_clear', {})).toEqual({ type: 'append', action: { type: 'clear' } });
   });
 
-  it('wb_open/wb_close/discussion 不上板；v1 词表外动作降级 none', () => {
+  it('wb_open/wb_close/discussion 不上板；全量词表 shape/table/line/code 成块上板（P3 渲染器已补齐）', () => {
     for (const name of ['wb_open', 'wb_close', 'discussion', 'speech']) {
       expect(boardEffectOf(name, {}).type).toBe('none');
     }
-    // 仅 TEACH_ACTIONS_FULL=1 时模型才可能输出：前端先不认，渲染器留待后续期
-    for (const name of ['wb_draw_shape', 'wb_draw_table', 'wb_draw_line', 'wb_draw_code', 'wb_edit_code']) {
-      expect(boardEffectOf(name, { content: 'x' }).type).toBe('none');
-    }
+    expect(boardEffectOf('wb_draw_shape', { shape: 'circle', width: 2, height: 1, label: '圆' }).type).toBe('append');
+    expect(boardEffectOf('wb_draw_table', { data: [['a', 'b'], ['1', '2']] })).toEqual({
+      type: 'append',
+      action: { type: 'table', data: [['a', 'b'], ['1', '2']] },
+    });
+    expect(boardEffectOf('wb_draw_table', { data: [] }).type).toBe('none');
+    expect(boardEffectOf('wb_draw_line', { startX: 0, startY: 0, endX: 1, endY: 1 }).type).toBe('append');
+    expect(boardEffectOf('wb_draw_line', { startX: 'x' }).type).toBe('none');
+    expect(boardEffectOf('wb_draw_code', { code: 'let a = 1;' }).type).toBe('append');
+    expect(boardEffectOf('wb_draw_code', { code: '  ' }).type).toBe('none');
+    expect(boardEffectOf('wb_edit_code', {}).type).toBe('none');
   });
 
   it('新词表静默动作不挂 chip，落板动作挂 chip', () => {
@@ -130,6 +143,46 @@ describe('boardEffectOf · 新引擎动作词表（teach-engine，P1-B）', () =
       type: 'append',
       action: { type: 'write', text: '课题', role: 'title' },
     });
+  });
+});
+
+describe('createElementIdResolver（spotlight 语义 elementId → 画布 wN）', () => {
+  it('语义 id 登记后 spotlight 翻译成 wN', () => {
+    const r = createElementIdResolver();
+    r.trackToolCall('wb_draw_text', { content: '勾股定理', elementId: 'title' });
+    r.trackToolCall('wb_draw_text', { content: '前提', elementId: 'condition' });
+    r.trackToolCall('wb_draw_latex', { latex: 'a^2+b^2=c^2', elementId: 'formula' });
+    const args = r.trackToolCall('spotlight', { elementId: 'formula' });
+    expect(args.elementId).toBe('w3');
+    expect(boardEffectOf('spotlight', args)).toEqual({
+      type: 'append',
+      action: { type: 'circle', target: 'w3' },
+    });
+  });
+
+  it('未登记的 id 原样透传（渲染层找不到即不画，不炸板）', () => {
+    const r = createElementIdResolver();
+    const args = r.trackToolCall('spotlight', { elementId: 'compare' });
+    expect(args.elementId).toBe('compare');
+  });
+
+  it('wb_clear / flip_page 后编号与对应表重置（对齐 flattenPage 重编号）', () => {
+    const r = createElementIdResolver();
+    r.trackToolCall('wb_draw_text', { content: '甲', elementId: 'x' });
+    r.trackToolCall('wb_clear', {});
+    r.trackToolCall('wb_draw_text', { content: '乙', elementId: 'y' });
+    expect(r.trackToolCall('spotlight', { elementId: 'y' }).elementId).toBe('w1');
+    // 清板前的旧 id 不再对号
+    expect(r.trackToolCall('spotlight', { elementId: 'x' }).elementId).toBe('x');
+  });
+
+  it('reset 清空状态；非写板动作不占编号', () => {
+    const r = createElementIdResolver();
+    r.trackToolCall('wb_open', {});
+    r.trackToolCall('wb_draw_text', { content: '甲', elementId: 'x' });
+    expect(r.trackToolCall('spotlight', { elementId: 'x' }).elementId).toBe('w1');
+    r.reset();
+    expect(r.trackToolCall('spotlight', { elementId: 'x' }).elementId).toBe('x');
   });
 });
 

@@ -121,6 +121,16 @@ export function resolveTeachTtsProvider(): TeachTtsProviderConfig {
 }
 
 export const TeachConfig = {
+  /** 教学引擎选择：codex（现役 app-server 底座）/ engine（pi loop + vendor OpenMAIC，P1） */
+  engine: env('TEACH_ENGINE') || 'codex',
+  /** teach-engine 的 skill 目录（Agent Skills 标准 SKILL.md；目录不存在 = 无技能） */
+  skillsDir: env('TEACH_SKILLS_DIR') || 'assets/teach-skills',
+  /** teach-engine 人物人格 skill 的发现根（fenshen 蒸馏产物；目录布局契约见
+   *  fenshen/fenshen-config.ts：<egoId>/work/skill/SKILL.md 镜像 = 就绪门禁）。
+   *  仅配置值约定，不 import fenshen（teach-engine 与 fenshen 零耦合边界不变）。 */
+  personaSkillsRoot: env('TEACH_PERSONA_SKILLS_ROOT') || 'data/fenshen-codex',
+  /** teach-engine 单轮最大输出 tokens */
+  engineMaxOutputTokens: Number(env('TEACH_ENGINE_MAX_OUTPUT_TOKENS') || 4096),
   /** shim 监听端口（仅 127.0.0.1；被占用时假定已有健康 shim 在跑并复用） */
   shimPort: Number(env('TEACH_SHIM_PORT') || 8799),
   /** codex app-server 空闲回收阈值（默认 15 分钟） */

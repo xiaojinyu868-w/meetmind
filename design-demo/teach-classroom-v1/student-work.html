@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>04 · 学生产出上板 — teach 课堂 v1</title>
+<link rel="stylesheet" href="./shared.css" />
+<style>
+  #title   { left: 7%; top: 9%; }
+  #title .chalk-tag { display: block; margin-bottom: 7px; }
+  #prompt  { left: 7%; top: 26%; max-width: 30%; }
+  #prompt .chalk-note b { color: var(--chalk-amber); font-weight: 600; }
+
+  /* 拍题照片：贴在板上的拍立得 */
+  #photo {
+    left: 38%; top: 16%; width: 30%;
+    transform: rotate(-2.5deg) translateY(30px); opacity: 0;
+    transition: transform 0.8s var(--ease-out), opacity 0.8s var(--ease-out);
+    filter: drop-shadow(0 18px 34px rgba(0,0,0,0.5));
+  }
+  #photo.on { transform: rotate(-2.5deg) translateY(0); opacity: 1; }
+  #photo .frame { background: #f3eddb; border-radius: 6px; padding: 10px 10px 34px; position: relative; }
+  #photo .cap {
+    position: absolute; bottom: 9px; left: 14px;
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.1em; color: #8a7f66;
+  }
+  .tape {
+    position: absolute; width: 74px; height: 22px;
+    background: rgba(214, 205, 176, 0.4); backdrop-filter: blur(1px);
+    border-left: 1px dashed rgba(120,110,88,0.4); border-right: 1px dashed rgba(120,110,88,0.4);
+  }
+  .tape.t1 { top: -10px; left: 18%; transform: rotate(-8deg); }
+  .tape.t2 { top: -10px; right: 14%; transform: rotate(6deg); }
+
+  /* 红笔批注层（画在照片之上） */
+  #redpen { position: absolute; inset: 0; pointer-events: none; }
+  #redpen path, #redpen text { visibility: hidden; }
+  #redpen .draw.on, #redpen text.on { visibility: visible; }
+
+  /* 老师端详时的注视圈 */
+  #gaze {
+    position: absolute; border: 2px dashed rgba(143,197,169,0.75); border-radius: 12px;
+    opacity: 0; transition: all 0.6s var(--ease-out); pointer-events: none; z-index: 6;
+  }
+  #gaze.on { opacity: 1; }
+
+  #bubble { left: 70%; top: 24%; visibility: hidden; }
+  #bubble.show { visibility: visible; }
+  #leader { opacity: 0; transition: opacity .45s; }
+  #leader.on { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <header class="topbar">
+    <div class="lesson">
+      <span class="live-dot"></span>
+      <b>匀变速直线运动</b><span>高中物理 · 第 3 讲</span>
+    </div>
+    <div class="clock" id="clock">19:48</div>
+  </header>
+
+  <div class="board-wrap">
+    <div class="board" id="board">
+
+      <div class="b-el" id="title">
+        <span class="chalk-tag">§ 2.2 · 练习</span>
+        <div class="chalk chalk-title">你昨天卡壳的那道题</div>
+        <svg width="240" height="10" style="display:block;margin-top:8px"><path class="ink amber thin" d="M2 6 C 60 3, 160 8, 238 5"/></svg>
+      </div>
+
+      <div class="b-el" id="prompt">
+        <div class="chalk chalk-body">汽车以 20 m/s 行驶，刹车加速度 <b>−4 m/s²</b>，求刹车后 6 s 内的位移。</div>
+        <div class="chalk chalk-note" style="margin-top:12px">你把作业拍给我了——我们就在黑板上改，讲<b>你自己的</b>这一步。</div>
+      </div>
+
+      <div class="b-el" id="photo">
+        <div class="tape t1"></div><div class="tape t2"></div>
+        <div class="frame">
+          <svg width="100%" viewBox="0 0 300 260">
+            <!-- 作业纸 -->
+            <rect x="0" y="0" width="300" height="260" fill="#f7f1de"/>
+            <g stroke="#d8cfb4" stroke-width="1"><line x1="0" y1="42" x2="300" y2="42"/><line x1="0" y1="76" x2="300" y2="76"/><line x1="0" y1="110" x2="300" y2="110"/><line x1="0" y1="144" x2="300" y2="144"/><line x1="0" y1="178" x2="300" y2="178"/><line x1="0" y1="212" x2="300" y2="212"/></g>
+            <!-- 学生手写（灰铅笔） -->
+            <g stroke="#6b6552" stroke-width="2.2" fill="none" stroke-linecap="round">
+              <path d="M18 30 q 30 -8 60 0 t 60 2 t 70 -2"/>
+              <path d="M18 64 q 20 -6 44 0 t 48 -2"/>
+              <path id="hw1" d="M18 98 q 26 -8 54 -1 t 58 3 t 62 -4"/>
+              <path id="hw2" d="M18 132 q 18 -5 40 1 t 46 -2 t 52 2"/>
+              <path d="M18 166 q 34 -7 70 0 t 66 1"/>
+              <path d="M18 200 q 22 -6 46 0 t 50 -2 t 56 1"/>
+            </g>
+            <text x="18" y="240" font-size="12" fill="#6b6552" font-family="Instrument Serif" font-style="italic">x = 20×6 + ½×(−4)×6² = 48 m</text>
+          </svg>
+          <span class="cap">小舟的作业 · 昨晚 22:14</span>
+        </div>
+
+        <!-- 红笔批注层 -->
+        <svg id="redpen" viewBox="0 0 320 300">
+          <!-- 圈出错误行 -->
+          <path class="ink vermilion draw" data-red="1" style="--len:340;--dur:1s"
+            d="M24 108 C 30 82, 200 78, 268 92 C 300 99, 296 122, 260 126 C 190 134, 40 132, 24 116 C 16 108, 22 104, 24 108"/>
+          <!-- 正确步骤的勾 -->
+          <path class="ink vermilion draw" data-red="2" style="--len:60;--dur:.5s"
+            d="M262 158 l 12 12 l 22 -26"/>
+          <!-- 波浪线：答案行 -->
+          <path class="ink vermilion thin draw" data-red="3" style="--len:280;--dur:.9s"
+            d="M18 252 q 10 -8 20 0 t 20 0 t 20 0 t 20 0 t 20 0 t 20 0 t 20 0 t 20 0 t 20 0 t 20 0 t 20 0 t 20 0"/>
+          <!-- 批注文字 -->
+          <text data-red="4" x="30" y="70" font-size="14" fill="#c0452f" font-family="Inter" font-weight="600" transform="rotate(-2 30 70)">车 5 s 就停了！</text>
+          <text data-red="4" x="30" y="88" font-size="11.5" fill="#c0452f" font-family="Inter" transform="rotate(-2 30 88)">先算停止时间 t = v₀/|a| = 5 s</text>
+        </svg>
+        <div class="gaze" id="gaze"></div>
+      </div>
+
+      <svg class="leader" id="leader"><path id="leaderPath" d=""/></svg>
+
+      <div class="reply-bubble vermilion bubble-in" id="bubble">
+        <div class="who"><i></i>老师 · 批改</div>
+        <p>思路完全对，公式也代对了——只漏了一件事：<b>车刹 5 秒就停了</b>，第 6 秒它没有在移动。所以位移要用 5 s 算：<b>x = 50 m</b>。这类「刹车陷阱」以后先问自己：车什么时候停？</p>
+      </div>
+    </div>
+  </div>
+
+  <footer class="voice-bar">
+    <div class="voice-pill">
+      <div class="wave" id="teacherWave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <span class="label"><b>老师</b> · 批改小舟的作业</span>
+    </div>
+    <div class="narration" id="narration"></div>
+    <div class="hold-talk" id="holdTalk">
+      <div class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></div>
+      <span class="hint">按住 插话</span>
+    </div>
+  </footer>
+</div>
+
+<button class="notes-toggle"><i></i>注记</button>
+<aside class="notes">
+  <p class="scene-tag">SCENE 04 · STUDENT WORK</p>
+  <h2>学生产出上板</h2>
+  <p>学生昨晚拍了一道卡壳的作业题。课上老师把它贴上黑板，用红笔现场批改——AI 讲的是学生自己的东西，不是题库里的例题。</p>
+
+  <h3>交互触发与状态转移</h3>
+  <ul>
+    <li>学生拍题（课前或课中）→ 照片<b>飞入贴上黑板</b>（胶带拍立得，微微歪斜）</li>
+    <li>老师端详 → 注视虚线框停在出错的行上</li>
+    <li>红笔逐笔批注：圈出错误行 → 给正确步骤打勾 → 答案行画波浪线 → 写批注「车 5 s 就停了」</li>
+    <li>小结气泡锚定在照片旁；批注与照片一起进入课后复习材料（见 06）</li>
+  </ul>
+
+  <h3>关键决策</h3>
+  <ul>
+    <li>照片保留「纸」的质感（胶带 / 歪斜 / 阴影）——它是学生物件，不做成 UI 卡片</li>
+    <li>红笔 = 朱砂签名色在课堂的物化：老师批改用朱砂，板书正文用粉笔白</li>
+    <li>备选：把照片 OCR 成文本重新排版上板——本稿否决，抹掉笔迹就抹掉了「这是你的作业」</li>
+  </ul>
+
+  <h3>演示步骤</h3>
+  <div class="demo-steps">
+    <button id="btn1"><b>拍 1 · 照片上板</b> —— 拍立得飞入、胶带贴牢</button>
+    <button id="btn2"><b>拍 2 · 老师端详</b> —— 注视框停在错误行 + 口播</button>
+    <button id="btn3"><b>拍 3 · 红笔批改</b> —— 圈错 → 打勾 → 波浪线 → 批注，逐笔</button>
+    <button id="btn4"><b>拍 4 · 小结</b> —— 锚定气泡讲「刹车陷阱」</button>
+    <button id="btnReset"><b>重置</b></button>
+  </div>
+
+  <h3>覆盖原则</h3>
+  <div class="principles"><span>4 学生产出进课堂</span></div>
+
+  <div class="nav"><a href="./waiting.html">← 上一页</a> · <a href="./index.html">目录</a> · <a href="./quiz-lab.html">下一页：quiz 与实验 →</a></div>
+</aside>
+
+<script src="./shared.js"></script>
+<script>
+  initNotes();
+  startClock(document.getElementById('clock'), 1188);
+  animateWave(document.getElementById('teacherWave'));
+  const board = document.getElementById('board');
+  const photo = document.getElementById('photo');
+  const gaze = document.getElementById('gaze');
+  const narrationEl = document.getElementById('narration');
+
+  function drawLeader() {
+    const b = board.getBoundingClientRect();
+    const ph = photo.getBoundingClientRect();
+    const bub = document.getElementById('bubble').getBoundingClientRect();
+    const x1 = bub.left - b.left + 6, y1 = bub.top - b.top + 40;
+    const x2 = ph.left - b.left + ph.width * 0.92, y2 = ph.top - b.top + ph.height * 0.42;
+    const mx = (x1 + x2) / 2;
+    document.getElementById('leaderPath').setAttribute('d', `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`);
+  }
+
+  document.getElementById('btn1').addEventListener('click', () => {
+    photo.classList.add('on');
+    narrate(narrationEl, '你昨晚拍给我的这道题，我们拿到黑板上来看。');
+  });
+  document.getElementById('btn2').addEventListener('click', () => {
+    gaze.style.left = '6%'; gaze.style.top = '30%'; gaze.style.width = '88%'; gaze.style.height = '16%';
+    gaze.classList.add('on');
+    narrate(narrationEl, '我先看看……嗯，思路是对的。但这里——');
+  });
+  document.getElementById('btn3').addEventListener('click', () => {
+    gaze.classList.remove('on');
+    const reds = document.querySelectorAll('#redpen [data-red]');
+    let t = 0;
+    [1, 2, 3, 4].forEach(n => {
+      const els = [...reds].filter(e => e.dataset.red == n);
+      setTimeout(() => els.forEach(e => e.classList.add('on')), t);
+      t += n === 1 ? 1100 : 800;
+    });
+    narrate(narrationEl, '圈出来这一步：6 秒直接代进公式，问题来了。');
+  });
+  document.getElementById('btn4').addEventListener('click', () => {
+    drawLeader();
+    document.getElementById('leader').classList.add('on');
+    document.getElementById('bubble').classList.add('show');
+    narrate(narrationEl, '记住这类刹车陷阱：先问车什么时候停。');
+  });
+  document.getElementById('btnReset').addEventListener('click', () => {
+    photo.classList.remove('on');
+    gaze.classList.remove('on');
+    document.querySelectorAll('#redpen [data-red]').forEach(e => e.classList.remove('on'));
+    document.getElementById('leader').classList.remove('on');
+    document.getElementById('bubble').classList.remove('show');
+    narrationEl.innerHTML = '';
+  });
+</script>
+</body>
+</html>

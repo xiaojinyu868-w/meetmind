@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-03T09:59:04.209Z",
+  "generatedAt": "2026-09-05T06:36:59.357Z",
   "thesis": "每一次交付，留下两样东西：一个产品，和一份能力。",
   "layers": [
     {
@@ -246,7 +246,7 @@
     }
   ],
   "sources": {
-    "changelogMilestones": 21,
+    "changelogMilestones": 23,
     "evalBaselines": [
       "asr",
       "tutor"

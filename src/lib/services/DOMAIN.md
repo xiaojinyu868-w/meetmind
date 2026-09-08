@@ -45,6 +45,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `tutor-service.ts` | 273 | AI 家教：引用匹配 + LLM 解释 |
 | `learning-intent-service.ts` | ~220 | 深度学习意图确认：当前表达定义目标边界，历史上下文不能静默收窄宽泛愿望；只在学习路径确有歧义时生成 1-3 个动态单选/多选问题，用户作答后再次整理为最终计划，模型不可用时返回确定性计划 |
 | `learning-memory-distillation-service.ts` | ~170 | 全局学习问答持久化后的独立学习理解整理：不依赖用户手动选择模式，只从本轮真实表达/作答提炼最多 2 条，支持替换近义旧理解；拒绝愿望、建议、人格与敏感推断，证据不足返回空数组，不读取或改写客观学习现场 |
+| `learning-event-service.ts` | ~230 | 学习记忆事件管道（P0 事件化）：`appendLearningEvent`（zod 校验 + idempotencyKey 撞 unique 静默返回已有）落事件表；`processLearningEvent` 读画像 → 对话类事件蒸馏 / activity 事件直合并（复用 learning-context 纯函数）→ 写回 `learnerProfileJson` 物化视图；`triggerLearningEventProcessing` 按用户串行 fire-and-forget，失败只 log.warn、事件留表可回放；单测 `learning-event-service.test.ts`（内存 prisma fake） |
 | `ai-control-service.ts` | ~750 | 管理员 AI 控制台：Tutor 六模式 + 意图确认 + 学习理解整理 + 应用矩阵六类应用的链路目录、上下文样例、prompt 最终拼接预览、线上与候选配置真实结果对比、追加指令 / 模型覆盖、草稿发布与版本回退；按链路保留 JSON 或 Markdown 真实调用参数，硬产品合同始终位于实验指令之后；运行时读取失败自动回落代码基线 |
 | `workshop-readiness-service.ts` | ~220 | 应用矩阵内容适配判断：先用客观证据阈值拦截空内容和过短材料，再由模型判断内容类型与可选推荐；证据充足后模型不得撤销当前层能力，避免误判让长课堂整页不可用。官方试听课直接采用策划过的 ready 评估 |
 | `dify-service.ts` | 354 | Dify Agent 集成（提问引导 + 联网检索） |
@@ -127,7 +128,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `keyframe/` | ~300 | 录课「屏幕观察」关键帧检测：64 位 DCT pHash（带死区防纯色同值簇失稳）+ 稳定期结算检测器 + 浏览器抓帧（详见 `keyframe/DOMAIN.md`，架构定位见 `roadmap/v4.0-everywhere-capture.md`） |
 | `lesson-title-service.ts` | ~260 | 课堂标题服务端：`主题 · 课程 · M-D` 契约 + 零信息词质量门（宁缺毋滥）+ titleSource 用户锁 + 存量回填 |
 | `lesson-title-client.ts` | ~100 | 课堂标题客户端触发层：课后静默重命名 / 用户改名加锁 / 进入应用静默回填 / `requestLessonUnderstanding` 课后理解触发（2026-08 起 realtime 停录即触发，不再等课后 batch 定稿） |
-| `lesson-understanding-service.ts` | ~180 | 课后理解：一次 LLM 调用输出 topic+overview+takeaways+highlights（解析校验可单测），标题/摘要/精选三个产物一次落齐 |
+| `lesson-understanding-service.ts` | ~205 | 课后理解：一次 LLM 调用输出 topic+overview+takeaways+highlights（解析校验可单测），标题/摘要/精选三个产物一次落齐；理解完成后追加 `activity` 学习事件（`lesson-understanding:{captureId}` 幂等，fire-and-forget）——P0 学习记忆观察器范例 |
 | `classroom-data-service.ts` | 1007 | 课堂数据共享（学生↔教师读写） |
 | `classroom-flow-service.ts` | ~290 | 课中课堂脉络增量生成：模型只消费新增转录并返回 now / recent / keep 的 upsert-remove delta，服务端与 priorFlow 确定性合并；较早推进会作为课后复习材料保留，发给模型的工作记忆只带近期窗口，避免长课输入持续膨胀；内部 enum / 英文标识会被丢弃 |
 | `meetmind-service.ts` | 436 | 核心业务整合（Open Notebook + LongCut） |

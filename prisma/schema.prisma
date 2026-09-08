@@ -684,12 +684,15 @@ model AgentPack {
 /// codexThreadId 是 codex app-server 侧的持久线程 id（首个 turn 拉起后回填，
 /// 用于进程回收/重启后的 thread/resume 续讲）；每 turn 的事件日志落盘在
 /// data/teach-events/<id>.jsonl（供重放/复习线），不进库。
+/// engine 是创建时按 TEACH_ENGINE 快照的引擎归属（codex | engine）；
+/// null = 迁移前旧线程，一律按 codex 分发（15 个 legacy 线程的回放依赖此语义）。
 model TeachThread {
   id            String   @id @default(cuid())
   title         String
   topic         String
   model         String
   codexThreadId String?
+  engine        String?
   status        String   @default("active") // active | archived
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

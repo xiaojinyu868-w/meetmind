@@ -5,6 +5,34 @@
 
 ---
 
+## 2026-09-05 — AI 家教引擎迁移 P1/P2 落地：pi + vendor OpenMAIC 新引擎与 codex 底座双线并存
+
+> teach 上课线的编排层换底：codex app-server（每线程一进程）→ 进程内 pi agent loop +
+> vendor OpenMAIC 28 动作引擎，模型直出结构化动作、边生成边执行。SSE 事件契约不变，
+> 旧线程回放不破。设计与分期见 `docs/TEACH_TUTOR_ENGINE.md`（§9 分期表是状态真相源），
+> 交接见 `docs/plans/2026-09-05-teach-engine-handoff.md`。
+
+- **P1 引擎落地**：`src/lib/services/teach-engine/`——teach-engine-service 编排 + `runtime/`
+  接缝（stream-fn pi→AI SDK v6 桥、engine-runner 增量解析闭合即执行、action-map 词表单一
+  事实源、skills、stage-store、board-stores、audio-pacer）；`vendor/openmaic/` 整树豁免 500
+  行铁律（bug 修复以 `[FIX vs upstream]` 标注）。`TEACH_ENGINE=codex|engine` 决定新建线程
+  归属，`TeachThread.engine` 创建时快照（null 旧线程走 codex）；threads / messages / interrupt
+  薄壳路由按引擎分发；前端 `teach-events.ts` boardEffectOf 双词表（legacy 分支永久保留供旧
+  线程回放）；`next.config.js` extensionAlias 让 vendor 的 `.js` 后缀 import 解析回 `.ts`
+- **P2 skill 体系**：`assets/teach-skills/` 10 个首发 skill（8 个 vendor 教学法裁剪版 +
+  quiz-maker + lab-sim 占位，Agent Skills 标准）+ fenshen 人物 skill 多源合并；出题闭环 eval
+  门禁 `tests/eval/teach/`（`make eval-teach` dry-run 6/6，baseline `tests/eval/baselines/teach.json`，
+  regression-guard 接入 teach 段）；`scripts/teach-engine-bench.ts` 引擎 bench（token / 板书密度）
+- **P3 渲染器部分**：全量词表默认放开（`TEACH_ACTIONS_FULL=0` 事故回滚阀）——shape / table /
+  line / code 结构化块渲染（`BoardBlocks` + `board-blocks.ts`）、wb_edit_code 行级编辑、laser
+  瞬态光圈（`BoardLaser`，live 才落地、回放不重演）、spotlight / laser 的语义 elementId 逐事件
+  登记翻译成 wN；交互形态设计稿 `design-demo/teach-classroom-v1/` 六页（待 Taste 评审再动工）
+- **未做（P3 缺口，按建议顺序）**：quiz 锚点纪律 prompt 收敛（real 首测判分 5/6 准但判分轮不
+  引用 quiz_qN）、插话三拍 eval、学生模型消费、节奏层 / finish-done 语义、换肤实现；P4 codex
+  退役评估未开始。生产 `.env` 未设 `TEACH_ENGINE`，现役仍是 codex 底座
+
+---
+
 ## 2026-09-05 — 分身线旅程修复：课在旅程里始终在场
 
 背景：分身↔课的关联此前只在发消息时隐式生效（sessionId 物化），UI 全程无表达——

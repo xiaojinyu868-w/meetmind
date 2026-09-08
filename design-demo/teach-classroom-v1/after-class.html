@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>06 · 课后沉淀 — teach 课堂 v1</title>
+<link rel="stylesheet" href="./shared.css" />
+<style>
+  body { overflow: auto; }
+  .stage { height: auto; min-height: 100vh; }
+
+  .settle {
+    max-width: 880px; margin: 0 auto; padding: 7vh 24px 80px;
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
+  .rise { opacity: 0; animation: rise 0.9s var(--ease-out) forwards; }
+  .d1 { animation-delay: .1s } .d2 { animation-delay: .3s } .d3 { animation-delay: .5s }
+  .d4 { animation-delay: .68s } .d5 { animation-delay: .85s } .d6 { animation-delay: 1s }
+
+  .close-line { font-family: var(--serif); font-style: italic; font-size: clamp(24px, 3.4vw, 34px); color: #ddd5bd; }
+  .close-line b { font-style: normal; font-family: 'Inter', sans-serif; font-weight: 650; color: var(--chalk); }
+  .meta { margin-top: 16px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; color: var(--mm-ink-muted); }
+  .meta i { font-style: normal; color: var(--chalk-pine); }
+
+  /* 板书快照：这堂课的板，缩小成一张可点的卡片 */
+  .board-snapshot {
+    margin-top: 40px; width: 100%;
+    border-radius: 18px; overflow: hidden;
+    border: 1px solid var(--board-edge);
+    background: linear-gradient(168deg, var(--board), var(--board-deep));
+    box-shadow: 0 24px 64px rgba(0,0,0,0.45);
+    cursor: pointer; text-align: left;
+    transition: transform 0.4s var(--ease-out), box-shadow 0.4s;
+    position: relative;
+  }
+  .board-snapshot:hover { transform: translateY(-3px); box-shadow: 0 30px 76px rgba(0,0,0,0.55), 0 0 30px rgba(143,197,169,0.07); }
+  .board-snapshot .inner { padding: 30px 34px 26px; transform-origin: top left; }
+  .board-snapshot .hover-hint {
+    position: absolute; right: 16px; bottom: 14px;
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.16em; color: var(--chalk-pine);
+    opacity: 0; transition: opacity 0.3s;
+  }
+  .board-snapshot:hover .hover-hint { opacity: 1; }
+  .snap-title { font-size: 17px; font-weight: 650; letter-spacing: 0.04em; }
+  .snap-row { display: flex; gap: 40px; margin-top: 18px; align-items: flex-start; }
+  .snap-formulas { font-family: var(--serif); font-style: italic; font-size: 17px; line-height: 2.1; }
+  .snap-side { flex: 1; }
+  .snap-pin {
+    display: inline-flex; align-items: center; gap: 6px; margin: 0 8px 8px 0;
+    padding: 4px 11px; border-radius: 999px; font-size: 10.5px;
+    border: 1px solid rgba(232,148,122,0.5); color: var(--chalk-vermilion);
+  }
+  .snap-pin i { width: 4px; height: 4px; border-radius: 50%; background: var(--chalk-vermilion); }
+  .snap-photo {
+    display: inline-block; padding: 6px 10px 16px; background: #f3eddb; border-radius: 4px;
+    transform: rotate(-2deg); font-family: var(--mono); font-size: 9px; color: #8a7f66;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.35);
+  }
+  .snap-photo s { display: block; width: 90px; height: 52px; background: #f7f1de; border: 1px solid #d8cfb4; margin-bottom: 5px; position: relative; }
+  .snap-photo s::after { content: ''; position: absolute; left: 12px; top: 18px; width: 60px; height: 22px; border: 1.5px solid #c0452f; border-radius: 50%; transform: rotate(-3deg); }
+
+  /* 回流入口：回 MeetMind 主线 */
+  .return-grid { margin-top: 16px; width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .rcard {
+    position: relative; padding: 20px 18px 17px; text-align: left;
+    background: rgba(29, 38, 28, 0.45);
+    border: 1px solid rgba(240, 234, 214, 0.1); border-radius: 16px;
+    color: inherit; cursor: pointer; overflow: hidden;
+    transition: transform 0.35s var(--ease-out), border-color 0.35s;
+  }
+  .rcard::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--chalk-pine); transform: scaleX(0); transform-origin: left; transition: transform 0.45s var(--ease-out); }
+  .rcard:hover { transform: translateY(-3px); border-color: rgba(143,197,169,0.45); }
+  .rcard:hover::before { transform: scaleX(1); }
+  .rcard .k { font-family: var(--mono); font-size: 9px; letter-spacing: 0.2em; color: var(--chalk-pine); text-transform: uppercase; }
+  .rcard b { display: block; margin-top: 9px; font-size: 14.5px; font-weight: 650; }
+  .rcard span { display: block; margin-top: 7px; font-size: 11.5px; line-height: 1.7; color: var(--mm-ink-muted); }
+
+  .digest {
+    margin-top: 14px; width: 100%; text-align: left;
+    border: 1px solid rgba(240,234,214,0.1); border-radius: 16px; padding: 18px 20px;
+    background: rgba(29, 38, 28, 0.3);
+    font-size: 12.5px; line-height: 1.95; color: #a39c8a;
+  }
+  .digest .k { font-family: var(--mono); font-size: 9px; letter-spacing: 0.2em; color: var(--chalk-pine); text-transform: uppercase; display: block; margin-bottom: 8px; }
+  .digest mark { background: none; color: var(--chalk-pine); }
+  .digest .cite { font-family: var(--mono); font-size: 10.5px; color: var(--chalk-vermilion); }
+
+  .back { margin-top: 34px; font-size: 11.5px; }
+  .back a { color: var(--mm-ink-muted); text-decoration: none; }
+  .back a:hover { color: var(--chalk); }
+</style>
+</head>
+<body>
+<div class="stage">
+  <main class="settle">
+    <p class="close-line rise d1">下课了。这堂课已经<b>替你收好</b>。</p>
+    <p class="meta rise d2">匀变速直线运动 · 第 3 讲 &nbsp;·&nbsp; 时长 38:24 &nbsp;·&nbsp; 板书 <i>14</i> 处 &nbsp;·&nbsp; 你的插话 <i>3</i> 次 &nbsp;·&nbsp; quiz <i>2/3</i></p>
+
+    <div class="board-snapshot rise d3" title="回到这堂课的板书">
+      <div class="inner">
+        <div class="chalk snap-title">§ 2.2 匀变速直线运动的速度与位移</div>
+        <div class="snap-row">
+          <div class="snap-formulas chalk">
+            v = v<sub>0</sub> + at<br/>
+            x = v<sub>0</sub>t + <span class="chalk amber" style="font-style:normal">½</span>at<sup>2</sup>
+          </div>
+          <div class="snap-side">
+            <span class="snap-pin"><i></i>½ 的来历</span>
+            <span class="snap-pin"><i></i>刹车陷阱</span>
+            <span class="snap-photo"><s></s>小舟的作业 · 已批改</span>
+          </div>
+        </div>
+      </div>
+      <span class="hover-hint">点击回到板书 →</span>
+    </div>
+
+    <div class="digest rise d4">
+      <span class="k">这节课的对话 · 摘要</span>
+      你问了 <mark>「½ 是怎么来的」</mark><span class="cite">[11:07]</span>，老师用平均速度推了一遍；
+      你的作业被红笔批改了 <mark>「刹车陷阱」</mark><span class="cite">[19:48]</span>——先算停止时间，再代公式；
+      quiz 第 2 题错在<mark>把 ½ 丢了</mark><span class="cite">[26:12]</span>，已记进你的误区档案。
+    </div>
+
+    <div class="return-grid rise d5">
+      <button class="rcard">
+        <span class="k">复习</span>
+        <b>课堂脉络</b>
+        <span>板书 + 对话回到课后复习工作区，板书别针就是跳回课堂原话的锚点。</span>
+      </button>
+      <button class="rcard">
+        <span class="k">巩固</span>
+        <b>错题与批注</b>
+        <span>你的作业照片和红笔批注已成卡片，「刹车陷阱」会出现在下次课的开场。</span>
+      </button>
+      <button class="rcard">
+        <span class="k">检验</span>
+        <b>讲给同桌听</b>
+        <span>把这堂课讲给 MeetMind 同学听——讲不清楚的地方，就是还没学会的地方。</span>
+      </button>
+    </div>
+
+    <p class="back rise d6"><a href="./index.html">← 返回设计稿目录</a></p>
+  </main>
+</div>
+
+<button class="notes-toggle"><i></i>注记</button>
+<aside class="notes">
+  <p class="scene-tag">SCENE 06 · AFTER CLASS</p>
+  <h2>课后沉淀</h2>
+  <p>课结束的瞬间不是终点：板 + 对话自动收束成复习材料，回流 MeetMind 主线——课堂线闭环，OpenMAIC 没有这一拍。</p>
+
+  <h3>状态转移</h3>
+  <ul>
+    <li>下课 → 收束动画（像合上一本笔记，仪式时刻白名单第 4 条）</li>
+    <li>板书 → 可点快照卡：公式、插话别针（½ 的来历）、批改过的作业照片都在</li>
+    <li>对话 → 三句话摘要，引用带 <code>[MM:SS]</code> 时间锚点（「有根」DNA）</li>
+    <li>误区（丢 ½）→ 写入 LearnerProfile，成为下一节课的开场钩子</li>
+    <li>三个回流入口 → 复习工作区 / 错题卡 / 「讲给同桌听」应用矩阵</li>
+  </ul>
+
+  <h3>关键决策</h3>
+  <ul>
+    <li>沉淀是<b>自动</b>的，不需要学生点「保存」——安静、不急，时间到了自己起来</li>
+    <li>快照卡保留黑板暗色与粉笔字：复习时一眼认出「这是我的那堂课」</li>
+    <li>备选：课后生成一份排版精美的讲义——本稿否决，重排版就丢了课堂现场的根</li>
+  </ul>
+
+  <h3>覆盖原则</h3>
+  <div class="principles"><span>5 课后无缝沉淀</span></div>
+
+  <div class="nav"><a href="./quiz-lab.html">← 上一页</a> · <a href="./index.html">目录</a> · <a href="./live.html">回到第一页 →</a></div>
+</aside>
+
+<script src="./shared.js"></script>
+<script>initNotes();</script>
+</body>
+</html>
