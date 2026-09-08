@@ -41,6 +41,9 @@
   要么代理到这个口对拍，要么在 `CONTEXT_SYSTEM_URL` 提供同形接口，本仓库自动改问它；写侧 `triggerLearningEventProcessing` 配了 URL 就把
   事件原样转发 `POST /v1/learning-events`（outbox，失败只 warn）。生产用临时账号全程验证：写 `/api/memory/events` 200 → 表里有行 →
   读回 `unstable` → `/api/apps/execute` 不带本机切片 trace `learner_context=server:2`，出的题正落在那两个还没稳的概念上；探针数据已清
+- **UI 也跟着账号走**：`hooks/useMasteryTrail` 把本机轨迹与服务端切片合并（同概念以服务端为准，本机更新的保留），「我的上下文」掌握轨迹与
+  问同学书桌都改用它——登录用户在一台空白浏览器里也能看到"另一台设备上错过的：条件概率的方向 测验 ✕ → 闪卡 ✓ 刚记住"，
+  脚注从"这台设备上的记录"换成"跟着你的账号走，换设备也在"。生产用临时账号 + 只带 JWT 的新浏览器验证后清理
 
 ---
 

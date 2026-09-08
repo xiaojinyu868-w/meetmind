@@ -5,13 +5,14 @@
  *
  * 每一行：状态点 + 概念原文 + 事实序列（测验 ✕ → 闪卡 ✓）。状态只有三个词，其余全是事实；
  * "还没稳"排最前——最需要被看见的先看见。没有任何记录时整块不渲染，页面保持安静。
+ * 数据：useMasteryTrail（本机会话层结果 + 登录用户的服务端事件表切片合并）。
  */
 
-import { useEffect, useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { COPY } from '@/lib/ui/copy';
 import { cn } from '@/lib/utils';
-import { buildMasteryTrail, collectDeviceOutcomes, type MasteryStatus, type MasteryTrailEntry } from './mastery-trail';
+import { useMasteryTrail } from '@/hooks/useMasteryTrail';
+import type { MasteryStatus } from './mastery-trail';
 
 const STATUS_STYLE: Record<MasteryStatus, { dot: string; text: string; label: string }> = {
   unstable: { dot: 'bg-vermilion', text: 'text-vermilion', label: COPY.globalAsk.masteryTrail.statusUnstable },
@@ -24,11 +25,8 @@ function stepLabel(appKey: string): string {
 }
 
 export function MasteryTrailSection({ className }: { className?: string }) {
-  const [trail, setTrail] = useState<MasteryTrailEntry[]>([]);
-
-  useEffect(() => {
-    setTrail(buildMasteryTrail(collectDeviceOutcomes()));
-  }, []);
+  // 本机 + 服务端（登录用户）合并：换设备也看到同一个自己
+  const { trail, fromAccount } = useMasteryTrail({ appId: 'my-context' });
 
   if (trail.length === 0) return null;
 
@@ -64,7 +62,7 @@ export function MasteryTrailSection({ className }: { className?: string }) {
           );
         })}
       </ul>
-      <p className="mt-2 px-1 text-[10.5px] text-ink-muted">{COPY.globalAsk.masteryTrail.deviceScopeHint}</p>
+      <p className="mt-2 px-1 text-[10.5px] text-ink-muted">{fromAccount ? COPY.globalAsk.masteryTrail.accountScopeHint : COPY.globalAsk.masteryTrail.deviceScopeHint}</p>
     </section>
   );
 }

@@ -296,6 +296,8 @@ export const COPY = {
         'teach-back': '讲给同桌听',
       } as Record<string, string>,
       deviceScopeHint: '这台设备上的记录。登录后会跟着你走。',
+      /** 登录用户：轨迹来自服务端事件表，换设备也在 */
+      accountScopeHint: '跟着你的账号走，换设备也在。',
     },
     memoryPaused: '已不再参考',
     recentTitle: '最近学习现场',

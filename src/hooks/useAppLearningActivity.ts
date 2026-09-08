@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useLearningContext } from '@/hooks/useLearningContext';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { invalidateMasteryTrailCache } from '@/hooks/useMasteryTrail';
 import { createLogger } from '@/lib/logger';
 import type { LearningAssessmentDraft, LearningEventInput } from '@/types/learning-event';
 
@@ -104,6 +105,8 @@ export function useAppLearningActivity({
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify(body),
+    }).then(() => {
+      invalidateMasteryTrailCache();
     }).catch((error) => {
       // 记忆写入失败不打扰用户，也不重试——事件是增量材料，丢一条不影响当前学习
       log.warn('assessment event failed', { appKey: draft.appKey, message: error instanceof Error ? error.message : String(error) });

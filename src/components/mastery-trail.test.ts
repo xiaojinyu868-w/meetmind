@@ -63,3 +63,21 @@ describe('conceptLabel', () => {
     expect(conceptLabel(long).endsWith('…')).toBe(true);
   });
 });
+
+describe('服务端切片合并（登录用户换设备也看到同一个自己）', () => {
+  it('trailFromLearnerMastery：服务端形状 → 轨迹条目；mergeMasteryTrails：同概念以服务端为准，本机更新的保留', async () => {
+    const { mergeMasteryTrails, trailFromLearnerMastery } = await import('@/lib/learning/mastery-trail-model');
+    const server = trailFromLearnerMastery([
+      { concept: '归一化', status: 'stable', lastAt: '2026-09-08T10:00:00Z', steps: [{ appId: 'quiz', positive: false, at: '2026-09-07T10:00:00Z' }, { appId: 'flashcards', positive: true, at: '2026-09-08T10:00:00Z' }, { appId: 'quiz', positive: true, at: '2026-09-08T10:00:00Z' }] },
+      { concept: '先验', status: 'unstable', lastAt: '2026-09-08T09:00:00Z' },
+    ]);
+    expect(server[0].steps.map((s) => `${s.appKey}:${s.positive}`)).toEqual(['quiz:false', 'flashcards:true', 'quiz:true']);
+    const local = [
+      { concept: '归一化', status: 'unstable' as const, steps: [], lastAt: Date.parse('2026-09-01T00:00:00Z') },
+      { concept: '似然', status: 'improving' as const, steps: [], lastAt: Date.parse('2026-09-08T12:00:00Z') },
+      { concept: '先验', status: 'stable' as const, steps: [], lastAt: Date.parse('2026-09-09T00:00:00Z') },
+    ];
+    const merged = mergeMasteryTrails(local, server);
+    expect(merged.map((e) => `${e.concept}:${e.status}`)).toEqual(['似然:improving', '先验:stable', '归一化:stable']);
+  });
+});

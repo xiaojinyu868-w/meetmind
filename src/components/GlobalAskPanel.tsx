@@ -40,7 +40,7 @@ import { buildAskDesk } from '@/components/global-ask-desk';
 import { buildLocalLearnerContext } from '@/components/learner-context-local';
 import { GUEST_DEMO_LESSON_TITLE, resetDemoEntryConsumed } from '@/components/classroom/guest-demo-entry';
 import { isDemoLessonLoaded } from '@/components/classroom/DemoLessonLoader';
-import { buildMasteryTrail, collectDeviceOutcomes, type MasteryTrailEntry } from '@/components/mastery-trail';
+import { useMasteryTrail } from '@/hooks/useMasteryTrail';
 import {
   ChatBubble,
   ChatComposer,
@@ -377,11 +377,8 @@ export function GlobalAskPanel({
     memories: learning.memories,
   }), [currentMaterialTitles, effectiveDepth, learning.memories, learning.recentActivities]);
 
-  // 书桌：同桌此刻在读什么、记得你什么。掌握轨迹读本机会话层结果，每次打开面板刷一次
-  const [masteryTrail, setMasteryTrail] = React.useState<MasteryTrailEntry[]>([]);
-  React.useEffect(() => {
-    if (open && showWelcome) setMasteryTrail(buildMasteryTrail(collectDeviceOutcomes()));
-  }, [open, showWelcome]);
+  // 书桌：同桌此刻在读什么、记得你什么。掌握轨迹 = 本机会话层结果 + 登录用户的服务端切片（换设备也在），面板打开时读
+  const { trail: masteryTrail } = useMasteryTrail({ enabled: open && showWelcome, appId: 'global-ask' });
   const currentLessonTitle = React.useMemo(() => {
     if (isDemoLessonLoaded(segments)) return GUEST_DEMO_LESSON_TITLE;
     if (!sessionId) return undefined;
