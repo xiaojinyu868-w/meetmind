@@ -699,6 +699,7 @@ export function ClassroomLeftPanel({
             demoAudioPlaying={demoAudioPlaying}
             demoAudioMuted={demoAudioMuted}
             demoAudioNeedsGesture={demoAudioNeedsGesture}
+            audioSource={audioSource}
             onToggleDemoAudio={onToggleDemoAudio}
             defaultTranslationMode={defaultTranslationMode}
             isDemoComplete={isDemoComplete}

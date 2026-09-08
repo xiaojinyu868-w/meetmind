@@ -12,7 +12,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Square, Languages, Play, Pause, Camera, ChevronLeft, VolumeX } from 'lucide-react';
+import { Square, Languages, Play, Pause, Camera, ChevronLeft, VolumeX, Mic, Monitor } from 'lucide-react';
 import { ClassroomFlowCanvas } from './ClassroomFlowCanvas';
 import { OctoBuddySprite } from './OctoBuddy';
 import type { ClassroomFlowState } from '@/types/classroom-flow';
@@ -24,6 +24,7 @@ import { buildLiveTranslationRows } from '@/lib/utils/live-translation-rows';
 import { stitchLiveSentences } from '@/lib/utils/stitch-live-sentences';
 import { cycleTranslationMode, resolveSessionTranslationMode } from './ClassroomRecordingView.model';
 import { COPY } from '@/lib/ui/copy';
+import type { RecorderAudioSource } from '@/stores/capture-editor-store';
 
 export interface LiveConcept {
   id: string;
@@ -60,6 +61,8 @@ export interface ClassroomRecordingViewProps {
   demoAudioMuted?: boolean;
   demoAudioNeedsGesture?: boolean;
   onToggleDemoAudio?: () => void;
+  /** 录音来源（真实录课时显示在 LIVE 旁；试听课不显示） */
+  audioSource?: RecorderAudioSource;
   /** 英文试听课默认开启 EN→中，但不写入用户长期偏好 */
   defaultTranslationMode?: TranslationMode;
   /** 试听课听完后的课后引导 */
@@ -73,6 +76,12 @@ export interface ClassroomRecordingViewProps {
 }
 
 // ── 时间工具 ──────────────────────────────────────────────────────────
+
+function audioSourceLabel(source: RecorderAudioSource): string {
+  if (source === 'system') return COPY.recording.sourceSystem;
+  if (source === 'mixed') return COPY.recording.sourceMixed;
+  return COPY.recording.sourceMic;
+}
 
 function formatTime(totalSec: number): string {
   const m = Math.floor(totalSec / 60).toString().padStart(2, '0');
@@ -95,6 +104,7 @@ function LiveTranscriptPanel({
   demoAudioNeedsGesture,
   onToggleDemoAudio,
   listening = true,
+  audioSource,
 }: {
   segments?: TranscriptSegment[];
   recentLines: Array<{ id: string; text: string; startMs: number }>;
@@ -112,6 +122,7 @@ function LiveTranscriptPanel({
   onToggleDemoAudio?: () => void;
   /** 仍在听课 → 头部呼吸球仪式；停止 / 试听结束即消散 */
   listening?: boolean;
+  audioSource?: RecorderAudioSource;
 }) {
   const rows = useMemo(
     () => buildLiveTranslationRows({ segments, recentLines, interimText, maxFinalRows: 9999 }),
@@ -179,35 +190,42 @@ function LiveTranscriptPanel({
   }, [rows, termsByRow, translateEnabled, lookup]);
   const stableSentenceCount = stitchedSentences.filter((s) => !s.isInterim).length;
 
+  // 自动跟随的判定只来自用户的滚动（onScroll），不在内容变化后再量——
+  // 此前在新行渲染后才量"离底部多远"，一句带翻译的新行就超过 96px，被误判成"用户上滚了"，
+  // 自动跟随从此永远失效（实测示例课 30 秒后转录卡停在开头，露着「回到底部」）。
   const isNearBottomRef = useRef(true);
+  const programmaticScrollUntilRef = useRef(0);
 
-  const updateJumpVisibility = useCallback(() => {
+  const handleListScroll = useCallback(() => {
+    if (Date.now() < programmaticScrollUntilRef.current) return; // 自己滚出来的事件不算用户意图
     const el = listRef.current;
     if (!el) return;
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
     const nearBottom = distance <= 96;
     isNearBottomRef.current = nearBottom;
-    setShowJumpToBottom(distance > 96);
+    setShowJumpToBottom(!nearBottom);
   }, []);
 
   const jumpToBottom = useCallback(() => {
     isNearBottomRef.current = true;
+    programmaticScrollUntilRef.current = Date.now() + 600;
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     setShowJumpToBottom(false);
   }, []);
 
+  // 新内容（新句子或正在说的半句变长）到来：用户没上滚就贴住底部；上滚了就露「回到底部」
+  const contentKey = `${rows.length}:${stitchedSentences.reduce((n, sentence) => n + sentence.text.length, 0)}`;
   useEffect(() => {
-    updateJumpVisibility();
-  }, [rows.length, updateJumpVisibility]);
-
-  // 自动跟随：新内容到来时，如果用户在底部附近（没主动上滚），自动滚到底部。
-  // 用 ref 判断（实时），不依赖 state 的异步更新——避免滚动滞后。
-  useEffect(() => {
-    if (!isNearBottomRef.current) return;
     const el = listRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [rows.length]);
+    if (isNearBottomRef.current) {
+      programmaticScrollUntilRef.current = Date.now() + 200;
+      el.scrollTop = el.scrollHeight;
+      setShowJumpToBottom(false);
+    } else if (el.scrollHeight - el.clientHeight > 8) {
+      setShowJumpToBottom(true);
+    }
+  }, [contentKey]);
 
   return (
     <aside className="relative flex h-full w-full min-w-0 flex-col overflow-hidden rounded-[22px] border border-divider bg-card shadow-soft">
@@ -259,6 +277,17 @@ function LiveTranscriptPanel({
                 <span className="shrink-0 whitespace-nowrap font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-pine/85">
                   {COPY.recording.liveBadge}
                 </span>
+                {/* 录音来源可见：麦克风 / 电脑声音 / 两路——录到一半才发现录的是空气，是最贵的一种错 */}
+                {!isDemoPlayback && audioSource ? (
+                  <span
+                    className="inline-flex shrink-0 items-center gap-0.5 text-ink-muted"
+                    title={COPY.recording.sourceListening(audioSourceLabel(audioSource))}
+                    aria-label={COPY.recording.sourceListening(audioSourceLabel(audioSource))}
+                  >
+                    {audioSource === 'system' ? <Monitor size={11} strokeWidth={2} /> : <Mic size={11} strokeWidth={2} />}
+                    {audioSource === 'mixed' ? <Monitor size={11} strokeWidth={2} /> : null}
+                  </span>
+                ) : null}
                 <p className="truncate text-[12.5px] text-ink-secondary">
                   {hasDraftRow ? (
                     <span className="font-serif italic text-pine/85">{COPY.recording.listeningSentence}</span>
@@ -337,7 +366,7 @@ function LiveTranscriptPanel({
 
       <div
         ref={listRef}
-        onScroll={updateJumpVisibility}
+        onScroll={handleListScroll}
         className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
       >
         {rows.length === 0 ? (
@@ -568,6 +597,7 @@ export function ClassroomRecordingView({
   demoAudioMuted = false,
   demoAudioNeedsGesture = false,
   onToggleDemoAudio,
+  audioSource,
   defaultTranslationMode,
   isDemoComplete = false,
   onReplayDemo,
@@ -623,6 +653,7 @@ export function ClassroomRecordingView({
               demoAudioNeedsGesture={demoAudioNeedsGesture}
               onToggleDemoAudio={onToggleDemoAudio}
               listening={!isDemoComplete}
+              audioSource={audioSource}
             />
           </div>
           <div className={`${mobilePane === 'flow' ? 'block' : 'hidden'} min-w-0 overflow-hidden rounded-[24px] border border-divider bg-white xl:block`}>

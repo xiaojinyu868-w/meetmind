@@ -1433,6 +1433,8 @@ export const COPY = {
     sourceMixedHint: '网课＋自己提问',
     sourceSystemHint: '开始后，在系统窗口勾选“分享音频”。',
     activeStatus: (source: string): string => `正在听 · ${source} · 点开看实时文字`,
+    /** 录课态转录卡 LIVE 旁的来源图标提示 */
+    sourceListening: (source: string): string => `正在听：${source}`,
     /** mixed 模式系统音频采集失败、降级为纯麦克风时提示 */
     downgradeFromMixed: '电脑声音没录到，只用麦克风在录',
     startFailedFallback: '没有接上录音设备，请检查麦克风权限后再试。',
