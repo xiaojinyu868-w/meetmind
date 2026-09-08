@@ -29,6 +29,14 @@ export function markDemoEntryConsumed(): void {
   } catch { /* storage 不可用时静默 */ }
 }
 
+/** 用户明确再点一次"试听示例课"（如问同学空桌面）时，把入口重新打开，让 entry=demo 再灌一次。 */
+export function resetDemoEntryConsumed(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.removeItem(DEMO_ENTRY_CONSUMED_KEY);
+  } catch { /* storage 不可用时静默 */ }
+}
+
 export function resolveGuestDemoEntry({
   isGuestFastEntry,
   entry,

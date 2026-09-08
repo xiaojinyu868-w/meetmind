@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StoredAssessment } from '@/components/apps/review-session-outcomes';
-import { buildMasteryTrail } from './mastery-trail';
+import { buildMasteryTrail, conceptLabel } from './mastery-trail';
 
 const t = (n: number) => 1_700_000_000_000 + n * 60_000;
 
@@ -48,5 +48,18 @@ describe('buildMasteryTrail', () => {
   it('只对过一次 = 刚记住（不敢说稳）', () => {
     const once: StoredAssessment = { appKey: 'quiz', at: t(1), items: [{ concept: 'x', outcome: 'correct' }] };
     expect(buildMasteryTrail([once])[0].status).toBe('improving');
+  });
+});
+
+describe('conceptLabel', () => {
+  it('整句问题里有引号包着的术语就用术语', () => {
+    expect(conceptLabel('“up in the air” 在这段对话里是什么意思？')).toBe('up in the air');
+    expect(conceptLabel('「先验概率」和「后验概率」的区别')).toBe('先验概率');
+  });
+  it('没有术语就截到可读长度；短句原样返回', () => {
+    expect(conceptLabel('为什么要归一化')).toBe('为什么要归一化');
+    const long = '听力开始前，旁白提醒学生要注意什么？还有哪些细节';
+    expect(conceptLabel(long).length).toBe(20);
+    expect(conceptLabel(long).endsWith('…')).toBe(true);
   });
 });

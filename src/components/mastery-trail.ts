@@ -39,6 +39,19 @@ function normalizeConcept(text: string): string {
   return text.replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
+const QUOTED_TERM = /[“"「『]([^”"」』]{2,24})[”"」』]/;
+
+/**
+ * 概念的展示名。闪卡 / 测验留下的"概念"常常是整句问题（"“up in the air” 在这段对话里是什么意思"），
+ * 桌面和轨迹里只放得下一个词：句子里有引号包着的术语就用术语，否则截到可读长度。
+ */
+export function conceptLabel(concept: string, max = 20): string {
+  const text = concept.replace(/\s+/g, ' ').trim();
+  const quoted = QUOTED_TERM.exec(text)?.[1]?.trim();
+  if (quoted && quoted.length < text.length) return quoted;
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
 /** 扫这台设备上所有课的会话层结果（只读）。 */
 export function collectDeviceOutcomes(): StoredAssessment[] {
   if (typeof window === 'undefined') return [];

@@ -6,13 +6,16 @@ import { cn } from '@/lib/utils';
 import type { LearningThreadEntry } from '@/types/user';
 import { COPY } from '@/lib/ui/copy';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
+import { GlobalAskDesk } from '@/components/GlobalAskDesk';
+import type { DeskGroup, DeskItem } from '@/components/global-ask-desk';
 
 /**
- * GlobalAskWelcome — 问同学空态（v9 呼吸森林）
+ * GlobalAskWelcome — 问同学空态（v9 呼吸森林 · 同桌的书桌）
  *
- * 布局对齐大厂 AI 首页心智（豆包 / ChatGPT）：问候在上、输入框是唯一主角、
- * 建议入口垫在输入框下面。视觉用 v9 B 方向（globals.css 的 v9-* 基元）：
- * 签名色光场在背后缓慢漂移，Octo 带听课涟漪，表面是浮在光上的毛玻璃。
+ * 问候在上，主角是一张"书桌"：上半是同桌此刻在读的东西（当前课堂、你标的时刻、
+ * 还没稳的概念、最近学过、记得的困惑——全是可见可点的实物），输入框坐在这些上下文上面。
+ * 点一件实物，一句指向具体位置的问题就落进输入框。视觉用 v9 B 方向（globals.css 的 v9-*
+ * 基元）：签名色光场在背后缓慢漂移，Octo 带听课涟漪，表面是浮在光上的毛玻璃。
  *
  * 文案契约不变：全部来自 COPY.globalAsk；免费档的深度模式入口带 Pro 标识
  * （`deepLocked`，由 panel 按会员档位传入）。
@@ -22,6 +25,10 @@ interface GlobalAskWelcomeProps {
   depth: 'quick' | 'deep';
   /** 建议入口（宿主按当前材料 / 最近课堂 / 未过去的困惑算好；不传退回通用句） */
   prompts?: readonly string[];
+  /** 书桌上的实物（宿主用 buildAskDesk 算好；空数组显示空桌面） */
+  desk?: readonly DeskGroup[];
+  /** 空桌面的试听入口 */
+  onStartDemo?: () => void;
   /** 免费档：深度模式（陪我学会）是 Pro/Max 专属，在入口上带 Pro 标识 */
   deepLocked?: boolean;
   activeThread?: LearningThreadEntry;
@@ -36,6 +43,8 @@ interface GlobalAskWelcomeProps {
 export function GlobalAskWelcome({
   depth,
   prompts: groundedPrompts,
+  desk,
+  onStartDemo,
   deepLocked = false,
   activeThread,
   composer,
@@ -50,26 +59,28 @@ export function GlobalAskWelcome({
     : depth === 'deep'
       ? COPY.globalAsk.deepExamples
       : COPY.globalAsk.quickExamples;
+  const deskHasItems = Boolean(desk && desk.length > 0);
+  const showStarters = !deskHasItems || depth === 'deep';
 
   // 光场（v9-aura）由 GlobalAskPanel 铺满整个对话区，这里不再自带——
   // 此前光场被 max-w-3xl 容器裁成一块"岛"，白色面板里浮着一块渐变，像两层容器。
   return (
     <div className="relative mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-4 pb-10 pt-6 sm:px-6">
 
-      {/* ── Hero：Octo + 问候 ── */}
+      {/* ── Hero：Octo + 问候（书桌是主角，问候收小一号） ── */}
       <div className="relative flex flex-col items-center text-center">
-        <div className="v9-rise v9-d1 relative grid place-items-center p-4">
+        <div className="v9-rise v9-d1 relative grid place-items-center p-3">
           <span className="v9-ring" />
           <span className="v9-ring v9-ring-delay" />
-          <OctoAvatar mood="listening" size="lg" aura={false} />
+          <OctoAvatar mood="listening" size="md" aura={false} />
         </div>
-        <p className="v9-rise v9-d2 mt-3 font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-pine">
+        <p className="v9-rise v9-d2 mt-2 font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-pine">
           {COPY.globalAsk.welcomeEyebrow}
         </p>
-        <h2 className="v9-rise v9-d3 mt-3 max-w-2xl font-serif text-[32px] italic leading-[1.2] tracking-[-0.02em] text-ink sm:text-[42px]">
+        <h2 className="v9-rise v9-d3 mt-2.5 max-w-2xl font-serif text-[28px] italic leading-[1.2] tracking-[-0.02em] text-ink sm:text-[36px]">
           {depth === 'deep' ? COPY.globalAsk.deepEmptyTitle : COPY.globalAsk.emptyTitle}
         </h2>
-        <p className="v9-rise v9-d4 mt-3 max-w-lg text-[13px] leading-6 text-ink-secondary sm:text-[13.5px] sm:leading-7">
+        <p className="v9-rise v9-d4 mt-2.5 max-w-lg text-[13px] leading-6 text-ink-secondary">
           {depth === 'deep' ? COPY.globalAsk.deepEmptyBody : COPY.globalAsk.emptyBody}
         </p>
       </div>
@@ -91,8 +102,18 @@ export function GlobalAskWelcome({
         </button>
       ) : null}
 
-      {/* ── 主角：玻璃 composer ── */}
-      <div className="v9-rise v9-d5 v9-glass relative mt-7 rounded-[28px] transition-shadow duration-500 focus-within:shadow-[0_0_0_4px_rgba(47,107,85,0.1),0_24px_56px_rgba(16,22,15,0.12)]">
+      {/* ── 主角：书桌（上半是同桌正在读的实物，下半是 composer） ── */}
+      <div className="v9-rise v9-d5 v9-glass relative mt-6 rounded-[28px] transition-shadow duration-500 focus-within:shadow-[0_0_0_4px_rgba(47,107,85,0.1),0_24px_56px_rgba(16,22,15,0.12)]">
+        {desk ? (
+          <>
+            <GlobalAskDesk
+              groups={desk}
+              onChoose={(item: DeskItem) => onChoosePrompt(item.prompt)}
+              onStartDemo={onStartDemo}
+            />
+            <div className="mx-4 mt-4 border-t border-ink/5 sm:mx-5" />
+          </>
+        ) : null}
         <div className="px-4 pt-4 sm:px-5">{composer}</div>
         <div className="flex flex-col gap-2 border-t border-ink/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <div className="flex items-center gap-1" aria-label={COPY.globalAsk.modeSelectorLabel}>
@@ -135,7 +156,9 @@ export function GlobalAskWelcome({
         </div>
       </div>
 
-      {/* ── 建议入口：玻璃卡，垫在 composer 下面 ── */}
+      {/* ── 建议入口：玻璃卡，垫在 composer 下面。桌上已有实物时（直接回答），泛化句只是重复，收起；
+            深度模式的句式不同（系统学懂并检验），仍保留 ── */}
+      {showStarters ? (
       <div className="v9-rise v9-d6 relative mt-6">
         <p className="text-center font-mono text-[9.5px] uppercase tracking-[0.16em] text-ink-muted">{COPY.globalAsk.startersTitle}</p>
         <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
@@ -152,6 +175,7 @@ export function GlobalAskWelcome({
           ))}
         </div>
       </div>
+      ) : null}
     </div>
   );
 }

@@ -36,6 +36,10 @@ import { LearningMemoryPanel } from '@/components/LearningMemoryPanel';
 import { GlobalAskContextDrawer } from '@/components/GlobalAskContextDrawer';
 import { GlobalAskWelcome } from '@/components/GlobalAskWelcome';
 import { buildGlobalAskStarters, describeGlobalAskContext } from '@/components/global-ask-starters';
+import { buildAskDesk } from '@/components/global-ask-desk';
+import { GUEST_DEMO_LESSON_TITLE, resetDemoEntryConsumed } from '@/components/classroom/guest-demo-entry';
+import { isDemoLessonLoaded } from '@/components/classroom/DemoLessonLoader';
+import { buildMasteryTrail, collectDeviceOutcomes, type MasteryTrailEntry } from '@/components/mastery-trail';
 import {
   ChatBubble,
   ChatComposer,
@@ -77,6 +81,7 @@ export function GlobalAskPanel({
   const deepLocked = pointsSummary?.membership.tier === 'free';
   const sessionId = useSessionStore((state) => state.sessionId);
   const segments = useCaptureEditorStore((state) => state.segments);
+  const anchors = useCaptureEditorStore((state) => state.anchors);
   const sourceItems = useCollectionStore((state) => state.sourceItems);
   const [depth, setDepth] = React.useState<AskDepth>('quick');
   const [view, setView] = React.useState<'ask' | 'memory'>('ask');
@@ -361,6 +366,36 @@ export function GlobalAskPanel({
     memories: learning.memories,
   }), [currentMaterialTitles, effectiveDepth, learning.memories, learning.recentActivities]);
 
+  // 书桌：同桌此刻在读什么、记得你什么。掌握轨迹读本机会话层结果，每次打开面板刷一次
+  const [masteryTrail, setMasteryTrail] = React.useState<MasteryTrailEntry[]>([]);
+  React.useEffect(() => {
+    if (open && showWelcome) setMasteryTrail(buildMasteryTrail(collectDeviceOutcomes()));
+  }, [open, showWelcome]);
+  const currentLessonTitle = React.useMemo(() => {
+    if (isDemoLessonLoaded(segments)) return GUEST_DEMO_LESSON_TITLE;
+    if (!sessionId) return undefined;
+    const match = [...learning.recentActivities].reverse().find((item) => item.kind === 'lesson' && item.sessionId === sessionId);
+    return match?.title;
+  }, [learning.recentActivities, segments, sessionId]);
+  const deskGroups = React.useMemo(() => buildAskDesk({
+    hasCurrentTranscript: currentTranscript.length > 0,
+    currentLessonTitle,
+    materialTitles: [
+      ...sourceItems.filter((item) => item.status !== 'failed').slice(-6).reverse().map((item) => item.title),
+      ...fileUpload.attachedFiles.map((file) => file.title),
+    ],
+    anchors,
+    recentActivities: learning.recentActivities,
+    trail: masteryTrail,
+    memories: learning.memories,
+  }), [anchors, currentLessonTitle, currentTranscript.length, fileUpload.attachedFiles, learning.memories, learning.recentActivities, masteryTrail, sourceItems]);
+  // 空桌面的试听入口：只给访客（entry=demo 只在 guest=1 下自动灌课；登录用户从课堂 tab 进）
+  const startDemoLesson = React.useCallback(() => {
+    resetDemoEntryConsumed();
+    onClose();
+    window.location.assign('/app?guest=1&entry=demo');
+  }, [onClose]);
+
   const handleDepthChange = React.useCallback((nextDepth: AskDepth) => {
     setDepth(nextDepth);
     if (nextDepth === 'quick') {
@@ -457,6 +492,8 @@ export function GlobalAskPanel({
                 <GlobalAskWelcome
                   depth={effectiveDepth}
                   prompts={welcomeStarters}
+                  desk={deskGroups}
+                  onStartDemo={user ? undefined : startDemoLesson}
                   deepLocked={deepLocked}
                   activeThread={learning.activeThread}
                   composer={renderComposer(true)}
