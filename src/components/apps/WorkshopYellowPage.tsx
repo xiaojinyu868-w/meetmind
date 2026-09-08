@@ -410,7 +410,8 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     generated: generatedSet,
     allowed: allowedSet,
   }), [allowedSet, anchors, generatedSet, keyDifficulties, outcomeSummary, transcript]);
-  const modelPick = !hasAnyOutcome && assessment?.recommendedAppKey && allowedSet.has(assessment.recommendedAppKey)
+  // 模型按内容给的首选，只在课堂事实说不出具体理由（兜底"先从这里开始"）时接手
+  const modelPick = !hasAnyOutcome && !nextStep.grounded && assessment?.recommendedAppKey && allowedSet.has(assessment.recommendedAppKey)
     && !generatedSet.has(assessment.recommendedAppKey)
     ? assessment.recommendedAppKey
     : null;

@@ -73,6 +73,14 @@ describe('recommendNextStep', () => {
     expect(rec.key).toBe('quiz');
     expect(rec.reason).toContain('0:17、0:30');
     expect(rec.completed).toBe(false);
+    expect(rec.grounded).toBe(true);
+  });
+
+  it('没有任何事实时兜底"先从这里开始"，grounded=false（此时才轮到模型按内容给的首选）', () => {
+    const short = transcript.slice(0, 3);
+    const rec = recommendNextStep({ anchors: [], transcript: short, outcomes: {}, generated: new Set(), allowed });
+    expect(rec.key).toBe('quiz');
+    expect(rec.grounded).toBe(false);
   });
 
   it('没有标记但有难点 → 先记住；都没有且内容长 → 先看结构', () => {

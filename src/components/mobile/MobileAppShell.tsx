@@ -8,7 +8,6 @@ import {
   buildClassroomTimeline,
   resolveMobileWorkshopRecommendation,
   resolveClassroomPhotoTimestamp,
-  sortMobileWorkshopApps,
   sortCollectionNewestFirst,
 } from './mobile-collection-utils';
 import { MobileReviewSheet } from './MobileReviewSheet';
@@ -18,7 +17,7 @@ import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import { toast } from 'sonner';
-import { Mic, Camera, Paperclip, ArrowUp, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Sparkles, MapPin, ExternalLink, Headphones, Newspaper, Image as ImageIcon, Pause, Play, UserRound, BookOpen } from 'lucide-react';
+import { Mic, Camera, Paperclip, ArrowUp, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Sparkles, MapPin, ExternalLink, Newspaper, Pause, Play, UserRound } from 'lucide-react';
 import type { SourceIngestItem } from '@/types/page-types';
 import type { TranscriptSegment } from '@/types';
 import { getSpeakerLabel, getSpeakerColorClass } from '@/lib/services/asr/diarization-service';
@@ -27,6 +26,7 @@ import { COPY } from '@/lib/ui/copy';
 import { getProvenanceSourceLabel } from '@/lib/capture/source-provenance';
 import { WORKSHOP_APP_CATALOG, getWorkshopAppByKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { MobileAppRunner } from './MobileAppRunner';
+import { MobileLessonPath, classTierApps } from './MobileLessonPath';
 import { recommendWorkshopApp } from '@/components/apps/workshop-recommendation';
 import { useWorkshopReadiness } from '@/components/apps/hooks/useWorkshopReadiness';
 import { ClassroomFlowCanvas } from '@/components/classroom/ClassroomFlowCanvas';
@@ -1191,16 +1191,11 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
   const [activeClassroomFlow, setActiveClassroomFlow] = useState<ClassroomFlowState | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const iconByKey: Record<WorkshopAppKey, React.ReactNode> = {
-    flashcards: <Zap size={18} strokeWidth={2} />,
-    quiz: <Brain size={18} strokeWidth={2} />,
-    cheatsheet: <FileText size={18} strokeWidth={2} />,
-    mindmap: <Layers size={18} strokeWidth={2} />,
-    'audio-overview': <Headphones size={18} strokeWidth={2} />,
-    infographic: <ImageIcon size={18} strokeWidth={2} />,
-    'teach-back': <Mic size={18} strokeWidth={2} />,
-    explainer: <BookOpen size={18} strokeWidth={2} />,
-  };
+  // 与 CatalogAppScreen / MobileAppRunner 同一个会话键，结果缓存与会话层结果才对得上
+  const pathSessionId = _p.sessionId || 'mobile-session';
+  // 锚点与 segments 同源（都是 capture editor store 当前装载的那节课），不按 sessionId 再过滤——
+  // 示例课的锚点带 DEMO_SESSION_ID 而会话键是 guest-demo，过滤会把"你标记了 2 处"整个滤掉
+  const anchors = useCaptureEditorStore((s) => s.anchors);
   const recommendation = recommendWorkshopApp({
     activeAnchorCount: 0,
     difficultyCount: 0,
@@ -1216,10 +1211,7 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
   });
   const recommendedKey = resolveMobileWorkshopRecommendation(assessment, recommendation.key);
   // 不再替用户决定「能不能用」：所有应用始终可见可用，材料撑不住由插件执行后诚实空态。
-  const apps = sortMobileWorkshopApps(
-    WORKSHOP_APP_CATALOG.filter((app) => app.supportedTiers.includes('class')),
-    recommendedKey,
-  );
+  const apps = useMemo(() => classTierApps(), []);
   const courseCheatsheetHref = `/app?workspace=context&intent=cheatsheet${searchParams.get('guest') === '1' ? '&guest=1' : ''}`;
   const blockedTitle = assessment?.reason === 'not_learning'
     ? COPY.apps.matrix.notLearningTitle
@@ -1254,8 +1246,8 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
             <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
           </button>
           <div>
+            {/* 课堂事实（时长 / 标记 / 难点）由下面的 MobileLessonPath 头部陈述，这里不再重复"N 段课堂内容" */}
             <p className="text-[16px] font-semibold leading-tight text-ink">{COPY.apps.matrix.mobileTitle}</p>
-            <p className="mt-1 text-[12px] text-ink-muted">{COPY.apps.matrix.contextBasis(_p.segments.length, 0, 0)}</p>
           </div>
         </div>
       </div>
@@ -1275,31 +1267,15 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
             compact
           />
         ) : null}
-        <div className="flex flex-col gap-2.5">
-          {apps.map((app, i) => (
-            (() => {
-              const isRecommended = app.key === recommendedKey;
-              return (
-            <button key={app.key} onClick={() => push(app.key)}
-              className={`rounded-[18px] border bg-white px-4 text-left active:scale-[0.99] transition m-card-in ${isRecommended ? 'border-pine/35 py-4 shadow-soft' : 'min-h-[74px] py-3'}`}
-              style={{ animationDelay: `${i * 0.05}s` }}>
-              <div className="flex items-center gap-3.5">
-                <div className={`flex flex-shrink-0 items-center justify-center rounded-[13px] bg-pine-mist text-pine ${isRecommended ? 'h-11 w-11' : 'h-10 w-10'}`}>{iconByKey[app.key]}</div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <p className="truncate text-[12px] font-semibold text-pine">{app.learningAction}</p>
-                    {isRecommended ? <span className="flex-shrink-0 rounded-full bg-vermilion-mist px-2 py-0.5 text-[11px] font-semibold text-vermilion">{COPY.apps.matrix.recommended}</span> : null}
-                  </div>
-                  <p className="mt-0.5 text-[15px] font-semibold leading-tight text-ink">{app.name}</p>
-                  {isRecommended ? <p className="mt-1.5 line-clamp-2 text-[13px] leading-5 text-ink-muted">{app.bestFor}</p> : null}
-                </div>
-                <ChevronRight size={16} className="flex-shrink-0 text-ink-muted" />
-              </div>
-            </button>
-              );
-            })()
-          ))}
-        </div>
+        <MobileLessonPath
+          sessionId={pathSessionId}
+          title={reviewContext?.title || _p.selectedReviewItem?.title}
+          segments={_p.segments}
+          anchors={anchors}
+          apps={apps}
+          modelPick={recommendedKey}
+          onOpen={(key) => push(key)}
+        />
         <div className="mt-5">
           <p className="mb-2 px-1 text-[12px] font-semibold text-ink">{COPY.apps.matrix.courseCheatsheetSection}</p>
           <button

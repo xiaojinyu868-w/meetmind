@@ -105,6 +105,11 @@ export interface NextStepRecommendation {
   reason: string;
   /** 全部路径走完 */
   completed: boolean;
+  /**
+   * 理由是否落在具体事实上（标记时刻 / 难点 / 上一步结果 / 时长）。
+   * false = 兜底的"先从这里开始"——此时才轮到模型按内容给的首选。
+   */
+  grounded: boolean;
 }
 
 export interface NextStepSignals {
@@ -142,13 +147,13 @@ export function recommendNextStep(signals: NextStepSignals): NextStepRecommendat
 
   if (outcomes.quiz && outcomes.quiz.wrongConcepts.length > 0 && !generated.has('flashcards') && can('flashcards')) {
     const names = outcomes.quiz.wrongConcepts.slice(0, 2).map((item) => shortConcept(item.concept));
-    return { key: 'flashcards', reason: copy.afterQuizWrong(outcomes.quiz.wrongConcepts.length, names), completed: false };
+    return { key: 'flashcards', reason: copy.afterQuizWrong(outcomes.quiz.wrongConcepts.length, names), completed: false, grounded: true };
   }
   if (outcomes.flashcards && outcomes.flashcards.missedConcepts.length > 0 && !generated.has('teach-back') && can('teach-back')) {
-    return { key: 'teach-back', reason: copy.afterFlashcardsMissed(outcomes.flashcards.missedConcepts.length), completed: false };
+    return { key: 'teach-back', reason: copy.afterFlashcardsMissed(outcomes.flashcards.missedConcepts.length), completed: false, grounded: true };
   }
   if (outcomes.quiz && outcomes.quiz.wrongConcepts.length === 0 && outcomes.quiz.total > 0 && !generated.has('teach-back') && can('teach-back')) {
-    return { key: 'teach-back', reason: copy.afterQuizPerfect(outcomes.quiz.total), completed: false };
+    return { key: 'teach-back', reason: copy.afterQuizPerfect(outcomes.quiz.total), completed: false, grounded: true };
   }
   if (outcomes.teachBack && !generated.has('infographic') && can('infographic')) {
     return {
@@ -157,30 +162,31 @@ export function recommendNextStep(signals: NextStepSignals): NextStepRecommendat
         ? copy.afterTeachBackGaps(outcomes.teachBack.blindSpot + outcomes.teachBack.gap)
         : copy.afterTeachBackClear,
       completed: false,
+      grounded: true,
     };
   }
   if (pathDone && LEARNING_PATH.some((key) => generated.has(key))) {
-    return { key: null, reason: copy.completed, completed: true };
+    return { key: null, reason: copy.completed, completed: true, grounded: true };
   }
 
   // 还没开始：用课堂事实排第一步
   const activeAnchors = signals.anchors.filter((anchor) => !anchor.cancelled && !anchor.resolved);
   if (activeAnchors.length > 0 && !generated.has('quiz') && can('quiz')) {
     const times = activeAnchors.slice(0, 3).map((anchor) => fmtTime(anchor.timestamp));
-    return { key: 'quiz', reason: copy.fromAnchors(activeAnchors.length, times), completed: false };
+    return { key: 'quiz', reason: copy.fromAnchors(activeAnchors.length, times), completed: false, grounded: true };
   }
   const difficulties = (signals.keyDifficulties ?? []).filter((item) => item.trim());
   if (difficulties.length > 0 && !generated.has('flashcards') && can('flashcards')) {
-    return { key: 'flashcards', reason: copy.fromDifficulties(difficulties.length, difficulties.slice(0, 2).map((d) => shortConcept(d))), completed: false };
+    return { key: 'flashcards', reason: copy.fromDifficulties(difficulties.length, difficulties.slice(0, 2).map((d) => shortConcept(d))), completed: false, grounded: true };
   }
   const durationMs = signals.transcript.length > 0 ? signals.transcript[signals.transcript.length - 1].endMs : 0;
   if (signals.transcript.length >= 24 && !generated.has('mindmap') && can('mindmap')) {
-    return { key: 'mindmap', reason: copy.fromLength(Math.max(1, Math.round(durationMs / 60000))), completed: false };
+    return { key: 'mindmap', reason: copy.fromLength(Math.max(1, Math.round(durationMs / 60000))), completed: false, grounded: true };
   }
   // 兜底：路径第一步里第一个还没做的
   const first = LEARNING_PATH.find((key) => !generated.has(key) && can(key));
-  if (first) return { key: first, reason: copy.defaultStart, completed: false };
-  return { key: null, reason: '', completed: false };
+  if (first) return { key: first, reason: copy.defaultStart, completed: false, grounded: false };
+  return { key: null, reason: '', completed: false, grounded: false };
 }
 
 /**
