@@ -145,14 +145,15 @@ export function recommendNextStep(signals: NextStepSignals): NextStepRecommendat
   const can = (key: WorkshopAppKey) => allowed.has(key);
   const pathDone = LEARNING_PATH.every((key) => generated.has(key) || !allowed.has(key));
 
-  if (outcomes.quiz && outcomes.quiz.wrongConcepts.length > 0 && !generated.has('flashcards') && can('flashcards')) {
+  // "做过"看结果不看产物：闪卡可能早就生成好了（示例课预置），只要还没练过，测验错了就该去练它
+  if (outcomes.quiz && outcomes.quiz.wrongConcepts.length > 0 && !outcomes.flashcards && can('flashcards')) {
     const names = outcomes.quiz.wrongConcepts.slice(0, 2).map((item) => shortConcept(item.concept));
     return { key: 'flashcards', reason: copy.afterQuizWrong(outcomes.quiz.wrongConcepts.length, names), completed: false, grounded: true };
   }
-  if (outcomes.flashcards && outcomes.flashcards.missedConcepts.length > 0 && !generated.has('teach-back') && can('teach-back')) {
+  if (outcomes.flashcards && outcomes.flashcards.missedConcepts.length > 0 && !outcomes.teachBack && can('teach-back')) {
     return { key: 'teach-back', reason: copy.afterFlashcardsMissed(outcomes.flashcards.missedConcepts.length), completed: false, grounded: true };
   }
-  if (outcomes.quiz && outcomes.quiz.wrongConcepts.length === 0 && outcomes.quiz.total > 0 && !generated.has('teach-back') && can('teach-back')) {
+  if (outcomes.quiz && outcomes.quiz.wrongConcepts.length === 0 && outcomes.quiz.total > 0 && !outcomes.teachBack && can('teach-back')) {
     return { key: 'teach-back', reason: copy.afterQuizPerfect(outcomes.quiz.total), completed: false, grounded: true };
   }
   if (outcomes.teachBack && !generated.has('infographic') && can('infographic')) {

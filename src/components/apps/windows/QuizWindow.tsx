@@ -128,6 +128,20 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
     (question) => submitted[question.id] && !isQuizAnswerCorrect(question, selected[question.id]),
   );
   const accuracy = finishedCount > 0 ? Math.round((correctCount / finishedCount) * 100) : 0;
+  const firstUnfinishedIndex = activeQuestions.findIndex((question) => !submitted[question.id]);
+  const selfRate = (correct: boolean) => {
+    if (isSubmitted) return;
+    setSelected((prev) => ({ ...prev, [current.id]: correct ? QUIZ_SELF_CORRECT : QUIZ_SELF_WRONG }));
+    setSubmitted((prev) => ({ ...prev, [current.id]: true }));
+    onLearningActivity?.(formatQuizActivity({
+      index: index + 1,
+      total: activeQuestions.length,
+      stem: current.stem,
+      picked: correct ? COPY.apps.quiz.selfCorrect : COPY.apps.quiz.selfWrong,
+      answer: current.answer,
+      correct,
+    }));
+  };
   const progress = activeQuestions.length > 0 ? ((index + 1) / activeQuestions.length) * 100 : 0;
   const elapsedMinutes = Math.round((Date.now() - startTime) / 60000);
 
@@ -297,49 +311,11 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
                   <div className="rounded-2xl border border-mint-200 bg-mint-50 p-4">
                     <p className="mb-1.5 text-[12px] font-medium tracking-wider text-ink-muted">{COPY.apps.quiz.referenceAnswer}</p>
                     <p className="text-[15px] leading-[1.75] text-ink">{current.answer || COPY.apps.quiz.referenceFallback}</p>
-                    <div className="mt-3 flex items-center gap-2 border-t border-mint-200 pt-3">
-                      <span className="text-[13px] text-ink-muted">{COPY.apps.quiz.selfRate}</span>
-                      <button
-                        type="button"
-                        disabled={isSubmitted}
-                        onClick={() => {
-                          if (isSubmitted) return;
-                          setSelected((prev) => ({ ...prev, [current.id]: QUIZ_SELF_CORRECT }));
-                          setSubmitted((prev) => ({ ...prev, [current.id]: true }));
-                          onLearningActivity?.(formatQuizActivity({
-                            index: index + 1,
-                            total: activeQuestions.length,
-                            stem: current.stem,
-                            picked: COPY.apps.quiz.selfCorrect,
-                            answer: current.answer,
-                            correct: true,
-                          }));
-                        }}
-                        className={`rounded-full border px-3 py-1 text-[13px] transition disabled:cursor-default ${selectedOption === QUIZ_SELF_CORRECT ? 'border-mint-500 bg-mint-500 text-white' : 'border-divider text-ink-secondary hover:border-mint-300'}`}
-                      >
-                        {COPY.apps.quiz.selfCorrect}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isSubmitted}
-                        onClick={() => {
-                          if (isSubmitted) return;
-                          setSelected((prev) => ({ ...prev, [current.id]: QUIZ_SELF_WRONG }));
-                          setSubmitted((prev) => ({ ...prev, [current.id]: true }));
-                          onLearningActivity?.(formatQuizActivity({
-                            index: index + 1,
-                            total: activeQuestions.length,
-                            stem: current.stem,
-                            picked: COPY.apps.quiz.selfWrong,
-                            answer: current.answer,
-                            correct: false,
-                          }));
-                        }}
-                        className={`rounded-full border px-3 py-1 text-[13px] transition disabled:cursor-default ${selectedOption === QUIZ_SELF_WRONG ? 'border-danger-300 bg-danger-500 text-white' : 'border-divider text-ink-secondary hover:border-danger-300'}`}
-                      >
-                        {COPY.apps.quiz.selfWrong}
-                      </button>
-                    </div>
+                    {isSubmitted ? (
+                      <p className={`mt-3 border-t border-mint-200 pt-3 text-[13px] font-medium ${selectedOption === QUIZ_SELF_CORRECT ? 'text-pine' : 'text-vermilion'}`}>
+                        {selectedOption === QUIZ_SELF_CORRECT ? COPY.apps.quiz.selfCorrect : COPY.apps.quiz.selfWrong}
+                      </p>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -477,6 +453,25 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
             >
               {subjective ? COPY.apps.quiz.revealReference : COPY.apps.quiz.confirmAnswer}
             </button>
+          ) : subjective && !isSubmitted ? (
+            // 填空 / 简答：对照参考后在同一位置自评——主动作始终在底部同一处，不用在卡片里找按钮
+            <div className="flex items-center gap-2">
+              <span className="text-[13px] text-ink-muted">{COPY.apps.quiz.selfRate}</span>
+              <button
+                type="button"
+                onClick={() => selfRate(true)}
+                className="rounded-full bg-ink px-5 py-2 text-sm font-medium text-white transition hover:opacity-85 active:scale-95"
+              >
+                {COPY.apps.quiz.selfCorrect}
+              </button>
+              <button
+                type="button"
+                onClick={() => selfRate(false)}
+                className="rounded-full border border-divider px-5 py-2 text-sm font-medium text-ink-secondary transition hover:border-vermilion/50 hover:text-vermilion active:scale-95"
+              >
+                {COPY.apps.quiz.selfWrong}
+              </button>
+            </div>
           ) : isSubmitted ? (
             <>
               {index < activeQuestions.length - 1 ? (
@@ -499,6 +494,15 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
                   className="rounded-full bg-ink px-8 py-2.5 text-sm font-medium text-white transition hover:opacity-85 active:scale-95"
                 >
                   {COPY.apps.quiz.viewResult}
+                </button>
+              ) : firstUnfinishedIndex >= 0 ? (
+                // 走到最后一题却还有跳过的：此前这里什么都不显示，学生看着"4 / 5 已完成"不知道差哪一题
+                <button
+                  type="button"
+                  onClick={() => navigateTo(firstUnfinishedIndex, 'right')}
+                  className="rounded-full border border-ink/15 bg-white px-6 py-2.5 text-sm font-medium text-ink transition hover:border-ink/40 active:scale-95"
+                >
+                  {COPY.apps.quiz.backToUnfinished(activeQuestions.length - finishedCount, firstUnfinishedIndex + 1)}
                 </button>
               ) : null}
             </>

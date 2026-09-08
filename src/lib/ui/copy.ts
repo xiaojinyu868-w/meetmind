@@ -1862,6 +1862,8 @@ export const COPY = {
       confirmAnswer: '确认答案',
       nextQuestion: '下一题',
       viewResult: '看这一轮',
+      /** 最后一题做完但还有跳过的：告诉学生差几题、回到哪一题 */
+      backToUnfinished: (remaining: number, questionNo: number): string => `还有 ${remaining} 题没做 · 回到第 ${questionNo} 题`,
       completeTitle: '这一轮检验完成',
       completeMeta: (count: number, minutes: string): string => `共 ${count} 题 · 用时 ${minutes} 分钟`,
       recallRate: '本轮答稳',

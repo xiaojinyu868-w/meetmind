@@ -105,6 +105,15 @@ describe('recommendNextStep', () => {
     expect(done.key).toBeNull();
   });
 
+  it('闪卡早已生成但还没练：测验错了仍推荐去练闪卡（看结果不看产物）', () => {
+    const rec = recommendNextStep({
+      anchors: [], transcript, outcomes: summarizeSessionOutcomes([quizDraft]),
+      generated: new Set(['quiz', 'flashcards']), allowed,
+    });
+    expect(rec.key).toBe('flashcards');
+    expect(rec.reason).toContain('错了 2 处');
+  });
+
   it('全对的测验直接跳到讲出来', () => {
     const perfect: LearningAssessmentDraft = { appKey: 'quiz', items: [{ concept: 'x', outcome: 'correct' }] };
     const rec = recommendNextStep({ anchors: [], transcript, outcomes: summarizeSessionOutcomes([perfect]), generated: new Set(['quiz']), allowed });
