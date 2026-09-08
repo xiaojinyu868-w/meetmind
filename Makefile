@@ -1,14 +1,28 @@
 # MeetMind Golden Commands
-# Agent 和人类都只用这些命令。不要发明新脚本。
+# 这是 agent 与人类共用的命令接口：可复现、可被下一个人照着跑。
+# 临时验证脚本放仓库外（/tmp）；一个流程重复出现两次以上，就把它收进这里成为新命令。
 
 RUNTIME_TARGETS := dev check build deploy test test-watch test-server test-all lint \
 	smoke smoke-intent smoke-review smoke-in-class smoke-shared smoke-all ttft \
 	eval eval-unit eval-asr eval-asr-real eval-tutor eval-tutor-real eval-teach \
 	eval-teach-real eval-guard eval-guard-update eval-ci db-push db-studio ledger
 
+# --- Node 24 运行时：先自动找，找不到才报错 ---
+# node_modules 里的原生模块（better-sqlite3 / sharp）按 Node 24 ABI 编译，换主版本会崩，
+# 所以版本要求是真的。但"默认 shell 是别的 Node"是环境噪音，不该变成任务中断：
+# 当前 node 不是 24 时，按顺序探测 /usr/local/bin 与 nvm 目录里的 24，找到就前置到 PATH。
+NODE_MAJOR := $(shell node -p 'process.versions.node.split(".")[0]' 2>/dev/null)
+ifneq ($(NODE_MAJOR),24)
+  NODE24_BIN := $(shell for d in /usr/local/bin $$HOME/.nvm/versions/node/v24*/bin; do \
+    if [ -x "$$d/node" ] && [ "$$("$$d/node" -p 'process.versions.node.split(".")[0]' 2>/dev/null)" = "24" ]; then echo "$$d"; break; fi; done)
+  ifneq ($(NODE24_BIN),)
+    export PATH := $(NODE24_BIN):$(PATH)
+  endif
+endif
+
 .PHONY: assert-node-runtime
 assert-node-runtime:
-	@node -e 'const major=Number(process.versions.node.split(".")[0]); if (major !== 24) { console.error("MeetMind requires Node.js 24 LTS. Run nvm use, then reinstall dependencies with npm ci."); process.exit(1); }'
+	@node -e 'const major=Number(process.versions.node.split(".")[0]); if (major !== 24) { console.error("MeetMind requires Node.js 24 LTS (found " + process.versions.node + "). Install Node 24 (nvm install 24 / /usr/local/bin/node) and reinstall deps with pnpm install --frozen-lockfile."); process.exit(1); }'
 
 $(RUNTIME_TARGETS): assert-node-runtime
 

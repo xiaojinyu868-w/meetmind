@@ -1,19 +1,24 @@
 name: CI
 
+# 门禁要跑在真正在开发的分支上，否则它只是一份摆设：
+# 任何 PR 都跑；push 到 main / feat/** / feature/** / milestone/** 也跑。
 on:
   pull_request:
-    branches: [feature/classroom-v2-hci-polish, main]
   push:
-    branches: [milestone/**]
+    branches: [main, 'feat/**', 'feature/**', 'milestone/**']
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # ──────────────────────────────────────────────────────────────
-  # 类型检查 + 单元测试 + Eval Harness
+  # 类型检查 + 单元测试 + Eval Harness（与 make eval-ci 同一套门禁）
   # ──────────────────────────────────────────────────────────────
   checks:
     name: tsc + tests + eval harness
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       # 把 Prisma generate 的 sqlite 文件写到 tmp
       DATABASE_URL: "file:./tmp-ci.db"
@@ -23,20 +28,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 包管理器是 pnpm（pnpm-lock.yaml 是唯一有效锁文件）；版本与本地一致
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node 24
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: 'npm'
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
 
       - name: Install deps
-        run: npm ci --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
 
       - name: Prisma generate
         run: npx prisma generate
 
       - name: Type check (tsc --noEmit)
         run: make check
+
+      # make lint 目前是红的（178 条历史 warning，--max-warnings 0），先不进门禁；
+      # 清零后再加回来。规则见 AGENTS.md §1：不新增 warning。
 
       - name: Unit tests (src/)
         run: make test
@@ -52,6 +66,9 @@ jobs:
 
       - name: Run Tutor harness (dry-run)
         run: make eval-tutor
+
+      - name: Run Teach harness (dry-run)
+        run: make eval-teach
 
       - name: Regression guard (baseline check)
         run: make eval-guard
