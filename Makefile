@@ -48,6 +48,14 @@ build: ## 生产构建（多核 + 大堆 + build worker；类型与 lint 由 mak
 	npm run build
 
 .PHONY: deploy
+.PHONY: bundle-report
+bundle-report: ## 首屏 JS 体积归因：旁路构建到 .next-attr（模块 id = 源码路径，关 scope hoisting）→ 按文件 / 包列出 gzip 体积；ROUTE 可覆盖
+	NEXT_BUNDLE_ATTRIBUTION=1 NEXT_DIST_DIR=.next-attr NEXT_BUILD_CPUS=$${NEXT_BUILD_CPUS:-3} \
+	NODE_OPTIONS="--max-old-space-size=$${NEXT_BUILD_HEAP_MB:-7168}" \
+	NEXT_IGNORE_BUILD_LINT=1 NEXT_IGNORE_TYPE_ERRORS=1 \
+	npx next build > /tmp/bundle-report-build.log 2>&1 || (tail -20 /tmp/bundle-report-build.log; exit 1)
+	python3 scripts/bundle-report.py .next-attr "$${ROUTE:-/(main)/app/page}" 45
+
 deploy: check build ## 类型检查 + 构建 + PM2 优雅停机后重启 + 健康检查
 	./scripts/deploy.sh --quick
 

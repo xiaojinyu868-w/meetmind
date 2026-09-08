@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DashScopeASRClient } from '@/lib/services/dashscope-asr-service';
+import type { DashScopeASRClient } from '@/lib/services/dashscope-asr-service';
 import { COPY } from '@/lib/ui/copy';
 
 export type VoiceInputStatus = 'idle' | 'connecting' | 'recording' | 'error';
@@ -196,6 +196,8 @@ export function useVoiceInput({
       });
       mediaStreamRef.current = stream;
 
+      // ASR 客户端按需加载：语音输入是收集流里偶尔用的动作，不该坐在首屏 JS 里
+      const { DashScopeASRClient } = await import('@/lib/services/dashscope-asr-service');
       const asrClient = new DashScopeASRClient('', {
         onSentence: (sentence) => {
           if (!sentence.text || !sentence.isFinal) return;

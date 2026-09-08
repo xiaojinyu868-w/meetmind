@@ -201,7 +201,14 @@ readiness 双重门（模型只能推荐不能剥夺能力）、结果缓存、�
    修法全是"把纯的东西抽成纯模块 + 按需出现的东西 dynamic"（`workshop-window-state.ts`、`dedao-timeline-model.ts`、
    WordExplainer 懒加载），零行为变化。剩余 330 KB 里：page 主块 105 KB（God File + Recorder 被 scope-hoisting 合成一个
    277 KB 模块——下一刀是 God File 按域切分）、react-dom 52、COPY 36（单一真相源，不拆）、Next 运行时 31、Dexie 30。
-   <300 KB 需要动 God File；骨架屏方面预渲染 HTML 只有 AppLoading 品牌页，体积减半后先观察慢网表现再决定。
+   **第二刀（同日晚）：330 → 298 KB gzip，目标达成，没动 God File。** 先做了账（`make bundle-report`：归因构建把模块 id 换成源码路径、
+   关 scope hoisting，`scripts/bundle-report.py` 按文件 / 包列 gzip），账上最大的应用模块是 `copy.ts` 36 KB——其中 landing +
+   technology 两块 10 KB 是营销页文案，/app 用不到却随单体进每个页面，拆到 `copy-landing.ts`；Recorder（≈20 KB 含 ASR 客户端 /
+   PCM 采集）改 next/dynamic，挂载点都是 sr-only 的隐藏引擎，桌面走 autoStartSignal、手机端 waitForRecorder 短等就位；
+   再切两条纯函数泄漏（收集卡片为一个 markdownToPlainText 拖进整个网页抽取服务；语音输入静态引 ASR 客户端）。
+   剩余 298 KB：react-dom 53、copy 26、dexie 30、Next 运行时 27、page.tsx 18、sonner 9、lucide 9、swr 7（useSummary 真用）。
+   再往下就是 God File 按域切分（收集域 hooks ≈15 KB 只在收集 tab 用）与 sonner / dexie 的按需化，收益递减。
+   骨架屏方面预渲染 HTML 只有 AppLoading 品牌页，体积减半后先观察慢网表现再决定。
 
 ### P2 —— 新生级
 

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { motion } from 'motion/react';
 import { ArrowLeft, ArrowRight, Database, GraduationCap, Play, Trophy } from 'lucide-react';
 import { COPY } from '@/lib/ui/copy';
+import { LANDING_COPY } from '@/lib/ui/copy-landing';
 import styles from './TechnologyPage.module.css';
 
 const ease = [0.22, 1, 0.36, 1] as const;
@@ -32,7 +33,7 @@ function TechMark() {
 }
 
 function StackFlow() {
-  const stack = COPY.technology.track.stack;
+  const stack = LANDING_COPY.technology.track.stack;
   return (
     <div className={styles.stackFlow}>
       {stack.map((node, index) => (
@@ -56,7 +57,7 @@ function StackFlow() {
 }
 
 function Flywheel() {
-  const copy = COPY.technology.flywheel;
+  const copy = LANDING_COPY.technology.flywheel;
   return (
     <div className={styles.flywheel}>
       <svg className={styles.flywheelRing} viewBox="0 0 100 100" aria-hidden="true">
@@ -86,7 +87,7 @@ function Flywheel() {
 }
 
 export function TechnologyPage() {
-  const copy = COPY.technology;
+  const copy = LANDING_COPY.technology;
 
   return (
     <main className={styles.page}>

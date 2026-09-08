@@ -14,7 +14,7 @@ import { getCollectionContextDisplayTitle } from '@/lib/capture/collection-conte
 import { parseVideoLink } from '@/lib/utils/video-link';
 import { compactText, compactMultilineText } from './text-and-constants';
 import { COPY } from '@/lib/ui/copy';
-import { markdownToPlainText } from '@/lib/services/web-article-extract-service';
+import { markdownToPlainText } from '@/lib/utils/markdown-plain-text';
 import {
   buildSourceProvenance,
   readSourceProvenance,

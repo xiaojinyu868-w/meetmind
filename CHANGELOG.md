@@ -5,6 +5,20 @@
 
 ---
 
+## 2026-09-08 — `/app` 首屏 JS 330 → 298 KB gzip（目标 <300 达成）+ 体积账本
+
+- **先做账**：`make bundle-report` 用归因构建（`NEXT_BUNDLE_ATTRIBUTION=1`：模块 id = 源码路径、关 scope hoisting）把首屏 JS
+  按文件 / 包列出 gzip 体积（`scripts/bundle-report.py`）——此前只能看 chunk 哈希猜
+- **营销页文案拆出**：`copy.ts` 是账上最大的应用模块（36 KB），其中 landing + technology 10 KB 是 /app 用不到的营销页文案，
+  拆到 `src/lib/ui/copy-landing.ts`（`LANDING_COPY`），口吻规则不变；AGENTS.md 路由表已注明
+- **Recorder 按需加载**：录音引擎（含 ASR 客户端 / PCM 采集 / 转录增强，≈20 KB）此前静态坐在首屏；挂载点都是 sr-only 隐藏引擎，
+  改 dynamic 后桌面走 autoStartSignal、手机端 `waitForRecorder` 短等就位
+- **再切两条纯函数泄漏**：收集卡片为一个 `markdownToPlainText` 拖进整个网页抽取服务（→ `lib/utils/markdown-plain-text.ts`）；
+  语音输入静态引 ASR 客户端（→ 开始听写时再 import）
+- 生产冒烟：书桌三态 / landing 内嵌试听 / 示例课 console 零错误
+
+---
+
 ## 2026-09-08 — 讲给同桌听：修复"核对永远失败"
 
 - **根因**：`TeachBackWindow` 把 AppRenderSurface 给信息图用的 1400 字 `contentContext` 当成课名——黑板抬头滚着整段转录，

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowDown, ArrowRight, Download, ExternalLink } from 'lucide-react';
 import { useEffect } from 'react';
 import { COPY } from '@/lib/ui/copy';
+import { LANDING_COPY } from '@/lib/ui/copy-landing';
 import { DESKTOP_DOWNLOAD } from '@/lib/config/desktop-download.config';
 import { LandingAppsLine } from './LandingAppsLine';
 import { LandingClassroomLine } from './LandingClassroomLine';
@@ -28,7 +29,7 @@ function Brand() {
 const STAGE_TONES = ['pine', 'sand', 'rose', 'sky', 'ink'] as const;
 
 export function LandingPage() {
-  const copy = COPY.landing;
+  const copy = LANDING_COPY.landing;
 
   // 入场揭示：滚动到可视区后 stagger 浮现
   useEffect(() => {

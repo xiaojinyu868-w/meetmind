@@ -107,3 +107,4 @@ tests/eval/**/runs/*.jsonl
 # Python 缓存
 __pycache__/
 *.pyc
+.next-attr

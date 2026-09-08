@@ -132,6 +132,13 @@ const nextConfig = {
         'thread-stream': false,
         'sonic-boom': false,
       };
+      // NEXT_BUNDLE_ATTRIBUTION=1（make bundle-report）：模块 id 用源码路径、关掉 scope hoisting，
+      // 产物里每个模块边界都能归到文件——首屏 JS 体积才有账可查。只用于旁路分析构建，不进线上产物
+      if (process.env.NEXT_BUNDLE_ATTRIBUTION === '1') {
+        config.optimization = config.optimization || {};
+        config.optimization.moduleIds = 'named';
+        config.optimization.concatenateModules = false;
+      }
     }
     return config;
   },

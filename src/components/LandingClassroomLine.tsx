@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { COPY } from '@/lib/ui/copy';
+import { LANDING_COPY } from '@/lib/ui/copy-landing';
 import styles from './LandingClassroomLine.module.css';
 
-type Stage = (typeof COPY.landing.classroomLine.stages)[number];
+type Stage = (typeof LANDING_COPY.landing.classroomLine.stages)[number];
 type StageMock = Stage['mock'];
 
 function StageMoment({ mock }: { mock: StageMock }) {
@@ -76,7 +76,7 @@ function StageMoment({ mock }: { mock: StageMock }) {
 }
 
 export function LandingClassroomLine() {
-  const copy = COPY.landing.classroomLine;
+  const copy = LANDING_COPY.landing.classroomLine;
   const railRef = useRef<HTMLDivElement>(null);
   const [activeStage, setActiveStage] = useState(0);
   const [railPaused, setRailPaused] = useState(false);

@@ -82,11 +82,18 @@ import { UIConfig } from '@/lib/config';
 import { COPY } from '@/lib/ui/copy';
 
 // SWR data hooks for API state management.
-import { useTopics, useSummary } from '@/hooks/data';
+// 直接指到具体模块而不是 @/hooks/data 桶：桶里的 useSession 带着 swr（≈7 KB gzip）进首屏，而这页用不到它；
+// 本仓库 package.json 没有 sideEffects:false，webpack 不敢把 re-export 剪掉
+import { useTopics } from '@/hooks/data/useTopics';
+import { useSummary } from '@/hooks/data/useSummary';
 import { useLessonDigest } from '@/hooks/useLessonDigest';
 
 import type { WaveformPlayerRef, WaveformAnchor } from '@/components/WaveformPlayer';
-import { Recorder, type RecorderHandle } from '@/components/Recorder';
+import type { RecorderHandle } from '@/components/Recorder';
+// 录音引擎按需加载：它只在用户按下"开始一节课"后才干活，却带着 ASR 客户端 / PCM 采集 / 转录增强
+// 一起坐在首屏 JS 里（≈20 KB gzip）。挂载点都是 sr-only 的隐藏引擎，晚几百毫秒挂上对首屏毫无影响；
+// 开始录音的两条路径都能等它就位：桌面走 autoStartSignal（挂上即自动开始），手机端 waitForRecorder 短等
+const Recorder = dynamic(() => import('@/components/Recorder').then((m) => ({ default: m.Recorder })), { ssr: false });
 import { installDesktopRecordingBridge, waitForRecordingStart } from '@/lib/services/desktop-recording-bridge';
 import { useClassCheck } from '@/hooks/useClassCheck';
 import type { ClassCheckHighlight } from '@/app/api/class-check/plan/route';
@@ -522,6 +529,13 @@ function StudentAppContent({
   const sourceFileInputRef = useRef<HTMLInputElement>(null);
   const waveformRef = useRef<WaveformPlayerRef>(null);
   const recorderRef = useRef<RecorderHandle | null>(null);
+  const waitForRecorder = useCallback(async (timeoutMs: number): Promise<RecorderHandle | null> => {
+    const deadline = Date.now() + timeoutMs;
+    while (!recorderRef.current && Date.now() < deadline) {
+      await new Promise((resolve) => { setTimeout(resolve, 80); });
+    }
+    return recorderRef.current;
+  }, []);
   // 记录当前进入复习态的 sourceItem，用于非音视频类型（文章/笔记）展示原文
   const [selectedReviewItem, setSelectedReviewItem] = useState<SourceIngestItem | null>(null);
   // 示例课结束进复习后 effectiveAutoLoadDemo 已被消费掉，标题按会话兜底，否则课后学习页头部没有课名
@@ -2096,11 +2110,13 @@ function StudentAppContent({
           onStartRecording={async () => {
             // 只有 Recorder 真正拿到音频流并开始保存原声后，MobileAppShell 才进入录课页。
             // handleRecordingStart 会在这个 Promise 返回前同步隔离新 session 和清空旧课。
-            if (!recorderRef.current) {
+            // Recorder 是按需加载的：首屏后几百毫秒内挂上；用户点得比它快就短等一下再判"没就位"
+            const recorder = recorderRef.current ?? await waitForRecorder(4000);
+            if (!recorder) {
               toast.error(COPY.recording.startFailed(COPY.recording.recorderNotReady));
               return false;
             }
-            return recorderRef.current.startRecording();
+            return recorder.startRecording();
           }}
           onOpenFilePicker={(mode) => handleSourceFileButtonClick(mode)}
           onOpenReview={(item) => openReviewFromCollection(item)}

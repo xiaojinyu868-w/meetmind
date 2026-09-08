@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { COPY } from '@/lib/ui/copy';
+import { LANDING_COPY } from '@/lib/ui/copy-landing';
 import { handleSpotlightMove } from './landing-spotlight';
 import pageStyles from './LandingPage.module.css';
 import styles from './LandingAppsLine.module.css';
 
-type AppsLineApp = (typeof COPY.landing.appsLine.apps)[number];
+type AppsLineApp = (typeof LANDING_COPY.landing.appsLine.apps)[number];
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -283,7 +283,7 @@ function AppStage({ app }: { app: AppsLineApp }) {
 }
 
 export function LandingAppsLine() {
-  const copy = COPY.landing.appsLine;
+  const copy = LANDING_COPY.landing.appsLine;
   const apps = copy.apps;
   const [selected, setSelected] = useState(0);
   const [autoPlay, setAutoPlay] = useState(true);

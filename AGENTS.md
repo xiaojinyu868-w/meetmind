@@ -43,7 +43,7 @@
 | 新增 API 路由、请求体字段、响应契约、stream marker、事件名 | `src/app/api/**/DOMAIN.md` + 相关 `docs/*` |
 | 新增模型 provider、默认模型、API key、环境变量 | `src/lib/config/DOMAIN.md` + `.env.example`（涉 Tutor 再加 `docs/TUTOR_AGENT.md`） |
 | 改 Tutor / ASR / teach / fenshen / 记忆 主链路 | 对应 `DOMAIN.md` + `docs/TUTOR_AGENT.md` / `docs/ASR_PIPELINE.md` / `docs/TEACH_TUTOR_ENGINE.md` |
-| 改用户面文案或设置项 | `src/lib/ui/copy.ts` 或设置页说明 + 偏好 key 所在 `DOMAIN.md` |
+| 改用户面文案或设置项 | `src/lib/ui/copy.ts`（营销页 Landing / Technology 在 `copy-landing.ts`）或设置页说明 + 偏好 key 所在 `DOMAIN.md` |
 | 交付里程碑 | `CHANGELOG.md` 一条（可追到 commit）+ `make ledger` |
 
 ---
@@ -66,6 +66,7 @@ make lint           # ESLint（--max-warnings 0）
 make smoke-all      # 4 个 Tutor mode 的 e2e smoke
 make ttft           # 首 token 延迟（改 prompt/smoothStream/provider 后跑）
 make stats          # 项目统计（超标文件、console.log 残留）
+make bundle-report  # 首屏 JS 体积账本（归因构建 → 按文件 / 包列 gzip；ROUTE 可覆盖，默认 /app）
 
 # Eval（SWE-Bench 风格）
 make eval           # 完整套件
@@ -130,7 +131,7 @@ make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
 | **改跨设备同步** | `roadmap/v2.1-cross-browser-sync-gap.md` → `workspace-evidence-service.ts` + `backfill-captures-to-indexeddb.ts` |
 | **改桌面壳 / 全端采集** | `roadmap/v4.0-everywhere-capture.md` → `desktop/DOMAIN.md` → `src/lib/services/keyframe/DOMAIN.md` |
 | **改标题 / 课后理解** | `src/lib/services/lesson-title-service.ts` + `lesson-understanding-service.ts` + `src/app/api/DOMAIN.md` AI 能力段 |
-| **改用户面文案** | `src/lib/ui/copy.ts`（唯一真相源） |
+| **改用户面文案** | `src/lib/ui/copy.ts`（唯一真相源；营销页 Landing / Technology 按体积拆在 `copy-landing.ts`，口吻规则相同） |
 | **改状态管理 / 类型 / 配置 / 模型** | `src/stores/DOMAIN.md` / `src/types/DOMAIN.md` / `src/lib/config/DOMAIN.md` → `app.config.ts` → `llm-service.ts` |
 | **改设置项 / 用户偏好** | `src/app/DOMAIN.md` 设置页 → `src/lib/utils/DOMAIN.md` → 所有消费该偏好的 hooks/components |
 | **改设计 / 视觉** | `docs/DESIGN_SYSTEM.md` + `design-demo/v7/` showcase + `docs/PRODUCT_TASTE.md` |
@@ -193,7 +194,7 @@ src/
 │   ├── prompts/    # tutor-prompts.ts（六模式唯一 prompt 源）
 │   ├── ai-native/  # 应用插件系统（8 plugins + catalog）
 │   ├── db/         # IndexedDB schema（v8）+ CRUD
-│   ├── ui/copy.ts  # 用户面文案唯一真相源
+│   ├── ui/copy.ts  # 用户面文案唯一真相源（copy-landing.ts：营销页文案，按体积拆出）
 │   └── config/     # app.config.ts（模型注册表，env 驱动）
 ├── desktop/        # Electron 壳（仓库根 desktop/：main/shell-window/quick-panel/screenshot/updater）
 └── tests/eval/     # SWE-Bench 风格 harness + baselines

@@ -1,7 +1,7 @@
-import { COPY } from '@/lib/ui/copy';
+import { LANDING_COPY } from '@/lib/ui/copy-landing';
 import styles from './LandingCollectionLine.module.css';
 
-type ThreadItem = (typeof COPY.landing.collectionLine.wechatThread)[number];
+type ThreadItem = (typeof LANDING_COPY.landing.collectionLine.wechatThread)[number];
 
 function WxOutbound({ item }: { item: ThreadItem }) {
   if (item.kind === 'link') {
@@ -28,7 +28,7 @@ function WxOutbound({ item }: { item: ThreadItem }) {
 }
 
 export function LandingCollectionLine() {
-  const copy = COPY.landing.collectionLine;
+  const copy = LANDING_COPY.landing.collectionLine;
   return (
     <section className={styles.collectionLine} id="collection" aria-labelledby="collection-line-title">
       <div className={styles.collectionStage}>

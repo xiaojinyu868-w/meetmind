@@ -1,15 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { COPY } from '@/lib/ui/copy';
+import { LANDING_COPY } from '@/lib/ui/copy-landing';
 import { handleSpotlightMove } from './landing-spotlight';
 import pageStyles from './LandingPage.module.css';
 import styles from './LandingContextLine.module.css';
 
-type Memory = (typeof COPY.landing.context.memories)[number];
+type Memory = (typeof LANDING_COPY.landing.context.memories)[number];
 
 function MemoryRow({ memory }: { memory: Memory }) {
-  const copy = COPY.landing.context;
+  const copy = LANDING_COPY.landing.context;
   const [paused, setPaused] = useState(false);
   const [forgotten, setForgotten] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -53,7 +53,7 @@ function MemoryRow({ memory }: { memory: Memory }) {
 }
 
 export function LandingContextLine() {
-  const copy = COPY.landing.context;
+  const copy = LANDING_COPY.landing.context;
   return (
     <section className={styles.contextLine} id="context" aria-labelledby="context-title">
       <div className={pageStyles.sectionHeading}>
