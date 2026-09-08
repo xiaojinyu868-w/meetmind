@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useLearningContext, type UseLearningContextReturn } from '@/hooks/useLearningContext';
 import { CourseContextSection } from '@/components/CourseContextSection';
+import { MasteryTrailSection } from '@/components/MasteryTrailSection';
 import { CourseCheatsheetWorkspace } from '@/components/CourseCheatsheetWorkspace';
 import { COPY } from '@/lib/ui/copy';
 import { cn } from '@/lib/utils';
@@ -283,6 +284,9 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
               ))}
             </div>
           </section> : null}
+
+          {/* 掌握轨迹：测验 / 闪卡 / 讲给同桌听留下的事实按概念连成线——"曾经不稳 → 现在稳"在这里被看见 */}
+          {view === 'overview' ? <MasteryTrailSection /> : null}
 
           {view === 'overview' ? (
             <nav className="mt-9 border-t border-divider" aria-label={COPY.globalAsk.contextLibraryNavigation}>
