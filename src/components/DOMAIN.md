@@ -106,7 +106,7 @@ components/
 | `ClassCheckOverlay.tsx` | 430 | 随堂检验弹窗（greeting → quiz → result 三阶段，Backdrop 已提取为独立组件避免闪烁） |
 | `ClassroomView.model.ts` | ~10 | 课堂页纯交互模型（demo 录课态停止按钮应退出 demo，不走真实录音/stale DB 清理） |
 | `SharedWorkspacePanel.tsx` | ~78 | shared workspace 统一面板（仅 apps）；支持在中间工作区打开具体应用而不是只弹浮窗 |
-| `ReviewWorkspacePanel.tsx` | ~193 | desktop review 左侧证据面板（timeline / anchor detail；M15 起移除单课 feed tab，信息流改走侧栏全局入口） |
+| `ReviewWorkspacePanel.tsx` | ~200 | desktop review 左侧证据面板（timeline / anchor detail；M15 起移除单课 feed tab，信息流改走侧栏全局入口）。「困惑点」tab 没选中时渲染 `review/MomentList.tsx`：按名字列出这节课标下的每一刻（`lib/learning/moment-title`），点一行进详情并跳到那一句——替代了此前"去波形上找红点"的空态 |
 | `ReviewTutorPanel.tsx` | ~268 | desktop review 右侧 Tutor 面板（历史对话、SafeAITutor / TutorAgentPanel 统一容器；音频波形已上移到左证据栏）；顶部只用“整节课 / 困惑点”表达当前对话范围，不再用重复说明文字挤压默认窄栏 |
 | `CollectionSelectionBar.tsx` | 94 | 收集上下文多选操作条（问 Tutor / 引用 / 批量归档删除） |
 | `CollectionComposerContextPreview.tsx` | 62 | composer 上方的引用与链接预览条 |
