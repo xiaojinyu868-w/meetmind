@@ -33,7 +33,7 @@ src/components/apps/windows/
 ├── PodcastPlayerBar.tsx        # 课堂播客播放条（2026-09-08，v7 皮肤）：墨色圆形播放键 + 松石绿进度 + 等宽时间 + 倍速胶囊，隐藏 <audio> 经 forwardRef 暴露给宿主做章节跳转 / 逐行高亮。取代此前播客窗口与「做好即弹」预览卡里的浏览器原生 <audio controls>——整套应用里唯一一块不属于产品的皮肤
 ├── PodcastWindow.tsx           # 音频概览：优先播放、折叠制作详情与稳定失败兜底
 ├── podcast-window-model.ts     # 播客前端纯 helper：过滤 provider/HTTP 原始失败章节
-├── ExplainerWindow.tsx         # 板书精讲：BoardScript → blackboard/BlackboardPlayer（v31 白纸讲义画布实时书写），头部显示标题与老师原话核对统计
+├── ExplainerWindow.tsx         # 板书精讲：BoardScript → blackboard/BlackboardPlayer（v31 白纸讲义画布实时书写），头部显示标题与老师原话核对统计。2026-09-08：窗口本身改纸面（与闪卡 / 测验 / 导图同皮肤），黑板只是墙上那一块——BlackboardPlayer 的深色框只包住 16:9 纸面 + 控制条并垂直居中，纸面按宿主（`data-board-host`）宽 / 可用高双约束缩放（BoardCanvas）；无宿主（TeachBoard / 独立页）沿用铺满宽度的 16:9 盒子
 ├── blackboard/                 # 讲义播放器：board-model（纯函数网格/时间轴/bounds）+ BoardCanvas（v32 备课本/分栏总装）+ BoardFlow（双栏流式内容区）+ BoardFormula（KaTeX 块级公式）+ board-lecture（字阶/调色板/分栏纯函数）+ BoardWrite（token 接力显现，v32 起屏显字体）+ RoughStroke（roughjs 圈点勾画）+ useBoardPlayer（状态机 + Clock 抽象）+ BlackboardPlayer（控制条）。v32：BoardCaption（字幕）删除，鸿雷/Caveat/hanzi-writer 随手写体退役
 ├── AppWindowPlaceholder.tsx    # 六类应用共用的整理中 / 空结果 / 失败状态
 ├── EvidenceLabel.tsx           # 证据标签组件

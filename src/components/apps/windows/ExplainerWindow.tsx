@@ -75,24 +75,26 @@ export function ExplainerWindow({ result }: ExplainerWindowProps) {
 
   const stats = payload.quoteStats;
 
+  // 窗口本身是纸面（和闪卡 / 测验 / 导图同一皮肤），黑板只是墙上那一块（BlackboardPlayer 的深色框）。
+  // 此前整个窗口刷成深色房间：复习页中栏又窄又高，纸面只占上面 1/3，其余全黑，像坏了的投影幕
   return (
-    <div className="flex h-full flex-col" style={{ background: '#10181b' }}>
-      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-3">
-        <h2 className="text-[15px] font-medium tracking-[-0.01em]" style={{ color: '#f5f2e8' }}>
+    <div className="flex h-full flex-col">
+      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-1 pb-3">
+        <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">
           {payload.title}
         </h2>
         {stats && stats.verified > 0 ? (
-          <span className="text-[12px]" style={{ color: '#A8C8A0' }}>
+          <span className="text-[12px] text-pine">
             {COPY.apps.explainer.quotesVerified(stats.verified)}
           </span>
         ) : null}
         {stats && stats.downgraded > 0 ? (
-          <span className="text-[12px]" style={{ color: 'rgba(245,242,232,0.5)' }}>
+          <span className="text-[12px] text-ink-muted">
             {COPY.apps.explainer.quotesDowngraded(stats.downgraded)}
           </span>
         ) : null}
       </header>
-      <div className="min-h-0 flex-1 px-3 pb-3">
+      <div className="min-h-0 flex-1">
         <BlackboardPlayer script={payload.script} />
       </div>
     </div>

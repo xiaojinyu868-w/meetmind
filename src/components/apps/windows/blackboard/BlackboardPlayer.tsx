@@ -448,11 +448,15 @@ export function BlackboardPlayer({ script, paceMsPerChar, fontFamily, debugBound
   };
 
   return (
+    // 外层透明占满窗口、把黑板框垂直居中；黑板框只包住 16:9 纸面 + 控制条。
+    // 此前黑板框 h-full 铺满整栏：复习页中栏又窄又高，纸面只占上面 1/3，下面全是黑——像坏了的投影幕。
+    // 纸面按"宽 / 可用高"双约束缩放（BoardCanvas 读 data-board-host 的高度），宽屏矮窗也不会撑出窗外
+    <div className="flex h-full min-h-0 flex-col justify-center" data-board-host data-testid="blackboard-host">
     <div
-      className="flex h-full flex-col"
+      className="flex min-h-0 flex-col"
       style={{ background: '#161e21', borderRadius: 12, padding: 14, gap: 12 }}
     >
-      <div className="min-h-0 flex-1" style={{ position: 'relative' }}>
+      <div className="flex min-h-0 items-center justify-center" style={{ position: 'relative' }}>
         <BoardCanvas
           page={page}
           pageIndex={player.pageIndex}
@@ -568,6 +572,7 @@ export function BlackboardPlayer({ script, paceMsPerChar, fontFamily, debugBound
           {COPY.apps.explainer.pageLabel(player.pageIndex + 1, player.pageCount)}
         </span>
       </div>
+    </div>
     </div>
   );
 }

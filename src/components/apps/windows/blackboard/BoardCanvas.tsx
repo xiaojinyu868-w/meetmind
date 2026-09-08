@@ -112,13 +112,29 @@ export function BoardCanvas({
   // v31 栏满自动换栏兜底：该 key 之后的内容进下一栏（已写墨迹不动）
   const [autoBreakAfter, setAutoBreakAfter] = useState<string | null>(null);
 
+  // 纸面缩放：以宿主（data-board-host）的宽和可用高双约束——宽屏矮窗按高缩，窄高栏按宽缩。
+  // 控制条 + 黑板框内边距约 84px，从宿主高度里扣掉；宿主不存在（独立页）时退回按宽缩
+  const HOST_CHROME_PX = 84;
+  const [hosted, setHosted] = useState(false);
   useEffect(() => {
     const outer = outerRef.current;
     if (!outer) return;
-    const update = () => setScale(outer.clientWidth / BOARD_WIDTH);
+    const host = outer.closest<HTMLElement>('[data-board-host]');
+    setHosted(Boolean(host));
+    const update = () => {
+      if (!host) {
+        // 无宿主（teach 引擎的板、独立页）：沿用铺满宽度的 16:9 盒子
+        setScale(outer.clientWidth / BOARD_WIDTH);
+        return;
+      }
+      const byWidth = Math.max(0, host.clientWidth - 28) / BOARD_WIDTH;
+      const availH = host.clientHeight - HOST_CHROME_PX;
+      const byHeight = availH > 0 ? availH / BOARD_HEIGHT : Number.POSITIVE_INFINITY;
+      setScale(Math.max(0.05, Math.min(byWidth, byHeight)));
+    };
     update();
     const observer = new ResizeObserver(update);
-    observer.observe(outer);
+    observer.observe(host ?? outer);
     return () => observer.disconnect();
   }, []);
 
@@ -363,7 +379,11 @@ export function BoardCanvas({
   }, [instant, flat, extraWrites]);
 
   return (
-    <div ref={outerRef} className="w-full" style={{ aspectRatio: '16 / 9' }}>
+    <div
+      ref={outerRef}
+      className={hosted ? undefined : 'w-full'}
+      style={hosted ? { width: BOARD_WIDTH * scale, height: BOARD_HEIGHT * scale, maxWidth: '100%' } : { aspectRatio: '16 / 9' }}
+    >
       <div
         ref={boardRef}
         data-board-inner
