@@ -37,6 +37,7 @@ import { GlobalAskContextDrawer } from '@/components/GlobalAskContextDrawer';
 import { GlobalAskWelcome } from '@/components/GlobalAskWelcome';
 import { buildGlobalAskStarters, describeGlobalAskContext } from '@/components/global-ask-starters';
 import { buildAskDesk } from '@/components/global-ask-desk';
+import { buildLocalLearnerContext } from '@/components/learner-context-local';
 import { GUEST_DEMO_LESSON_TITLE, resetDemoEntryConsumed } from '@/components/classroom/guest-demo-entry';
 import { isDemoLessonLoaded } from '@/components/classroom/DemoLessonLoader';
 import { buildMasteryTrail, collectDeviceOutcomes, type MasteryTrailEntry } from '@/components/mastery-trail';
@@ -165,6 +166,10 @@ export function GlobalAskPanel({
   }, [activeIntent, currentMaterials, effectiveDepth, fileUpload.attachedFiles, formattedLearningContext, useCurrentContext, usePersonalContext]);
   const agentContextRef = React.useRef(agentContext);
   React.useEffect(() => { agentContextRef.current = agentContext; }, [agentContext]);
+  const learnerRef = React.useRef({ usePersonalContext, activities: learning.recentActivities, memories: learning.memories });
+  React.useEffect(() => {
+    learnerRef.current = { usePersonalContext, activities: learning.recentActivities, memories: learning.memories };
+  }, [usePersonalContext, learning.recentActivities, learning.memories]);
 
   const transport = React.useMemo(() => new DefaultChatTransport({
     api: '/api/tutor/agent',
@@ -172,7 +177,13 @@ export function GlobalAskPanel({
     body: () => ({
       mode: 'global',
       sessionId: sessionId || 'global-ask',
-      context: agentContextRef.current,
+      // 「这个学习者」读槽：发送时现算本机切片（掌握状态 + 最近现场 + 长期理解——和书桌同一份事实）；个人上下文关掉时不带
+      context: {
+        ...agentContextRef.current,
+        ...(learnerRef.current.usePersonalContext
+          ? { learner: buildLocalLearnerContext({ appId: 'tutor:global', sessionId: sessionId || undefined, activities: learnerRef.current.activities, memories: learnerRef.current.memories }) }
+          : {}),
+      },
       options: {},
     }),
   }), [accessToken, sessionId]);

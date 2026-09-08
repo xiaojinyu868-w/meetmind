@@ -14,7 +14,10 @@
   掌握状态 + 最近现场 + 长期理解（与问同学书桌、掌握轨迹同一份事实）。今天就有真实数据在槽里流，接远端只是换供给方
 - **消费**：`/api/apps/execute` 注入 `context.learner`，闪卡 / 测验 / 讲给同桌听的 user prompt 多一段「关于这个学习者」——
   做完一轮闪卡再出测验，模型已知道哪几个概念还没稳；`trace` 含 `learner_context=local|remote:N`
-- 下一批消费方：课中同桌 / 复习 Tutor prompt（替代 learnerProfile 散文）、teach 引擎；接口形态待与 context 系统对齐（plan §6）
+- **Tutor 也用上了**（同日晚）：除 `shared` 外六模式的 system prompt 多一段「他此前真实做过的检验（跨课）」——还没稳的多停一下、
+  已经稳的不重复、没问起不报清单；课中同桌 / 复习同桌 / 问同学三个入口发送时现算本机切片（memo 会停在挂载那一刻，实测踩过）；
+  shared 态服务端强制抹掉（隐私铁律，有用例）。生产实测：做完闪卡后问 "up in the air"，请求里 mastery=3、该概念 unstable；TTFT p50 ≈ 0.9 s 不变
+- 剩 teach 引擎待接；接口形态待与 context 系统对齐（plan §6）
 
 ---
 

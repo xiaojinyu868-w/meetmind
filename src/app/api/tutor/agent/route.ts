@@ -24,6 +24,8 @@
 //   - prompt 来源：`src/lib/prompts/tutor-prompts.ts` 的 buildTutorSystemPrompt
 //   - global quick 默认走注册表里的低延迟 Tutor 模型；deep / 课堂 / 复习保留主模型
 
+import { parseLearnerContext, resolveLearnerContext } from '@/lib/services/learner-context-service';
+import { LEARNER_CONTEXT_VERSION, isLearnerContextEmpty } from '@/types/learner-context';
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
@@ -92,6 +94,8 @@ const ContextSchema = z
     currentTimestampSec: z.number().optional(),
     supportMaterials: z.array(SupportMaterialSchema).optional(),
     learnerProfile: z.string().optional(),
+    /** 客户端带来的本机 LearnerContext 切片（访客 / 远端未接入时的供给）；解析后再校验，不合法就当没有，不让整个请求 400 */
+    learner: z.unknown().optional(),
     /** 仅 mode='goal'：用户已经记下的目标 + bio 画像 + 这次会话的 hint */
     goal: z
       .object({
@@ -593,7 +597,10 @@ export async function POST(request: NextRequest) {
       });
     }
     const { messages, mode, options } = parsed.data;
-    let { context } = parsed.data;
+    let context: TutorSystemContext = {
+      ...parsed.data.context,
+      learner: parseLearnerContext(parsed.data.context.learner) ?? undefined,
+    };
     sessionId = parsed.data.sessionId;
 
     // v3.0 shared 模式：用 shareToken 加载 SharedAgent.snapshot 替换上下文
@@ -661,6 +668,25 @@ export async function POST(request: NextRequest) {
         points: tutorPrice,
         turnKey: tutorTurnKey(lastUserMessage, messages.length),
       };
+    }
+
+    // 「这个学习者」读槽：分享态绝不注入（访问者的事实不该灌给分享者刻下的同学）；其余模式登录用户问外部
+    // context 系统，否则用客户端带来的本机切片；任何失败都只是没有这一段
+    if (mode !== 'shared') {
+      const learner = await resolveLearnerContext({
+        request: {
+          v: LEARNER_CONTEXT_VERSION,
+          appId: `tutor:${mode}`,
+          learnerId: userId ?? undefined,
+          sessionId: sessionId || undefined,
+          need: ['mastery', 'recent', 'challenges', 'topics', 'goals'],
+          limit: 8,
+        },
+        local: context.learner,
+      });
+      context = { ...context, learner: isLearnerContextEmpty(learner) ? undefined : learner };
+    } else {
+      context = { ...context, learner: undefined };
     }
 
     const controlled = await buildControlledTutorPrompt(mode as TutorMode, context, options);

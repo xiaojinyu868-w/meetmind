@@ -18,6 +18,7 @@
  */
 
 import * as React from 'react';
+import { buildLocalLearnerContext } from '@/components/learner-context-local';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { conversationMessageToUIMessage, resolveTutorAgentHistoryLabel } from './tutor-agent-history';
@@ -267,7 +268,9 @@ export function TutorAgentPanel({
           subject: subject ?? '',
           ...(preferredModel ? { model: preferredModel } : {}),
           mode,
-          context: agentContext ?? {},
+          // 「这个学习者」读槽：每次发送时现算本机切片——刚在闪卡里打的分要立刻算进去（memo 会停在面板挂载那一刻）。
+          // 服务端对登录用户优先问外部 context 系统；分享态服务端会抹掉
+          context: { ...(agentContext ?? {}), learner: buildLocalLearnerContext({ appId: `tutor:${mode}`, sessionId }) },
           options: options ?? {},
         }),
       }),

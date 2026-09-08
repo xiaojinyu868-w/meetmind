@@ -449,3 +449,39 @@ describe('buildTutorSystemPrompt — TutorMode 联合扩展（v3.0）', () => {
     }
   });
 });
+
+describe('buildTutorSystemPrompt — 「这个学习者」读槽（LearnerContext，2026-09-08）', () => {
+  const learner = {
+    v: 1 as const,
+    generatedAt: '2026-09-08T12:00:00Z',
+    source: 'local' as const,
+    mastery: [
+      { concept: 'up in the air 是什么意思', status: 'unstable' as const, lastAt: '2026-09-08T11:00:00Z', steps: [{ appId: 'quiz', positive: false, at: '2026-09-08T11:00:00Z' }] },
+      { concept: '样本空间', status: 'stable' as const, lastAt: '2026-09-08T11:00:00Z' },
+    ],
+    recentLessons: [], challenges: [], topics: [], preferences: [], goals: [], evidenceIds: [],
+  };
+
+  it('review / in-class / global 注入事实段，且只陈述不判断', () => {
+    for (const mode of ['review', 'in-class', 'global'] as TutorMode[]) {
+      const prompt = buildTutorSystemPrompt(mode, { learner, global: mode === 'global' ? { depth: 'quick' } : undefined });
+      expect(prompt).toContain('他此前真实做过的检验');
+      expect(prompt).toContain('还没稳：up in the air 是什么意思（quiz✕）');
+      expect(prompt).toContain('已经稳了：样本空间');
+    }
+  });
+
+  it('分享态绝不注入——访问者的事实不该灌给分享者刻下的同学', () => {
+    const prompt = buildTutorSystemPrompt('shared', {
+      learner,
+      shared: { sharerNickname: 'A', courseTitle: 'B', transcriptDigest: '[00:00] x' },
+    });
+    expect(prompt).not.toContain('他此前真实做过的检验');
+    expect(prompt).not.toContain('up in the air');
+  });
+
+  it('空切片不产生任何段落', () => {
+    const empty = { ...learner, mastery: [] };
+    expect(buildTutorSystemPrompt('review', { learner: empty })).not.toContain('他此前真实做过的检验');
+  });
+});

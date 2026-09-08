@@ -1,4 +1,5 @@
 import type { TranscriptSegment } from '@/types';
+import type { LearnerContext } from '@/types/learner-context';
 import { extractRecentFocus } from '@/lib/services/classroom/recent-focus';
 import { formatTranscriptWithSpeakers } from '@/lib/utils/transcript-format';
 
@@ -14,6 +15,8 @@ export interface InClassTutorAgentBody extends Record<string, unknown> {
     learnerProfile?: string;
     /** 用户在课堂上传的图片/截图/文档解析文本。课堂场景刚需：拍 PPT 上一道题问"这个怎么做"。 */
     supportMaterials?: Array<{ title: string; content: string }>;
+    /** 「这个学习者」读槽的本机切片（服务端会校验，登录用户可能换成远端） */
+    learner?: LearnerContext;
   };
   options: {
     returnTimestamps: false;
@@ -30,6 +33,8 @@ export function buildInClassTutorAgentBody(input: {
   learnerProfile?: string;
   /** 用户在课堂上传的图片/截图/文档解析文本（来自底座 useChatFileUpload）。 */
   supportMaterials?: Array<{ title: string; content: string }>;
+  /** 本机 LearnerContext 切片（components/learner-context-local 产出） */
+  learner?: LearnerContext;
 }): InClassTutorAgentBody {
   const recentFocus = extractRecentFocus(input.segments) || undefined;
   const model = input.model?.trim() || undefined;
@@ -48,6 +53,7 @@ export function buildInClassTutorAgentBody(input: {
   if (input.supportMaterials && input.supportMaterials.length > 0) {
     context.supportMaterials = input.supportMaterials;
   }
+  if (input.learner) context.learner = input.learner;
 
   return {
     messages: input.messages,

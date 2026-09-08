@@ -33,6 +33,12 @@ goal 模式（M15 起）是**选择题驱动的短仪式**：每轮回复末尾�
 
 ---
 
+## 「这个学习者」读槽（2026-09-08）
+
+除分享态外，system prompt 在 `learnerProfile` 之后多一段结构化事实：`LearnerContext`（`src/types/learner-context.ts`）——跨课的掌握状态（还没稳 / 刚记住 / 已经稳了，带事实序列与回到原话的时间）、没过去的困惑、最近学过、在学 / 目标 / 偏好。`formatLearnerContextForPrompt` 只陈述、不判断，≤600 字；prompt 里明确"还没稳的地方多停一下、换个例子；已经稳的不必再从头解释；他没问起就不要主动报清单"。
+
+供给在服务端 `resolveLearnerContext`：登录用户问外部 context 系统（`CONTEXT_SYSTEM_URL`，`POST /v1/learner-context`，1.5 s 超时静默回落），否则用客户端随请求带来的本机切片（会话层检验结果 + 最近现场 + 长期理解）。三个入口（课中同桌 / 复习同桌 / 问同学）都在**发送时现算**切片。生产实测：做完一轮闪卡后在复习页问 "up in the air 是什么意思"，请求里 `learner.mastery` = 3 条、该概念状态 `unstable`。TTFT 不变（p50 ≈ 0.9 s）。
+
 ## 历史：M3 Agent loop 方案（已被 M14.6 纯对话链路替代）
 
 > M3 交付：从"LLM 文本框"升级为"会用工具的同桌"。

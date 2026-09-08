@@ -136,6 +136,7 @@ import {
   resolveExplicitAiModelPreference,
 } from '@/lib/utils/ai-model-preference';
 import { buildInClassTutorAgentBody } from '@/lib/tutor/classroom-agent-request';
+import { buildLocalLearnerContext } from '@/components/learner-context-local';
 import { extractOpenAppMarker, isInClassBlockedInlineAppKey } from '@/lib/utils/open-app-marker';
 
 /** 把长句子截成省略号版，塞进"再讲讲那道 xxx..."的追问气泡里 */
@@ -698,6 +699,8 @@ export function useClassroomCompanion(
           learnerProfile: formatLearnerProfileForTutorAgent(user?.learnerProfile),
           // M14.5：用户在课堂上传的图片/文档（来自底座 useChatFileUpload）
           supportMaterials,
+          // 「这个学习者」读槽：本机切片（跨课掌握状态）；登录用户在服务端优先问外部 context 系统
+          learner: buildLocalLearnerContext({ appId: 'tutor:in-class', sessionId: sessionId || undefined, learnerId: user?.id }),
         }),
         {
           headers,

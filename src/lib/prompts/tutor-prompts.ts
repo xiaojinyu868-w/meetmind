@@ -25,6 +25,9 @@
  * 版本化：`PROMPT_VERSIONS` 给 Sentry span `experimental_telemetry.metadata` 做切片。
  */
 
+import type { LearnerContext } from '@/types/learner-context';
+import { formatLearnerContextForPrompt } from '@/lib/services/learner-context-service';
+
 export type TutorMode = 'in-class' | 'review' | 'shared' | 'goal' | 'word' | 'global';
 
 export interface TutorSystemContext {
@@ -38,6 +41,12 @@ export interface TutorSystemContext {
   supportMaterials?: Array<{ title: string; content: string }>;
   /** 可选：学生背景（从 learner profile 解析出来）。分享态绝不注入这一段。 */
   learnerProfile?: string;
+  /**
+   * 「这个学习者」读槽（renewal plan §6）：跨课的掌握状态 / 没过去的困惑 / 最近学过，结构化事实。
+   * 由服务端 resolveLearnerContext 注入（登录用户问外部 context 系统，否则用客户端带来的本机切片）。
+   * 分享态绝不注入——那是访问者本人的。迁移期与 learnerProfile 散文并存，这份是事实、那份是估计。
+   */
+  learner?: LearnerContext;
   /** 仅 shared：分享 Agent 的快照内容（v3.0） */
   shared?: {
     /** 分享者展示昵称（不带真实姓名） */
@@ -460,6 +469,14 @@ function capSharedContext(shared: NonNullable<TutorSystemContext['shared']>): st
   return '\n' + lines.join('\n');
 }
 
+function capLearnerContext(facts: string): string {
+  return `
+【他此前真实做过的检验（跨课）】
+${facts}
+
+这些是事实不是判断：还没稳的地方，讲到相关处时多停一下、换个例子；已经稳了的不必再从头解释。他没问起就不要主动报这份清单。`;
+}
+
 function capLearnerProfile(profile: string): string {
   return `
 【这个学生】
@@ -630,6 +647,10 @@ export function buildTutorSystemPrompt(
   // word 态：可以注入（让 AI 知道这是谁在问，但实际很少用到）
   if (mode !== 'shared' && context.learnerProfile?.trim()) {
     parts.push(capLearnerProfile(context.learnerProfile));
+  }
+  if (mode !== 'shared') {
+    const learnerFacts = formatLearnerContextForPrompt(context.learner);
+    if (learnerFacts) parts.push(capLearnerContext(learnerFacts));
   }
 
   // Options（可选能力段）

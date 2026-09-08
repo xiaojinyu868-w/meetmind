@@ -32,6 +32,13 @@
 | `word` | 选词解释浮窗 `WordExplainer`（M13） | `word.selectionText` + `word.nearbyContext` + `word.fullTranscriptTail` | 浮窗形态；禁 native tools；禁时间戳 |
 | `global` | `GlobalAskPanel` | `global.depth` + 已确认 `intent` + `memories/recentActivities/activeThread/goals/bio` + 可选 `supportMaterials` | 普通问答直接回答，深度学习仅在真实歧义时确认路径；任何全局学习问答持久化后都由 `/api/tutor/memory` 独立判断是否形成真实学习理解，证据不足返回空；用户可纠正/暂停/忘记，客观最近学习现场保持独立 |
 
+### 「这个学习者」读槽（2026-09-08，renewal plan §6）
+
+- 除 `shared` 外所有 mode 的 system prompt 多一段「他此前真实做过的检验（跨课）」：还没稳 / 刚记住 / 已经稳了 / 没过去的困惑 / 最近学过——结构化事实（`LearnerContext`，`types/learner-context.ts`），迁移期与 `learnerProfile` 散文并存（这份是事实，那份是估计）。
+- 供给：`agent/route.ts` 解析后 `resolveLearnerContext`——登录用户且配置了 `CONTEXT_SYSTEM_URL` 问外部 context 系统，否则用客户端随请求带来的本机切片 `context.learner`（`components/learner-context-local.ts`，会话层检验结果 + 最近现场 + 长期理解）；不合法的切片当没有，不 400；任何失败只是没有这一段。
+- 客户端**每次发送时现算**切片（transport `body()` 里），刚在闪卡打的分要立刻算进去；memo 会停在面板挂载那一刻——实测过这个坑。
+- **隐私铁律不变**：`shared` 态服务端强制 `learner: undefined`，`buildTutorSystemPrompt` 也不为 shared 拼这段（`tutor-prompts.test.ts` 有用例）。
+
 ### M14.6 重要变更：native tools 与 inline app marker 已移除
 
 - **`const tools = {}`**：`agent/route.ts` 对所有 mode 都不挂 native tools。结构化产物（闪卡/测验/速查表等）改由前端 SkillChip 直接打开应用矩阵，不再走 LLM 输出 `<open_app:KEY/>` marker 的链路。
