@@ -9,10 +9,12 @@
  *   - MemoryLayerSnapshot 是「这节课」的摘要 / 难点 / 术语——场景上下文，继续用；
  *   - learnerProfile 文本是「这个人」的画像散文，只有 Tutor prompt 读它——它会被这份结构化切片取代，迁移期并存。
  *
- * 供给方两种，形状相同（LearnerContext.source 标明）：
+ * 供给方三种，形状相同（LearnerContext.source 标明），resolveLearnerContext 按顺序取：
  *   - remote：外部 context 系统（CONTEXT_SYSTEM_URL），由服务端按 learnerId 取；
- *   - local：合并前 / 访客 / 远端不可用时，客户端从本机会话层结果（review-session-outcomes）、最近学习现场与长期理解
- *     拼出同一形状随请求带上——所以今天就有真实数据在这条槽里流，接上远端只是换供给方。
+ *   - server：本仓库服务端从 LearningEvent 表（assessment 事件）+ 用户画像（记忆 / 最近现场）聚成——登录用户换设备也在；
+ *     这是外部系统合并前的参考实现，对外也以同一契约暴露在 POST /api/context/v1/learner-context；
+ *   - local：访客 / 离线时，客户端从本机会话层结果（review-session-outcomes）、最近学习现场与长期理解拼出同一形状随请求带上。
+ *   所以今天就有真实数据在这条槽里流，接上外部系统只是换供给方。
  *
  * 契约原则：只放事实与状态（还没稳 / 刚记住 / 已经稳了），不放推断出的学习风格；每条尽量带 evidenceIds。
  * 版本字段 v 与 LearningEvent 对齐，形状变更必须升 v 并保留旧分支。
@@ -71,7 +73,7 @@ export interface LearnerContext {
   v: typeof LEARNER_CONTEXT_VERSION;
   /** ISO 时间：切片生成时刻 */
   generatedAt: string;
-  source: 'local' | 'remote';
+  source: 'local' | 'server' | 'remote';
   learnerId?: string;
   /** 概念掌握状态；还没稳的排最前 */
   mastery: LearnerConceptState[];

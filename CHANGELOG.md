@@ -20,6 +20,13 @@
 - **teach 两条线也接上了**：开课 `POST /api/teach/threads` 可带切片，存 `TeachThread.learnerJson`（新列，nullable，`make db-push` 已同步线上）；
   codex 线 baseInstructions 与 engine 线 systemPrompt 在会话建立时拼「关于这位学生」，旧线程一字不加。生产直打：开课带
   "判别式还没稳" → 落库成功。读契约本侧的消费方至此齐了（应用矩阵 / Tutor / teach），只等外部供给方对齐接口（plan §6）
+- **记忆系统在本仓库自己闭环了**（9-9 凌晨）：新增服务端供给方 `learner-context-provider`（`source: 'server'`）——从 LearningEvent 表的
+  assessment 事件（P0-1 写侧）+ 用户画像（记忆 / 最近现场）读时聚出同一契约的切片，掌握轨迹规则搬到 `lib/learning/mastery-trail-model.ts`
+  由客户端与服务端共用；`resolveLearnerContext` 顺序改为 远端 → 服务端 → 本机 → 空，**登录用户换设备也记得**。同一契约对外暴露
+  `POST /api/context/v1/learner-context`（Bearer = MeetMind JWT，learnerId 以 token 为准，无 token 401）——外部 context 系统合并时
+  要么代理到这个口对拍，要么在 `CONTEXT_SYSTEM_URL` 提供同形接口，本仓库自动改问它；写侧 `triggerLearningEventProcessing` 配了 URL 就把
+  事件原样转发 `POST /v1/learning-events`（outbox，失败只 warn）。生产用临时账号全程验证：写 `/api/memory/events` 200 → 表里有行 →
+  读回 `unstable` → `/api/apps/execute` 不带本机切片 trace `learner_context=server:2`，出的题正落在那两个还没稳的概念上；探针数据已清
 
 ---
 

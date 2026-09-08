@@ -84,6 +84,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 
 | 路由 | 方法 | 职责 |
 |------|------|------|
+| `/api/context/v1/learner-context` | POST | 「这个学习者」读契约的参考实现（2026-09-09）：body = `LearnerContextRequest`，200 = `LearnerContext`（`source: 'server'`，来自 LearningEvent assessment 事件 + 用户画像）；Bearer = MeetMind JWT，learnerId 以 token 为准（个人上下文默认私有），无 token 401。外部 context 系统合并时可代理到此口对拍，或在 `CONTEXT_SYSTEM_URL` 提供同形接口 |
 | `/api/apps/execute` | POST | 执行 AI-Native 应用插件；单课可传 legacy `input`，unit/exam 传 `contextPack`。服务端校验 tier、课数与 catalog 白名单；考试速查表必须有至少两节课，或 exam tier 的大纲/真题范围。**learner 读槽（2026-09-08）**：请求可带 `learner: LearnerContext`（本机切片，zod 校验不过就当没有）；服务端 `resolveLearnerContext` 对登录用户优先问外部 context 系统（`CONTEXT_SYSTEM_URL`），失败回落本机切片，注入 `context.learner` 供插件 prompt（闪卡 / 测验 / 讲给同桌听多一段「关于这个学习者」）；`trace` 含 `learner_context=local|remote:N` |
 | `/api/apps/plugins` | GET | 获取已注册插件列表 |
 | `/api/apps/catalog` | GET | 获取应用目录 |

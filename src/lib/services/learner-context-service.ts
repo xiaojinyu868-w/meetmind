@@ -17,6 +17,7 @@
 import { z } from 'zod';
 import { createLogger } from '@/lib/logger';
 import { ContextSystemConfig } from '@/lib/config/app.config';
+import { buildLearnerContextFromStore } from '@/lib/services/learner-context-provider';
 import {
   LEARNER_CONTEXT_VERSION,
   emptyLearnerContext,
@@ -57,7 +58,7 @@ const noteSchema = z.object({
 export const learnerContextSchema = z.object({
   v: z.literal(LEARNER_CONTEXT_VERSION),
   generatedAt: z.string().max(40),
-  source: z.enum(['local', 'remote']),
+  source: z.enum(['local', 'server', 'remote']),
   learnerId: z.string().max(120).optional(),
   mastery: z.array(conceptStateSchema).max(60),
   recentLessons: z.array(z.object({ title: z.string().max(200), at: z.string().max(40), sessionId: z.string().max(120).optional() })).max(30),
@@ -116,14 +117,23 @@ export interface ResolveLearnerContextOptions {
 }
 
 /**
- * 供给顺序：远端（配置了且拿到了）→ 本机切片 → 空。
- * 登录用户才问远端（访客没有 learnerId，远端无从查起；访客数据登录后由 context 系统合并）。
+ * 供给顺序：远端（配置了且拿到了）→ 服务端事件表（登录用户）→ 本机切片 → 空。
+ * 登录用户才问远端 / 服务端（访客没有 learnerId；访客数据登录后由 context 系统合并）。
+ * 服务端切片为空时仍用本机切片：刚做完的一轮可能还没写进事件表（访客态做的、或写入延迟）。
  */
 export async function resolveLearnerContext({ request, local }: ResolveLearnerContextOptions): Promise<LearnerContext> {
   const localContext = local ? parseLearnerContext(local) : null;
-  if (request.learnerId && isRemoteLearnerContextConfigured()) {
-    const remote = await fetchRemoteLearnerContext(request);
-    if (remote && !isLearnerContextEmpty(remote)) return remote;
+  if (request.learnerId) {
+    if (isRemoteLearnerContextConfigured()) {
+      const remote = await fetchRemoteLearnerContext(request);
+      if (remote && !isLearnerContextEmpty(remote)) return remote;
+    }
+    try {
+      const server = await buildLearnerContextFromStore(request);
+      if (!isLearnerContextEmpty(server)) return server;
+    } catch (error) {
+      log.warn('learner-context.server.failed', { appId: request.appId, error: error instanceof Error ? error.message : String(error) });
+    }
   }
   if (localContext) return { ...localContext, source: 'local' };
   return emptyLearnerContext('local', request.learnerId);

@@ -1,6 +1,16 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptyLearnerContext, LEARNER_CONTEXT_VERSION, type LearnerContext } from '@/types/learner-context';
 import { formatLearnerContextForPrompt, parseLearnerContext, resolveLearnerContext } from './learner-context-service';
+
+// 服务端事件表供给方走 prisma；这里只测编排，供给方由 learner-context-provider.test.ts 单独测
+vi.mock('@/lib/services/learner-context-provider', () => ({
+  buildLearnerContextFromStore: vi.fn(async (request: { learnerId?: string }) => ({
+    ...emptyLearnerContext('server', request.learnerId),
+    ...(request.learnerId === 'u-with-server-data'
+      ? { mastery: [{ concept: '服务端记得的概念', status: 'unstable' as const, lastAt: '2026-09-08T10:00:00Z' }] }
+      : {}),
+  })),
+}));
 
 const sample: LearnerContext = {
   ...emptyLearnerContext('local'),
@@ -47,11 +57,18 @@ describe('resolveLearnerContext', () => {
     expect(bad.mastery).toEqual([]);
   });
 
-  it('远端配置了但不可达：静默回落到本机切片', async () => {
+  it('远端配置了但不可达：静默回落（服务端为空时用本机切片）', async () => {
     process.env.CONTEXT_SYSTEM_URL = 'http://127.0.0.1:9';
     const got = await resolveLearnerContext({ request: { v: LEARNER_CONTEXT_VERSION, appId: 'quiz', learnerId: 'u1', need: ['mastery'] }, local: sample });
     expect(got.source).toBe('local');
     expect(got.mastery[0].concept).toContain('up in the air');
+  });
+
+  it('登录用户：服务端事件表有数据就优先用它（换设备也在）', async () => {
+    delete process.env.CONTEXT_SYSTEM_URL;
+    const got = await resolveLearnerContext({ request: { v: LEARNER_CONTEXT_VERSION, appId: 'quiz', learnerId: 'u-with-server-data', need: ['mastery'] }, local: sample });
+    expect(got.source).toBe('server');
+    expect(got.mastery[0].concept).toBe('服务端记得的概念');
   });
 
   it('parseLearnerContext 只认当前版本', () => {

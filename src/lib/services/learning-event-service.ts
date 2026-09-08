@@ -17,6 +17,7 @@
 import { z } from 'zod';
 import type { LearningEvent } from '@prisma/client';
 import prisma from '@/lib/prisma';
+import { ContextSystemConfig } from '@/lib/config/app.config';
 import { createLogger } from '@/lib/logger';
 import { distillLearningMemories } from '@/lib/services/learning-memory-distillation-service';
 import {
@@ -286,6 +287,9 @@ const processingQueues = new Map<string, Promise<void>>();
  * 失败只记日志，事件仍在表内可回放。
  */
 export function triggerLearningEventProcessing(event: LearningEvent): Promise<void> {
+  // 写契约的另一半（renewal plan §6）：配置了外部 context 系统就把事件原样转发过去（outbox 语义，失败只 warn，
+  // 不影响本地处理）。载荷格式即 src/types/learning-event.ts，对方消费它就不用再读我们的表
+  void forwardLearningEventToContextSystem(event);
   const previous = processingQueues.get(event.userId) ?? Promise.resolve();
   const next = previous
     .then(() => processLearningEvent(event))
@@ -298,4 +302,48 @@ export function triggerLearningEventProcessing(event: LearningEvent): Promise<vo
     });
   processingQueues.set(event.userId, next);
   return next;
+}
+
+const FORWARD_TIMEOUT_MS = 2_000;
+
+/**
+ * 把一条已落库的事件转发给外部 context 系统：POST {CONTEXT_SYSTEM_URL}/v1/learning-events。
+ * 未配置 = 静默不做；失败只记 warn（事件已在本地表里，对方可以按 idempotencyKey 补拉）。
+ */
+export async function forwardLearningEventToContextSystem(event: LearningEvent): Promise<boolean> {
+  const base = ContextSystemConfig.url;
+  if (!base) return false;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FORWARD_TIMEOUT_MS);
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (ContextSystemConfig.apiKey) headers.Authorization = `Bearer ${ContextSystemConfig.apiKey}`;
+    let payload: unknown = null;
+    try { payload = JSON.parse(event.payloadJson); } catch { payload = null; }
+    const response = await fetch(`${base.replace(/\/$/, '')}/v1/learning-events`, {
+      method: 'POST',
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        id: event.id,
+        learnerId: event.userId,
+        appId: event.appId,
+        type: event.type,
+        payload,
+        sourceId: event.sourceId ?? undefined,
+        idempotencyKey: event.idempotencyKey ?? event.id,
+        occurredAt: event.occurredAt.toISOString(),
+      }),
+    });
+    if (!response.ok) {
+      log.warn('learning event forward rejected', { eventId: event.id, status: response.status });
+      return false;
+    }
+    return true;
+  } catch (error) {
+    log.warn('learning event forward failed', { eventId: event.id, message: error instanceof Error ? error.message.slice(0, 160) : String(error) });
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
 }
