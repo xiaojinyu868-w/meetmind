@@ -27,7 +27,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 | `ClassroomCompanionPanel.tsx` | ~590 | 右侧同桌面板（header/气泡/流式气泡/thinking/输入栏）；课中不写入自动寒暄消息，header + 轻量 Octo 在场信号承接第一次互动，问题快通道只在输入区保留一套，避免上下两组重复入口；管理员透镜读取与真实课中请求相同的转录、recentFocus、学习理解与最近问题；课后 starter 同样不做重功能卡；v7 按钮语义：InlineActionStrip 主 action / 发送钮 / 课后首 chip 走 pine，次 action 走 ghost 白边；AI 消息带 2px pine 左 rail 作为克制的“AI 在场”信号 |
 | `InlineAppCard.tsx` | ~160 | 对话内应用承载卡（真实应用 UI 复用 `apps/windows/AppRenderSurface`，不再手写一套窄版）；inline quiz / flashcards 沉浸底统一 `var(--mm-immersive)` |
 | `OctoBuddy.tsx` | ~660 | Octo Buddy 像素 IP（Sprite + 悬浮球）；Sprite 自带呼吸 / 听课 / 开心动画，右侧同桌内嵌也必须动起来 |
-| `ClassroomHero.tsx` | ~280 | 课堂零存量首屏；左侧定位与录音入口，右侧展示真实示例；存在未完成学习线索时，主叙事上方显示 `ContextRecoveryCard`，可直接接回全局 Ask；proof 卡时间戳统一 `.cite-ts`（朱批 mono 胶囊） |
+| `ClassroomHero.tsx` | ~380 | 课堂零存量首屏；左侧定位与录音入口，右侧 `HeroLiveProof`——示例卡是活的：三个来自示例课真实转录的瞬间循环播放（原话 StreamText 逐字浮现 → 同桌解释浮起 → 停 4.6s → 下一个；悬停暂停；reduced-motion 静态只显第一个；卡片仍是进示例课的入口，文案在 COPY.hero.proofMoments）；存在未完成学习线索时，主叙事上方显示 `ContextRecoveryCard`，可直接接回全局 Ask；proof 卡时间戳统一 `.cite-ts`（朱批 mono 胶囊） |
 | `ClassroomLaunchpad.tsx` | ~100 | 课堂首页能力入口：让开始课堂、放入材料、搜索并继续问第一眼可见；只呈现三条学习路径，不做完整功能黄页 |
 | `ClassroomLessonCard.tsx` | ~160 | 一张课的卡片（四种时态视觉差异：upcoming/recording/processing/ready）；时间只显示为元信息，不再伪装成课堂标题 |
 | `ClassroomRecordingView.tsx` | ~640 | 录课中视图（宽桌面左侧实时文字 + 中间课堂脉络；移动端和中等宽度桌面在“脉络 / 原话”之间切换，避免三栏硬挤；含翻译与试听课音频控制）。试听课默认 EN→中，音频结束后只引导点击“结束这节课”，由上层切到课后复习页 / 应用矩阵；转录卡头部有呼吸球仪式（listening 时存在、试听完成即消散）和返回课程列表的退出入口（试听课先暂停音频，真实录音由活动条承接可回来），句首时间戳统一 `.cite-ts`；DemoAfterClassPanel 为 v7 收尾卡（纸感 + pine CTA + Octo happy + 一次柔光扫过） |

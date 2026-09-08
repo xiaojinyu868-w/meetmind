@@ -62,7 +62,8 @@ export const StreamText = React.forwardRef<HTMLParagraphElement, StreamTextProps
             key={`${i}-${c.ch}`}
             style={c.isNew ? { animationDelay: `${c.delay}s` } : { opacity: 1, transform: 'translateY(0)' }}
           >
-            {c.ch}
+            {/* 每个字符是 inline-block span：普通空格会被折叠成零宽，英文句子会粘成一团——用不换行空格保住词距 */}
+            {c.ch === ' ' ? '\u00A0' : c.ch}
           </span>
         ))}
         {cursor && <span className="typing-caret" aria-hidden />}

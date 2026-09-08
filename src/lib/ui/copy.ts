@@ -683,6 +683,23 @@ export const COPY = {
       ].filter(Boolean);
       return parts.length > 0 ? `会参考 ${parts.join('、')}` : '这次先从你的问题开始';
     },
+    /** 只有一份当前材料时点名它（2026-09-08）：比"1 份当前内容"像人话 */
+    contextSummaryNamed: (title: string, recent: number, memory: number): string => {
+      const extra = [
+        recent > 0 ? `${recent} 条最近学习` : '',
+        memory > 0 ? `${memory} 条长期理解` : '',
+      ].filter(Boolean);
+      return `会带上《${title}》${extra.length > 0 ? `，还有 ${extra.join('、')}` : ''}`;
+    },
+    /** 空态建议入口（2026-09-08）：从这个人正在学的地方接话，不再是谁看都一样的通用句 */
+    starters: {
+      quickFromCurrentLesson: '帮我讲清这节课里最难的地方',
+      quickFromMaterial: (title: string): string => `帮我讲清《${title}》里最难的地方`,
+      quickFromLesson: (title: string): string => `接着《${title}》，我哪里还没懂？`,
+      quickFromChallenge: (title: string): string => `再讲一遍「${title}」，上次没弄明白`,
+      deepFromLesson: (title: string): string => `围绕《${title}》，帮我系统学懂并检验是否真的会了`,
+      deepFromMaterial: (title: string): string => `围绕《${title}》，帮我系统学懂并检验是否真的会了`,
+    },
     contextCurrentCount: (count: number): string => `${count} 份当前材料`,
     contextRecentCount: (count: number): string => `${count} 条最近学习`,
     contextMemoryCount: (count: number): string => `${count} 条长期记忆`,
@@ -1097,6 +1114,27 @@ export const COPY = {
     proofLabel: '同学听懂了',
     proofAnswer: '这里不是“在空中”，而是“具体时间还没有决定”。',
     proofAction: '进入这节示例课',
+    /**
+     * 首屏示例卡的三个真实瞬间（2026-09-08）：原话来自示例课转录（fixtures/demo-data），
+     * 时间戳能在示例课里核对。卡片循环播放"听见原话 → 有依据地解释"，让第一屏就看见产品在工作。
+     */
+    proofMoments: [
+      {
+        quote: "I'm so up in the air right now.",
+        time: '00:06',
+        answer: '「up in the air」不是“在空中”，是“心里没底、还没定下来”——她刚说完自己要搬家。',
+      },
+      {
+        quote: "I'm having a hard time getting organised.",
+        time: '00:17',
+        answer: '这里的「getting organised」是把搬家的事理顺，不是在说她性格有没有条理。',
+      },
+      {
+        quote: 'You will not hear the recording a second time.',
+        time: '00:42',
+        answer: '这是听力考试的规则：只放一遍。后面六道题要边听边答。',
+      },
+    ] as const,
   },
 
   lesson: {

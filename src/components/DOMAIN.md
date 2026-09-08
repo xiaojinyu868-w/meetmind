@@ -69,7 +69,8 @@ components/
 |------|------|------|
 | `AITutor.tsx` | 1940 | 旧 AI 家教 / legacy fallback（移动端文字和语音主链路已移出），子模块在 `tutor/` |
 | `AIChat.tsx` | 691 | AI 对话组件 |
-| `GlobalAskPanel.tsx` / `GlobalAskWelcome.tsx` / `GlobalAskContextDrawer.tsx` | ~660 | 全局 Ask MeetMind：基于 ChatBase 的多轮问答；空态（v9 呼吸森林：光场 + 涟漪 Octo + 毛玻璃 hero composer + 玻璃建议卡，基元在 globals.css `v9-*`）把输入作为唯一主动作，在输入内轻量选择"直接回答 / 陪我学会"（免费档"陪我学会"带 Pro 标识，提交直接唤起会员页，服务端 402 membership_required 兜底）；参考范围按需从右侧打开，深度学习仅在答案会改变路线时逐题追问；管理员额外看到"查看本次 AI"轻入口，将当前真实上下文带到独立控制中心，普通用户完全不可见 |
+| `GlobalAskPanel.tsx` / `GlobalAskWelcome.tsx` / `GlobalAskContextDrawer.tsx` | ~660 | 全局 Ask MeetMind：基于 ChatBase 的多轮问答；空态（v9 呼吸森林：光场 + 涟漪 Octo + 毛玻璃 hero composer + 玻璃建议卡，基元在 globals.css `v9-*`；2026-09-08 起光场由 Panel 铺满整个对话区、消息列表切 glass 变体、空态垂直居中——此前光场被 max-w 容器裁成白面板里的一块"岛"；建议入口由 `global-ask-starters.ts` 按当前材料 / 最近课堂 / 未过去的困惑生成（"帮我讲清《X》里最难的地方"），底栏「会带上《X》」在只有一份材料时点名）把输入作为唯一主动作，在输入内轻量选择"直接回答 / 陪我学会"（免费档"陪我学会"带 Pro 标识，提交直接唤起会员页，服务端 402 membership_required 兜底）；参考范围按需从右侧打开，深度学习仅在答案会改变路线时逐题追问；管理员额外看到"查看本次 AI"轻入口，将当前真实上下文带到独立控制中心，普通用户完全不可见 |
+| `global-ask-starters.ts` | ~70 | 问同学空态建议与「会带上…」文案的纯函数：当前材料点名、最近一节课接话、未过去的困惑先提；最多两条，全无则退回通用句 |
 | `LearningIntentConfirmationCard.tsx` / `learning-intent-confirmation-model.ts` | ~210 | 深度学习的轻确认：若学习路径确有歧义，逐步显现模型动态生成的 1-3 个选择问题；学习理解在回答结束后静默整理，不把内部记忆标记塞进消息流 |
 | `LearningProgressMemoryCard.tsx` | ~50 | 旧学习进展 marker 的反馈卡，当前 `GlobalAskPanel` 不再使用；保留仅供迁移期兼容（旧对话回放），新链路不用它——记忆反馈已收进服务端事件化管线 |
 | `LearningMemoryPanel.tsx` / `CourseContextSection.tsx` / `CourseAssessmentCard.tsx` / `CourseCheatsheetWorkspace.tsx` / `ContextRecoveryCard.tsx` | ~1100 | 「我的上下文」采用消费级总览→具体内容层级：总览只展开模型对用户的长期理解，并以两条安静入口进入“课程与考试”或“最近学习现场”，不再把三类内容一次性纵向铺满；从复习页进入考试速查表时直接打开范围选择，返回时也直接回到原应用矩阵，不绕经上下文总览。范围选择支持跨课程与课次级多选；桌面为课程侧栏 + 课次画布，手机为横向课程选择带 + 仅展开已选课次，避免表单长页。课程支持可信名称、用户标签与边界纠正，再进入可打印速查表 |

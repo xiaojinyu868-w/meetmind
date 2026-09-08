@@ -1,0 +1,1 @@
+{"wsUrl":"wss://dashscope.aliyuncs.com/api-ws/v1/inference","available":true,"model":"qwen-audio-3.0-asr-flash-streaming","sampleRate":16000}

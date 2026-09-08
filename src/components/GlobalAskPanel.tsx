@@ -35,6 +35,7 @@ import { LearningIntentConfirmationCard } from '@/components/LearningIntentConfi
 import { LearningMemoryPanel } from '@/components/LearningMemoryPanel';
 import { GlobalAskContextDrawer } from '@/components/GlobalAskContextDrawer';
 import { GlobalAskWelcome } from '@/components/GlobalAskWelcome';
+import { buildGlobalAskStarters, describeGlobalAskContext } from '@/components/global-ask-starters';
 import {
   ChatBubble,
   ChatComposer,
@@ -343,8 +344,22 @@ export function GlobalAskPanel({
   const currentContextCount = currentMaterials.length + fileUpload.attachedFiles.length;
   const recentContextCount = learning.recentActivities.length;
   const memoryContextCount = learning.memories.filter((memory) => memory.status === 'active').length;
-  const contextSummary = COPY.globalAsk.contextSummary(currentContextCount, recentContextCount, memoryContextCount);
+  const currentMaterialTitles = React.useMemo(
+    () => [...currentMaterials.map((item) => item.title), ...fileUpload.attachedFiles.map((file) => file.title)],
+    [currentMaterials, fileUpload.attachedFiles],
+  );
+  const contextSummary = describeGlobalAskContext({
+    currentMaterialTitles,
+    recentCount: recentContextCount,
+    memoryCount: memoryContextCount,
+  });
   const showWelcome = messages.length === 0 && !intentPlan && !intentBusy && !pendingQuery;
+  const welcomeStarters = React.useMemo(() => buildGlobalAskStarters({
+    depth: effectiveDepth,
+    currentMaterialTitles,
+    recentActivities: learning.recentActivities,
+    memories: learning.memories,
+  }), [currentMaterialTitles, effectiveDepth, learning.memories, learning.recentActivities]);
 
   const handleDepthChange = React.useCallback((nextDepth: AskDepth) => {
     setDepth(nextDepth);
@@ -423,16 +438,25 @@ export function GlobalAskPanel({
         </header>
 
         <div className="flex min-h-0 flex-1">
-          <main className="flex min-w-0 flex-1 flex-col">
+          <main className="relative flex min-w-0 flex-1 flex-col">
+            {/* 呼吸森林光场铺满整个对话区（空态），composer 与建议卡浮在光上；有消息后退回纸面 */}
+            {showWelcome ? (
+              <div className="v9-aura" aria-hidden>
+                <div className="v9-blob v9-blob-pine" />
+                <div className="v9-blob v9-blob-sky" />
+                <div className="v9-blob v9-blob-sand" />
+              </div>
+            ) : null}
             <ChatMessageList
               watchKey={`${messages.length}:${latestText.length}:${intentBusy ? 1 : 0}`}
               showEmpty={showWelcome}
-              variant="paper"
+              variant={showWelcome ? 'glass' : 'paper'}
               contentMaxWidth="max-w-3xl"
-              innerClassName="space-y-4"
+              innerClassName={showWelcome ? 'min-h-full' : 'space-y-4'}
               emptyState={
                 <GlobalAskWelcome
                   depth={effectiveDepth}
+                  prompts={welcomeStarters}
                   deepLocked={deepLocked}
                   activeThread={learning.activeThread}
                   composer={renderComposer(true)}

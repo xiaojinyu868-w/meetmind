@@ -20,6 +20,8 @@ import { OctoAvatar } from '@/components/ui/octo-avatar';
 
 interface GlobalAskWelcomeProps {
   depth: 'quick' | 'deep';
+  /** 建议入口（宿主按当前材料 / 最近课堂 / 未过去的困惑算好；不传退回通用句） */
+  prompts?: readonly string[];
   /** 免费档：深度模式（陪我学会）是 Pro/Max 专属，在入口上带 Pro 标识 */
   deepLocked?: boolean;
   activeThread?: LearningThreadEntry;
@@ -33,6 +35,7 @@ interface GlobalAskWelcomeProps {
 
 export function GlobalAskWelcome({
   depth,
+  prompts: groundedPrompts,
   deepLocked = false,
   activeThread,
   composer,
@@ -42,18 +45,16 @@ export function GlobalAskWelcome({
   onChoosePrompt,
   onResumeThread,
 }: GlobalAskWelcomeProps) {
-  const prompts = depth === 'deep'
-    ? COPY.globalAsk.deepExamples
-    : COPY.globalAsk.quickExamples;
+  const prompts = groundedPrompts && groundedPrompts.length > 0
+    ? groundedPrompts
+    : depth === 'deep'
+      ? COPY.globalAsk.deepExamples
+      : COPY.globalAsk.quickExamples;
 
+  // 光场（v9-aura）由 GlobalAskPanel 铺满整个对话区，这里不再自带——
+  // 此前光场被 max-w-3xl 容器裁成一块"岛"，白色面板里浮着一块渐变，像两层容器。
   return (
-    <div className="relative mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center overflow-hidden px-4 pb-10 pt-8 sm:px-6">
-      {/* 呼吸森林光场 */}
-      <div className="v9-aura" aria-hidden>
-        <div className="v9-blob v9-blob-pine" />
-        <div className="v9-blob v9-blob-sky" />
-        <div className="v9-blob v9-blob-sand" />
-      </div>
+    <div className="relative mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-4 pb-10 pt-6 sm:px-6">
 
       {/* ── Hero：Octo + 问候 ── */}
       <div className="relative flex flex-col items-center text-center">

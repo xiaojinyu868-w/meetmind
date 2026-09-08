@@ -5,6 +5,32 @@
 
 ---
 
+## 2026-09-08 — 构建 30 分钟 → 1.5 分钟；部署零停机；首屏与问同学两页打磨
+
+### 构建与部署（基础设施）
+- **构建 1815 s → 98 s**：`.next/trace` 显示 1643 s 花在 `node-file-trace-plugin`——为每条路由追踪运行时文件依赖
+  （teach / fenshen 路由各 21 MB `.nft.json`，`hanzi-writer-data` 9000 个文件被逐一扫描），真正的 webpack 编译只有
+  ~50 s。追踪只服务 `output:'standalone'`，本仓库 PM2 直跑仓库目录 → `outputFileTracing: false`。顺带：build 放宽到
+  3 核 / 7 GB 堆、显式 `webpackBuildWorker`、跳过 next build 自带的 tsc/eslint（`make deploy` 前置 `make check`）
+- **部署零停机 + 自动回滚**：此前 `next build` 一开始就清空 `.next`，而生产进程正从它懒加载页面与静态资源——每次部署的
+  整个构建期 `/_next/static/*` 全 500、新访客白屏（HTML 壳能出、健康检查照样 200，所以从没被发现）。现在
+  `scripts/deploy.sh` 在 `.next-staging` 构建（webpack 缓存随行）→ 毫秒级 `mv` 切换 → PM2 重载 → 健康 + 静态 chunk
+  抽样检查 → 失败回滚到 `.next-previous`
+
+### 课堂零存量首屏（`ClassroomHero`）
+- 示例卡是活的（`HeroLiveProof`）：三个来自示例课真实转录的瞬间循环——原话 `StreamText` 逐字浮现 → 同桌解释浮起 →
+  停 4.6 s → 下一个；悬停暂停；`prefers-reduced-motion` 只静态显第一个；卡片仍是进示例课的入口。此前是一段静态引用，
+  且那句话并不在示例课转录里
+- `StreamText` 修复：字符 span 是 inline-block，普通空格被折叠成零宽，英文句子粘成一团——空格改不换行空格（中文场景此前没暴露）
+
+### 问同学空态（`GlobalAskWelcome`）
+- 呼吸森林光场由 Panel 铺满整个对话区、消息列表切 glass 变体、空态垂直居中——此前光场被 `max-w-3xl` 容器裁成
+  白面板里的一块"岛"，像两层容器
+- 建议入口接地（`global-ask-starters.ts`）：有当前材料点名材料（"帮我讲清《X》里最难的地方"），最近上过课就接那节课，
+  长期理解里有未过去的困惑先提它；底栏「会带上《X》」在只有一份材料时点名，不再是"1 份当前内容"
+
+---
+
 ## 2026-09-08 — 课后学习页 v2：从「选一个应用」到「同桌告诉你先做这一件」
 
 > 形态不动（录课 → 复习页 → 应用矩阵），把中栏这一段做到位。走查与数据都说明：第一次会话的体验
