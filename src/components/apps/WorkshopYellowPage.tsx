@@ -283,6 +283,13 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
   const searchParams = useSearchParams();
   const { accessToken } = useAuth();
   const abortControllersRef = useRef<Record<string, AbortController>>({});
+  /**
+   * 「开始」= 应用立刻出现。此前是后台生成 → 卡片"正在做…" → toast「做好了 · 打开」，页面唯一的主动作
+   * 以一条 toast 收尾。现在按下即打开窗口：窗口先显示"同学在听"的生成态（AppWindowPlaceholder），
+   * 结果落到缓存时窗口自己刷新（useAppExecution 监听同页缓存事件）。信息图 / 播客做好即弹预览，保持原样。
+   * 自动打开过的运行不再发 toast——结果就在眼前。
+   */
+  const autoOpenedRef = useRef<Set<string>>(new Set());
 
   const [apps, setApps] = useState<Array<WorkshopAppCatalogItem & { enabled?: boolean }>>([]);
   const [generatedMap, setGeneratedMap] = useState<Record<string, boolean>>({});
@@ -788,6 +795,8 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           setPodcastPreview(podcastReady);
         }
         const poppedDirectly = Boolean(infographicReady || podcastReady);
+        const openedOnStart = autoOpenedRef.current.delete(app.key);
+        if (openedOnStart) return;
         toast.success(COPY.apps.matrix.generated(app.name), {
           action:
             !poppedDirectly && (onOpenAppWindow || app.key === 'infographic' || app.key === 'audio-overview')
@@ -816,6 +825,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
               : undefined,
         });
       } catch (error) {
+        autoOpenedRef.current.delete(app.key);
         const isAborted =
           (error instanceof DOMException && error.name === 'AbortError') ||
           (error instanceof Error && error.name === 'AbortError');
@@ -907,6 +917,20 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     [buildAppHref, onOpenAppWindow, router]
   );
 
+  /** 「开始」时已自动打开窗口的应用：做好后不再 toast（见 startAndOpen） */
+  const startAndOpen = useCallback(
+    (app: WorkshopAppCatalogItem) => {
+      void runInBackground(app);
+      const canOpenNow = Boolean(onOpenAppWindow) && sessionId && transcript.length > 0
+        && !runningMap[app.key] && app.key !== 'infographic' && app.key !== 'audio-overview';
+      if (canOpenNow) {
+        autoOpenedRef.current.add(app.key);
+        onOpenAppWindow?.(app.key);
+      }
+    },
+    [onOpenAppWindow, runInBackground, runningMap, sessionId, transcript.length],
+  );
+
   const openTaskResult = useCallback(
     (appKey: string) => {
       const app = appMap[appKey];
@@ -994,10 +1018,10 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         outcomeLine={formatOutcomeLine(app.key, outcomeSummary)}
         redoHint={generated && outcomeAnchorCount > 0 ? COPY.apps.path.redoWithOutcomes(outcomeAnchorCount) : undefined}
         progressLabel={dockTask ? <ElapsedTimer startMs={dockTask.startedAt} /> : undefined}
-        onStart={() => void runInBackground(app)}
+        onStart={() => startAndOpen(app)}
         onOpen={() => openTaskResult(app.key)}
         onRetry={() => retryTask(app.key)}
-        onRemake={() => void runInBackground(app)}
+        onRemake={() => startAndOpen(app)}
         onProgress={() => setDockOpen(true)}
         shareAction={cachedResult && isShareableArtifactAppKey(app.key) ? (
           <ShareArtifactAction

@@ -21,6 +21,10 @@
   生产实测：做完闪卡返回，路径第二步变「做好了」、首选换成下一步
 - **首选规则修正（两端）**：模型按内容给的首选只在课堂事实说不出具体理由时接手（`recommendNextStep.grounded`）。
   此前有标记的示例课首选是"闪卡训练 · 这段内容已经足以支撑这个学习动作"，现在是"课堂测验 · 你在 0:30、1:12 留了标记"
+- **课后学习页「开始」= 应用立刻出现**：此前按下页面唯一的主按钮后是后台生成 → 卡片"正在做…" → 一条 toast「做好了 · 打开」。
+  现在按下即打开应用，窗口里先是"在听这节课，给你课堂测验 · 同学正在整理 · 01s"，题目做好自动落进来（`useAppExecution`
+  新增同页缓存事件——浏览器 `storage` 事件只发给其他 tab，此前同页两处只靠 localStorage 通信，窗口会停在"生成中"）。
+  生产实测：开始 → 1.2 s 内中栏切到生成态 → 题目出现 → 作答判分带原话依据
 - **`/app` 首屏 JS 677 → 330 KB gzip（−51%）**：三行静态 import 让已有的 dynamic 形同虚设——`useWorkshopWindows` 从
   `WorkshopWindowManager.tsx` 取类型 + 常量（拖进整棵应用窗口树 + KaTeX + react-markdown）、page.tsx 从 `DedaoTimeline.tsx`
   取纯函数（拖进 WordExplainer → @ai-sdk/react + zod）、`Recorder` 静态导入划词解释浮窗。抽成纯模块（`workshop-window-state.ts`、

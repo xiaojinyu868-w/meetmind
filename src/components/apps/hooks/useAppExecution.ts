@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { Anchor, TranscriptSegment } from '@/types';
 import type { AppExecutionResult, ContextPack, DataSourceType } from '@/lib/ai-native/types';
@@ -59,6 +59,25 @@ function safeJsonParse<T>(raw: string | null): T | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * 同页缓存变更事件。浏览器的 `storage` 事件只发给其他 tab；同一页里课后学习页在后台生成、
+ * 应用窗口已经打开等结果——两者只靠 localStorage 通信，窗口会一直停在"生成中"。
+ * 写缓存的两个函数都派发它，useAppExecution 监听后重读缓存。
+ */
+export const APP_CACHE_CHANGED_EVENT = 'meetmind:app-cache-changed';
+
+interface AppCacheChangedDetail {
+  sessionId: string;
+  appKey: string;
+  /** 写入者标识：hook 自己的写入不必再从缓存重读（缓存里的结果剥掉了大段内联图，内存里的才完整） */
+  origin?: string;
+}
+
+function notifyAppCacheChanged(sessionId: string, appKey: string, origin?: string): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent<AppCacheChangedDetail>(APP_CACHE_CHANGED_EVENT, { detail: { sessionId, appKey, origin } }));
 }
 
 export function buildResultCacheKey(sessionId: string, appKey: string): string {
@@ -196,7 +215,7 @@ function safeSetItem(key: string, value: string): void {
   }
 }
 
-export function writeCachedAppResult(sessionId: string, appKey: string, result: AppExecutionResult): void {
+export function writeCachedAppResult(sessionId: string, appKey: string, result: AppExecutionResult, origin?: string): void {
   if (typeof window === 'undefined') return;
   const key = buildResultCacheKey(sessionId, appKey);
 
@@ -211,15 +230,17 @@ export function writeCachedAppResult(sessionId: string, appKey: string, result: 
     }
 
     safeSetItem(key, serialized);
+    notifyAppCacheChanged(sessionId, appKey, origin);
     touchCacheKey(key);
   } catch {
     removeCacheEntry(key);
   }
 }
 
-export function writeCachedTaskState(sessionId: string, appKey: string, state: AppTaskState): void {
+export function writeCachedTaskState(sessionId: string, appKey: string, state: AppTaskState, origin?: string): void {
   if (typeof window === 'undefined') return;
   safeSetItem(buildTaskCacheKey(sessionId, appKey), JSON.stringify(state));
+  notifyAppCacheChanged(sessionId, appKey, origin);
 }
 
 function nowTaskState(status: AppTaskStatus, error?: string): AppTaskState {
@@ -303,6 +324,7 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
     contextPack,
   } = params;
   const { accessToken } = useAuth();
+  const instanceId = useRef(`exec-${Math.random().toString(36).slice(2)}`).current;
   const [result, setResult] = useState<AppExecutionResult | null>(null);
   const [taskState, setTaskState] = useState<AppTaskState>(() => nowTaskState('idle'));
   const [hydrated, setHydrated] = useState(false);
@@ -333,9 +355,19 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
       syncFromCache();
     };
 
+    const onSameTabChange = (event: Event) => {
+      const detail = (event as CustomEvent<AppCacheChangedDetail>).detail;
+      if (!detail || detail.sessionId !== sessionId || detail.appKey !== app.key || detail.origin === instanceId) return;
+      syncFromCache();
+    };
+
     window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, [app.key, sessionId, syncFromCache]);
+    window.addEventListener(APP_CACHE_CHANGED_EVENT, onSameTabChange);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener(APP_CACHE_CHANGED_EVENT, onSameTabChange);
+    };
+  }, [app.key, instanceId, sessionId, syncFromCache]);
 
   const executeInternal = useCallback(
     async (force: boolean) => {
@@ -344,13 +376,13 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
       if (transcript.length === 0 && !hasContextPackTranscript) {
         const emptyState = nowTaskState('error', '当前会话缺少可用课堂内容，请先导入或录制。');
         setTaskState(emptyState);
-        writeCachedTaskState(sessionId, app.key, emptyState);
+        writeCachedTaskState(sessionId, app.key, emptyState, instanceId);
         return null;
       }
 
       const runningState = nowTaskState('running');
       setTaskState(runningState);
-      writeCachedTaskState(sessionId, app.key, runningState);
+      writeCachedTaskState(sessionId, app.key, runningState, instanceId);
 
       try {
         const controller = new AbortController();
@@ -411,7 +443,7 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
           if (pointsBlock) {
             const idleState = nowTaskState('idle');
             setTaskState(idleState);
-            writeCachedTaskState(sessionId, app.key, idleState);
+            writeCachedTaskState(sessionId, app.key, idleState, instanceId);
             toast.message(describePointsBlock(pointsBlock));
             notifyPointsChanged();
             // 高意向截断：余额不足（登录用户）同步唤起付费页；会员闸门弹会员 Tab；guest 限额/月熔断不弹
@@ -432,7 +464,7 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
             // 避免页面一边说没做好，一边还展示/分享旧的伪成品。
             const idleState = nowTaskState('idle');
             setTaskState(idleState);
-            writeCachedTaskState(sessionId, app.key, idleState);
+            writeCachedTaskState(sessionId, app.key, idleState, instanceId);
             setResult(null);
             removeCacheEntry(buildResultCacheKey(sessionId, app.key));
             toast.message(
@@ -449,10 +481,10 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
         }
 
         setResult(data.result);
-        writeCachedAppResult(sessionId, app.key, data.result);
+        writeCachedAppResult(sessionId, app.key, data.result, instanceId);
         const successState = nowTaskState('success');
         setTaskState(successState);
-        writeCachedTaskState(sessionId, app.key, successState);
+        writeCachedTaskState(sessionId, app.key, successState, instanceId);
         // 应用生成会扣积分，让头部 chip / 设置页静默刷新余额
         notifyPointsChanged();
         return data.result;
@@ -474,11 +506,11 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
         // CONTENT_NOT_READY 的清理已在上面早退分支完成；这里只剩真实失败
         const failedState = nowTaskState('error', message);
         setTaskState(failedState);
-        writeCachedTaskState(sessionId, app.key, failedState);
+        writeCachedTaskState(sessionId, app.key, failedState, instanceId);
         return null;
       }
     },
-    [accessToken, anchors, app.intent, app.key, contextPack, contextTitle, dataSource, keyDifficulties, model, result, sessionId, summaryOverview, terminologyHint, transcript]
+    [accessToken, anchors, app.intent, app.key, contextPack, contextTitle, dataSource, instanceId, keyDifficulties, model, result, sessionId, summaryOverview, terminologyHint, transcript]
   );
 
   useEffect(() => {
@@ -498,12 +530,12 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
   const updateResult = useCallback(
     (next: AppExecutionResult) => {
       setResult(next);
-      writeCachedAppResult(sessionId, app.key, next);
+      writeCachedAppResult(sessionId, app.key, next, instanceId);
       const successState = nowTaskState('success');
       setTaskState(successState);
-      writeCachedTaskState(sessionId, app.key, successState);
+      writeCachedTaskState(sessionId, app.key, successState, instanceId);
     },
-    [app.key, sessionId]
+    [app.key, instanceId, sessionId]
   );
 
   return useMemo(
