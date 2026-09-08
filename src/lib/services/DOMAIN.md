@@ -15,6 +15,12 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 
 ## 服务分域索引
 
+### 共享 Context
+
+`context/DOMAIN.md`：通用跨应用 Context 服务，保存原始观察、应用授权及可靠投递状态；记忆处理由 Hindsight 完成。现有课堂、全局对话与应用活动按 CONTEXT_ENABLED 选择新旧管道；旧画像不自动迁移。实际实现和验收限制见 docs/plans/CONTEXT_M1_DELIVERY.md。
+
+`learning-observation-service.ts`：课后理解等服务端生产者按 CONTEXT_ENABLED 路由到新 Context 或旧记忆管道，等待原始观察持久化后返回。课后标题/摘要/精选仍先完成，记忆后端故障不会阻断这些产物。
+
 ### 🎙️ ASR 转录
 
 |  | ~740 | 今日情报编排与排序：内部线索来自收藏、已确认目标和活跃学习线，没有新 capture 也可由真实目标启动；外部检索计划覆盖深入、相邻与不同视角。百炼原生搜索已完成相关性选择时，只做多方向去重，不再重复调用排序模型；direct 候选仍由模型在真实 URL 中筛选。明确点过“不相关”的同一材料会被排除 |

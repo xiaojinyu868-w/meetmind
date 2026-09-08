@@ -19,6 +19,7 @@
 | `classroom-flow.ts` | ~35 | 课中课堂脉络契约 | `ClassroomFlowState`, `ClassroomMoment`, `ClassroomSignal` |
 | `learning-intent.ts` | ~45 | 深度学习开始前的交互式意图契约 | `LearningIntentPlan`, `LearningIntentQuestion`, `LearningIntentAnswer`, `LearningIntentApproach`, `LearningContextFocus` |
 | `learning-event.ts` | ~80 | 学习记忆事件契约（P0 事件化：事件表是画像唯一写入口） | `LearningEventType`、`LearningEventInput`、`LearningConversationPayload`、`LearningActivityPayload`（payload 含版本字段 `v`） |
+| `context.ts` | 1 | 纯类型重导出 packages/context-sdk/src/types.ts（公共协议真相源）；用户、应用、空间、原始观察、来源、任务读取与受限授权，零运行时依赖 | `ContextEventInput`, `ContextPrincipal`, `UserContextBundle`, `ContextGrantInput` |
 | `ai-control.ts` | ~120 | 管理员 AI 控制台的 Tutor / 理解层 / 应用链路目录、提示词覆盖、版本、预览与真实结果对比契约 | `AiControlKey`, `AiPromptOverride`, `AiControlItem`, `AiPromptPreview`, `AiControlComparison` |
 
 ## 使用约定
@@ -28,5 +29,7 @@
 3. 类型文件**不能有运行时代码**（const/function/class），只有 `type`/`interface`/`enum`
 
 `LearnerProfile.stage='unknown'` 仅用于用户已经通过对话确认 bio/goals、但尚未主动填写结构化学习档案的场景。此时不得猜测用户是大学生、在职或具体年级；Tutor 直接使用已确认的自然语言画像。
+
+LearningEventInput.observation 是教育适配的可选完整原始证据（开放 type/content/locator），使用通用 Context 的内容预算；旧管道仍只消费原有 payload。测验自评必须与实际提交答案区分，核心不定义教育认知分类。
 
 `LearnerProfile.memories` 与 `recentLearningActivities` 必须分开：应用点击、闪卡/测验结果与课堂/对话摘要只写近期活动，不能直接升级为对用户的判断；全局学习互动中由用户亲自表达或作答证明的方式、能力、困难、主题与进展，可由证据约束模型写入长期学习理解，用户可纠正、暂停或忘记。暂停的理解保留给用户查看，但不得注入 Tutor 上下文。

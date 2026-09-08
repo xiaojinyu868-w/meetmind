@@ -39,6 +39,7 @@
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@fontsource/caveat": "^5.3.0",
     "@fontsource/zcool-kuaile": "^5.3.0",
+    "@modelcontextprotocol/sdk": "1.29.0",
     "@nivo/core": "^0.99.0",
     "@nivo/heatmap": "^0.99.0",
     "@openai/codex": "0.149.0",

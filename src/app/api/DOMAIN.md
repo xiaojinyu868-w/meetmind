@@ -16,6 +16,12 @@ route.ts → lib/services/ + lib/utils/rate-limit
 
 ## 路由总览
 
+### 共享 Context
+
+`/api/context/v1/*`：原始事件、任务检索、来源控制、应用授权，独立认证并兼容用户登录 token 与 mmctx_ 受限凭证。完整契约见 `context/DOMAIN.md`。后台投递使用 `make context-worker`。
+
+课后理解的观察通过 `learning-observation-service.ts` 随 CONTEXT_ENABLED 切换到新服务；原始课堂资料的源存储仍遵循现有课堂/IndexedDB 契约，不被记忆整理覆盖。
+
 ### 🎙️ 转录管线
 
 | 路由 | 方法 | 职责 |

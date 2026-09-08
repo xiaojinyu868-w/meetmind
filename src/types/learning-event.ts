@@ -46,6 +46,13 @@ export interface LearningActivityPayload {
 
 export type LearningEventPayload = LearningConversationPayload | LearningActivityPayload;
 
+/** Optional original evidence for the new Context adapter; never a mastery verdict. */
+export interface LearningObservationContent {
+  type: string;
+  content: string;
+  locator?: string;
+}
+
 /** `POST /api/memory/events` 的请求体（zod 校验在 route / service 层，这里只给契约）。 */
 export interface LearningEventInput {
   /** 来源应用：global-ask | classroom | wechat | teach... */
@@ -58,4 +65,6 @@ export interface LearningEventInput {
   idempotencyKey?: string;
   /** 事件发生时间（ISO 8601）；缺省由服务端取当前时间 */
   occurredAt?: string;
+  /** Full observation for Context; legacy processing continues to use payload. */
+  observation?: LearningObservationContent;
 }

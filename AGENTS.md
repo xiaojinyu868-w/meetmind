@@ -117,6 +117,7 @@ make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
 | **改用户面文案** | `src/lib/ui/copy.ts`（唯一真相源） |
 | **改状态管理 / 类型 / 配置 / 模型** | `src/stores/DOMAIN.md` / `src/types/DOMAIN.md` / `src/lib/config/DOMAIN.md` → `app.config.ts` → `llm-service.ts` |
 | **改设置项 / 用户偏好** | `src/app/DOMAIN.md` 设置页 → `src/lib/utils/DOMAIN.md` → 所有消费该偏好的 hooks/components |
+| **改共享学习记忆 / Context 服务 / 记忆开发者接入** | `docs/plans/LEARNING_MEMORY_V1_SPEC.md`（V1 目标）→ `docs/plans/CONTEXT_M1_DELIVERY.md`（已实现能力与限制）→ `src/lib/services/context/DOMAIN.md` + `src/app/api/context/DOMAIN.md`；UI 看 `src/components/context/DOMAIN.md`，接入包看 `packages/context-sdk/DOMAIN.md`；旧入口与迁移背景见 `src/app/api/memory/DOMAIN.md` + `docs/plans/LEARNING_MEMORY_P0_HANDOFF.md` |
 | **改设计 / 视觉** | `docs/DESIGN_SYSTEM.md` + `design-demo/v7/` showcase + `docs/PRODUCT_TASTE.md` |
 | **处理 bug** | `skills/debugging/SKILL.md` → 先诊断再动手 |
 

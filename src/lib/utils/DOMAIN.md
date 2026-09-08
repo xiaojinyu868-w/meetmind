@@ -4,6 +4,8 @@
 
 ## 依赖规则
 
+Context v1 在 middleware 白名单中仅为委托认证：mmctx_ token 不符合 JWT 外形，必须交给 `services/context/access.ts` 验证；这不表示允许匿名访问。
+
 - ✅ 任何模块都可以 import `lib/utils/`
 - ❌ `lib/utils/` 不能 import `lib/services/`, `components/`, `hooks/`, `stores/`
 - ⚠️ `page-utils.ts` 是例外——它从 page.tsx 提取的函数，可能引用 `types/`

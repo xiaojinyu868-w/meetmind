@@ -64,6 +64,7 @@ import { meterLLMUsage, meterUserIdFromRequest } from '@/lib/services/point-mete
 import { getMembershipPlan, getTutorModePrice, type MembershipTier } from '@/lib/config/pricing';
 import { checkCanSpend, checkGuestDailyCost, spendPoints } from '@/lib/services/point-account-service';
 import { getActiveMembership } from '@/lib/services/membership-service';
+import { tutorContextSuffix } from '@/lib/services/context/tutor-adapter';
 
 const log = createLogger('tutor-agent');
 
@@ -690,10 +691,16 @@ export async function POST(request: NextRequest) {
       } as UIMessage;
     });
 
+    const sharedContext = await tutorContextSuffix({
+      authorization: request.headers.get('authorization'), mode,
+      // GlobalAsk omits the entire personal payload when contextFocus='current'.
+      personalContext: context.global?.memories !== undefined,
+      task: extractMessageText([...messages].reverse().find((message) => message.role === 'user') ?? {}),
+    });
     const stream = createTutorAttemptStream({
       providers,
       body: parsed.data,
-      systemPrompt: controlled.systemPrompt,
+      systemPrompt: controlled.systemPrompt + sharedContext,
       modelMessages: await convertToModelMessages(uiMessages),
       userId: meteringUserId,
       charge,

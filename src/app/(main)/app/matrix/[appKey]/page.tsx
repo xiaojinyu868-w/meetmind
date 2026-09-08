@@ -15,6 +15,8 @@ import { AppWindowShell } from '@/components/apps/windows/AppWindowShell';
 import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 import { ShareArtifactAction } from '@/components/share/ShareArtifactAction';
 import { COPY } from '@/lib/ui/copy';
+import { useAppLearningActivity } from '@/hooks/useAppLearningActivity';
+import { buildAppResultActivityDetail } from '@/lib/utils/app-learning-activity';
 
 const WORKSHOP_MODEL_PREFERENCE = 'ai_workshop_model';
 
@@ -322,6 +324,13 @@ export default function AppMatrixWindowPage() {
     autoRun: loadState === 'ready' && Boolean(app) && app?.key !== 'infographic' && app?.key !== 'cheatsheet',
   });
 
+  const { recordInteraction } = useAppLearningActivity({
+    appKey, sessionId, resultReady: Boolean(execution.result) && execution.taskState.status === 'success',
+    resultUpdatedAt: execution.taskState.updatedAt,
+    resultDetail: buildAppResultActivityDetail(execution.result, COPY.globalAsk.appResultSummary),
+    activityTitle: COPY.globalAsk.appActivity(app?.name || appKey),
+  });
+
   if (!app) {
     return (
       <MatrixRouteState
@@ -431,6 +440,7 @@ export default function AppMatrixWindowPage() {
         onRegenerate={() => void execution.rerun()}
         onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
         onResultUpdate={execution.updateResult}
+        onLearningActivity={recordInteraction}
       />
     </AppWindowShell>
   );

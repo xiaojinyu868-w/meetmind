@@ -3,6 +3,7 @@
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import type { TranscriptSegment } from '@/types';
+import type { LearningObservationContent } from '@/types/learning-event';
 import type { AppTaskState } from '@/components/apps/hooks/useAppExecution';
 import { PodcastWindow } from './PodcastWindow';
 import { FlashcardsWindow } from './FlashcardsWindow';
@@ -24,7 +25,7 @@ export interface AppRenderSurfaceProps {
   onRegenerate?: () => void;
   onGenerateDraft?: () => Promise<AppExecutionResult | null>;
   onResultUpdate?: (next: AppExecutionResult) => void;
-  onLearningActivity?: (line: string) => void;
+  onLearningActivity?: (line: string, observation?: LearningObservationContent) => void;
   /** 移动端结果页先展示大纲；桌面工作区默认导图。 */
   mindmapDefaultViewMode?: 'mindmap' | 'outline';
 }

@@ -31,6 +31,7 @@ components/
 ├── admin/DOMAIN.md    # 管理员会话级管理视图、现场 AI 透镜与独立控制中心
 ├── points/DOMAIN.md   # 积分系统前端（Phase 2）：头部 PointsChip + 设置页积分区块；402 拦截见 hooks/points-guard
 ├── settings/DOMAIN.md # 设置页组件（行原子 / 桌面锚点导航 / 账户与关于你两个 section）
+├── context/DOMAIN.md  # /context 共享 Context 管理、任务试读、来源控制与受限应用授权
 ├── mobile/DOMAIN.md   # 移动端专用组件（18 个）
 ├── business/DOMAIN.md # 业务展示组件（6 个）
 ├── layout/DOMAIN.md   # 布局组件（3 个）

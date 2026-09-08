@@ -107,6 +107,8 @@ const PUBLIC_ROUTES = [
   // 清小搭广场接入：平台网关带的是 XIAODA_API_KEY（非 MeetMind JWT），
   // 由 compat 路由内 checkXiaodaAuth 自验 Bearer，无效返回 401。
   '/api/compat/*',
+  // Context 应用凭证不是 JWT；服务内 authenticateContext 完整校验身份、撤销及空间。
+  '/api/context/v1/*',
 ] as const;
 
 function matchPath(pathname: string, patterns: readonly string[]): boolean {

@@ -66,6 +66,10 @@ src/components/apps/windows/
 
 ### QuizWindow（课堂测验）
 
+翻页交互委托 hooks/useQuizNavigation.ts；组件保留题面、提交与自评。
+
+quiz-observation.ts 为提交动作附加完整 practice.attempt 观察：保留未截断题面、选项、实际答案、生成参考答案的来源性质与课堂引用。主观题只保存看答案后的自评，submittedAnswer=null；当前页面内复练保留已见参考答案标记，其他页面/会话的暴露史标 unknown。不推断稳定掌握度。可选证据通过 onLearningActivity 第二参数传递，原单参数宿主兼容；约束由 quiz-observation.test.ts 验证。
+
 - 客观题（single / judge）= 选项卡片即时判分；主观题（short / fill）= 看参考答案 + 一次轻量自评标记，统一进 `isAnswerCorrect` 计分。
 - 主观题只有在用户对照答案并完成自评后才算完成；“只练需要回看的”会建立真实题目子集，不能只是跳到第一道错题后继续混入已会题。
 - 结果页表达“这一轮答稳 / 还要回看”，不使用 A-F 等级给学习者贴标签；citation 必须显示并在复习工作区支持回到课堂原声。

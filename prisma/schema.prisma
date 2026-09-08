@@ -43,6 +43,8 @@ model User {
   shareClaims          ShareClaim[]          @relation("ShareClaimer")
   shareInteractions    ShareInteraction[]    @relation("ShareInteractionVisitor")
   agentPacks           AgentPack[]           @relation("UserAgentPacks")
+  contextEvents        ContextEvent[]
+  contextGrants        ContextGrant[]
 
   @@index([username])
   @@index([email])
@@ -824,4 +826,54 @@ model Membership {
   sourceOutTradeNo String? // 最近一笔到账订单号
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+}
+
+/// 原始 Context 观察与可靠投递；模型的记忆/图谱继续由上游组件管理。
+model ContextEvent {
+  id                 String   @id @default(uuid())
+  userId             String
+  appId              String
+  spaceId            String   @default("personal")
+  clientEventId      String
+  type               String
+  content            String?
+  sourceJson         String?
+  metadataJson       String   @default("{}")
+  occurredAt         DateTime
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  visibility         String   @default("active")
+  deliveryStatus     String   @default("queued")
+  backendOperationId String   @unique @default(uuid())
+  attempts           Int      @default(0)
+  nextAttemptAt      DateTime @default(now())
+  leaseToken         String?
+  leaseUntil         DateTime?
+  lastErrorCode      String?
+  cleanupPending     Boolean  @default(false)
+  cleanupStage       String   @default("pending")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, appId, clientEventId])
+  @@index([userId, spaceId, occurredAt])
+  @@index([deliveryStatus, nextAttemptAt])
+}
+
+/// 用户委托给单个应用的 Context 能力；只保存随机凭证的摘要。
+model ContextGrant {
+  id               String    @id @default(uuid())
+  userId           String
+  appId            String
+  label            String
+  tokenHash        String    @unique
+  capabilitiesJson String
+  spaceIdsJson     String
+  createdAt        DateTime  @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }

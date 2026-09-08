@@ -14,6 +14,10 @@ import {
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 import { createLogger } from '@/lib/logger';
 import type { LearningEventInput } from '@/types/learning-event';
+import { getContextConfig } from '@/lib/config/context';
+import { appendEducationObservation } from '@/lib/services/context/education-adapter';
+import { ContextError } from '@/lib/services/context/validation';
+import { authenticateContext, requireOwner } from '@/lib/services/context/access';
 
 const log = createLogger('memory/events');
 
@@ -28,12 +32,19 @@ export async function POST(request: NextRequest) {
   if (rateLimit) return rateLimit;
 
   try {
-    const payload = getAuthPayload(request);
+    const enabled = getContextConfig().enabled;
+    const principal = enabled ? await authenticateContext(request.headers.get('Authorization')) : null;
+    if (principal) requireOwner(principal);
+    const payload = principal ? { sub: principal.userId } : getAuthPayload(request);
     if (!payload) {
       return NextResponse.json({ ok: false, error: '未授权' }, { status: 401 });
     }
 
     const body = await request.json() as LearningEventInput;
+    if (enabled) {
+      const receipt = await appendEducationObservation(payload.sub, body);
+      return NextResponse.json({ ok: true, ...receipt, backend: 'context' }, { status: 202 });
+    }
     const event = await appendLearningEvent(payload.sub, body);
     if (!event) {
       return NextResponse.json({ ok: false, error: '事件内容不完整' }, { status: 400 });
@@ -44,6 +55,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, eventId: event.id });
   } catch (error) {
+    if (error instanceof ContextError) return NextResponse.json({ ok: false, error: error.code }, { status: error.status });
     log.error('append learning event failed', error);
     return NextResponse.json({ ok: false, error: '这次没有形成新的理解' }, { status: 500 });
   }

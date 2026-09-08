@@ -1,6 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { useQuizNavigation } from '@/hooks/useQuizNavigation';
+import type { LearningObservationContent } from '@/types/learning-event';
+import { buildQuizAttemptObservation } from './quiz-observation';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { TranscriptSegment } from '@/types';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
@@ -21,7 +24,7 @@ interface QuizWindowProps {
   result: AppExecutionResult | null;
   transcript: TranscriptSegment[];
   onSeek?: (startMs: number) => void;
-  onLearningActivity?: (line: string) => void;
+  onLearningActivity?: (line: string, observation?: LearningObservationContent) => void;
 }
 
 /* 测验保持安静平涂：用排版和状态区分，不用题目环境光。 */
@@ -34,71 +37,13 @@ export function QuizWindow({ result, onSeek, onLearningActivity }: QuizWindowPro
     () => reviewQuestionIds ? questions.filter((question) => reviewQuestionIds.includes(question.id)) : questions,
     [questions, reviewQuestionIds],
   );
-  const [index, setIndex] = useState(0);
+  const { index, setIndex, slideDir, navigateTo, goToNext, goToPrev, handleTouchStart, handleTouchEnd } = useQuizNavigation(activeQuestions.length);
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState<Record<string, boolean>>({});
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [showReport, setShowReport] = useState(false);
   const [startTime] = useState(() => Date.now());
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [slideDir, setSlideDir] = useState<'none' | 'left' | 'right'>('none');
-
-  // Swipe gesture
-  const touchStartX = useRef<number | null>(null);
-  const touchStartY = useRef<number | null>(null);
-
-  const navigateTo = useCallback((newIndex: number, dir: 'left' | 'right') => {
-    if (isAnimating) return;
-    setIsAnimating(true);
-    setSlideDir(dir);
-    setTimeout(() => {
-      setIndex(newIndex);
-      setSlideDir('none');
-      setIsAnimating(false);
-    }, 250);
-  }, [isAnimating]);
-
-  const goToPrev = useCallback(() => {
-    if (index <= 0 || isAnimating) return;
-    navigateTo(index - 1, 'right');
-  }, [index, isAnimating, navigateTo]);
-
-  const goToNext = useCallback(() => {
-    if (index >= activeQuestions.length - 1 || isAnimating) return;
-    navigateTo(index + 1, 'left');
-  }, [activeQuestions.length, index, isAnimating, navigateTo]);
-
-  // Keyboard
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      const tag = target?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
-      if (e.key === 'ArrowLeft') goToPrev();
-      else if (e.key === 'ArrowRight') goToNext();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [goToPrev, goToNext]);
-
-  // Touch swipe
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-  }, []);
-
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (touchStartX.current === null || touchStartY.current === null) return;
-    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
-    const deltaY = e.changedTouches[0].clientY - touchStartY.current;
-    touchStartX.current = null;
-    touchStartY.current = null;
-    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
-      if (deltaX < 0) goToNext();
-      else goToPrev();
-    }
-  }, [goToNext, goToPrev]);
-
+  const seenReferences = useRef(new Set<string>());
   if (!result) {
     return <AppWindowPlaceholder status="loading" appName={COPY.apps.quiz.appName} />;
   }
@@ -112,6 +57,16 @@ export function QuizWindow({ result, onSeek, onLearningActivity }: QuizWindowPro
   const subjective = isSubjectiveQuizQuestion(current);
   const normalizedAnswer = normalizeQuizAnswer(current.answer, current.options);
   const isCorrect = isQuizAnswerCorrect(current, selectedOption);
+
+  function recordAttempt(picked: string, selfAssessment?: 'correct' | 'incorrect'): void {
+    const key = JSON.stringify([current.id, current.stem, current.options, current.answer]);
+    const observation = buildQuizAttemptObservation({ question: current, picked, selfAssessment, referencePreviouslySeen: seenReferences.current.has(key) });
+    seenReferences.current.add(key);
+    onLearningActivity?.(formatQuizActivity({
+      index: index + 1, total: activeQuestions.length, stem: current.stem, picked,
+      answer: normalizedAnswer, correct: selfAssessment ? selfAssessment === 'correct' : isQuizAnswerCorrect(current, picked),
+    }), observation);
+  }
 
   const finishedCount = activeQuestions.filter((question) => submitted[question.id]).length;
   const correctCount = activeQuestions.filter(
@@ -299,14 +254,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity }: QuizWindowPro
                           if (isSubmitted) return;
                           setSelected((prev) => ({ ...prev, [current.id]: QUIZ_SELF_CORRECT }));
                           setSubmitted((prev) => ({ ...prev, [current.id]: true }));
-                          onLearningActivity?.(formatQuizActivity({
-                            index: index + 1,
-                            total: activeQuestions.length,
-                            stem: current.stem,
-                            picked: COPY.apps.quiz.selfCorrect,
-                            answer: current.answer,
-                            correct: true,
-                          }));
+                          recordAttempt(COPY.apps.quiz.selfCorrect, 'correct');
                         }}
                         className={`rounded-full border px-3 py-1 text-[13px] transition disabled:cursor-default ${selectedOption === QUIZ_SELF_CORRECT ? 'border-mint-500 bg-mint-500 text-white' : 'border-divider text-ink-secondary hover:border-mint-300'}`}
                       >
@@ -319,14 +267,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity }: QuizWindowPro
                           if (isSubmitted) return;
                           setSelected((prev) => ({ ...prev, [current.id]: QUIZ_SELF_WRONG }));
                           setSubmitted((prev) => ({ ...prev, [current.id]: true }));
-                          onLearningActivity?.(formatQuizActivity({
-                            index: index + 1,
-                            total: activeQuestions.length,
-                            stem: current.stem,
-                            picked: COPY.apps.quiz.selfWrong,
-                            answer: current.answer,
-                            correct: false,
-                          }));
+                          recordAttempt(COPY.apps.quiz.selfWrong, 'incorrect');
                         }}
                         className={`rounded-full border px-3 py-1 text-[13px] transition disabled:cursor-default ${selectedOption === QUIZ_SELF_WRONG ? 'border-danger-300 bg-danger-500 text-white' : 'border-divider text-ink-secondary hover:border-danger-300'}`}
                       >
@@ -457,14 +398,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity }: QuizWindowPro
                   setRevealed((prev) => ({ ...prev, [current.id]: true }));
                 } else {
                   setSubmitted((prev) => ({ ...prev, [current.id]: true }));
-                  onLearningActivity?.(formatQuizActivity({
-                    index: index + 1,
-                    total: activeQuestions.length,
-                    stem: current.stem,
-                    picked: selectedOption || '',
-                    answer: normalizedAnswer,
-                    correct: isCorrect,
-                  }));
+                  recordAttempt(selectedOption || '');
                 }
               }}
             >

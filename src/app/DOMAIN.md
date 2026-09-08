@@ -12,6 +12,8 @@ page.tsx ❌ 不能调用 api routes（通过 fetch 调用可以）
 
 ## 目录结构
 
+`/context` → `components/context/SharedContextPanel.tsx`：共享 Context 的独立管理与验证页，登录用户查看原始经历、来源控制及应用连接；尚未替换旧 GlobalAsk 内的个人画像面板。
+
 ```
 src/app/
 ├── (auth)/                    # 认证页面组
@@ -62,6 +64,8 @@ src/app/
 `/app?claimedCapture=[captureId]` 是 SharedAgent 领取后的回流契约：页面切到收集流，等待对应 WorkspaceCapture 回填后滚动到卡片并短暂显示 AI 在场微光，随后清掉参数，避免刷新时重复播放落点反馈。
 
 ### `src/app/(main)/app/matrix/[appKey]/page.tsx` — 学习应用独立页
+
+独立页与桌面/移动工作区复用 useAppLearningActivity，记录生成结果及交互；测验完整原始观察经 AppRenderSurface 第二参数传递到 Context 教育适配器。
 
 根据 `appKey` 参数渲染不同学习应用的独立画布；六类应用统一复用 `AppWindowShell`，返回矩阵时保留游客身份等入口状态。可分享成果在标题栏直接创建分享链接。`cheatsheet` 深链不会用当前单课直接生成，而会转入 `/app?workspace=context&intent=cheatsheet` 的课程 / 多课范围选择。用户可见文案避免深链、会话数据、转录内容等内部词。
 
