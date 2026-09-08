@@ -3,7 +3,7 @@
  * 这是 page 工具函数的最底层——其它子模块都依赖此文件。
  */
 
-import type { FloatingWorkshopWindowState } from '@/components/apps/windows/WorkshopWindowManager';
+import type { FloatingWorkshopWindowState } from '@/components/apps/windows/workshop-window-state';
 
 // ── Constants ─────────────────────────────────────────────────────
 

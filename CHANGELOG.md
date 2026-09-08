@@ -21,6 +21,11 @@
   生产实测：做完闪卡返回，路径第二步变「做好了」、首选换成下一步
 - **首选规则修正（两端）**：模型按内容给的首选只在课堂事实说不出具体理由时接手（`recommendNextStep.grounded`）。
   此前有标记的示例课首选是"闪卡训练 · 这段内容已经足以支撑这个学习动作"，现在是"课堂测验 · 你在 0:30、1:12 留了标记"
+- **`/app` 首屏 JS 677 → 330 KB gzip（−51%）**：三行静态 import 让已有的 dynamic 形同虚设——`useWorkshopWindows` 从
+  `WorkshopWindowManager.tsx` 取类型 + 常量（拖进整棵应用窗口树 + KaTeX + react-markdown）、page.tsx 从 `DedaoTimeline.tsx`
+  取纯函数（拖进 WordExplainer → @ai-sdk/react + zod）、`Recorder` 静态导入划词解释浮窗。抽成纯模块（`workshop-window-state.ts`、
+  `dedao-timeline-model.ts`）+ WordExplainer 懒加载，零行为变化；生产实测复习页划词后按需加载一块、"解释一下"照常出现。
+  剩余最大块是 God File + Recorder 合成的 page 主块（105 KB），下一刀是按域切分（详见 renewal plan P1-9）
 - **我的上下文 · 掌握轨迹**（`MasteryTrailSection` + `mastery-trail.ts`，commit 3f07fa5）：本机会话层的检验结果按概念连成
   "测验 ✕ → 闪卡 ✓"，状态只有三个词（还没稳 / 刚记住 / 已经稳了），还没稳排最前；无记录整块不渲染。
   `conceptLabel` 把整句问题收成术语（引号内优先）供窄处使用。数据边界写在头注：外部 context 系统合并后同一形状由它供给

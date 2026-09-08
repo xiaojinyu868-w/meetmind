@@ -3,17 +3,11 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 import type { TranscriptSegment } from '@/types';
-import type { Anchor } from '@/types';
 import { TranscriptFlowView } from '../TranscriptFlowView';
+import type { DedaoTimelineEntry } from './dedao-timeline-model';
 
-export interface DedaoTimelineEntry {
-  id: string;
-  content: string;
-  startMs: number;
-  endMs: number;
-  hasConfusion: boolean;
-  confusionResolved?: boolean;
-}
+// 条目类型与 toDedaoEntries 在 dedao-timeline-model.ts（纯模块）——page.tsx 从那里取，不必静态加载本组件
+export { toDedaoEntries, type DedaoTimelineEntry } from './dedao-timeline-model';
 
 export interface DedaoTimelineProps {
   entries: DedaoTimelineEntry[];
@@ -22,26 +16,6 @@ export interface DedaoTimelineProps {
   onConfusionClick?: (entry: DedaoTimelineEntry) => void;
   onEntryTextUpdate?: (entry: DedaoTimelineEntry, text: string) => void;
   className?: string;
-}
-
-export function toDedaoEntries(
-  segments: TranscriptSegment[],
-  anchors: Anchor[]
-): DedaoTimelineEntry[] {
-  return segments.map((segment) => {
-    const anchor = anchors.find(
-      (a) => a.timestamp >= segment.startMs && a.timestamp <= segment.endMs
-    );
-
-    return {
-      id: segment.id,
-      content: segment.text,
-      startMs: segment.startMs,
-      endMs: segment.endMs,
-      hasConfusion: !!anchor,
-      confusionResolved: anchor?.resolved,
-    };
-  });
 }
 
 export function DedaoTimeline({

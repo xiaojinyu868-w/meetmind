@@ -15,6 +15,7 @@
  * - context: 困惑点上下文（困惑时刻红色高亮）
  */
 
+import dynamic from 'next/dynamic';
 import {
   useState,
   useRef,
@@ -44,7 +45,9 @@ interface FlowSegment {
   originalText?: string;
 }
 import { useTextSelection } from '@/hooks/useTextSelection';
-import { WordExplainer } from './WordExplainer';
+// 选词解释浮窗只在用户划词后出现，却带着 @ai-sdk/react + zod + 对话 markdown 渲染链（≈200KB gzip）——
+// 懒加载，让 Recorder（首屏静态导入）不再把整条对话依赖拖进 /app 首屏 JS
+const WordExplainer = dynamic(() => import('./WordExplainer').then((m) => ({ default: m.WordExplainer })), { ssr: false });
 import { useEnToZhTranslation, useTranslationMode, type TranslationMode } from '@/hooks/useEnToZhTranslation';
 import { extractChineseRuns, extractEnglishRuns } from '@/lib/services/translation/extract-english';
 import { getSpeakerColorClass, getSpeakerLabel } from '@/lib/services/asr/diarization-service';

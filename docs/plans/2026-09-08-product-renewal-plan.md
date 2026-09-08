@@ -192,8 +192,16 @@ readiness 双重门（模型只能推荐不能剥夺能力）、结果缓存、�
    登录动机从"门槛"变成"带走"。
 8. **「我的上下文」显示状态迁移**（曾经困惑 → 已掌握）。
 9. **`/app` 首屏体积**：2393 KB 未压缩 / ≈675 KB gzip / 30 chunk（附录 A 实测；服务端 TTFB 只有 4 ms）。
-   God File 按域切分 + mermaid / katex / shiki / wavesurfer / motion 按需加载，目标首屏 <300 KB gzip，补骨架屏。
    这是慢网用户"打开就白屏 10 秒"的真实原因，也是 78% 一分钟内离开里可量化的那部分。
+   **2026-09-08 第一刀已落：677 → 330 KB gzip（−51%），17 chunk。** 根因不是"没做 dynamic"——page.tsx 早就把
+   GlobalAskPanel / 复习布局 / 应用窗口 / 移动壳全 dynamic 了——而是三行静态 import 让 dynamic 形同虚设：
+   `useWorkshopWindows` 从 `WorkshopWindowManager.tsx` 取一个类型 + 一个常量（拖进整棵应用窗口树：板书 KaTeX、
+   速查表 react-markdown）；page.tsx 从 `DedaoTimeline.tsx` 取纯函数 `toDedaoEntries`（拖进 TranscriptFlowView →
+   WordExplainer → @ai-sdk/react + zod v3/v4 → chat markdown）；`Recorder`（首屏必须静态）里的划词解释浮窗静态导入。
+   修法全是"把纯的东西抽成纯模块 + 按需出现的东西 dynamic"（`workshop-window-state.ts`、`dedao-timeline-model.ts`、
+   WordExplainer 懒加载），零行为变化。剩余 330 KB 里：page 主块 105 KB（God File + Recorder 被 scope-hoisting 合成一个
+   277 KB 模块——下一刀是 God File 按域切分）、react-dom 52、COPY 36（单一真相源，不拆）、Next 运行时 31、Dexie 30。
+   <300 KB 需要动 God File；骨架屏方面预渲染 HTML 只有 AppLoading 品牌页，体积减半后先观察慢网表现再决定。
 
 ### P2 —— 新生级
 

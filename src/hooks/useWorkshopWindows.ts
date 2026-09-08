@@ -8,7 +8,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { type FloatingWorkshopWindowState, getDefaultDisplayMode } from '@/components/apps/windows/WorkshopWindowManager';
+import { type FloatingWorkshopWindowState, getDefaultDisplayMode } from '@/components/apps/windows/workshop-window-state';
 import { isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import {
   getWorkshopWindowStorageKey,

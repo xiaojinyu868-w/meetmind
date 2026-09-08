@@ -6,6 +6,7 @@ import { resolveWorkshopModelId, WORKSHOP_MODEL_PREFERENCE_KEY } from '@/lib/uti
 import type { Anchor, TranscriptSegment } from '@/types';
 import type { DataSourceType } from '@/lib/ai-native/types';
 import { getWorkshopAppByKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
+import type { FloatingWorkshopWindowState } from './workshop-window-state';
 import { useAppExecution, type AppTaskState } from '@/components/apps/hooks/useAppExecution';
 import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 
@@ -79,32 +80,11 @@ function useIsMobile(breakpoint = 768) {
   return isMobile;
 }
 
-/** 应用的默认展示模式 */
-const DEFAULT_DISPLAY_MODES: Partial<Record<WorkshopAppKey, 'panel' | 'fullscreen'>> = {
-  mindmap: 'fullscreen',
-  infographic: 'fullscreen',
-  'audio-overview': 'panel',
-  flashcards: 'fullscreen',
-  quiz: 'fullscreen',
-  cheatsheet: 'fullscreen',
-  'teach-back': 'fullscreen',
-};
-
 /** 需要沉浸式全屏体验的应用（深色背景、精简header） */
 const IMMERSIVE_APPS: Set<WorkshopAppKey> = new Set(['flashcards', 'quiz']);
 
-function getDefaultDisplayMode(appKey: WorkshopAppKey): 'panel' | 'fullscreen' {
-  return DEFAULT_DISPLAY_MODES[appKey] || 'panel';
-}
-
-export type WorkshopDisplayMode = 'panel' | 'fullscreen';
-
-export interface FloatingWorkshopWindowState {
-  appKey: WorkshopAppKey;
-  minimized: boolean;
-  zIndex: number;
-  displayMode: WorkshopDisplayMode;
-}
+// 状态类型与默认展示模式在 workshop-window-state.ts（纯模块）——首屏 hook 从那里取，不必静态加载整棵窗口树
+export type { WorkshopDisplayMode, FloatingWorkshopWindowState } from './workshop-window-state';
 
 interface WorkshopWindowManagerProps {
   windows: FloatingWorkshopWindowState[];
@@ -536,4 +516,4 @@ export function WorkshopWindowManager(props: WorkshopWindowManagerProps) {
   );
 }
 
-export { getDefaultDisplayMode };
+export { getDefaultDisplayMode } from './workshop-window-state';

@@ -155,7 +155,7 @@ const loadDemoData = async () => {
 // Mobile components - dynamic loaded (only needed on mobile)
 const MiniPlayer = dynamic(() => import('@/components/mobile/MiniPlayer').then(m => ({ default: m.MiniPlayer })), { ssr: false });
 const DedaoTimeline = dynamic(() => import('@/components/mobile/DedaoTimeline').then(m => ({ default: m.DedaoTimeline })), { ssr: false });
-import { toDedaoEntries } from '@/components/mobile/DedaoTimeline';
+import { toDedaoEntries } from '@/components/mobile/dedao-timeline-model';
 const DedaoConfusionCard = dynamic(() => import('@/components/mobile/DedaoConfusionCard').then(m => ({ default: m.DedaoConfusionCard })), { ssr: false });
 const DedaoMenu = dynamic(() => import('@/components/mobile/DedaoMenu').then(m => ({ default: m.DedaoMenu })), { ssr: false });
 const MobileTopBar = dynamic(() => import('@/components/mobile/MobileTopBar').then(m => ({ default: m.MobileTopBar })), { ssr: false });
