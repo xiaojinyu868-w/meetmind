@@ -36,7 +36,7 @@ import { LearningMemoryPanel } from '@/components/LearningMemoryPanel';
 import { GlobalAskContextDrawer } from '@/components/GlobalAskContextDrawer';
 import { GlobalAskWelcome } from '@/components/GlobalAskWelcome';
 import { buildGlobalAskStarters } from '@/components/global-ask-starters';
-import { buildAskDesk } from '@/components/global-ask-desk';
+import { buildAskDesk, isMaterialTitle } from '@/components/global-ask-desk';
 import { composeAskOpening } from '@/components/global-ask-opening';
 import { buildLocalLearnerContext } from '@/components/learner-context-local';
 import { GUEST_DEMO_LESSON_TITLE, resetDemoEntryConsumed } from '@/components/classroom/guest-demo-entry';
@@ -362,39 +362,38 @@ export function GlobalAskPanel({
   const currentContextCount = currentMaterials.length + fileUpload.attachedFiles.length;
   const recentContextCount = learning.recentActivities.length;
   const memoryContextCount = learning.memories.filter((memory) => memory.status === 'active').length;
-  const currentMaterialTitles = React.useMemo(
-    () => [...currentMaterials.map((item) => item.title), ...fileUpload.attachedFiles.map((file) => file.title)],
-    [currentMaterials, fileUpload.attachedFiles],
-  );
   const showWelcome = messages.length === 0 && !intentPlan && !intentBusy && !pendingQuery;
+  // 能在第一屏点名的材料：用户自己收的（不是系统写的）、不是图、标题是标题而不是一句话
+  const namedMaterialTitles = React.useMemo(() => [
+    ...sourceItems.filter((item) => item.status !== 'failed' && item.origin !== 'system' && item.type !== 'image').slice(-6).reverse().map((item) => item.title),
+    ...fileUpload.attachedFiles.map((file) => file.title),
+  ].filter(isMaterialTitle), [fileUpload.attachedFiles, sourceItems]);
   const welcomeStarters = React.useMemo(() => buildGlobalAskStarters({
     depth: effectiveDepth,
-    currentMaterialTitles,
+    currentMaterialTitles: [...(currentTranscript ? [GLOBAL_ASK_COPY.sourceCurrentLesson] : []), ...namedMaterialTitles],
     recentActivities: learning.recentActivities,
     memories: learning.memories,
-  }), [currentMaterialTitles, effectiveDepth, learning.memories, learning.recentActivities]);
+  }), [currentTranscript, effectiveDepth, learning.memories, learning.recentActivities, namedMaterialTitles]);
 
   // 书桌：同桌此刻在读什么、记得你什么。掌握轨迹 = 本机会话层结果 + 登录用户的服务端切片（换设备也在），面板打开时读
   const { trail: masteryTrail } = useMasteryTrail({ enabled: open && showWelcome, appId: 'global-ask' });
-  const currentLessonTitle = React.useMemo(() => {
-    if (isDemoLessonLoaded(segments)) return GUEST_DEMO_LESSON_TITLE;
-    if (!sessionId) return undefined;
+  const currentLesson = React.useMemo(() => {
+    if (isDemoLessonLoaded(segments)) return { title: GUEST_DEMO_LESSON_TITLE, at: undefined };
+    if (!sessionId) return { title: undefined, at: undefined };
     const match = [...learning.recentActivities].reverse().find((item) => item.kind === 'lesson' && item.sessionId === sessionId);
-    return match?.title;
+    return { title: match?.title, at: match?.occurredAt };
   }, [learning.recentActivities, segments, sessionId]);
   const deskGroups = React.useMemo(() => buildAskDesk({
     hasCurrentTranscript: currentTranscript.length > 0,
     segments,
-    currentLessonTitle,
-    materialTitles: [
-      ...sourceItems.filter((item) => item.status !== 'failed').slice(-6).reverse().map((item) => item.title),
-      ...fileUpload.attachedFiles.map((file) => file.title),
-    ],
+    currentLessonTitle: currentLesson.title,
+    currentLessonAt: currentLesson.at,
+    materialTitles: namedMaterialTitles,
     anchors,
     recentActivities: learning.recentActivities,
     trail: masteryTrail,
     memories: learning.memories,
-  }), [anchors, currentLessonTitle, currentTranscript.length, fileUpload.attachedFiles, learning.memories, learning.recentActivities, masteryTrail, segments, sourceItems]);
+  }), [anchors, currentLesson, currentTranscript.length, learning.memories, learning.recentActivities, masteryTrail, namedMaterialTitles, segments]);
   // 同学开口的话 + 「可以从这里开始」：从书桌事实说成一两句，不再陈列 chip
   const opening = React.useMemo(() => composeAskOpening({
     desk: deskGroups,

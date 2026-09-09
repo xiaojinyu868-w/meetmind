@@ -26,6 +26,8 @@ export interface DeskItem {
   /** 点击后填进输入框的问题 */
   prompt: string;
   tone?: 'pine' | 'vermilion';
+  /** 这件事发生的时间（ISO；课 / 最近学过才有）——开口时能说"昨天听的" */
+  at?: string;
 }
 
 export interface DeskGroup {
@@ -52,6 +54,8 @@ export interface AskDeskInput {
   segments?: readonly MomentSegment[];
   /** 当前课堂标题（可得时点名；不可得用"这节课"） */
   currentLessonTitle?: string;
+  /** 当前课堂上课时间（ISO）；开口据此判断"刚听完"还是"那节" */
+  currentLessonAt?: string;
   /** 当前会带进对话的材料标题（不含转录） */
   materialTitles: readonly string[];
   anchors: readonly DeskAnchor[];
@@ -85,6 +89,51 @@ function isGenericLessonTitle(title: string | undefined): boolean {
   return isPlaceholderLessonTitle(title) || title === GLOBAL_ASK_COPY.sourceCurrentLesson;
 }
 
+function displayWidth(text: string): number {
+  let units = 0;
+  for (const ch of text) units += WIDE_CHAR.test(ch) ? 2 : 1;
+  return units;
+}
+
+/**
+ * 能放进《》里念出来的才是标题。口袋收下的一句话（"这台设备上的课堂历史已同步到账号。"）、
+ * 随手贴的对话（"hello 你好你好。感觉不对劲，为什么现在又可以了?"）都是内容，不是材料名——
+ * 念成"帮我讲清《这台设备上的课堂历史已同步到账号。》里最难的地方"就露怯了。
+ * 规则：不含句末标点、不以英文句号收尾（文件扩展名除外）、不长过 40 个汉字宽。
+ */
+export function isMaterialTitle(title: string | undefined): title is string {
+  if (!title) return false;
+  const t = title.replace(/\s+/g, ' ').trim();
+  if (!t || isPlaceholderLessonTitle(t)) return false;
+  if (/[。！？!?…；;]/.test(t)) return false;
+  if (/\.\s*$/.test(t) && !/\.[A-Za-z0-9]{1,5}$/.test(t)) return false;
+  if (displayWidth(t) > 80) return false;
+  return true;
+}
+
+/** "完成了「测验」"是活动描述，不是课名 */
+function isActivityDescription(title: string): boolean {
+  const prefix = GLOBAL_ASK_COPY.appActivity('').slice(0, -1);
+  return prefix.length > 0 && title.startsWith(prefix);
+}
+
+/**
+ * 长期理解的标题常是模型写的目标句（"关注线性规划的建模与转化能力"）；放进「」里念，
+ * 开头的动词要去掉——"围绕「关注线性规划…」"不是人话。
+ */
+const LEADING_VERBS = /^(?:关注|学习|掌握|理解|提升|练习|巩固|复习|加强|正在学|在学|想学|想要|需要|希望)\s*/;
+export function topicLabel(title: string): string {
+  const t = title.replace(/\s+/g, ' ').trim();
+  const stripped = t.replace(LEADING_VERBS, '').trim();
+  return stripped.length >= 2 ? stripped : t;
+}
+
+/** 记忆标题能不能念：不是一整句话、不长过 30 个汉字宽 */
+function isSpeakableMemoryTitle(title: string): boolean {
+  const t = title.trim();
+  return t.length > 0 && !/[。！？!?…；;]/.test(t) && displayWidth(t) <= 60;
+}
+
 export function buildAskDesk(input: AskDeskInput): DeskGroup[] {
   const copy = GLOBAL_ASK_COPY.desk;
   const groups: DeskGroup[] = [];
@@ -98,9 +147,10 @@ export function buildAskDesk(input: AskDeskInput): DeskGroup[] {
       label: named ? shortTitle(input.currentLessonTitle as string, LABEL_MAX) : copy.currentLesson,
       meta: named ? copy.currentLessonMeta : undefined,
       prompt: named ? copy.promptFromLesson(shortTitle(input.currentLessonTitle as string)) : copy.promptFromCurrentLesson,
+      at: input.currentLessonAt,
     });
   }
-  const materials = input.materialTitles.map((t) => t.trim()).filter(Boolean);
+  const materials = input.materialTitles.map((t) => t.trim()).filter(isMaterialTitle);
   for (const title of materials) {
     if (reading.length >= READING_MAX) break;
     reading.push({ id: `reading:${title}`, label: shortTitle(title, LABEL_MAX), prompt: copy.promptFromMaterial(shortTitle(title)) });
@@ -156,18 +206,33 @@ export function buildAskDesk(input: AskDeskInput): DeskGroup[] {
 
   // 最近学过：没有当前课堂时才需要它把人接回上一节
   if (!input.hasCurrentTranscript) {
+    // 应用活动的标题是"完成了「测验」"，课名要顺着 sessionId 找回那节课
+    // "昨天听的"指的是听课那天，不是做应用那天——时间也跟着课走
+    const lessonBySession = new Map<string, { title: string; at: string }>();
+    for (const activity of input.recentActivities) {
+      if (activity.kind === 'lesson' && activity.sessionId && activity.title.trim()) {
+        lessonBySession.set(activity.sessionId, { title: activity.title.trim(), at: activity.occurredAt });
+      }
+    }
     const seen = new Set<string>();
     const recent: DeskItem[] = [];
     for (const activity of [...input.recentActivities].reverse()) {
       if (activity.kind !== 'lesson' && activity.kind !== 'app') continue;
-      const title = activity.title.trim();
-      if (!title || seen.has(title)) continue;
+      let title = activity.title.trim();
+      let at = activity.occurredAt;
+      if (activity.kind === 'app') {
+        const lesson = activity.sessionId ? lessonBySession.get(activity.sessionId) : undefined;
+        if (lesson) { title = lesson.title; at = lesson.at; }
+        else if (isActivityDescription(title)) continue;
+      }
+      if (!isMaterialTitle(title) || seen.has(title)) continue;
       seen.add(title);
       recent.push({
         id: `recent:${activity.id}`,
         label: shortTitle(title, LABEL_MAX),
         meta: activity.kind === 'app' && activity.appKey ? GLOBAL_ASK_COPY.masteryTrail.stepLabels[activity.appKey] : undefined,
         prompt: copy.promptFromRecent(shortTitle(title)),
+        at,
       });
       if (recent.length >= RECENT_MAX) break;
     }
@@ -177,16 +242,19 @@ export function buildAskDesk(input: AskDeskInput): DeskGroup[] {
   // 长期理解：还没过去的困惑先出现，其后是在学的主题（偏好 / 长处 / 进度不是问题的起点，不上桌）
   const memoryRank: Partial<Record<LearningMemoryEntry['kind'], number>> = { challenge: 0, topic: 1 };
   const memory: DeskItem[] = [...input.memories]
-    .filter((m) => m.status === 'active' && m.title.trim() && m.kind in memoryRank)
+    .filter((m) => m.status === 'active' && m.kind in memoryRank && isSpeakableMemoryTitle(m.title))
     .sort((a, b) => (memoryRank[a.kind] ?? 9) - (memoryRank[b.kind] ?? 9))
     .slice(0, MEMORY_MAX)
-    .map((m) => ({
-      id: `memory:${m.id}`,
-      label: shortTitle(m.title, LABEL_MAX),
-      meta: m.kind === 'challenge' ? copy.memoryChallenge : copy.memoryTopic,
-      prompt: m.kind === 'challenge' ? copy.promptFromChallenge(shortTitle(m.title)) : copy.promptFromTopic(shortTitle(m.title)),
-      tone: m.kind === 'challenge' ? 'vermilion' : undefined,
-    }));
+    .map((m) => {
+      const label = topicLabel(m.title);
+      return {
+        id: `memory:${m.id}`,
+        label: shortTitle(label, LABEL_MAX),
+        meta: m.kind === 'challenge' ? copy.memoryChallenge : copy.memoryTopic,
+        prompt: m.kind === 'challenge' ? copy.promptFromChallenge(shortTitle(label)) : copy.promptFromTopic(shortTitle(label)),
+        tone: m.kind === 'challenge' ? 'vermilion' : undefined,
+      } as DeskItem;
+    });
   if (memory.length > 0) groups.push({ id: 'memory', title: copy.memoryTitle, items: memory });
 
   return groups;

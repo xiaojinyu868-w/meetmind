@@ -363,7 +363,8 @@ export function VoiceMicButton({
       {state === 'recording' ? (
         <span
           className={cn(
-            'pointer-events-none absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 rounded-md px-2 py-0.5 font-mono text-[10.5px] tabular-nums backdrop-blur-sm',
+            // whitespace-nowrap：绝对定位在 36px 宽的按钮里，不加会按字符竖着断成 "5 / 8 / s"
+            'pointer-events-none absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md px-2 py-0.5 font-mono text-[10.5px] tabular-nums backdrop-blur-sm',
             showCountdownWarn ? 'bg-vermilion text-white' : 'bg-ink/85 text-white',
           )}
         >

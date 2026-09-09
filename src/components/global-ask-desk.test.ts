@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LearningActivityEntry, LearningMemoryEntry } from '@/types/user';
 import type { MasteryTrailEntry } from '@/components/mastery-trail';
-import { buildAskDesk, type AskDeskInput, type DeskAnchor } from './global-ask-desk';
+import { buildAskDesk, isMaterialTitle, topicLabel, type AskDeskInput, type DeskAnchor } from './global-ask-desk';
 
 const base: AskDeskInput = {
   hasCurrentTranscript: false,
@@ -123,5 +123,50 @@ describe('buildAskDesk', () => {
     const latin = "Australia's Moving Experience · IELTS 听力练习";
     const [reading2] = buildAskDesk({ ...base, materialTitles: [latin] });
     expect(reading2.items[0].label).toBe(latin);
+  });
+
+  it('句子不是标题：口袋收的一句话、贴的对话不进「正在读」，也不进 prompt 的《》里', () => {
+    const groups = buildAskDesk({
+      ...base,
+      materialTitles: ['这台设备上的课堂历史已同步到账号。', 'hello 你好你好。感觉不对劲，为什么现在又可以了?', '线性规划讲义.pdf', 'Chapter 3 · Duality'],
+    });
+    const reading = groups.find((g) => g.id === 'reading');
+    expect(reading?.items.map((i) => i.label)).toEqual(['线性规划讲义.pdf', 'Chapter 3 · Duality']);
+    expect(isMaterialTitle('第三章 对偶问题')).toBe(true);
+    expect(isMaterialTitle('notes.md')).toBe(true);
+    expect(isMaterialTitle('This is a sentence.')).toBe(false);
+    expect(isMaterialTitle('课堂录音')).toBe(false);
+  });
+
+  it('应用活动"完成了「讲给同桌听」"不是课名：顺着 sessionId 找回那节课；找不到就不上', () => {
+    const groups = buildAskDesk({
+      ...base,
+      recentActivities: [
+        activity({ id: 'l1', title: '线性规划：从业务问题到数学建模', sessionId: 's1', occurredAt: '2026-09-07T08:00:00Z' }),
+        activity({ id: 'a1', title: '完成了「讲给同桌听」', kind: 'app', appKey: 'teach-back', sessionId: 's1', occurredAt: '2026-09-08T08:00:00Z' }),
+        activity({ id: 'a2', title: '完成了「测验」', kind: 'app', appKey: 'quiz', sessionId: 'unknown', occurredAt: '2026-09-09T08:00:00Z' }),
+      ],
+    });
+    const recent = groups.find((g) => g.id === 'recent');
+    expect(recent?.items).toHaveLength(1);
+    // 时间跟着听课那天走，不是做应用那天
+    expect(recent?.items[0]).toMatchObject({ label: '线性规划：从业务问题到数学建模', at: '2026-09-07T08:00:00Z' });
+    expect(recent?.items[0].prompt).toContain('《线性规划：从业务问题到数学建模》');
+  });
+
+  it('长期理解的标题去掉开头动词再念；一整句话的记忆不念', () => {
+    expect(topicLabel('关注线性规划的建模与转化能力')).toBe('线性规划的建模与转化能力');
+    expect(topicLabel('掌握 对偶问题')).toBe('对偶问题');
+    expect(topicLabel('关注')).toBe('关注');
+    const groups = buildAskDesk({
+      ...base,
+      memories: [
+        memory({ id: 'm1', title: '关注线性规划的建模与转化能力', kind: 'topic' }),
+        memory({ id: 'm2', title: '上次说自己总是把条件概率的方向搞反了。', kind: 'challenge' }),
+      ],
+    });
+    const mem = groups.find((g) => g.id === 'memory');
+    expect(mem?.items.map((i) => i.label)).toEqual(['线性规划的建模与转化能力']);
+    expect(mem?.items[0].prompt).toBe('围绕「线性规划的建模与转化能力」，我现在该学什么？');
   });
 });

@@ -155,7 +155,7 @@ export function GlobalAskWelcome({
       {/* 3. 可以从这里开始——句子，不是卡片 */}
       {opening.starters.length > 0 ? (
         <div className="mt-8">
-          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{copy.startersEyebrow}</p>
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-muted">{copy.startersEyebrow}</p>
           <ul className="mt-2.5 flex flex-col">
             {opening.starters.map((starter) => (
               <li key={starter.id}>

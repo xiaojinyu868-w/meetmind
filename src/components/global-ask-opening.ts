@@ -46,6 +46,8 @@ export interface AskOpeningInput {
   depth: 'quick' | 'deep';
   /** 访客有试听入口 */
   canStartDemo: boolean;
+  /** 测试注入"现在" */
+  now?: Date;
 }
 
 const MAX_STARTERS = 3;
@@ -71,6 +73,29 @@ function lessonName(label: string): string {
   return clip(label.split(' · ')[0] || label, LESSON_MAX);
 }
 
+/** 自然日差：0 今天、1 昨天…；无效日期返回 undefined */
+function daysAgo(at: string | undefined, now: Date): number | undefined {
+  if (!at) return undefined;
+  const then = new Date(at);
+  if (Number.isNaN(then.getTime())) return undefined;
+  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diff = Math.round((startOf(now) - startOf(then)) / 86_400_000);
+  return diff < 0 ? 0 : diff;
+}
+
+/** "上次是《X》"太干——知道是哪天就说哪天 */
+function heardWhen(at: string | undefined, now: Date): readonly [string, string] {
+  const copy = GLOBAL_ASK_COPY.opening;
+  const days = daysAgo(at, now);
+  if (days === undefined) return copy.lastTime;
+  if (days === 0) return copy.heardToday;
+  if (days === 1) return copy.heardYesterday;
+  if (days === 2) return copy.heardDayBefore;
+  if (days < 7) return copy.heardDaysAgo(days);
+  const then = new Date(at as string);
+  return copy.heardOnDate(then.getMonth() + 1, then.getDate());
+}
+
 /** 时刻 chip 的 label 是「00:30 · 原话首句」；开口里只念时间点（MM:SS，与复习页、问题句一致） */
 function stampOf(item: DeskItem): string {
   return item.label.split(' · ')[0].trim();
@@ -78,6 +103,7 @@ function stampOf(item: DeskItem): string {
 
 export function composeAskOpening(input: AskOpeningInput): AskOpening {
   const copy = GLOBAL_ASK_COPY.opening;
+  const now = input.now ?? new Date();
   const parts: OpeningPart[] = [];
   const usedPrompts = new Set<string>();
   const text = (value: string) => { if (value) parts.push({ kind: 'text', text: value }); };
@@ -96,26 +122,41 @@ export function composeAskOpening(input: AskOpeningInput): AskOpening {
   const currentLesson = reading.find((item) => item.id === 'reading:current-lesson');
   let sentences = 0;
 
-  // 此刻：刚听完这节课（有名字才点名；占位名就说"这节课"）
+  const speakStops = () => {
+    moments.slice(0, MAX_STAMPS_IN_SENTENCE).forEach((item, index) => {
+      if (index > 0) text(copy.listSeparator);
+      link('stamp', stampOf(item), item.prompt);
+    });
+    text(moments.length > MAX_STAMPS_IN_SENTENCE ? copy.stoppedAtMore(moments.length - MAX_STAMPS_IN_SENTENCE) : copy.stoppedAt[1]);
+  };
+
+  // 此刻：打开着一节课。今天听的说"刚听完"；翻回以前的课不能这么说——"《X》那节，你在 00:30 停过。"
   if (currentLesson) {
     const named = currentLesson.label !== GLOBAL_ASK_COPY.desk.currentLesson;
-    if (named) {
+    const days = daysAgo(currentLesson.at, now);
+    const fresh = days === undefined || days === 0;
+    if (!named) {
+      link('lesson', copy.justHeardThisLesson, currentLesson.prompt);
+      text(copy.period);
+      sentences += 1;
+      if (moments.length > 0) { text(copy.stoppedAt[0]); speakStops(); sentences += 1; }
+    } else if (fresh) {
       text(copy.justHeard[0]);
       link('lesson', lessonName(currentLesson.label), currentLesson.prompt);
       text(copy.justHeard[1]);
-    } else {
-      link('lesson', copy.justHeardThisLesson, currentLesson.prompt);
-      text(copy.period);
-    }
-    sentences += 1;
-    // 你在哪几处停过
-    if (moments.length > 0) {
+      sentences += 1;
+      if (moments.length > 0) { text(copy.stoppedAt[0]); speakStops(); sentences += 1; }
+    } else if (moments.length > 0) {
+      text(copy.thatLesson[0]);
+      link('lesson', lessonName(currentLesson.label), currentLesson.prompt);
+      text(copy.thatLesson[1]);
       text(copy.stoppedAt[0]);
-      moments.slice(0, MAX_STAMPS_IN_SENTENCE).forEach((item, index) => {
-        if (index > 0) text(copy.listSeparator);
-        link('stamp', stampOf(item), item.prompt);
-      });
-      text(moments.length > MAX_STAMPS_IN_SENTENCE ? copy.stoppedAtMore(moments.length - MAX_STAMPS_IN_SENTENCE) : copy.stoppedAt[1]);
+      speakStops();
+      sentences += 2;
+    } else {
+      text(copy.lookingAt[0]);
+      link('lesson', lessonName(currentLesson.label), currentLesson.prompt);
+      text(copy.lookingAt[1]);
       sentences += 1;
     }
   }
@@ -128,11 +169,12 @@ export function composeAskOpening(input: AskOpeningInput): AskOpening {
     sentences += 1;
   }
 
-  // 没有当前课：上次那节 / 之前卡住的
+  // 没有当前课：上次那节（知道哪天就说哪天）/ 之前卡住的
   if (sentences === 0 && recent.length > 0) {
-    text(copy.lastTime[0]);
+    const when = heardWhen(recent[0].at, now);
+    text(when[0]);
     link('lesson', lessonName(recent[0].label), recent[0].prompt);
-    text(copy.lastTime[1]);
+    text(when[1]);
     sentences += 1;
   }
   if (sentences < 2 && challenge) {

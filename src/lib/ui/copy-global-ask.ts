@@ -63,8 +63,17 @@ export const GLOBAL_ASK_COPY = {
       speaker: '同学',
       justHeard: ['刚听完《', '》。'] as const,
       justHeardThisLesson: '刚听完这节课',
+      /** 打开的是以前的课（不是今天听的）：不说"刚听完" */
+      thatLesson: ['《', '》那节，'] as const,
+      lookingAt: ['在看《', '》。'] as const,
       period: '。',
       stoppedAt: ['你在 ', ' 停过。'] as const,
+      /** 最近学过：按离现在多久说 */
+      heardToday: ['今天听了《', '》。'] as const,
+      heardYesterday: ['昨天听的《', '》。'] as const,
+      heardDayBefore: ['前天听的《', '》。'] as const,
+      heardDaysAgo: (days: number): readonly [string, string] => [`${days} 天前听的《`, '》。'],
+      heardOnDate: (month: number, day: number): readonly [string, string] => [`${month} 月 ${day} 日听的《`, '》。'],
       stoppedAtMore: (more: number): string => ` 等 ${more + 2} 处停过。`,
       listSeparator: '、',
       unstable: ['「', '」还没稳。'] as const,

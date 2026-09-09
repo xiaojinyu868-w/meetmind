@@ -70,4 +70,35 @@ describe('composeAskOpening', () => {
     expect(render(opening.parts)).toContain('刚听完《AI 场景上下文应用》');
     expect(opening.starters.map((s) => s.text)).toEqual(['我想系统学懂线性规划，并检验自己是否真的会了']);
   });
+
+  it('知道哪天就说哪天：今天听了 / 昨天听的 / 前天 / N 天前 / 月日；不知道才说"上次是"', () => {
+    const now = new Date('2026-09-09T14:00:00+08:00');
+    const say = (at?: string) => render(composeAskOpening({
+      desk: [{ id: 'recent', title: '最近', items: [{ id: 'r', label: '对偶问题 · 运筹学 · 9-1', prompt: 'p', at }] }],
+      fallbackStarters: [], depth: 'quick', canStartDemo: false, now,
+    }).parts);
+    expect(say('2026-09-09T09:00:00+08:00')).toBe('今天听了《对偶问题》。');
+    expect(say('2026-09-08T23:00:00+08:00')).toBe('昨天听的《对偶问题》。');
+    expect(say('2026-09-07T01:00:00+08:00')).toBe('前天听的《对偶问题》。');
+    expect(say('2026-09-05T01:00:00+08:00')).toBe('4 天前听的《对偶问题》。');
+    expect(say('2026-08-20T01:00:00+08:00')).toBe('8 月 20 日听的《对偶问题》。');
+    expect(say(undefined)).toBe('上次是《对偶问题》。');
+  });
+
+  it('翻回以前的课不说"刚听完"：《X》那节，你在 00:30 停过；没停过就只说在看', () => {
+    const now = new Date('2026-09-09T14:00:00+08:00');
+    const lesson = { id: 'reading:current-lesson', label: '对偶问题 · 运筹学 · 9-1', meta: '这节课', prompt: 'p', at: '2026-09-01T09:00:00+08:00' };
+    const withStops = composeAskOpening({
+      desk: [
+        { id: 'reading', title: '正在读', items: [lesson] },
+        { id: 'moments', title: '你标的', items: [{ id: 'm', label: '00:30 · 原话', meta: '没跟上', prompt: 'q', tone: 'vermilion' }] },
+      ],
+      fallbackStarters: [], depth: 'quick', canStartDemo: false, now,
+    });
+    expect(render(withStops.parts)).toBe('《对偶问题》那节，你在 00:30 停过。');
+    const quiet = composeAskOpening({ desk: [{ id: 'reading', title: '正在读', items: [lesson] }], fallbackStarters: [], depth: 'quick', canStartDemo: false, now });
+    expect(render(quiet.parts)).toBe('在看《对偶问题》。');
+    const today = composeAskOpening({ desk: [{ id: 'reading', title: '正在读', items: [{ ...lesson, at: '2026-09-09T09:00:00+08:00' }] }], fallbackStarters: [], depth: 'quick', canStartDemo: false, now });
+    expect(render(today.parts)).toBe('刚听完《对偶问题》。');
+  });
 });

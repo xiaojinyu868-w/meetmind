@@ -8,6 +8,7 @@
 
 import type { LearningActivityEntry, LearningMemoryEntry } from '@/types/user';
 import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
+import { isMaterialTitle } from './global-ask-desk';
 
 export interface GlobalAskStarterInput {
   depth: 'quick' | 'deep';
@@ -36,7 +37,8 @@ export function buildGlobalAskStarters(input: GlobalAskStarterInput): string[] {
     if (out.length < MAX_STARTERS && !out.includes(text)) out.push(text);
   };
 
-  const material = input.currentMaterialTitles.find((title) => title.trim());
+  // 当前课堂转录的占位名放行；其余必须是能念的标题（口袋收的一句话不是材料名）
+  const material = input.currentMaterialTitles.find((title) => isGenericTitle(title) || isMaterialTitle(title));
   const recentLesson = [...input.recentActivities].reverse().find((item) => item.kind === 'lesson' && item.title.trim());
   const openChallenge = input.memories.find((memory) => memory.status === 'active' && memory.kind === 'challenge' && memory.title.trim());
 
