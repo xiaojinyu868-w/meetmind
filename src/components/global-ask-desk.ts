@@ -14,6 +14,7 @@ import { conceptLabel, type MasteryTrailEntry } from '@/components/mastery-trail
 import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import { formatTimestamp } from '@/lib/utils/time-utils';
 import { clipDisplay, describeMoment, type MomentSegment } from '@/lib/learning/moment-title';
+import { isPlaceholderLessonTitle } from '@/lib/learning/lesson-title-generic';
 
 export type DeskGroupId = 'reading' | 'moments' | 'unstable' | 'recent' | 'memory';
 
@@ -81,7 +82,7 @@ function shortTitle(title: string, maxUnits = TITLE_MAX): string {
 }
 
 function isGenericLessonTitle(title: string | undefined): boolean {
-  return !title || title === GLOBAL_ASK_COPY.sourceCurrentLesson;
+  return isPlaceholderLessonTitle(title) || title === GLOBAL_ASK_COPY.sourceCurrentLesson;
 }
 
 export function buildAskDesk(input: AskDeskInput): DeskGroup[] {

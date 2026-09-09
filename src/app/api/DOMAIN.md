@@ -74,7 +74,9 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/translate/zh-en` | POST | 课堂中文片段翻译为英文 |
 | `/api/generate-summary` | POST | 课堂摘要生成 |
 | `/api/titles/lock` | POST | 用户手动改名加锁：写标题 + metadata.titleSource='user'，自动标题系统不再覆盖 |
-| `/api/titles/backfill` | POST | 存量零信息标题（录音 HH:MM / 屏幕截图）静默回填，单次最多 10 条 |
+| `/api/titles/backfill` | POST | 存量零信息标题静默回填，单次最多 10 条；零信息判定用 `lib/learning/lesson-title-generic`（含「课堂录音 / 图片材料 / 微信随手记」这类产品默认值，2026-09 前漏掉导致 152 条永远不回填）；全量历史用 `make titles-backfill` |
+| `/api/class-check/plan` | POST | 随堂检验骨架：checkpoints（不含题）+ highlights，转录 < 3 段返 400 |
+| `/api/class-check/question` | POST | 按单个 checkpoint 出 1-3 道选择题。题目只来自模型（窗口内无片段用时间上最近的几段照样问；一次重试），答案解析不到选项的题丢弃；仍无可用题返回 `{ ok: true, questions: [] }`，客户端安静跳过该 checkpoint——2026-09 起没有模板题 |
 | `/api/generate-topics` | POST | 精选片段生成（Smart/Fast） |
 | `/api/feedback` | POST | 用户反馈 |
 | `/api/feed` | POST | 今日情报：允许游客携本地 captures 匿名调用并按 IP 限流；跨课程请求可携 `learningContext.activeThread/memories/recentActivities`，无新收藏但有真实当前目标时也可生成；有 `DASHSCOPE_API_KEY` 时外部卡默认由百炼原生 turbo 搜索返回真实 URL 与简介，不依赖服务器访问 DuckDuckGo / Open Library；响应含 `contentUrl/contentKind/authors/publishedAt/perspective`，link-only 与解析失败内容不能作为原文观点证据 |

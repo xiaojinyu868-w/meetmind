@@ -237,6 +237,10 @@ db-push: ## 同步 Prisma schema 到数据库
 db-studio: ## 打开 Prisma Studio
 	npx prisma studio
 
+.PHONY: titles-backfill
+titles-backfill: ## 存量零信息标题（课堂录音 / 录音 HH:MM / 图片材料…）重新起名；默认干跑，APPLY=1 真写，LIMIT 每用户每轮条数
+	@npx tsx scripts/backfill-lesson-titles.ts
+
 # === 诊断 ===
 
 .PHONY: stats

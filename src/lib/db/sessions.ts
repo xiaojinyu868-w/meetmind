@@ -4,31 +4,24 @@
  */
 
 import { db, type AudioSession } from './schema';
+import { isPlaceholderLessonTitle } from '@/lib/learning/lesson-title-generic';
 
 /** 默认用户ID（未登录时使用） */
 export const ANONYMOUS_USER_ID = 'anonymous';
 
 /**
- * 已知的默认占位 topic。
+ * 默认占位 topic 判定。
  *
  * 背景：早期代码里所有录音路径都会传 `topic: '课堂录音'`（UIConfig.defaultLessonTitle），
  * 而视频导入路径则会写入真实视频标题（如"一口气搞懂强化学习"）。当用户
  * 在视频上继续录音，upsert 就会把真实标题覆盖成占位，导致卡片看起来都
- * 一样。这里用一个小黑名单防守：遇到已知占位值就不盖已有具体内容。
+ * 一样。遇到已知占位值就不盖已有具体内容。
  *
- * 这个列表保持小而精——只列真正的"默认占位"，不列用户可能合法输入的词。
+ * 名单收口在 lib/learning/lesson-title-generic（产品自己写下的默认值 + 纯时间 / ID / URL），
+ * 与服务端"要不要自动重命名"的判定是同一份，避免两边口径不一致。
  */
-const PLACEHOLDER_TOPICS = new Set<string>([
-  '课堂录音',
-  '课堂回顾',
-  '视频复习',
-]);
-
 function isPlaceholderTopic(topic: string | undefined | null): boolean {
-  if (!topic) return true;
-  const trimmed = topic.trim();
-  if (trimmed === '') return true;
-  return PLACEHOLDER_TOPICS.has(trimmed);
+  return isPlaceholderLessonTitle(topic);
 }
 
 function isValidSessionIdKey(sessionId: unknown): sessionId is string {

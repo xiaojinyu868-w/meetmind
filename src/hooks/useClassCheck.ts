@@ -25,7 +25,6 @@ import { getPreference } from '@/lib/db/preferences';
 import { useAuth } from '@/lib/hooks/useAuth';
 import {
   buildClassCheckPlanRequestKey,
-  buildClientFallbackCheckpointQuestions,
   shouldAutoFetchCheckpointQuestions,
 } from './useClassCheckUtils';
 import type { TranscriptSegment } from '@/types';
@@ -169,12 +168,9 @@ async function fetchCheckpointQuestions(
     }),
   });
   if (!response.ok) {
-    // Demo 渐进转录和真实流式 ASR 都可能在 plan 已生成、对应时间窗尚未到达时
-    // 预热后续 checkpoint。此时服务端会以 400 表示窗口暂无文本；不要把单题
-    // 永久标成 failed，先给可用的本地兜底题，后续课堂仍能顺畅推进。
-    if (response.status === 400 || response.status === 429) {
-      return buildClientFallbackCheckpointQuestions({ checkpoint, transcript });
-    }
+    // 限流 / 窗口暂无文本 / 网关超时都走同一条路：这个 checkpoint 标 failed，
+    // 播放到点时安静跳过；用户从时间轴手动点击会再试一次。没有本地模板题——
+    // 一道正确答案永远是 A 的方法论题，比没有题更伤学生对同桌的信任。
     throw new Error(`question API ${response.status} ${response.statusText}`);
   }
   const contentType = response.headers.get('content-type') || '';
@@ -186,8 +182,12 @@ async function fetchCheckpointQuestions(
     questions?: ClassCheckQuestionData[];
     error?: string;
   };
-  if (!data.ok || !Array.isArray(data.questions) || data.questions.length === 0) {
-    throw new Error(data.error || 'question API returned empty');
+  if (!data.ok || !Array.isArray(data.questions)) {
+    throw new Error(data.error || 'question API returned malformed payload');
+  }
+  // 服务端诚实地没出题（模型两次都没给出可用的题）：同样按 failed 处理，安静跳过
+  if (data.questions.length === 0) {
+    throw new Error('NO_USABLE_QUESTIONS');
   }
   return data.questions;
 }
@@ -316,7 +316,10 @@ export function useClassCheck({
         log.debug(`[class-check] checkpoint ${checkpointIndex} "${checkpoint.topic}" questions ready (${questions.length})`);
       } catch (err) {
         if ((err as { name?: string }).name === 'AbortError') return;
-        console.warn('[class-check] checkpoint %d question fetch failed:', checkpointIndex, err);
+        log.warn('checkpoint question fetch failed, checkpoint will be skipped', {
+          checkpointIndex,
+          message: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200),
+        });
         setCheckpointQuestionStates((prev) => {
           const next = [...prev];
           next[checkpointIndex] = 'failed';

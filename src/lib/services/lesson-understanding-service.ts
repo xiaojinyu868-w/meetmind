@@ -20,6 +20,7 @@ import {
   retitleCaptureIfUnlocked,
 } from '@/lib/services/lesson-title-service';
 import { recordLearningObservation } from '@/lib/services/learning-observation-service';
+import { isPlaceholderLessonTitle } from '@/lib/learning/lesson-title-generic';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('lesson-understanding');
@@ -181,6 +182,16 @@ export async function applyLessonUnderstanding(params: {
     result.highlightCount += 1;
   }
 
+  // 进记忆的标题必须是理解出来的东西：主题 → 课程名 → 摘要首句。
+  // 三者都没有就不写这条事件——「课堂学习」这种默认词进了记忆，之后每一次召回
+  // 都会把它当成"用户学过一门叫课堂学习的课"复述出来。
+  const courseTitle = params.courseTitle?.trim();
+  const memoryTitle = understanding.topic
+    ?? (courseTitle && !isPlaceholderLessonTitle(courseTitle) ? courseTitle : null)
+    ?? understanding.overview?.split(/[。；;!！?？]/)[0]?.trim()
+    ?? null;
+  if (!memoryTitle) return result;
+
   // Wait only for the durable observation, never for model-based memory processing.
   await recordLearningObservation(userId, {
     appId: 'classroom',
@@ -188,7 +199,7 @@ export async function applyLessonUnderstanding(params: {
     payload: {
       v: 1,
       kind: 'lesson',
-      title: understanding.topic ?? params.courseTitle ?? '课堂学习',
+      title: memoryTitle.slice(0, 60),
       detail: understanding.overview ?? undefined,
       sessionId,
       appKey: 'classroom',

@@ -1,4 +1,5 @@
 import type { AudioSession } from '@/lib/db';
+import { isPlaceholderLessonTitle } from '@/lib/learning/lesson-title-generic';
 import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import type { CourseAssessmentEntry, CourseContextPreference } from '@/types/user';
 
@@ -31,33 +32,10 @@ export interface CourseContextGroup {
   detachedFromCourseKey?: string;
 }
 
-const GENERIC_LABELS = new Set([
-  '',
-  '课堂',
-  '课堂录音',
-  '课堂回顾',
-  '未知学科',
-  '未知课程',
-  '未命名课堂',
-  '视频复习',
-]);
-
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
 function compact(value: string | undefined): string {
   return (value || '').replace(/\s+/g, ' ').trim();
-}
-
-function looksLikeUrl(value: string): boolean {
-  return /^(?:https?:\/\/|www\.)/i.test(value)
-    || /(?:bilibili\.com|b23\.tv|youtube\.com|youtu\.be|mp\.weixin\.qq\.com)/i.test(value);
-}
-
-function looksLikeTemporalLabel(value: string): boolean {
-  const normalized = value.replace(/\s+/g, ' ').trim();
-  return /^(?:20\d{2}[./-])?\d{1,2}[./-]\d{1,2}(?:\s+\d{1,2}:\d{2})?$/u.test(normalized)
-    || /^\d{1,2}:\d{2}(?::\d{2})?$/u.test(normalized)
-    || /^周[一二三四五六日天](?:的课)?$/u.test(normalized);
 }
 
 function normalizedKey(value: string): string {
@@ -66,11 +44,8 @@ function normalizedKey(value: string): string {
 
 function isMeaningfulLabel(value: string | undefined): value is string {
   const label = compact(value);
-  return label.length > 0
-    && label.length <= 120
-    && !GENERIC_LABELS.has(label)
-    && !looksLikeUrl(label)
-    && !looksLikeTemporalLabel(label);
+  // 零信息判定（默认占位 / 纯时间 / ID / URL）收口在 lib/learning/lesson-title-generic
+  return label.length > 0 && label.length <= 120 && !isPlaceholderLessonTitle(label);
 }
 
 /**
@@ -145,7 +120,7 @@ function seedForSession(session: AudioSession, genericScheduleCounts: Map<string
 
   if (isMeaningfulLabel(session.topic)) {
     const inferred = courseTitleFromTopic(session.topic);
-    if (inferred && !GENERIC_LABELS.has(inferred)) {
+    if (inferred && !isPlaceholderLessonTitle(inferred)) {
       return {
         key: `topic:${normalizedKey(inferred)}`,
         title: inferred,

@@ -1,5 +1,6 @@
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
+import { isPlaceholderLessonTitle } from '@/lib/learning/lesson-title-generic';
 import type { SharedAgentSnapshot } from '@/lib/services/share-agent-service';
 import type { TranscriptSegment } from '@/types';
 
@@ -14,8 +15,6 @@ const SHAREABLE_ARTIFACT_KEYS = new Set<WorkshopAppKey>([
   'quiz',
   'infographic',
 ]);
-
-const PLACEHOLDER_COURSE_TITLES = new Set(['课堂录音', '未命名课堂', '新课堂']);
 
 export function isShareableArtifactAppKey(value: WorkshopAppKey): value is ShareableArtifactAppKey {
   return SHAREABLE_ARTIFACT_KEYS.has(value);
@@ -65,7 +64,7 @@ function sanitizeNickname(raw: string | null | undefined): string | undefined {
 
 function resolveTitle(courseTitle: string | undefined, artifactSummary: string): string {
   const normalized = courseTitle?.trim();
-  if (normalized && !PLACEHOLDER_COURSE_TITLES.has(normalized)) return normalized;
+  if (normalized && !isPlaceholderLessonTitle(normalized)) return normalized;
   return artifactSummary || '一节课';
 }
 

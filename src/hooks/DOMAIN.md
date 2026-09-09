@@ -47,7 +47,7 @@ useAppLearningActivity 的桌面/移动应用活动由登录用户提交 /api/me
 | `useOmniRealtimeCall.ts` | ~400 | **@deprecated 2026-08**：Qwen Omni realtime 语音通话（/api/tutor-call 已拆除），保留一个周期后物理删除 |
 | `useRealtimeTutorConversationBridge.ts` | ~120 | 语音同桌转写持久化到 `global-chat`（随语音通话下线，仅 deprecated 组件引用） |
 | `useWorkshopWindows.ts` | 122 | Workshop 浮窗状态管理 |
-| `useClassCheck.ts` | ~455 | 随堂检验控制器（Plan 生成 + 播放追踪 + 自动/手动触发 + checkpoint 状态机）；流式转录尚未覆盖预热窗口或限流时降级为证据就近的兜底题，外部通过 videoPlayerRef 真正暂停/恢复媒体 |
+| `useClassCheck.ts` | ~455 | 随堂检验控制器（Plan 生成 + 播放追踪 + 自动/手动触发 + checkpoint 状态机）；题目只来自模型——请求失败 / 限流 / 服务端诚实返回空数组时该 checkpoint 标 `failed`，播放到点安静跳过，时间轴手动点击会再试一次（2026-09 起没有本地模板题：正确答案永远是 A 的方法论题比没有题更伤信任）；外部通过 videoPlayerRef 真正暂停/恢复媒体 |
 | `useReviewSession.ts` | 506 | 复习会话恢复（IndexedDB / 服务端转录 → 播放态），从 page.tsx 提取 |
 | `useEchoActions.tsx` | 412 | 回声操作（refreshDailyEcho + 筛选 memo + 手动触发 UI），从 page.tsx 提取 |
 | `useWorkspaceCaptureActions.ts` | ~430 | 工作空间 capture CRUD 操作（新建/编辑/保存/归档/删除等 10 个函数），从 page.tsx 提取 |

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildClassCheckPlanRequestKey,
-  buildClientFallbackCheckpointQuestions,
   shouldAutoFetchCheckpointQuestions,
 } from './useClassCheckUtils';
 import type { TranscriptSegment } from '@/types';
@@ -72,22 +71,11 @@ describe('shouldAutoFetchCheckpointQuestions', () => {
     })).toBe(false);
   });
 
-  it('builds local fallback questions when the question endpoint is rate limited', () => {
-    const questions = buildClientFallbackCheckpointQuestions({
-      checkpoint: {
-        topic: 'why 和认知地图',
-        difficulty: 3,
-        startMs: 0,
-        endMs: 12_000,
-        triggerMs: 12_000,
-        greeting: '',
-        encouragement: '',
-        questions: [],
-      },
-      transcript: makeSegments(3),
-    });
-
-    expect(questions.length).toBeGreaterThan(0);
-    expect(questions[0].stem).toContain('why 和认知地图');
+  it('auto fetches a pending checkpoint that has not failed yet', () => {
+    expect(shouldAutoFetchCheckpointQuestions({
+      hasQuestions: false,
+      questionState: 'loading',
+      checkpointStatus: 'pending',
+    })).toBe(true);
   });
 });

@@ -19,6 +19,7 @@
 
 import type { AudioSession } from '@/lib/db/schema';
 import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
+import { isPlaceholderLessonTitle } from '@/lib/learning/lesson-title-generic';
 import { resolvePendingAudioFailureStatus } from '@/lib/utils/page-utils';
 import type { Lesson, LessonStatus } from './types';
 
@@ -39,22 +40,14 @@ export interface LessonExtras {
   };
 }
 
-const GENERIC_TITLES = new Set(['', '课堂', '课堂录音', '课堂回顾', '未命名课堂', '新课堂', '一节课', '未知学科', '未知课程']);
-
 function compactTitle(value: string | undefined): string {
   return (value || '').replace(/\s+/g, ' ').trim();
 }
 
+/** 零信息判定收口在 lib/learning/lesson-title-generic；这里只多一条长度上限 */
 function isMeaningfulTitle(value: string | undefined): value is string {
   const title = compactTitle(value);
-  return title.length > 0
-    && title.length <= 100
-    && !GENERIC_TITLES.has(title)
-    && !/^(?:https?:\/\/|www\.)/iu.test(title)
-    && !/(?:bilibili\.com|b23\.tv|youtube\.com|youtu\.be|mp\.weixin\.qq\.com)/iu.test(title)
-    && !/^\d{1,2}:\d{2}(?::\d{2})?(?:\s*的课)?$/u.test(title)
-    && !/^(?:20\d{2}[./-])?\d{1,2}[./-]\d{1,2}(?:\s+\d{1,2}:\d{2})?(?:\s*的课)?$/u.test(title)
-    && !/^\d{1,2}\s*月\s*\d{1,2}\s*日(?:\s+\d{1,2}:\d{2})?(?:\s*的课)?$/u.test(title);
+  return title.length > 0 && title.length <= 100 && !isPlaceholderLessonTitle(title);
 }
 
 function trimEvidenceSentence(value: string): string {
