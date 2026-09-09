@@ -74,18 +74,30 @@ export const COPY = {
 
   collection: {
     askClassmate: '问同学',
-    /** 空态（2026-09-09 重做）：同学开口一句 + 输入框是主角 + 四种方式退成一行字；此前是大头像 + 标题 + 四张图标卡 */
-    emptySpeaker: '同学',
-    emptyOpening: '想到什么，就留在这里。不用分类，我会把它接回相关的课、目标和问题。',
-    /** 四种方式，作为输入框脚下一行可点的字（不是卡片）；key 供组件映射动作 */
+    /**
+     * 空态（2026-09-09 二次重做，对标 HyperKnow 首页）：Octo + 一句情境标题 + 一句副题，输入框是整屏主角（hero 变体），
+     * 输入框下面一行带图标的能力 pill（丢什么进来），再下面一小段「丢进来会变成什么」。
+     */
+    emptyTitle: '想到什么，就留在这里。',
+    emptyBody: '链接、课件、一句话、一段语音——不用分类，同学会把它接回你的课、目标和问题。',
+    /** 能力 pill：丢什么进来；key 供组件映射图标与动作 */
     emptyEntries: [
-      { key: 'upload', label: '上传文件' },
-      { key: 'link', label: '贴个链接' },
-      { key: 'write', label: '写一句' },
-      { key: 'voice', label: '录一段' },
+      { key: 'upload', label: '课件 / 录音 / 图片' },
+      { key: 'link', label: 'B 站 / 公众号 / 网页' },
+      { key: 'write', label: '一个想法' },
+      { key: 'voice', label: '语音随手记' },
+      { key: 'wechat', label: '微信里发给我' },
     ] as const,
-    emptyWechatHint: '也可以从微信直接发给我',
-    emptyPocketHint: '桌面口袋：任何应用里选中，⌘⇧M 收下',
+    /** 微信服务号名 */
+    wechatAccountName: 'MeetmindAI原生专属导师',
+    emptyWechatTitle: '微信服务号「MeetmindAI原生专属导师」',
+    emptyBecomesEyebrow: '丢进来会变成什么',
+    emptyBecomes: [
+      { input: '一条 B 站视频或公众号文章', output: '讲了什么、哪一段值得回看' },
+      { input: '一份课件或一段录音', output: '和你的课对上，课后直接出题、做速查表' },
+      { input: '一句想法或一张截图', output: '接回相关的课；问同学时它会记得' },
+    ] as const,
+    emptyPocketHint: '桌面端：任何应用里选中，⌘⇧M 收下',
     deleteMemoryWarning: '删除后，这条内容不会再进入同学的回答、后续情报和个人上下文。',
     permanentDeleteWarning: '彻底删除后，这条内容不会再进入同学的回答、后续情报和个人上下文。',
     today: '今天',

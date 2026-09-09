@@ -114,12 +114,12 @@ components/
 | `ReviewTutorPanel.tsx` | ~268 | desktop review 右侧 Tutor 面板（历史对话、SafeAITutor / TutorAgentPanel 统一容器；音频波形已上移到左证据栏）；顶部只用“整节课 / 困惑点”表达当前对话范围，不再用重复说明文字挤压默认窄栏 |
 | `CollectionSelectionBar.tsx` | 94 | 收集上下文多选操作条（问 Tutor / 引用 / 批量归档删除） |
 | `CollectionComposerContextPreview.tsx` | 62 | composer 上方的引用与链接预览条 |
-| `CollectionComposerBar.tsx` | 168 | collection composer 输入区容器（预览 / textarea / 发送 / 听写 / 上传） |
+| `CollectionComposerBar.tsx` | 168 | collection composer 输入区容器（预览 / textarea / 发送 / 听写 / 上传）。`hero` 变体（2026-09-09）：空态主角——24px 圆角、两行起、16px、带标签的工具行（+ 上传文件 / 说一段）、阴影与聚焦环，宿主控制外边距 |
 | `CollectionMessageActionSheet.tsx` | ~283 | 收集消息操作菜单（引用/问 Tutor/多选/复习/编辑/打开原件/归档/删除），从 page.tsx 提取 |
 | `mobile/MobileCollectionSheet.tsx` | ~400 | 收集菜单 / 历史收集 / 今日情报面板；移动端底部或侧边 sheet，桌面端以具备 dialog 语义的右侧上下文抽屉呈现；情报空态可返回收集补充上下文 |
 | `CrossCourseFeedPanel.tsx` | ~180 | 个人上下文与目标驱动的情报面板：合并“看见自己”与真实外部信息，对用户零配置；保留上次结果并在后台刷新，失败不清空旧内容 |
 | `FeedStream.tsx` / `feed-stream-model.ts` | ~420 | 今日情报列表渲染器与纯排序模型：外部发现和个人线索从首屏起交替出现，不再用两组标题把信息流切成两个报告；外部卡展示作者、出版时间、来源、个人推荐理由与不同视角；支持反馈及外链打开 |
-| `CollectionEmptyState.tsx` | ~85 | 收集为空时的第一屏（2026-09-09 重做）：与问同学同一套语言——同学开口一句 + **真实的 `CollectionComposerBar` 坐在句子正下方**（宿主 page.tsx 在空态时把输入栏元素传进来，不再钉在页面底部；有内容后才回到底部）+ 四种方式（上传文件 / 贴个链接 / 写一句 / 录一段）退成输入框脚下一行可点的字 + 微信 / 桌面口袋两行小字。此前是大头像 + 标题 + 四张图标卡 + 底部孤零零的输入栏，两套入口打架，中间一大片空白 |
+| `CollectionEmptyState.tsx` | ~120 | 收集为空时的第一屏（2026-09-09 二次重做，对标 HyperKnow 首页）：一屏一件主角——**真实的 `CollectionComposerBar` 以 `hero` 变体坐在页面视觉中心**（宿主 page.tsx 空态时把输入栏传进来，不再钉在底部；有内容后回到底部普通条）；上方 Octo + 情境标题「想到什么，就留在这里。」+ 一句副题；下方一行带图标的能力 pill（课件 / 录音 / 图片 · B 站 / 公众号 / 网页 · 一个想法 · 语音随手记 · 微信里发给我）；再下一小段「丢进来会变成什么」三行清单；整块铺在极淡的点阵纸纹上（inline style，中央一圈可见）。微信服务号名 `COPY.collection.wechatAccountName`（MeetmindAI原生专属导师）。前两版：大头像 + 四张图标卡 + 底部孤零零的输入栏（两套入口打架）→ 一切退成小字（干净但寒，用户原话"越改越丑"） |
 | `ImageUpload.tsx` | ~220 | 图片上传 |
 | `Citations.tsx` | ~140 | 引用标签 |
 | `CitationReferenceSheet.tsx` | ~260 | 引用参考弹窗 |

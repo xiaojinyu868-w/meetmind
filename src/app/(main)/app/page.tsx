@@ -1600,8 +1600,9 @@ function StudentAppContent({
         : '';
 
     // 收集输入栏：有内容时钉在底部；空态时坐在同学那句话正下方（CollectionEmptyState 渲染），不再两处打架
-    const collectionComposerBar = (
+    const renderCollectionComposerBar = (hero: boolean) => (
       <CollectionComposerBar
+        hero={hero}
         quotedCount={quotedCollectionContextItems.length}
         quotedPrimaryTypeLabel={quotedCollectionPrimaryItem ? getCollectionContextTypeLabel(quotedCollectionPrimaryItem.type) : '内容'}
         quotedSummaryText={quotedCollectionSummaryText}
@@ -1701,7 +1702,7 @@ function StudentAppContent({
 
           {collectionFeedItems.length === 0 ? (
             <CollectionEmptyState
-              composer={showMobileRecorder ? undefined : collectionComposerBar}
+              composer={showMobileRecorder ? undefined : renderCollectionComposerBar(true)}
               onUpload={() => handleSourceFileButtonClick('all')}
               onLink={() => focusCollectionComposer()}
               onWrite={() => focusCollectionComposer()}
@@ -1900,7 +1901,7 @@ function StudentAppContent({
             />
           </div>
         </div>
-      ) : collectionFeedItems.length === 0 ? null : collectionComposerBar}
+      ) : collectionFeedItems.length === 0 ? null : renderCollectionComposerBar(false)}
 
     </div>
   );
