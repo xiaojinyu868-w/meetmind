@@ -298,14 +298,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 引导问题始终生成
+    // 引导问题：模型给得出就给；给不出就不弹澄清，正常回答（没有规则题库兜底）
     if (!guidanceQuestion && !globalMode) {
-      guidanceQuestion = await generateGuidanceQuestion({
+      guidanceQuestion = (await generateGuidanceQuestion({
         context: contextText,
         modelId: model,
         studentQuestion,
         selectedOptionId: selected_option_id,
-      });
+      })) ?? undefined;
     }
 
     // 联网搜索

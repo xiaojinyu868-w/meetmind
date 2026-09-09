@@ -20,17 +20,9 @@ function compact(value: unknown, max: number): string {
   return `${normalized.slice(0, Math.max(1, max - 1))}…`;
 }
 
-function fallbackPlan(query: string): LearningIntentPlan {
-  const topic = compact(query, 54) || '这件事';
-  return {
-    title: topic,
-    outcome: `把「${topic}」真正弄懂，并能用自己的话说清楚。`,
-    approach: 'understand',
-    contextFocus: 'mixed',
-    checkpoints: ['先确认已经知道什么', '找到真正卡住的地方', '用一次复述或练习验证'],
-    confidence: 'medium',
-  };
-}
+// 没有模板计划。之前模型失败会返回「把「X」真正弄懂，并能用自己的话说清楚」+ 三条通用
+// checkpoint 当成"确认好的目标"——它会被写进用户的学习线程（LearningThreadEntry）成为
+// 长期状态。目标是用户和模型一起定的；模型这次没理解好，就告诉用户再试一次。
 
 function sanitizeQuestions(value: unknown): LearningIntentQuestion[] {
   if (!Array.isArray(value)) return [];
@@ -72,20 +64,25 @@ function sanitizeQuestions(value: unknown): LearningIntentQuestion[] {
   });
 }
 
+/**
+ * 模型输出 → 计划。字段缺失宁缺毋滥：标题缺就用用户自己那句话（那是用户的原话，不是编的），
+ * outcome / checkpoints 缺就留空——不整包替换成模板。整个对象都不成立返回 null。
+ */
 export function sanitizeLearningIntentPlan(
   raw: unknown,
   query: string,
   allowQuestions = true,
-): LearningIntentPlan {
-  const fallback = fallbackPlan(query);
-  if (!raw || typeof raw !== 'object') return fallback;
+): LearningIntentPlan | null {
+  if (!raw || typeof raw !== 'object') return null;
   const value = raw as Record<string, unknown>;
+  const title = compact(value.title, 64) || compact(query, 54);
+  if (!title) return null;
   const approach = APPROACHES.has(value.approach as LearningIntentApproach)
     ? value.approach as LearningIntentApproach
-    : fallback.approach;
+    : 'understand';
   const contextFocus = CONTEXT_FOCUSES.has(value.contextFocus as LearningContextFocus)
     ? value.contextFocus as LearningContextFocus
-    : fallback.contextFocus;
+    : 'mixed';
   const checkpoints = Array.isArray(value.checkpoints)
     ? value.checkpoints.map((item) => compact(item, 60)).filter(Boolean).slice(0, 3)
     : [];
@@ -94,11 +91,11 @@ export function sanitizeLearningIntentPlan(
     : 'medium';
   const questions = allowQuestions ? sanitizeQuestions(value.questions) : [];
   return {
-    title: compact(value.title, 64) || fallback.title,
-    outcome: compact(value.outcome, 160) || fallback.outcome,
+    title,
+    outcome: compact(value.outcome, 160),
     approach,
     contextFocus,
-    checkpoints: checkpoints.length > 0 ? checkpoints : fallback.checkpoints,
+    checkpoints,
     confidence,
     ...(questions.length > 0 ? { questions } : {}),
   };
@@ -106,11 +103,12 @@ export function sanitizeLearningIntentPlan(
 
 export { buildLearningIntentSystemPrompt } from '@/lib/prompts/learning-understanding-prompts';
 
+/** 模型一次重试后仍给不出可用计划 → 抛 INTENT_UNAVAILABLE，路由返回「再试一次」 */
 export async function confirmLearningIntent(
   input: ConfirmLearningIntentInput,
 ): Promise<LearningIntentPlan> {
   const query = compact(input.query, 2_000);
-  if (!query) return fallbackPlan(query);
+  if (!query) throw new Error('INTENT_QUERY_REQUIRED');
 
   const learnerContext = compact(input.learnerContext, 2_500);
   const recentContext = compact(input.recentContext, 2_500);
@@ -127,30 +125,37 @@ export async function confirmLearningIntent(
   }).slice(0, 3) ?? [];
   const isFinalizing = answered.length > 0;
 
-  try {
-    const controlled = await buildControlledLearningIntentPrompt(isFinalizing);
-    const response = await chat(
-      [
-        { role: 'system', content: controlled.systemPrompt },
-        {
-          role: 'user',
-          content: buildLearningIntentUserPrompt({
-            query,
-            ...(learnerContext ? { learnerContext } : {}),
-            ...(recentContext ? { recentContext } : {}),
-            ...(activeContext ? { activeContext } : {}),
-            answered,
-          }),
-        },
-      ],
-      controlled.modelId,
-      { temperature: 0.25, maxTokens: 800, responseFormat: 'json_object' },
-    );
-    return sanitizeLearningIntentPlan(JSON.parse(response.content), query, !isFinalizing);
-  } catch (error) {
-    log.warn('intent confirmation fallback', {
-      message: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
-    });
-    return fallbackPlan(query);
+  const controlled = await buildControlledLearningIntentPrompt(isFinalizing);
+  const messages = [
+    { role: 'system' as const, content: controlled.systemPrompt },
+    {
+      role: 'user' as const,
+      content: buildLearningIntentUserPrompt({
+        query,
+        ...(learnerContext ? { learnerContext } : {}),
+        ...(recentContext ? { recentContext } : {}),
+        ...(activeContext ? { activeContext } : {}),
+        answered,
+      }),
+    },
+  ];
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await chat(messages, controlled.modelId, {
+        temperature: 0.25,
+        maxTokens: 800,
+        responseFormat: 'json_object',
+      });
+      const plan = sanitizeLearningIntentPlan(JSON.parse(response.content), query, !isFinalizing);
+      if (plan) return plan;
+      log.warn('intent confirmation returned no usable plan', { attempt: attempt + 1 });
+    } catch (error) {
+      log.warn('intent confirmation attempt failed', {
+        attempt: attempt + 1,
+        message: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
+      });
+    }
   }
+  throw new Error('INTENT_UNAVAILABLE');
 }

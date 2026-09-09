@@ -12,8 +12,8 @@
 | `route.ts` | Legacy SSE 路径（M10 前的主路由）。flag off 时仍可用。新功能长在 `agent/route.ts` 上，这里只接受修复与迁移——理由是避免两条主链再次分叉，不是这个文件不能碰 |
 | `tutor-prompts.ts` | **Legacy** System Prompt 模板（M10 前的旧实现）。六 mode 的 prompt 唯一源是 `@/lib/prompts/tutor-prompts.ts` 的 `buildTutorSystemPrompt`；本文件只随 legacy 路由存亡，改 prompt 去那边 |
 | `tutor-types.ts` | 共享类型定义 |
-| `tutor-citations.ts` | 引用处理（从转录中定位引用，legacy 路径用） |
-| `tutor-guidance.ts` | 引导问题生成（legacy 路径用） |
+| `tutor-citations.ts` | 引用处理（从转录中定位引用，legacy 路径用）；引用只来自模型真正引用了的地方——2026-09 前会按关键词重叠补「导入资料 N」`about:blank` 假引用卡 |
+| `tutor-guidance.ts` | 引导（澄清）问题生成（legacy 路径用）：只有模型一层（一次重试），给不出就返回 null 不弹澄清——2026-09 前有 180 行关键词规则题库兜底（含硬编码示例课 Jane Bond）；上下文预算头 4000 + 尾 5000 字 |
 
 > 文件行数易变，查实时行数与超标清单请跑 `make stats`。
 
@@ -66,7 +66,7 @@
 ## 依赖
 
 - `@/lib/prompts/tutor-prompts` — `buildTutorSystemPrompt(mode, context, options)`，6 mode 唯一 prompt 源
-- `@/lib/services/learning-intent-service` — `/api/tutor/intent` 的模型计划生成与确定性兜底
+- `@/lib/services/learning-intent-service` — `/api/tutor/intent` 的模型计划生成；模型两次都给不出可用计划 → 500「暂时没有理解好，再试一次」（不再返回「把「X」真正弄懂」模板计划写进学习线程）
 - `@/lib/services/learning-memory-distillation-service` — `/api/tutor/memory` 的证据约束、去重更新与模型失败空结果
 - `@/lib/prompts/learning-understanding-prompts` — intent / memory 共用的 system prompt、user input 拼装与独立版本号
 - `@/lib/utils/tutor-agent-provider` — provider 解析 + fallback

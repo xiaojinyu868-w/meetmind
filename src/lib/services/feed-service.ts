@@ -534,24 +534,14 @@ export async function generateCrossCourseFeed(
   // 外部发现由 MeetMind 服务端完成：先检索真实网页/论文/书籍，再让模型只做候选排序。
   let externalItems: FeedItem[] = [];
   try {
-    const fallbackDiscovery: RawExternalDiscovery = {
-      query: internalItems.filter((item) => item.type !== 'summary').slice(0, 2).map((item) => item.title).join(' ')
-        || captures[0]?.title
-        || options.learningContext?.activeThread?.title
-        || options.learningContext?.memories?.at(-1)?.title
-        || options.learnerProfile?.goals?.[0]?.title
-        || '学习方法',
-      reason: captures.length > 0 ? '延伸你最近收集的主题' : '沿着你正在推进的学习目标补充真实资料',
-      perspective: 'deepen',
-      contentKinds: ['web', 'paper', 'book'],
-      sourceCaptureIds: captures.slice(0, 2).map((capture) => capture.id),
-      goalLabel: options.learningContext?.activeThread?.title || options.learnerProfile?.goals?.[0]?.title,
-    };
-    const discoveries = (raw.externalDiscoveries ?? [])
+    // 外部发现只做模型明确提出的检索意图。之前模型没给 externalDiscoveries 时会用
+    // 收藏标题 / 「学习方法」拼一个 query，再配一句「延伸你最近收集的主题」当推荐理由——
+    // 网页是真的，但"为什么推给你"是我们编的。模型没看出值得延伸的方向，就不出外部卡。
+    const activeDiscoveries = (raw.externalDiscoveries ?? [])
       .filter((item) => item.query && item.reason)
-      .slice(0, 3);
-    const activeDiscoveries = (discoveries.length > 0 ? discoveries : [fallbackDiscovery])
+      .slice(0, 3)
       .map(normalizeDiscoveryBrief);
+    if (activeDiscoveries.length === 0) throw new Error('NO_EXTERNAL_DISCOVERY');
     const candidates = filterExternalCandidatesByFeedback(
       (await retrieveExternalCandidates(activeDiscoveries))
         .filter((candidate) => isAcceptableExternalResult(candidate.url)),
@@ -587,7 +577,11 @@ export async function generateCrossCourseFeed(
       };
     });
   } catch (error) {
-    log.warn('external discovery failed', error);
+    if (error instanceof Error && error.message === 'NO_EXTERNAL_DISCOVERY') {
+      log.info('no external discovery proposed by model; skipping external cards');
+    } else {
+      log.warn('external discovery failed', error);
+    }
   }
 
   return { items: [...internalItems, ...externalItems] };

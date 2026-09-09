@@ -152,87 +152,15 @@ export function buildAutomaticSupportPolicyPrompt(supportReferences: SupportRefe
   ].join('\n');
 }
 
-// ── 语义匹配 ──
-
-export function isDocumentReferenceQuestion(question: string): boolean {
-  if (!question) return false;
-  return /(文档|资料|讲义|课件|pdf|docx|ppt|pptx|导入|上传|参考|引用|source|document|material)/i.test(question);
-}
-
-export function extractSemanticKeywords(text: string): string[] {
-  const normalized = (text || '').toLowerCase().trim();
-  if (!normalized) return [];
-
-  const englishTokens = Array.from(normalized.matchAll(/[a-z0-9]{3,}/g)).map((match) => match[0]);
-  const cjkChunks = Array.from(normalized.matchAll(/[\u4e00-\u9fff]{2,}/g)).map((match) => match[0]);
-  const cjkTokens = cjkChunks.flatMap((chunk) => {
-    if (chunk.length <= 4) return [chunk];
-    const grams: string[] = [];
-    for (let index = 0; index < chunk.length - 1; index += 1) {
-      grams.push(chunk.slice(index, index + 2));
-    }
-    return grams;
-  });
-
-  return Array.from(new Set([...englishTokens, ...cjkTokens])).slice(0, 32);
-}
-
-export function shouldAttachSupportFallback(questionHint: string, supportReferences: SupportReference[]): boolean {
-  const normalizedQuestion = (questionHint || '').trim();
-  if (!normalizedQuestion || supportReferences.length === 0) return false;
-
-  if (isDocumentReferenceQuestion(normalizedQuestion)) return true;
-
-  const keywords = extractSemanticKeywords(normalizedQuestion);
-  if (keywords.length === 0) return false;
-
-  const supportCorpus = supportReferences
-    .map((item) => `${item.title} ${item.snippet}`.toLowerCase())
-    .join('\n');
-
-  let matchedCount = 0;
-  let strongestMatchLength = 0;
-
-  for (const keyword of keywords) {
-    if (!keyword || keyword.length < 2) continue;
-    if (!supportCorpus.includes(keyword)) continue;
-
-    matchedCount += 1;
-    strongestMatchLength = Math.max(strongestMatchLength, keyword.length);
-
-    if (matchedCount >= 3) break;
-  }
-
-  if (matchedCount >= 2) return true;
-  if (matchedCount >= 1 && strongestMatchLength >= 6) return true;
-  return false;
-}
-
-// ── Fallback 与 Ensure ──
-
-export function buildFallbackSupportCitations(supportReferences: SupportReference[], limit = 2): Citation[] {
-  return supportReferences.slice(0, limit).map((item) => ({
-    id: `support-${item.index}`,
-    title: item.title || `导入资料 ${item.index}`,
-    url: `about:blank#support-${item.index}`,
-    snippet: normalizeCitationText(item.snippet, 220),
-    source_type: 'knowledge_base',
-  }));
-}
-
+/**
+ * 引用只来自模型真正引用了的地方。
+ * 之前这里会在模型没引用资料时按关键词重叠"补"两张「导入资料 N」引用卡（url 是
+ * about:blank）——学生点开是空白页，回答和资料的关系也是我们猜的。没有引用就没有引用卡。
+ */
 export function ensureSupportCitations(params: {
   mergedCitations?: Citation[];
   supportReferences: SupportReference[];
   questionHint: string;
 }): Citation[] | undefined {
-  const { mergedCitations, supportReferences, questionHint } = params;
-  if (supportReferences.length === 0) return mergedCitations;
-
-  const hasKnowledgeCitation = (mergedCitations || []).some(
-    (item) => item.source_type === 'knowledge_base'
-  );
-  if (hasKnowledgeCitation) return mergedCitations;
-  if (!shouldAttachSupportFallback(questionHint, supportReferences)) return mergedCitations;
-
-  return mergeCitationResults(mergedCitations, buildFallbackSupportCitations(supportReferences));
+  return params.mergedCitations;
 }

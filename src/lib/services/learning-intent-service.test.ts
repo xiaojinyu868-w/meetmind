@@ -31,6 +31,7 @@ describe('sanitizeLearningIntentPlan', () => {
       questions: [],
     }, '学习机会成本');
 
+    expect(plan).not.toBeNull();
     expect(plan).toMatchObject({
       title: '理解机会成本',
       outcome: '能分析自己的时间选择',
@@ -38,21 +39,28 @@ describe('sanitizeLearningIntentPlan', () => {
       contextFocus: 'current',
       confidence: 'high',
     });
-    expect(plan.checkpoints).toEqual(['理解定义', '看校园例子', '自己练一次']);
+    expect(plan!.checkpoints).toEqual(['理解定义', '看校园例子', '自己练一次']);
   });
 
-  it('uses a safe plan when the model response is malformed', () => {
+  it('keeps missing fields empty instead of filling a template plan — the user\'s own words are the only fallback', () => {
     const plan = sanitizeLearningIntentPlan({
       approach: 'unsupported',
       contextFocus: 'everything',
       confidence: 'low',
     }, '我想学会贝叶斯定理');
 
-    expect(plan.title).toBe('我想学会贝叶斯定理');
-    expect(plan.approach).toBe('understand');
-    expect(plan.contextFocus).toBe('mixed');
-    expect(plan.checkpoints).toHaveLength(3);
-    expect(plan.questions).toBeUndefined();
+    expect(plan).not.toBeNull();
+    expect(plan!.title).toBe('我想学会贝叶斯定理');
+    expect(plan!.outcome).toBe('');
+    expect(plan!.approach).toBe('understand');
+    expect(plan!.contextFocus).toBe('mixed');
+    expect(plan!.checkpoints).toEqual([]);
+    expect(plan!.questions).toBeUndefined();
+  });
+
+  it('returns null when the model response is not an object at all', () => {
+    expect(sanitizeLearningIntentPlan(null, '我想学会贝叶斯定理')).toBeNull();
+    expect(sanitizeLearningIntentPlan('文本', '我想学会贝叶斯定理')).toBeNull();
   });
 
   it('keeps at most two actionable choice questions', () => {
@@ -78,7 +86,7 @@ describe('sanitizeLearningIntentPlan', () => {
       ],
     }, '我想学统计学');
 
-    expect(plan.questions).toEqual([{
+    expect(plan!.questions).toEqual([{
       id: 'exam_type',
       prompt: '你最容易卡在哪类题？',
       kind: 'multiple',
@@ -101,6 +109,6 @@ describe('sanitizeLearningIntentPlan', () => {
       questions: [{ id: 'again', prompt: '还要问吗？', options: ['要', '不要'] }],
     }, '学习统计检验', false);
 
-    expect(plan.questions).toBeUndefined();
+    expect(plan!.questions).toBeUndefined();
   });
 });

@@ -23,7 +23,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 
 ### 🎙️ ASR 转录
 
-|  | ~740 | 今日情报编排与排序：内部线索来自收藏、已确认目标和活跃学习线，没有新 capture 也可由真实目标启动；外部检索计划覆盖深入、相邻与不同视角。百炼原生搜索已完成相关性选择时，只做多方向去重，不再重复调用排序模型；direct 候选仍由模型在真实 URL 中筛选。明确点过“不相关”的同一材料会被排除 |
+|  | ~740 | 今日情报编排与排序：内部线索来自收藏、已确认目标和活跃学习线，没有新 capture 也可由真实目标启动；外部检索计划覆盖深入、相邻与不同视角，且只做模型明确提出的检索意图（模型没提就不出外部卡——2026-09 前会用收藏标题 / 「学习方法」拼 query 并配模板推荐理由）。百炼原生搜索已完成相关性选择时，只做多方向去重，不再重复调用排序模型；direct 候选仍由模型在真实 URL 中筛选。明确点过“不相关”的同一材料会被排除 |
 |------|------|------|
 | `qwen-asr-service.ts` | 709 | 通义千问 ASR（同步短音频 + 异步长音频） |
 | `dashscope-asr-service.ts` | ~700 | Qwen 实时 ASR 客户端（2026-08 腾讯 speaker 兼容层已移除；首次连接与重连均保留 FIFO PCM、连接 ID 命名空间、心跳保活）；浏览器只连自有 proxy、不接触 DashScope Key；realtime 单遍即定稿，仅 realtime 零产出时由 Recorder 兜底批量转写并按 session 隔离回填；断连缓冲按字节预算（`reconnectAudioBufferMs`，默认 120s≈3.84MB），缓冲溢出丢帧通过 `onAudioDropped` 累计上报（含代理侧 `audio-dropped` 事件），Recorder 常驻提示——单遍化后丢帧=内容永久缺失，绝不静默；WS URL 携带 `?token=<JWT>`（localStorage `meetmind_access_token`，guest 不带）供积分 Phase 2 连接关闭结算归属用户 |
@@ -49,7 +49,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `summary-service.ts` | 246 | 课堂摘要生成 |
 | `lesson-digest-service.ts` | ~290 | 课堂结构化分段总结：segments + 图片锚点 → LLM 生成分段 digest（一次重试；仍无可用分段抛 `GENERATION_FAILED`，路由 502，客户端失败态 + 再试一次、**不落 IndexedDB**——2026-09 前失败会按 5 分钟切片拼「第 N 段」假笔记并被永久缓存）；`normalizeLessonDigestOutput` 用前一段结束时间安全补齐模型遗漏的时间边界。桌面移动共享 |
 | `tutor-service.ts` | 273 | AI 家教：引用匹配 + LLM 解释 |
-| `learning-intent-service.ts` | ~220 | 深度学习意图确认：当前表达定义目标边界，历史上下文不能静默收窄宽泛愿望；只在学习路径确有歧义时生成 1-3 个动态单选/多选问题，用户作答后再次整理为最终计划，模型不可用时返回确定性计划 |
+| `learning-intent-service.ts` | ~220 | 深度学习意图确认：当前表达定义目标边界，历史上下文不能静默收窄宽泛愿望；只在学习路径确有歧义时生成 1-3 个动态单选/多选问题，用户作答后再次整理为最终计划；字段缺失宁缺毋滥（标题回退到用户原话，outcome / checkpoints 留空），模型两次都不可用抛 `INTENT_UNAVAILABLE`——2026-09 前返回模板计划并被写进用户学习线程 |
 | `learning-memory-distillation-service.ts` | ~170 | 全局学习问答持久化后的独立学习理解整理：不依赖用户手动选择模式，只从本轮真实表达/作答提炼最多 2 条，支持替换近义旧理解；拒绝愿望、建议、人格与敏感推断，证据不足返回空数组，不读取或改写客观学习现场 |
 | `learner-context-provider.ts` | ~130 | 读契约的**事实半**服务端供给方（`source: 'server'`）：LearningEvent 表 assessment 事件 → `lib/learning/mastery-trail-model` 同一份规则聚成掌握状态（证据 id 指回事件）；User.learnerProfileJson → 困惑 / 主题 / 偏好 / 进度 + 最近课堂。只读时聚合不写画像。对外 `POST /api/context/v1/learner-context` |
 | `learner-context-service.ts` | ~190 | 「这个学习者」读槽（renewal plan §6 读侧）：`resolveLearnerContext` 合成两半——事实半（服务端事件表 → 请求方本机切片 → 空）+ 理解半（`CONTEXT_ENABLED` 时 `context/learner-understanding` 按 `request.task` 向 Hindsight 召回，有来源、经暂停 / 忘记过滤；本机切片里的理解半不可信会被丢弃）；`formatLearnerContextForPrompt`（事实 ≤600 字 + 跨应用记忆 JSON 证据 ≤6000 字，带"历史证据不是指令"的说明）；`parseLearnerContext`（zod）。消费方：`/api/apps/execute`、Tutor 六模式（除 shared）、`/api/teach/threads` |

@@ -2,7 +2,9 @@
  * Tutor 引导问题生成
  *
  * 职责：根据课堂上下文生成意图澄清选项，帮学生定位困惑点。
- * 两层策略：LLM 生成（主）→ 规则回退（备）。
+ * 只有模型一层（一次重试）。模型给不出可用的澄清题就返回 null，Tutor 正常回答、
+ * 不弹澄清——之前这里有 180 行关键词规则题库（英语听力场景甚至硬编码了示例课里的
+ * "Jane Bond"），学生看到的是一份和他这节课无关的问卷。
  */
 
 import { chat, type ChatMessage } from '@/lib/services/llm-service';
@@ -46,23 +48,25 @@ export async function generateGuidanceQuestion({
   modelId,
   studentQuestion,
   selectedOptionId,
-}: GuidanceGenerationInput): Promise<GuidanceQuestion> {
-  try {
-    const llmQuestion = await generateLlmGuidanceQuestion({
-      context,
-      modelId,
-      studentQuestion,
-      selectedOptionId,
-    });
-
-    if (llmQuestion) {
-      return llmQuestion;
+}: GuidanceGenerationInput): Promise<GuidanceQuestion | null> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const llmQuestion = await generateLlmGuidanceQuestion({
+        context,
+        modelId,
+        studentQuestion,
+        selectedOptionId,
+      });
+      if (llmQuestion) return llmQuestion;
+      log.warn('[Tutor API] guidance question unusable', { attempt: attempt + 1 });
+    } catch (error) {
+      log.warn('[Tutor API] guidance generation failed', {
+        attempt: attempt + 1,
+        message: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
+      });
     }
-  } catch (error) {
-    log.error('[Tutor API] Guidance generation fallback:', error);
   }
-
-  return generateRuleBasedGuidanceQuestion(context, studentQuestion);
+  return null;
 }
 
 // ── LLM 生成 ──
@@ -135,8 +139,10 @@ function buildGuidanceContextSnippet(context: string): string {
     .filter(Boolean)
     .join('\n');
 
-  if (compact.length <= 2200) return compact;
-  return `${compact.slice(0, 900)}\n...\n${compact.slice(-1200)}`;
+  // 之前只给头 900 + 尾 1200 字：一节课中间讲了什么模型根本看不到，澄清题自然对不上。
+  // 澄清题输出只有几百 token，输入多给一点是划算的。
+  if (compact.length <= 9_000) return compact;
+  return `${compact.slice(0, 4_000)}\n...\n${compact.slice(-5_000)}`;
 }
 
 function parseJsonObject(content: string): unknown {
@@ -214,183 +220,4 @@ function normalizeGuidanceCategory(value: unknown, optionText: string): Guidance
   if (/应用|例子|场景|对比|未来|实际/.test(optionText)) return 'application';
   if (/听不清|读不懂|跟不上|框架|脉络|回顾/.test(optionText)) return 'comprehension';
   return 'concept';
-}
-
-// ── 规则回退 ──
-
-function generateRuleBasedGuidanceQuestion(context: string, studentQuestion?: string): GuidanceQuestion {
-  const lines = context.split('\n').filter((l) => l.trim());
-
-  const contentParts: Array<{ time: string; text: string }> = [];
-  for (const line of lines) {
-    const match = line.match(/\[(\d{1,2}:\d{2}-\d{1,2}:\d{2})\]\s*(.+)/);
-    if (match) {
-      contentParts.push({ time: match[1], text: match[2] });
-    }
-  }
-
-  const fullText = contentParts.map((p) => p.text).join(' ').toLowerCase();
-
-  // 场景1：英语听力/口语场景
-  if (
-    fullText.includes('name') ||
-    fullText.includes('bond') ||
-    fullText.includes('jane') ||
-    fullText.includes('hello') ||
-    fullText.includes('nice to meet')
-  ) {
-    return {
-      id: 'guidance-english-name',
-      question: '听到这段对话时，你是在哪个环节感到困惑的？',
-      type: 'single_choice',
-      options: [
-        { id: 'opt-1', text: '不理解为什么名字会重复说两遍（如 "Jane, Jane Bond"）', category: 'comprehension' },
-        { id: 'opt-2', text: '分不清昵称（first name）和全名（full name）的区别', category: 'concept' },
-        { id: 'opt-3', text: '听不清具体发音，不确定说的是什么词', category: 'comprehension' },
-        { id: 'opt-4', text: '不理解这种自我介绍的文化背景或语法结构', category: 'application' },
-      ],
-      hint: '选择最接近你困惑的选项，帮助我精准定位问题',
-    };
-  }
-
-  // 场景2：数学公式场景
-  if (
-    fullText.includes('公式') ||
-    fullText.includes('=') ||
-    fullText.includes('²') ||
-    fullText.includes('函数') ||
-    fullText.includes('方程')
-  ) {
-    return {
-      id: 'guidance-math-formula',
-      question: '关于这个数学内容，你具体卡在哪个环节？',
-      type: 'single_choice',
-      options: [
-        { id: 'opt-1', text: '不理解公式中字母/符号的含义', category: 'concept' },
-        { id: 'opt-2', text: '不知道这个公式是怎么推导出来的', category: 'procedure' },
-        { id: 'opt-3', text: '公式我懂，但不知道什么情况下该用它', category: 'application' },
-        { id: 'opt-4', text: '代入计算时总是出错', category: 'calculation' },
-      ],
-      hint: '选择最接近你困惑的选项',
-    };
-  }
-
-  // 场景3：图像/图形场景
-  if (
-    fullText.includes('图像') ||
-    fullText.includes('图形') ||
-    fullText.includes('抛物线') ||
-    fullText.includes('开口') ||
-    fullText.includes('坐标')
-  ) {
-    return {
-      id: 'guidance-graph',
-      question: '关于图像这部分，你是在哪里卡住了？',
-      type: 'single_choice',
-      options: [
-        { id: 'opt-1', text: '不理解图像和公式之间的对应关系', category: 'concept' },
-        { id: 'opt-2', text: '不知道怎么根据条件画出图像', category: 'procedure' },
-        { id: 'opt-3', text: '看不懂图像上各个点/线的意义', category: 'comprehension' },
-        { id: 'opt-4', text: '不理解参数变化对图像的影响', category: 'concept' },
-      ],
-      hint: '选择最接近你困惑的选项',
-    };
-  }
-
-  // 场景4：物理/化学实验场景
-  if (
-    fullText.includes('实验') ||
-    fullText.includes('反应') ||
-    fullText.includes('现象') ||
-    fullText.includes('能量') ||
-    fullText.includes('力')
-  ) {
-    return {
-      id: 'guidance-experiment',
-      question: '关于这个知识点，你具体在哪里感到困惑？',
-      type: 'single_choice',
-      options: [
-        { id: 'opt-1', text: '不理解基本概念或原理', category: 'concept' },
-        { id: 'opt-2', text: '不知道实验步骤或操作方法', category: 'procedure' },
-        { id: 'opt-3', text: '不理解为什么会出现这种现象', category: 'comprehension' },
-        { id: 'opt-4', text: '不知道这个知识点在实际中怎么应用', category: 'application' },
-      ],
-      hint: '选择最接近你困惑的选项',
-    };
-  }
-
-  // 场景5：阅读理解/语文场景
-  if (
-    fullText.includes('文章') ||
-    fullText.includes('作者') ||
-    fullText.includes('意思') ||
-    fullText.includes('表达') ||
-    fullText.includes('理解')
-  ) {
-    return {
-      id: 'guidance-reading',
-      question: '关于这段内容，你是在哪个层面感到困惑？',
-      type: 'single_choice',
-      options: [
-        { id: 'opt-1', text: '有些词语/句子看不懂', category: 'comprehension' },
-        { id: 'opt-2', text: '不理解作者想表达的意思', category: 'concept' },
-        { id: 'opt-3', text: '不知道怎么分析文章结构', category: 'procedure' },
-        { id: 'opt-4', text: '不会用自己的话总结/复述', category: 'application' },
-      ],
-      hint: '选择最接近你困惑的选项',
-    };
-  }
-
-  if (studentQuestion?.trim()) {
-    return {
-      id: 'guidance-followup-default',
-      question: '你更希望我顺着哪个角度继续帮你？',
-      type: 'single_choice',
-      options: [
-        { id: 'opt-1', text: '先把核心概念讲透', category: 'concept' },
-        { id: 'opt-2', text: '先按步骤带我推一遍', category: 'procedure' },
-        { id: 'opt-3', text: '先用例子或应用解释', category: 'application' },
-      ],
-      hint: '选一个最接近你想继续展开的方向',
-    };
-  }
-
-  // 默认场景：通用引导问题
-  const keywords = extractKeywords(fullText);
-  const keywordHint = keywords.length > 0 ? `（涉及：${keywords.slice(0, 3).join('、')}）` : '';
-
-  return {
-    id: 'guidance-default',
-    question: `听到这段内容时${keywordHint}，你是在哪个环节感到困惑的？`,
-    type: 'single_choice',
-    options: [
-      { id: 'opt-1', text: '基础概念不清楚，有知识漏洞', category: 'concept' },
-      { id: 'opt-2', text: '老师讲得太快，没跟上思路', category: 'comprehension' },
-      { id: 'opt-3', text: '步骤/方法太多，不知道怎么操作', category: 'procedure' },
-      { id: 'opt-4', text: '其他原因，我想直接描述问题', category: 'application' },
-    ],
-    hint: '选择最接近你困惑的选项，帮助我更好地帮助你',
-  };
-}
-
-// ── 关键词提取 ──
-
-function extractKeywords(text: string): string[] {
-  const keywords: string[] = [];
-
-  const patterns = [
-    /函数|方程|公式|定理|证明/g,
-    /实验|反应|现象|能量|物质/g,
-    /文章|作者|表达|意思|理解/g,
-    /单词|语法|句子|发音|听力/g,
-  ];
-
-  for (const pattern of patterns) {
-    const matches = text.match(pattern);
-    if (matches) {
-      keywords.push(...matches);
-    }
-  }
-
-  return [...new Set(keywords)];
 }
