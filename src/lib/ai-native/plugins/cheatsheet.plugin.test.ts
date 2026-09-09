@@ -8,7 +8,7 @@ const transcript: TranscriptSegment[] = [
 ];
 
 describe('buildCheatsheetSections evidence grounding', () => {
-  it('drops unsupported items instead of citing the nearest timestamp', () => {
+  it('keeps every model item; grounding only decides whether a citation is attached', () => {
     const sections = buildCheatsheetSections(transcript, {
       sections: [{
         key: 'definition',
@@ -20,9 +20,13 @@ describe('buildCheatsheetSections evidence grounding', () => {
     });
 
     expect(sections).toHaveLength(1);
-    expect(sections[0].items).toHaveLength(1);
+    expect(sections[0].items).toHaveLength(2);
+    // 落地到原话：引用回到真正说这句的地方，而不是模型给的最近时间点
     expect(sections[0].items[0].term).toBe('机会成本');
     expect(sections[0].items[0].citation?.startMs).toBe(0);
+    // 落地不到：条目保留，但绝不把它挂到"最近的时间点"上伪装成证据
+    expect(sections[0].items[1].term).toBe('量子纠缠');
+    expect(sections[0].items[1].citation).toBeUndefined();
   });
 
   it('only keeps strong emphasis when the supporting evidence explicitly signals it', () => {

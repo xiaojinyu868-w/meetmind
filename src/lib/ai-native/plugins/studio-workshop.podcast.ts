@@ -10,6 +10,7 @@ import { chat } from '@/lib/services/llm-service';
 import type { VolcPodcastResult } from '@/lib/services/volc-podcast';
 import type { AppExecutionContext, AppExecutionResult } from '../types';
 import { buildPromptAnchorContext } from '../prompt-context';
+import { resolveGroundedEvidence } from '../evidence-grounding';
 import {
   buildAudioOverviewChapterEvidence,
   buildAudioOverviewNarrationCorpus,
@@ -286,51 +287,48 @@ export function buildPodcastInputText(
 
 // ── Round cards builder ────────────────────────────────────────────
 
+/**
+ * 播客每一轮对白 → 脚本卡。「回放」锚点在整份转录里按这轮对白的内容落地；
+ * 落地不到就没有引用和跳转——之前按序号轮流挂 8 段抽样片段，点「回放」跳到的是别的地方。
+ */
 export function buildPodcastRoundCards(
   rounds: VolcPodcastResult['rounds'],
-  evidenceSegments: TranscriptSegment[]
+  transcript: TranscriptSegment[]
 ): AppExecutionResult['cards'] {
   if (!Array.isArray(rounds) || rounds.length === 0) return [];
-  const safeEvidence = evidenceSegments.length > 0 ? evidenceSegments : [];
   const speakerAliasMap = new Map<string, string>();
 
   return rounds
     .filter((round) => typeof round.text === 'string' && round.text.trim().length > 0)
     .slice(0, 20)
     .map((round, index) => {
-      const fallback = safeEvidence[index % Math.max(1, safeEvidence.length)];
-      const startMs = fallback?.startMs ?? 0;
-      const endMs = fallback?.endMs ?? startMs + 8000;
       const speaker = normalizePodcastSpeaker(round.speaker, index, speakerAliasMap);
       const rawLine = round.text?.trim() || '';
       const line = sanitizePodcastNarration(rawLine) || rawLine;
+      const grounding = resolveGroundedEvidence(line, transcript);
+      const segment = grounding.supported ? grounding.segment : undefined;
 
       return {
         id: `studio-podcast-round-${index + 1}`,
         type: 'timeline',
-        title: `Round ${index + 1} ? ${speaker}`,
+        title: `第 ${index + 1} 轮 · ${speaker}`,
         body: line,
         priority: index < 4 ? 'high' : 'medium',
-        citations: fallback
-          ? [
-              {
-                startMs,
-                endMs,
-                snippet: fallback.text.slice(0, 120),
-              },
-            ]
-          : undefined,
-        actions: [
-          {
-            id: `seek-podcast-round-${index + 1}`,
-            label: `Seek ${formatTimestamp(startMs)}`,
-            kind: 'seek',
-            payload: { timestamp: startMs },
-          },
-        ],
+        ...(segment
+          ? {
+            citations: [{ startMs: segment.startMs, endMs: segment.endMs, snippet: segment.text.slice(0, 120) }],
+            actions: [{
+              id: `seek-podcast-round-${index + 1}`,
+              label: `回放 ${formatTimestamp(segment.startMs)}`,
+              kind: 'seek' as const,
+              payload: { timestamp: segment.startMs },
+            }],
+          }
+          : {}),
         meta: {
           cardKind: 'script',
           dialogue: [{ speaker, line }],
+          evidence: segment ? 'text' : 'none',
         },
       };
     });

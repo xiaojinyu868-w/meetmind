@@ -357,7 +357,7 @@ export const studioWorkshopPlugin: AppPlugin = {
         throw new Error(`播客出音频失败：${podcastError || '未返回可播放音频'}`);
       }
 
-      const roundCards = buildPodcastRoundCards(podcastResult?.rounds || [], evidenceSegments);
+      const roundCards = buildPodcastRoundCards(podcastResult?.rounds || [], context.input.transcript);
       if (roundCards.length > 0) {
         cards.push(...roundCards);
         trace.push(`podcast_script_cards=${roundCards.length}`);
@@ -448,7 +448,6 @@ export const studioWorkshopPlugin: AppPlugin = {
           renderMode,
           cards,
           output,
-          evidenceSegments,
           podcastResult,
           podcastError,
           mode,

@@ -255,7 +255,9 @@ export function buildFallbackDraft(params: {
   return {
     title: scene.key === 'infographic' ? '课堂信息图' : scene.label,
     subtitle: context ? truncateText(context, 56) : '基于课堂内容自动生成的可视化图片',
-    keyPoints: keyPoints.length > 0 ? keyPoints : ['提炼课堂重点', '梳理知识关系', '突出关键结论'],
+    // 这份本地草案只用于拼生图 prompt（用户在没有模型草案时自定义出图），不再是用户可见的"要点"；
+    // 没有要点就是空数组，不放万能句
+    keyPoints,
     visualPlan: [
       `采用${scene.label}形式组织课堂重点`,
       `默认使用${orientationLabel}画布进行布局`,

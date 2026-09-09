@@ -90,7 +90,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `upload-recording-audio.ts` | ~90 | 登录态录音后台持久化：把本地 Blob 上传为跨设备 mediaUrl，并回写 IndexedDB / Workspace capture |
 | `workspace-audio-sync-service.ts` | ~70 | 服务端按 userId + sessionId 把已上传原声绑定回正确 Workspace capture，不依赖前端保留 sourceKey |
 | `retry-pending-recording-uploads.ts` | ~90 | 进入课堂时静默补传仍只有本地 Blob 的已完成录音；每次顺序处理少量，成功去重、失败保留后续重试 |
-| `workspace-echo-service.ts` | ~1300 | 每日回响生成（AI 洞察/金句/推荐）；CommonStack 新 schema 不返回 title，需从 takeaway / echo 生成标题后再进质量门 |
+| `workspace-echo-service.ts` | ~1300 | 每日回响生成（AI 洞察/金句/推荐）；CommonStack 新 schema 不返回 title，标题从模型自己的 takeaway / echo 首句取，取不出留空由质量门按 too-short 拒（不再写「今日回声」占位）；质量门只拦系统口吻泄漏与重复，不再用「主要讲了 / 总结来看」正则否决真回声 |
 | `workspace-search-service.ts` | 175 | 全局 AI 检索（流式带引用） |
 | `commonstack-echo-service.ts` | 273 | Echo LLM 调用（System Prompt 在此） |
 | `feed-service.ts` | ~740 | 今日情报编排与排序：内部线索来自收藏、已确认目标和活跃学习线，没有新 capture 也可由真实目标启动；外部检索计划覆盖深入、相邻与不同视角。百炼原生搜索已完成相关性选择时，只做多方向去重，不再重复调用排序模型；direct 候选仍由模型在真实 URL 中筛选。明确点过“不相关”的同一材料会被排除 |

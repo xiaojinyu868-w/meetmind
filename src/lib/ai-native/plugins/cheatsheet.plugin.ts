@@ -331,22 +331,22 @@ export function buildCheatsheetSections(
         sourceEvidence.length > 0 ? sourceEvidence : evidenceCorpus,
         startMs,
       );
-      // 找不到语义支持时宁可少一条，也不能把模型陈述挂到“最近的时间点”上伪装成证据。
-      if (!grounding.supported || !grounding.segment) return;
-      const evidence = grounding.segment;
+      // 证据落地只决定这条要不要带「回到原话」的引用——落地不到就没有引用，条目照留。
+      // 之前落地不到直接丢条目：模型写好的定义 / 公式因为措辞和老师原话不字面重叠就消失，
+      // 术语课、长课尤其严重，最后整页 CONTENT_NOT_READY。
+      const evidence = grounding.supported ? grounding.segment : undefined;
       const requestedEmphasis = normalizeEmphasis(item?.emphasis);
-      const evidenceText = evidence.text || '';
-      const hasExplicitEmphasis = evidence.sourceItemId?.startsWith('past-paper:')
+      const evidenceText = evidence?.text || '';
+      // strong 视觉重要度需要原话或真题里真有强调——这是"别把普通要点标成必考"的克制，不是内容否决
+      const hasExplicitEmphasis = evidence?.sourceItemId?.startsWith('past-paper:')
         || /必考|一定考|重点|反复强调|划重点|权重|must remember|important|crucial/i.test(evidenceText);
-      const hasExerciseEvidence = /例题|题型|解法|真题|样卷|作业|练习|exercise|problem|exam question/i.test(evidenceText);
-      if (key === 'exemplar' && !hasExerciseEvidence) return;
       items.push({
         id: `${key}-${index + 1}`,
         term: term.slice(0, 32),
         body: body.slice(0, 1_600),
         latex: typeof item?.latex === 'string' && item.latex.trim() ? item.latex.trim() : undefined,
         emphasis: requestedEmphasis === 'strong' && hasExplicitEmphasis ? 'strong' : 'normal',
-        citation: buildCitation(evidence, lessonSources),
+        ...(evidence ? { citation: buildCitation(evidence, lessonSources) } : {}),
       });
     });
     if (items.length > 0) {

@@ -4,7 +4,6 @@
  * Builds the final render payload (slides / infographic / table / audio / script / document)
  * from structured output + cards + evidence.
  */
-import type { TranscriptSegment } from '@/types';
 import type { AppExecutionResult, AppRenderMode } from '../types';
 import type { VolcPodcastResult } from '@/lib/services/volc-podcast';
 import type { StudioOutput, StudioMode, SlidePage } from './studio-workshop.types';
@@ -13,12 +12,13 @@ import { extractScriptLines } from './studio-workshop.podcast';
 
 // ── Slide pages ────────────────────────────────────────────────────
 
-export function buildSlidePages(
-  output: StudioOutput | null,
-  cards: AppExecutionResult['cards'],
-  evidenceSegments: TranscriptSegment[]
-): SlidePage[] {
-  const fromOutput = (output?.slides || [])
+/**
+ * 幻灯页只来自模型的 slides。之前 slides 为空会退两级：先把结构卡片拼成页（时间点按序号
+ * 挂抽样片段），再用抽样片段每段一页——那是"看起来像幻灯的转录切片"。没有页就是没有页，
+ * 由插件按 GENERATION_FAILED 诚实失败。
+ */
+export function buildSlidePages(output: StudioOutput | null): SlidePage[] {
+  return (output?.slides || [])
     .map((page, index) => ({
       id: `slide-${index + 1}`,
       title: page.title?.trim() || `第 ${index + 1} 页`,
@@ -30,37 +30,8 @@ export function buildSlidePages(
           ? Math.max(0, Math.floor(page.relatedTimestamp))
           : undefined,
     }))
-    .filter((page) => page.title || page.bullets.length > 0 || page.notes)
+    .filter((page) => page.bullets.length > 0 || page.notes)
     .slice(0, 12);
-
-  if (fromOutput.length > 0) return fromOutput;
-
-  const fallback = cards
-    .filter((card) => card.id !== 'studio-overview')
-    .slice(0, 10)
-    .map((card, index) => {
-      const bullets = Array.isArray(card.meta?.bullets) ? toStringArray(card.meta.bullets, 6) : [];
-      const evidence = evidenceSegments[index % Math.max(1, evidenceSegments.length)];
-      return {
-        id: `slide-fallback-${index + 1}`,
-        title: card.title || `第 ${index + 1} 页`,
-        subtitle: '',
-        bullets: bullets.length > 0 ? bullets : toStringArray(card.body.split(/\r?\n/), 5),
-        notes: card.body || '',
-        relatedTimestamp: evidence?.startMs,
-      };
-    });
-
-  if (fallback.length > 0) return fallback;
-
-  return evidenceSegments.slice(0, 5).map((segment, index) => ({
-    id: `slide-evidence-${index + 1}`,
-    title: `第 ${index + 1} 页`,
-    subtitle: '',
-    bullets: [segment.text.slice(0, 120)],
-    notes: '',
-    relatedTimestamp: segment.startMs,
-  }));
 }
 
 // ── Infographic draft ──────────────────────────────────────────────
@@ -115,7 +86,6 @@ export function buildRenderPayload(params: {
   renderMode: AppRenderMode;
   cards: AppExecutionResult['cards'];
   output: StudioOutput | null;
-  evidenceSegments: TranscriptSegment[];
   podcastResult: VolcPodcastResult | null;
   podcastError: string;
   mode: StudioMode;
@@ -125,7 +95,7 @@ export function buildRenderPayload(params: {
     model: string;
   } | null;
 }) {
-  const { renderMode, cards, output, evidenceSegments, podcastResult, podcastError, mode, infographicImage } = params;
+  const { renderMode, cards, output, podcastResult, podcastError, mode, infographicImage } = params;
 
   if (renderMode === 'table') {
     return {
@@ -161,9 +131,10 @@ export function buildRenderPayload(params: {
   }
 
   if (renderMode === 'slides') {
-    return {
-      pages: buildSlidePages(output, cards, evidenceSegments),
-    };
+    const pages = buildSlidePages(output);
+    // 模型没给出任何一页：诚实失败，不用卡片 / 抽样片段拼页
+    if (pages.length === 0) throw new Error('GENERATION_FAILED');
+    return { pages };
   }
 
   if (renderMode === 'script') {

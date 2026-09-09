@@ -531,15 +531,15 @@ export function normalizeEchoOutput(input: {
       .trim();
 
   // 新格式：echo 字段为主体。CommonStack json_schema 不返回 title，
-  // 因此标题需要从 takeaway / echo 中兜底生成，避免被质量门误判为 too-short。
+  // 标题从模型自己写的 takeaway / echo 首句里取——都取不出来就留空，让质量门按 too-short
+  // 诚实拒掉；不再用「今日回声」这种占位词冒充 AI 起的标题。
   const echoText = clean(input.echo || input.body || '');
   const takeaway = input.takeaway ? clean(input.takeaway) : undefined;
   const title = [
     clean(input.title || ''),
     takeaway ? makeFallbackTitle(takeaway) : '',
     makeFallbackTitle(echoText),
-    '今日回声',
-  ].find((value) => value.length >= 4) || '今日回声';
+  ].find((value) => value.length >= 4) || '';
 
   // 处理 highlights
   const highlights: EchoHighlight[] = Array.isArray(input.highlights)
@@ -566,10 +566,11 @@ export function normalizeEchoOutput(input: {
   };
 }
 
-function looksLikeSummary(text: string): boolean {
-  return /(主要讲了|总结来看|概括来说|重点介绍|内容主要)/.test(text);
-}
-
+/**
+ * 系统口吻泄漏（「系统正在…」「已接入」）是真问题，拦。
+ * 「主要讲了 / 总结来看」这类摘要口吻此前也会被当 low-signal 整条丢掉——那是用正则替
+ * 模型判断"这条回声够不够好"，结果是把真回声拒掉、用户看到「保留当前版本」。口吻交给提示词。
+ */
 function looksLikeSystemText(text: string): boolean {
   return /(系统|正在|已接入|已收下|已进入|可继续用于|后续会参与)/.test(text);
 }
@@ -592,7 +593,7 @@ export function evaluateEchoQuality(params: {
 
   const tooShort = title.length < 4 || body.length < 12;
   const tooSimilar = maxSimilarity >= 0.72;
-  const lowSignal = looksLikeSummary(body) || looksLikeSystemText(body);
+  const lowSignal = looksLikeSystemText(body);
 
   return {
     valid: !tooShort && !tooSimilar && !lowSignal,

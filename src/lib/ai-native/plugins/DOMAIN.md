@@ -11,12 +11,12 @@
 | `class-check.plugin.ts` | 随堂检验插件（基于知识点结构的智能随堂检验，视频内触发，不在 catalog）。题目只来自模型（一次重试，答案解析不到选项的题丢弃，仍无题抛 `GENERATION_FAILED`）；证据落地在整份转录里找，只决定「回放」跳到哪——2026-09 前会用最近一段原话切"关键短语"拼题且答案恒 A |
 | `studio-workshop.plugin.ts` | Studio Workshop 主文件（~340 行），子模块如下。2026-09-09 起：非播客模式模型两次无卡片、播客模式两次无脚本计划均抛 `GENERATION_FAILED`；卡片引用按整份转录落地给，不再按序号挂抽样片段、不再补"证据模块 N" |
 | `studio-workshop.types.ts` | 类型/模式检测/解析辅助（~210 行，有测试） |
-| `studio-workshop.podcast.ts` | 播客管线（~310 行）：plan/清洗/时间戳污染检测/脚本行选择；合成 provider 由 `PODCAST_TTS_PROVIDER` 一行切换（默认 dashscope 逐句合成+拼接，volc 一键成品备选）；音频没拿到即整次 execute 抛错（"不出音频不算好"） |
-| `studio-workshop.renderers.ts` | 渲染负载构建器（~180 行） |
+| `studio-workshop.podcast.ts` | 播客管线（~310 行）：plan/清洗/时间戳污染检测/脚本行选择；每轮对白的「回放」锚点按对白内容在整份转录里落地，落地不到就没有引用 / 跳转（2026-09 前按序号轮流挂 8 段抽样片段，跳到的是别处）；合成 provider 由 `PODCAST_TTS_PROVIDER` 一行切换（默认 dashscope 逐句合成+拼接，volc 一键成品备选）；音频没拿到即整次 execute 抛错（"不出音频不算好"） |
+| `studio-workshop.renderers.ts` | 渲染负载构建器（~150 行）；幻灯页只来自模型 slides，为空抛 `GENERATION_FAILED`（2026-09 前会用卡片 / 抽样片段拼页） |
 | `flashcards.plugin.ts` | 闪卡。**2026-09-09 起没有兜底卡**：模型的卡就是卡，落地只决定跳转；填充词 / 空题面的卡剔除；一次重试，可用卡 <2 抛 `GENERATION_FAILED` |
 | `flashcards.plugin.test.ts` | 闪卡证据回锚测试：语义匹配优先、秒/毫秒归一、禁止按卡片序号轮转原文 |
 | `mindmap.plugin.ts` | 思维导图（节点 prompt 要求“地图标签”式短语而非解释句；无原文支持的叶子节点会被剔除，保留节点回写证据时间）。2026-09-09 起节点只标注时间点不删节点，空树一次重试后抛 `GENERATION_FAILED`，不再用抽样片段拼假树 |
-| `cheatsheet.plugin.ts` | 跨课 / 考试速查表：课堂、大纲、真题三类证据分别回锚；无支持条目直接丢弃，`strong` 只由明确强调或真题证据保留；正文保留有依据的 GFM / LaTeX / 紧凑 Mermaid（flowchart / pie / xychart-beta；小表格只用于对比，图中数值必须直接来自证据），不得为装饰滥用富文本；模型判断材料无学习价值或全部条目无法落回证据时返回 `CONTENT_NOT_READY`，禁止逐句包装原文制造假成品 |
+| `cheatsheet.plugin.ts` | 跨课 / 考试速查表：课堂、大纲、真题三类证据分别回锚；证据落地只决定条目要不要带引用，落地不到条目照留（2026-09 前直接丢条目，术语课整页 CONTENT_NOT_READY）；`strong` 只由明确强调或真题证据保留；正文保留有依据的 GFM / LaTeX / 紧凑 Mermaid（flowchart / pie / xychart-beta；小表格只用于对比，图中数值必须直接来自证据），不得为装饰滥用富文本；模型判断材料无学习价值或全部条目无法落回证据时返回 `CONTENT_NOT_READY`，禁止逐句包装原文制造假成品 |
 | `teach-back.plugin.ts` | 讲给同桌听（费曼检验）：从课堂证据选 3-5 个「应该能亲口讲出来」的目标点，`anchorText` 经 `resolveGroundedEvidence` 重新锚定，锚不住 `evidence=null` 不伪造时间戳；转录过短或选点为空抛 `CONTENT_NOT_READY`。讲述后的四象限核对不在此插件，走 `/api/apps/teach-back/evaluate`（`teach-back-eval-service.ts`：coverage × confidence 由 LLM 判断，quadrant 由服务端映射推导，不信 LLM 自报） |
 | `explainer.plugin.ts` | 板书精讲：一次 LLM 调用产出 BoardScript（讲稿 narration + 板书动作 DSL），render mode `'board'`；唯一防线是老师原话逐字校验，其余完全信任模型。2026-09-09 起 LLM 失败 / 无可用动作抛 `GENERATION_FAILED`，不再返回"这次没做好"的假成品 |
 | `board-script.ts` | BoardScript DSL 类型 + helper（`parseWriteRef` / `countPageWrites` / `segmentDisplayText` / `checkpointAnswerText` / `extractCues`）；v2 起 write 不携带坐标，标注按 write 序号引用（'w3'）；v3 段联合类型 NarrationSegment/CheckpointSegment、ref 动作、narration 内联 cue（[aN] 词级讲写对齐，charIndex 为剥 cue 后坐标系；兼容模型偷懒写法 [N]）；BoardAction 联合含 `BoardClearAction`（teach 新引擎 wb_clear 的画布映射：清板，渲染语义 = 最后一个 clear 之前的动作不渲染，见 board-lecture.ts flattenPage；legacy 词表/备课脚本不含它）；**checkpoint 答案同规则：`answerDisplay` + `answerCues`（指向 demoActions，解析念到哪示范写到哪），sanitize 一并剥除 hints/question.text 里的标记——不剥会被 TTS 逐字念出（2026-08-19 实测）** |

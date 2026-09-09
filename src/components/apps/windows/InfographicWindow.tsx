@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import { APPS_COPY } from '@/lib/ui/copy-apps';
+import { AppWindowPlaceholder } from './AppWindowPlaceholder';
 import {
   type DraftPayload,
   type ImageConfigResponse,
@@ -345,7 +346,23 @@ export function InfographicWindow({
     );
   }
 
+  if (!customizeMode && (imageFailed || !imageEnabled) && !aiDraft) {
+    // 图没出来、模型草案也没有：诚实失败。之前这里会拿转录切几句当"要点"，
+    // 或者直接放「提炼课堂重点 / 梳理知识关系 / 突出关键结论」三条万能句，标成"可读版做好了"。
+    return (
+      <section className="h-full bg-canvas" data-testid="infographic-window">
+        <AppWindowPlaceholder
+          status="error"
+          appName={APPS_COPY.infographic.appName}
+          errorMessage={APPS_COPY.infographic.generateFailed}
+          onRetry={() => void generateFromCurrentContext()}
+        />
+      </section>
+    );
+  }
+
   if (!customizeMode && (imageFailed || !imageEnabled)) {
+    // 图没出来但模型草案在：可读版是同学真整理出的要点，不是拼的
     const keyPoints = (previewDraft.keyPoints || []).slice(0, 5);
     return (
       <section
