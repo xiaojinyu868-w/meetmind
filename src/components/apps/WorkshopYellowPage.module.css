@@ -1291,3 +1291,139 @@
   border-color: var(--mm-pine);
   color: var(--mm-pine);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   课后学习页 v2.1（2026-09-09）：字号与层级——这页读起来像同桌的笔记，不像设置面板。
+   规则：区块标题降为 mono 眉题，让卡片标题成为每个区块里最重的字；正文与说明从
+   10-11px 提到 12.5-14.5px；步骤号改用衬线数字做卡片的身份，不再是描边小圆。
+   写在文件末尾覆盖上方同名规则。
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.lessonHead {
+  margin-bottom: 26px;
+}
+.lessonTitle {
+  font-size: 26px;
+  line-height: 1.18;
+  letter-spacing: -0.032em;
+}
+.lessonMeta {
+  margin-top: 9px;
+  font-size: 11.5px;
+  letter-spacing: 0.03em;
+}
+.lessonSummary {
+  margin-top: 16px;
+  font-size: 14.5px;
+  line-height: 1.75;
+}
+
+.matrixSection {
+  margin-top: 30px;
+}
+.sectionHeading {
+  margin-bottom: 11px;
+}
+.sectionTitle {
+  color: var(--mm-ink-muted);
+  font-family: 'JetBrains Mono', 'Roboto Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.pathHint {
+  margin-top: 5px;
+  color: var(--mm-ink-secondary);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+/* 先做这一件 */
+.cardFeatured {
+  padding: 20px 22px;
+  border-radius: 20px;
+}
+.cardFeatured .appName {
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+.cardFeatured .recommendationReason {
+  margin-top: 10px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--mm-ink);
+}
+.cardFeatured .cardMeta {
+  margin-top: 8px;
+  font-size: 11.5px;
+}
+
+/* 学习路径 */
+.pathGrid {
+  gap: 12px;
+}
+.cardStep {
+  gap: 12px;
+  padding: 15px;
+  border-radius: 18px;
+}
+.cardStep .appName {
+  font-size: 15.5px;
+  letter-spacing: -0.016em;
+}
+.cardStep .fitLine {
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--mm-ink-secondary);
+}
+.cardStep .cardMeta {
+  margin-top: 7px;
+  font-size: 11px;
+}
+.stepIndex {
+  width: auto;
+  height: auto;
+  border: 0;
+  color: var(--mm-pine);
+  font-family: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  font-size: 22px;
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1;
+  opacity: 0.72;
+}
+.cardGenerated .stepIndex {
+  background: transparent;
+  color: var(--mm-pine);
+  opacity: 1;
+}
+.stepLabel {
+  font-size: 13px;
+}
+.stepNow {
+  font-size: 10px;
+}
+.statusDot {
+  font-size: 10.5px;
+}
+.statusDotCore {
+  width: 6px;
+  height: 6px;
+}
+
+/* 还可以这样学 */
+.quietList {
+  gap: 8px;
+}
+.cardQuiet {
+  padding: 11px 14px;
+  border-radius: 14px;
+}
+.quietAction {
+  font-size: 14px;
+}
+.quietName {
+  font-size: 12.5px;
+}

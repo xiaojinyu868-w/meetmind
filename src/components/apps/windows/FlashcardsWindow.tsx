@@ -31,7 +31,7 @@ interface FlashcardsWindowProps {
 
 type MasteryScore = 'missed' | 'got';
 
-export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessment, nextStep }: FlashcardsWindowProps) {
+export function FlashcardsWindow({ result, transcript, onSeek, onLearningActivity, onAssessment, nextStep }: FlashcardsWindowProps) {
   const cards = useMemo(() => normalizeFlashcards(result), [result]);
   const fallbackMessage = useMemo(() => getFlashcardsFallbackMessage(result), [result]);
   const [reviewCardIds, setReviewCardIds] = useState<string[] | null>(null);
@@ -168,7 +168,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessm
   }, [goToNext, goToPrev]);
 
   if (!result) {
-    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.flashcards.appName} />;
+    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.flashcards.appName} transcript={transcript} />;
   }
   if (fallbackMessage) {
     return (

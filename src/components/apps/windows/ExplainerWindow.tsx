@@ -10,6 +10,7 @@
 
 import { useMemo } from 'react';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
+import type { TranscriptSegment } from '@/types';
 import { sanitizeBoardScript } from '@/lib/ai-native/plugins/board-script';
 import type { BoardScript } from '@/lib/ai-native/plugins/board-script';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
@@ -18,6 +19,8 @@ import { APPS_COPY } from '@/lib/ui/copy-apps';
 
 interface ExplainerWindowProps {
   result: AppExecutionResult | null;
+  /** 等待态里掠过的这节课原话 */
+  transcript?: TranscriptSegment[];
 }
 
 interface ExplainerQuoteStats {
@@ -63,11 +66,11 @@ function normalizeExplainerPayload(result: AppExecutionResult | null): Explainer
   };
 }
 
-export function ExplainerWindow({ result }: ExplainerWindowProps) {
+export function ExplainerWindow({ result, transcript }: ExplainerWindowProps) {
   const payload = useMemo(() => normalizeExplainerPayload(result), [result]);
 
   if (!result) {
-    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.explainer.appName} />;
+    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.explainer.appName} transcript={transcript} />;
   }
   if (!payload) {
     return <AppWindowPlaceholder status="empty" appName={APPS_COPY.explainer.appName} />;

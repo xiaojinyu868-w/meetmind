@@ -23,6 +23,22 @@ import styles from './WorkshopYellowPage.module.css';
 
 export type WorkshopCardStatus = 'idle' | 'running' | 'success' | 'error';
 
+const STAMP_PATTERN = /(\d{1,2}:\d{2}(?::\d{2})?)/g;
+
+/**
+ * 推荐理由里的时间点（「你在 0:30、1:12 留了标记」）渲染成朱批 [MM:SS] 引用——
+ * 「有根」是这页的 DNA，理由指向课堂里具体的一刻，就该长得像一处引用而不是普通文字。
+ */
+function renderReasonWithStamps(text: string): ReactNode {
+  const parts = text.split(STAMP_PATTERN);
+  if (parts.length === 1) return text;
+  return parts.map((part, index) =>
+    /^\d{1,2}:\d{2}(?::\d{2})?$/.test(part)
+      ? <span key={`${part}-${index}`} className="cite-ts mono" style={{ fontSize: '11px', padding: '0 5px', margin: '0 1px', verticalAlign: '1px' }}>{part}</span>
+      : part,
+  );
+}
+
 /**
  * 三种形态，三级视觉重量（课后学习页 v2）：
  * - featured：「先做这一件」——页面唯一饱和主按钮，带理由，surface-ai 式 pine ring
@@ -227,7 +243,7 @@ export function WorkshopAppCard({
             </span>
           </div>
           {featured && recommendationReason ? (
-            <p className={styles.recommendationReason}>{recommendationReason}</p>
+            <p className={styles.recommendationReason}>{renderReasonWithStamps(recommendationReason)}</p>
           ) : (
             <p className={styles.fitLine}>{app.bestFor}</p>
           )}

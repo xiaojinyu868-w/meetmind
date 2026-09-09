@@ -236,7 +236,7 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
   /* ── 渲染 ── */
 
   if (!result) {
-    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.teachBack.appName} />;
+    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.teachBack.appName} transcript={transcript} />;
   }
   if (targets.length === 0) {
     return <AppWindowPlaceholder status="empty" appName={APPS_COPY.teachBack.appName} />;

@@ -141,7 +141,7 @@ export function AppRenderSurface({
   }
 
   if (appKey === 'explainer') {
-    return <ExplainerWindow result={result} />;
+    return <ExplainerWindow result={result} transcript={transcript} />;
   }
 
   return null;

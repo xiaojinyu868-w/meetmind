@@ -20,17 +20,19 @@ const rippleButtonVariants = cva(
   'relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 overflow-hidden [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:scale-[0.98]',
   {
     variants: {
+      // v7：主签名色 pine 是唯一饱和按钮；次级是 paper-warm 中性；朱砂只留给"此刻 / 引用"，不做按钮底色。
+      // （此前 primary 是纯黑、secondary / soft / ghost 全是珊瑚色——登录页因此像另一个产品）
       variant: {
         primary:
-          'bg-[#1C1B19] text-white hover:hover:-translate-y-0.5 focus-visible:ring-vermilion/50',
+          'bg-pine text-white shadow-soft hover:-translate-y-0.5 hover:opacity-95 focus-visible:ring-pine/40',
         secondary:
-          'bg-white border-2 border-vermilion/30 text-vermilion hover:bg-vermilion-fog hover:border-vermilion/45 focus-visible:ring-vermilion/30',
+          'bg-card border border-divider text-ink-secondary hover:border-pine hover:text-pine focus-visible:ring-pine/30',
         ghost:
-          'bg-transparent hover:bg-vermilion-fog text-vermilion focus-visible:ring-vermilion/30',
+          'bg-transparent text-pine hover:bg-pine-fog focus-visible:ring-pine/30',
         soft:
-          'bg-vermilion-mist text-vermilion hover:bg-vermilion-mist border border-vermilion/30 focus-visible:ring-vermilion/30',
+          'bg-paper-warm text-ink-secondary border border-divider hover:border-pine/50 hover:text-pine focus-visible:ring-pine/30',
         amber:
-          'bg-[#FDF3C0] text-white hover:hover:-translate-y-0.5 focus-visible:ring-[#1C1B19]',
+          'bg-sand text-ink hover:-translate-y-0.5 focus-visible:ring-pine/30',
       },
       size: {
         sm: 'h-9 px-3 text-xs',
@@ -107,7 +109,7 @@ const RippleButton = React.forwardRef<HTMLButtonElement, RippleButtonProps>(
         case 'ghost':
         case 'soft':
         default:
-          return 'rgba(244, 63, 94, 0.2)'; // rose-500 with opacity
+          return 'rgba(47, 107, 85, 0.16)'; // pine with opacity
       }
     };
 

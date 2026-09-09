@@ -36,7 +36,8 @@ src/components/apps/windows/
 ├── podcast-window-model.ts     # 播客前端纯 helper：过滤 provider/HTTP 原始失败章节
 ├── ExplainerWindow.tsx         # 板书精讲：BoardScript → blackboard/BlackboardPlayer（v31 白纸讲义画布实时书写），头部显示标题与老师原话核对统计。2026-09-08：窗口本身改纸面（与闪卡 / 测验 / 导图同皮肤），黑板只是墙上那一块——BlackboardPlayer 的深色框只包住 16:9 纸面 + 控制条并垂直居中，纸面按宿主（`data-board-host`）宽 / 可用高双约束缩放（BoardCanvas）；无宿主（TeachBoard / 独立页）沿用铺满宽度的 16:9 盒子
 ├── blackboard/                 # 讲义播放器：board-model（纯函数网格/时间轴/bounds）+ BoardCanvas（v32 备课本/分栏总装）+ BoardFlow（双栏流式内容区）+ BoardFormula（KaTeX 块级公式）+ board-lecture（字阶/调色板/分栏纯函数）+ BoardWrite（token 接力显现，v32 起屏显字体）+ RoughStroke（roughjs 圈点勾画）+ useBoardPlayer（状态机 + Clock 抽象）+ BlackboardPlayer（控制条）。v32：BoardCaption（字幕）删除，鸿雷/Caveat/hanzi-writer 随手写体退役
-├── AppWindowPlaceholder.tsx    # 六类应用共用的整理中 / 空结果 / 失败状态
+├── AppWindowPlaceholder.tsx    # 六类应用共用的整理中 / 空结果 / 失败状态（错误码 → 人话映射 describeAppExecutionError）
+├── TranscriptDrift.tsx         # 等待态的"有根"部分：这节课真实转录行按时间顺序掠过（≤24 句均匀取样，[MM:SS] 朱批戳，尊重 reduced-motion）
 ├── EvidenceLabel.tsx           # 证据标签组件
 └── index.ts                    # barrel 导出
 ```
@@ -110,7 +111,8 @@ quiz-observation.ts 为提交动作附加完整 practice.attempt 观察：保留
 - `PodcastWindow` 把“能否立刻听”作为第一任务；音频成功时脚本与章节默认折叠，音频失败时保留稳定重试动作并直接展开已经生成的脚本，让一次失败仍然有可用产物，且不透出 provider 原始错误。
 - 失败产物中若混入“播客音频未生成 / 403 Forbidden / 建连失败”等技术章节，必须在 `podcast-window-model.ts` 过滤；前端只保留可重试状态、脚本和真实课堂证据。
 - 播客只有真实音频，或至少真实脚本 / 章节存在时，才写入“最近学习现场”；禁止把 provider 调用结束当作用户已经得到可播放成品。
-- `AppWindowPlaceholder` 是六类应用整理中、空结果与失败状态的唯一展示；等待态使用“同学正在整理”，禁止重新出现“酿”等内部隐喻。
+- `AppWindowPlaceholder` 是六类应用整理中、空结果与失败状态的唯一展示；等待态使用“同学正在整理”，禁止重新出现“酿”等内部隐喻。窗口传入 `transcript` 时等待态会让这节课的原话掠过（`TranscriptDrift`）——不声称模型读到了哪句，只把材料本身可视化；不假装阶段进度。
+- `AppRenderSurface.isEmptyAppResult`：有"成品"但一道题 / 一张卡 / 一个分支都没有 → 按失败处理带「再试一次」，顶栏与窗口体不再一个说「做好了」一个说空。
 
 ## AppRenderSurface
 

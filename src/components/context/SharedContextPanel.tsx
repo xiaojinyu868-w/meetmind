@@ -11,6 +11,36 @@ const field = 'w-full rounded-xl border border-divider bg-card px-4 py-3 text-sm
 const button = 'rounded-full bg-pine px-5 py-2.5 text-sm font-medium text-white disabled:opacity-40';
 const smallButton = 'rounded-full border border-divider px-3 py-1.5 text-xs text-ink-secondary disabled:opacity-40';
 
+/**
+ * 访客态：这页此前只有一颗「登录后查看」按钮——一个空页面配一个按钮，说不清这里是什么。
+ * 现在先把三块区域用它们自己的文案摆出来（理解 / 轨迹 / 下一次能用上什么），
+ * 让人知道登录进来会看到什么；主动作登录，次动作先去试听一节课。
+ */
+function GuestPreview() {
+  const c = sharedContextCopy;
+  const blocks = [
+    { title: c.portraitHeading, body: c.portraitBody },
+    { title: c.history, body: c.timelineHint },
+    { title: c.tryTitle, body: c.guestTryBody },
+  ];
+  return (
+    <div className="max-w-3xl">
+      <div className="grid gap-3 sm:grid-cols-3">
+        {blocks.map((block) => (
+          <section key={block.title} className="rounded-2xl border border-dashed border-divider bg-card/60 p-5">
+            <h2 className="text-[15px] font-medium text-ink">{block.title}</h2>
+            <p className="mt-2 text-[13px] leading-6 text-ink-secondary">{block.body}</p>
+          </section>
+        ))}
+      </div>
+      <div className="mt-8 flex flex-wrap items-center gap-4">
+        <Link className={button} href="/login">{c.login}</Link>
+        <Link className="text-sm text-ink-secondary underline-offset-4 hover:text-pine hover:underline" href="/app?guest=1&entry=demo">{c.guestDemo}</Link>
+      </div>
+    </div>
+  );
+}
+
 export function SharedContextPanel() {
 
   const [note, setNote] = useState('');
@@ -39,7 +69,7 @@ export function SharedContextPanel() {
         <p className="mt-4 leading-7 text-ink-secondary">{c.intro}</p>
       </header>
       {!mounted || context.isCheckingAuth ? <p role="status">{c.loading}</p> : !context.signedIn ?
-        <Link className={button} href="/login">{c.login}</Link> : <>
+        <GuestPreview /> : <>
           {context.error && <p role="alert" className="mb-5 rounded-xl border border-divider bg-card p-4 text-sm text-vermilion">{c.errors[context.error] ?? c.error}</p>}
           <div className="mb-7 flex items-center justify-between gap-4">
             <span className="rounded-full border border-divider px-3 py-1 text-xs text-ink-secondary">{space}</span>

@@ -36,7 +36,7 @@ interface QuizWindowProps {
 /* 测验保持安静平涂：用排版和状态区分，不用题目环境光。 */
 const QUIZ_SUCCESS = 'var(--mm-pine)';
 
-export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, nextStep }: QuizWindowProps) {
+export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onAssessment, nextStep }: QuizWindowProps) {
   const questions = useMemo(() => normalizeQuizQuestions(result), [result]);
   const [reviewQuestionIds, setReviewQuestionIds] = useState<string[] | null>(null);
   const activeQuestions = useMemo(
@@ -51,7 +51,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
   const [startTime] = useState(() => Date.now());
   const seenReferences = useRef(new Set<string>());
   if (!result) {
-    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.quiz.appName} />;
+    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.quiz.appName} transcript={transcript} />;
   }
   if (questions.length === 0) {
     return <AppWindowPlaceholder status="empty" appName={APPS_COPY.quiz.appName} />;

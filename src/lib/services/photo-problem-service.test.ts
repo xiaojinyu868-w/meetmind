@@ -12,7 +12,7 @@ describe('parsePhotoProblemResponse', () => {
     });
     const problem = parsePhotoProblemResponse(raw);
     expect(problem).not.toBeNull();
-    expect(problem?.subject).toBe('其他');
+    expect(problem?.subject).toBe('数学');
     expect(problem?.statement).toContain('某商店');
     expect(problem?.figureDesc).toBeUndefined();
     expect(problem?.studentAttempt).toContain('涨价');

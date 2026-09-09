@@ -6,6 +6,7 @@ import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { TranscriptSegment } from '@/types';
 import { EvidenceChip } from '@/components/apps/evidence/EvidenceChip';
 import { APPS_COPY } from '@/lib/ui/copy-apps';
+import { AppWindowPlaceholder } from './AppWindowPlaceholder';
 import {
   treeToMarkdown,
   markdownToTree,
@@ -617,25 +618,9 @@ export function MindmapWindow({ result, transcript, onSeek, defaultViewMode = 'm
     return () => window.removeEventListener('keydown', onKey);
   }, [isFullscreen]);
 
-  // 加载中
+  // 加载中：与其他应用同一套"有根的等待"（这节课的原话掠过 + 秒数）
   if (!result) {
-    return (
-      <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-4 rounded-2xl" style={{ background: PALETTE.bg, border: `1px solid ${PALETTE.border}` }}>
-        <div className="relative">
-          <div className="absolute inset-0 animate-ping rounded-full opacity-20" style={{ background: PALETTE.accent }} />
-          <div className="relative flex h-14 w-14 items-center justify-center rounded-full" style={{ background: `${PALETTE.accent}15`, border: `2px solid ${PALETTE.accent}33` }}>
-            <svg className="h-6 w-6 animate-spin" style={{ color: PALETTE.accent }} fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          </div>
-        </div>
-        <div className="text-center">
-          <p className="text-sm font-medium" style={{ color: PALETTE.textPrimary }}>{APPS_COPY.mindmap.loadingTitle}</p>
-          <p className="mt-1 text-xs" style={{ color: PALETTE.textMuted }}>{APPS_COPY.mindmap.loadingBody}</p>
-        </div>
-      </div>
-    );
+    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.mindmap.appName} transcript={transcript} />;
   }
 
   // 空态

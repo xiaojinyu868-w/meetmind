@@ -369,11 +369,7 @@ function LoginForm() {
             <div className="mb-5 flex items-center gap-6 border-b border-divider pb-4">
               <button
                 onClick={() => handleLoginTypeChange('email')}
-                className="text-base pb-1 border-b-2 transition-all font-medium"
-                style={{ 
-                  color: loginType === 'email' ? '#1C1B19' : '#5C5A55',
-                  borderColor: loginType === 'email' ? '#1C1B19' : 'transparent',
-                }}
+                className={`text-base pb-1 border-b-2 transition-all font-medium ${loginType === 'email' ? 'border-pine text-ink' : 'border-transparent text-ink-secondary'}`}
               >
                 {COPY.login.accountTab}
               </button>
@@ -384,23 +380,13 @@ function LoginForm() {
               <div className="flex items-center gap-3 mb-5">
                 <button
                   onClick={() => setLoginMethod('code')}
-                  className="text-sm px-4 py-1.5 rounded-full transition-all"
-                  style={{ 
-                    backgroundColor: loginMethod === 'code' ? '#1C1B19' : 'transparent',
-                    color: loginMethod === 'code' ? '#FFFFFF' : '#5C5A55',
-                    border: loginMethod === 'code' ? '1px solid #1C1B19' : '1px solid transparent'
-                  }}
+                  className={`text-sm px-4 py-1.5 rounded-full border transition-all ${loginMethod === 'code' ? 'border-pine bg-pine text-white' : 'border-transparent text-ink-secondary hover:text-pine'}`}
                 >
                   验证码登录
                 </button>
                 <button
                   onClick={() => setLoginMethod('password')}
-                  className="text-sm px-4 py-1.5 rounded-full transition-all"
-                  style={{ 
-                    backgroundColor: loginMethod === 'password' ? '#1C1B19' : 'transparent',
-                    color: loginMethod === 'password' ? '#FFFFFF' : '#5C5A55',
-                    border: loginMethod === 'password' ? '1px solid #1C1B19' : '1px solid transparent'
-                  }}
+                  className={`text-sm px-4 py-1.5 rounded-full border transition-all ${loginMethod === 'password' ? 'border-pine bg-pine text-white' : 'border-transparent text-ink-secondary hover:text-pine'}`}
                 >
                   密码登录
                 </button>
@@ -427,7 +413,7 @@ function LoginForm() {
                   onChange={(e) => loginType === 'email' ? setEmail(e.target.value) : setPhone(e.target.value)}
                   placeholder={loginType === 'email' ? (loginMethod === 'password' ? COPY.login.passwordIdentifierPlaceholder : COPY.login.emailPlaceholder) : '请输入手机号码'}
                   required
-                  className="w-full rounded-xl border border-divider bg-white px-4 py-3.5 text-ink placeholder:text-ink-muted transition focus:border-ink focus:outline-none"
+                  className="w-full rounded-xl border border-divider bg-white px-4 py-3.5 text-ink placeholder:text-ink-muted transition focus:border-pine focus:outline-none focus:ring-2 focus:ring-pine/15"
                 />
               </div>
 
@@ -441,7 +427,7 @@ function LoginForm() {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="请输入密码"
                     required
-                    className="w-full rounded-xl border border-divider bg-white px-4 py-3.5 text-ink placeholder:text-ink-muted transition focus:border-ink focus:outline-none"
+                    className="w-full rounded-xl border border-divider bg-white px-4 py-3.5 text-ink placeholder:text-ink-muted transition focus:border-pine focus:outline-none focus:ring-2 focus:ring-pine/15"
                   />
                 </div>
               )}
@@ -460,7 +446,7 @@ function LoginForm() {
                       placeholder="请输入6位验证码"
                       required
                       maxLength={6}
-                      className="flex-1 rounded-xl border border-divider bg-white px-4 py-3.5 text-ink placeholder:text-ink-muted transition focus:border-ink focus:outline-none"
+                      className="flex-1 rounded-xl border border-divider bg-white px-4 py-3.5 text-ink placeholder:text-ink-muted transition focus:border-pine focus:outline-none focus:ring-2 focus:ring-pine/15"
                     />
                     <RippleButton
                       type="button"
@@ -483,7 +469,7 @@ function LoginForm() {
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="h-4 w-4 rounded border-divider text-ink focus:ring-ink-muted"
+                    className="h-4 w-4 rounded border-divider text-pine focus:ring-pine/30"
                   />
                   <span className="text-ink-secondary">记住登录30天</span>
                 </label>
@@ -501,7 +487,7 @@ function LoginForm() {
                 size="lg"
                 loading={isSubmitting}
                 loadingText="登录中..."
-                className="w-full bg-ink text-white hover:bg-[#1a1a19]"
+                className="w-full"
               >
                 {loginMethod === 'code' ? '登录 / 注册' : '登录'}
               </RippleButton>
@@ -533,9 +519,9 @@ function LoginForm() {
                   <a
                     href={wechatAuthUrl || undefined}
                     aria-disabled={!wechatAuthUrl}
-                    className={`flex w-full items-center justify-center gap-3 rounded-xl bg-pine px-4 py-3 font-medium text-white transition hover:bg-pine-dark ${!wechatAuthUrl ? 'pointer-events-none opacity-60' : ''}`}
+                    className={`flex w-full items-center justify-center gap-3 rounded-xl border border-divider bg-card px-4 py-3 font-medium text-ink transition hover:border-pine hover:text-pine ${!wechatAuthUrl ? 'pointer-events-none opacity-60' : ''}`}
                   >
-                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <svg className="h-5 w-5 text-pine" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                       <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 01.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18z" />
                     </svg>
                     <span>{wechatAuthUrl ? COPY.wechatQr.inWechatAction : COPY.wechatQr.loading}</span>
@@ -544,9 +530,9 @@ function LoginForm() {
                   <button
                     type="button"
                     onClick={() => setShowWechatQr(true)}
-                    className="flex w-full items-center justify-center gap-3 rounded-xl bg-pine px-4 py-3 font-medium text-white transition hover:bg-pine-dark"
+                    className="flex w-full items-center justify-center gap-3 rounded-xl border border-divider bg-card px-4 py-3 font-medium text-ink transition hover:border-pine hover:text-pine"
                   >
-                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <svg className="h-5 w-5 text-pine" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                       <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 01.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18z" />
                     </svg>
                     <span>{COPY.wechatQr.loginAction}</span>

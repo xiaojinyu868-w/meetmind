@@ -21,12 +21,18 @@ import { APPS_COPY } from '@/lib/ui/copy-apps';
 import { OctoBuddySprite } from '@/components/classroom/OctoBuddy';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { BrewingStrip } from '@/components/ui/thinking-strip';
+import { TranscriptDrift, type DriftLine } from './TranscriptDrift';
 
 interface AppWindowPlaceholderProps {
   /** 占位状态 */
   status: 'loading' | 'empty' | 'error';
   /** 应用中文名称（用于文案） */
   appName?: string;
+  /**
+   * 这节课的转录（loading 态用）：真实原话按时间顺序缓缓掠过，等待变成"它在读的是我的课"。
+   * 不传就只有章鱼 + 秒数。
+   */
+  transcript?: ReadonlyArray<DriftLine>;
   /** 错误消息 */
   errorMessage?: string;
   /** 重试回调 */
@@ -57,7 +63,15 @@ function useElapsedSec(): number {
   return seconds;
 }
 
-function ListeningLoading({ appName, loadingLabel }: { appName: string; loadingLabel?: string }) {
+function ListeningLoading({
+  appName,
+  loadingLabel,
+  transcript,
+}: {
+  appName: string;
+  loadingLabel?: string;
+  transcript?: ReadonlyArray<DriftLine>;
+}) {
   const seconds = useElapsedSec();
 
   // 文案分级：30s 内一句温柔陪伴；30-60s 承认内容多；>60s 表达耐心
@@ -67,9 +81,10 @@ function ListeningLoading({ appName, loadingLabel }: { appName: string; loadingL
       : seconds <= 60
         ? COPY.stages.listenSlow
         : COPY.stages.listenVerySlow;
+  const hasDrift = Boolean(transcript && transcript.length >= 3);
 
   return (
-    <div className="relative flex h-full min-h-[420px] flex-col items-center justify-center gap-7 px-6 py-12">
+    <div className="relative flex h-full min-h-[420px] flex-col items-center justify-center gap-6 px-6 py-12">
       {/* 极淡 pine / vermilion 双色光晕（v7 仪式时刻） */}
       <div
         aria-hidden
@@ -84,13 +99,15 @@ function ListeningLoading({ appName, loadingLabel }: { appName: string; loadingL
 
       {/* Octo Buddy listening · 主角不能小 */}
       <div className="relative">
-        <OctoBuddySprite mood="listening" size="lg" />
+        <OctoBuddySprite mood="listening" size={hasDrift ? 'md' : 'lg'} />
       </div>
 
-      <div className="relative flex flex-col items-center gap-3 text-center">
+      <div className="relative flex w-full flex-col items-center gap-3 text-center">
         <p className="text-[15px] font-medium tracking-[-0.01em] text-ink">
           {message}
         </p>
+        {/* 有根的等待：这节课的原话按时间顺序翻过——材料本身，不是假进度 */}
+        {hasDrift ? <TranscriptDrift transcript={transcript!} className="mt-1" /> : null}
         <BrewingStrip>
           <span className="font-mono tabular-nums text-pine">{APPS_COPY.placeholder.workingElapsed(seconds)}</span>
         </BrewingStrip>
@@ -248,10 +265,11 @@ export function AppWindowPlaceholder(props: AppWindowPlaceholderProps) {
     description,
     loadingLabel,
     backLabel,
+    transcript,
   } = props;
 
   if (status === 'loading') {
-    return <ListeningLoading appName={appName} loadingLabel={loadingLabel} />;
+    return <ListeningLoading appName={appName} loadingLabel={loadingLabel} transcript={transcript} />;
   }
 
   if (status === 'error') {

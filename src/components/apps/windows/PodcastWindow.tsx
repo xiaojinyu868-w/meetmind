@@ -144,7 +144,7 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
         />
       );
     }
-    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.podcast.appName} />;
+    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.podcast.appName} transcript={transcript} />;
   }
 
   const seekAudio = (startMs: number) => {
