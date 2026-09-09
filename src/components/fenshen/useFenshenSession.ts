@@ -17,7 +17,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { COPY } from '@/lib/ui/copy';
+import { FENSHEN_COPY } from '@/lib/ui/copy-fenshen';
 import {
   applyFenshenEvent,
   initialFenshenSessionState,
@@ -186,7 +186,7 @@ export function useFenshenSession(): UseFenshenSessionResult {
     } catch (cause) {
       commit({
         ...stateRef.current,
-        error: cause instanceof Error ? cause.message : COPY.fenshen.sendFailed,
+        error: cause instanceof Error ? cause.message : FENSHEN_COPY.sendFailed,
       });
     }
   }, [apply, commit]);
@@ -215,7 +215,7 @@ export function useFenshenSession(): UseFenshenSessionResult {
       } catch (cause) {
         commit({
           ...stateRef.current,
-          error: cause instanceof Error ? cause.message : COPY.fenshen.feedbackFailed,
+          error: cause instanceof Error ? cause.message : FENSHEN_COPY.feedbackFailed,
         });
         return false;
       }

@@ -9,13 +9,13 @@
  * - ref 跨页插播：淡出 → 目标页最终态 + 脉冲高亮 → 淡回（RefInterlude）
  * - 学生板演：粉笔蓝笔迹层（StudentInkLayer），擦掉重写/写完了恢复播放
  *
- * 播放 / 暂停 / 重播 / 倍速（1x·1.5x）/ 页码。文案统一走 COPY.apps.explainer。
+ * 播放 / 暂停 / 重播 / 倍速（1x·1.5x）/ 页码。文案统一走 APPS_COPY.explainer。
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BoardAction, BoardScript } from '@/lib/ai-native/plugins/board-script';
 import { checkpointAnswerText, segmentDisplayText } from '@/lib/ai-native/plugins/board-script';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import { BoardCanvas } from './BoardCanvas';
 import type { ExtraWrite } from './BoardCanvas';
 import { BOARD_FONT } from './BoardWrite';
@@ -285,7 +285,7 @@ export function BlackboardPlayer({ script, paceMsPerChar, fontFamily, debugBound
       // 批改示范行（写错时）：标题 note + 正确写法 step，串行上板
       ...(gradeDemo.length > 0
         ? [
-            { key: 'grade-demo-title', text: COPY.apps.explainer.inkDemoTitle, role: 'note' as const },
+            { key: 'grade-demo-title', text: APPS_COPY.explainer.inkDemoTitle, role: 'note' as const },
             ...gradeDemo.map((line, index) => ({
               key: `grade-demo-${index}`,
               text: line,
@@ -501,7 +501,7 @@ export function BlackboardPlayer({ script, paceMsPerChar, fontFamily, debugBound
               pointerEvents: 'none',
             }}
           >
-            {COPY.apps.explainer.awaitingGesture}
+            {APPS_COPY.explainer.awaitingGesture}
           </div>
         ) : null}
         {interlude ? (
@@ -541,20 +541,20 @@ export function BlackboardPlayer({ script, paceMsPerChar, fontFamily, debugBound
       <div className="flex items-center justify-between" style={{ gap: 10 }}>
         <div className="flex items-center" style={{ gap: 8 }}>
           {player.status === 'playing' ? (
-            <ControlButton onClick={player.pause} label={COPY.apps.explainer.pause} />
+            <ControlButton onClick={player.pause} label={APPS_COPY.explainer.pause} />
           ) : (
             <ControlButton
               onClick={player.status === 'finished' ? player.replay : player.play}
-              label={player.status === 'finished' ? COPY.apps.explainer.replay : COPY.apps.explainer.play}
+              label={player.status === 'finished' ? APPS_COPY.explainer.replay : APPS_COPY.explainer.play}
             />
           )}
           {player.status !== 'finished' ? (
-            <ControlButton onClick={player.replay} label={COPY.apps.explainer.replay} />
+            <ControlButton onClick={player.replay} label={APPS_COPY.explainer.replay} />
           ) : null}
           <ControlButton onClick={player.toggleSpeed} label={player.speed === 1 ? '1x' : '1.5x'} />
           <ControlButton
             onClick={toggleInk}
-            label={inkActive ? COPY.apps.explainer.inkDone : COPY.apps.explainer.inkStart}
+            label={inkActive ? APPS_COPY.explainer.inkDone : APPS_COPY.explainer.inkStart}
             active={inkActive}
             disabled={player.status === 'checkpoint'}
           />
@@ -564,12 +564,12 @@ export function BlackboardPlayer({ script, paceMsPerChar, fontFamily, debugBound
                 setStrokes([]);
                 setGradeMarks([]);
               }}
-              label={COPY.apps.explainer.inkClear}
+              label={APPS_COPY.explainer.inkClear}
             />
           ) : null}
         </div>
         <span style={{ fontSize: 12, color: 'rgba(245,242,232,0.55)' }}>
-          {COPY.apps.explainer.pageLabel(player.pageIndex + 1, player.pageCount)}
+          {APPS_COPY.explainer.pageLabel(player.pageIndex + 1, player.pageCount)}
         </span>
       </div>
     </div>

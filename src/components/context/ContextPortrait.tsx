@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { COPY } from '@/lib/ui/copy';
+import { sharedContextCopy } from '@/lib/ui/shared-context-copy';
 import type { UserContextBundle } from '@/types/context';
 
 interface Props {
@@ -12,7 +12,7 @@ interface Props {
 }
 
 export function ContextPortrait({ bundle, loading, busy, inspect }: Props) {
-  const c = COPY.sharedContext;
+  const c = sharedContextCopy;
   const [expanded, setExpanded] = useState(false);
   const sources = new Map(bundle?.sources.map((source) => [source.id, source]));
   const memories = [...(bundle?.memories ?? [])].sort((a, b) => {

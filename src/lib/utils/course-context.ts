@@ -1,5 +1,5 @@
 import type { AudioSession } from '@/lib/db';
-import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import type { CourseAssessmentEntry, CourseContextPreference } from '@/types/user';
 
 export type CourseContextOrigin = 'subject' | 'topic' | 'schedule' | 'single';
@@ -91,7 +91,7 @@ function toDate(value: Date | string): Date {
 
 function dateTitle(date: Date): string {
   void date;
-  return COPY.globalAsk.courseContextUntitled;
+  return GLOBAL_ASK_COPY.courseContextUntitled;
 }
 
 function roundedHalfHour(date: Date): number {
@@ -105,15 +105,15 @@ function scheduleKey(date: Date): string {
 
 function scheduleTitle(date: Date): string {
   void date;
-  return COPY.globalAsk.courseContextUntitled;
+  return GLOBAL_ASK_COPY.courseContextUntitled;
 }
 
 function lessonFallbackTitle(session: AudioSession): string {
   if (session.sourceType === 'video-file' || session.sourceType === 'video-link') {
-    return COPY.globalAsk.courseContextVideoLesson;
+    return GLOBAL_ASK_COPY.courseContextVideoLesson;
   }
-  if (session.sourceType === 'upload') return COPY.globalAsk.courseContextUploadLesson;
-  return COPY.globalAsk.courseContextRecordingLesson;
+  if (session.sourceType === 'upload') return GLOBAL_ASK_COPY.courseContextUploadLesson;
+  return GLOBAL_ASK_COPY.courseContextRecordingLesson;
 }
 
 function recurringSchedule(lessons: CourseContextLesson[]): string | undefined {
@@ -126,7 +126,7 @@ function recurringSchedule(lessons: CourseContextLesson[]): string | undefined {
   if (Math.max(...minutes) - Math.min(...minutes) > 90) return undefined;
   const average = Math.round(minutes.reduce((sum, value) => sum + value, 0) / minutes.length / 5) * 5;
   const time = `${String(Math.floor(average / 60)).padStart(2, '0')}:${String(average % 60).padStart(2, '0')}`;
-  return COPY.globalAsk.courseContextRecurring(WEEKDAYS[weekday], time);
+  return GLOBAL_ASK_COPY.courseContextRecurring(WEEKDAYS[weekday], time);
 }
 
 interface Seed {

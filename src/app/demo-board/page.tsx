@@ -17,7 +17,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { BoardScript } from '@/lib/ai-native/plugins/board-script';
 import { sanitizeBoardScript } from '@/lib/ai-native/plugins/board-script';
 import { BlackboardPlayer } from '@/components/apps/windows/blackboard/BlackboardPlayer';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 
 interface DemoPayload {
   script: BoardScript;
@@ -188,8 +188,8 @@ export default function DemoBoardPage() {
           } else if (event.type === 'error') {
             setPhotoError(
               event.error === 'not_a_problem'
-                ? COPY.apps.explainer.photoErrorNotProblem
-                : COPY.apps.explainer.photoErrorGeneric,
+                ? APPS_COPY.explainer.photoErrorNotProblem
+                : APPS_COPY.explainer.photoErrorGeneric,
             );
             setPhotoStage('idle');
             loadStaticScript(false); // 失败兜底：回到静态板书，不留空黑板
@@ -200,7 +200,7 @@ export default function DemoBoardPage() {
       }
       if (!gotUnit) throw new Error('no units');
     } catch {
-      setPhotoError(COPY.apps.explainer.photoErrorGeneric);
+      setPhotoError(APPS_COPY.explainer.photoErrorGeneric);
       setPhotoStage('idle');
       loadStaticScript(false); // 同上，失败兜底回静态板书
     } finally {
@@ -212,11 +212,11 @@ export default function DemoBoardPage() {
   const busy = photoStage !== 'idle';
   const stageText =
     photoStage === 'reading'
-      ? COPY.apps.explainer.photoStageReading
+      ? APPS_COPY.explainer.photoStageReading
       : photoStage === 'solving'
-        ? COPY.apps.explainer.photoStageSolving
+        ? APPS_COPY.explainer.photoStageSolving
         : photoStage === 'preparing'
-          ? COPY.apps.explainer.photoStagePreparing
+          ? APPS_COPY.explainer.photoStagePreparing
           : null;
   const stats = payload?.quoteStats;
 
@@ -235,16 +235,16 @@ export default function DemoBoardPage() {
       <div style={{ width: '100%', maxWidth: 960 }}>
         <header style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 12 }}>
           <h1 style={{ color: '#f5f2e8', fontSize: 17, fontWeight: 500 }}>
-            {payload?.script.title ?? COPY.apps.explainer.appName}
+            {payload?.script.title ?? APPS_COPY.explainer.appName}
           </h1>
           {stats && stats.verified > 0 ? (
             <span style={{ color: '#A8C8A0', fontSize: 12 }}>
-              {COPY.apps.explainer.quotesVerified(stats.verified)}
+              {APPS_COPY.explainer.quotesVerified(stats.verified)}
             </span>
           ) : null}
           {stats && stats.downgraded > 0 ? (
             <span style={{ color: 'rgba(245,242,232,0.5)', fontSize: 12 }}>
-              {COPY.apps.explainer.quotesDowngraded(stats.downgraded)}
+              {APPS_COPY.explainer.quotesDowngraded(stats.downgraded)}
             </span>
           ) : null}
           <span style={{ flex: 1 }} />
@@ -274,7 +274,7 @@ export default function DemoBoardPage() {
               cursor: busy ? 'default' : 'pointer',
             }}
           >
-            {busy ? stageText : COPY.apps.explainer.photoEntry}
+            {busy ? stageText : APPS_COPY.explainer.photoEntry}
           </button>
         </header>
 

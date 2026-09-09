@@ -11,7 +11,7 @@
 import * as React from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { COPY } from '@/lib/ui/copy';
+import { SHARE_COPY } from '@/lib/ui/copy-share';
 import type { SharedAgentSnapshot } from '@/lib/services/share-agent-service';
 
 export interface UseShareAgentCreatorReturn {
@@ -52,10 +52,10 @@ function ShareLinkFallbackDialog({
     const ok = await copyText(fallback.shareUrl);
     setCopying(false);
     if (ok) {
-      toast.success(COPY.share.creator.doneCopied);
+      toast.success(SHARE_COPY.creator.doneCopied);
       onClose();
     } else {
-      toast.error(COPY.share.creator.doneCopyFailed);
+      toast.error(SHARE_COPY.creator.doneCopyFailed);
     }
   }, [fallback.shareUrl, onClose]);
 
@@ -69,9 +69,9 @@ function ShareLinkFallbackDialog({
       <section className="w-full max-w-[420px] rounded-2xl bg-white p-5 shadow-card">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[15px] font-semibold text-ink">{COPY.share.creator.fallbackTitle}</p>
+            <p className="text-[15px] font-semibold text-ink">{SHARE_COPY.creator.fallbackTitle}</p>
             <p className="mt-1 text-[12.5px] leading-5 text-ink-muted">
-              {COPY.share.creator.fallbackBody}
+              {SHARE_COPY.creator.fallbackBody}
             </p>
           </div>
           <button
@@ -101,7 +101,7 @@ function ShareLinkFallbackDialog({
           disabled={copying}
           className="mt-4 w-full rounded-full bg-ink px-4 py-3 text-[14px] font-semibold text-white transition hover:bg-pine-deep active:scale-[0.99] disabled:opacity-60"
         >
-          {copying ? COPY.share.creator.doneCopying : COPY.share.creator.doneCopy}
+          {copying ? SHARE_COPY.creator.doneCopying : SHARE_COPY.creator.doneCopy}
         </button>
       </section>
     </div>
@@ -116,9 +116,9 @@ export function useShareAgentCreator(): UseShareAgentCreatorReturn {
   const openCreator = React.useCallback<UseShareAgentCreatorReturn['openCreator']>(
     async (snapshot) => {
       if (!isAuthenticated || !accessToken) {
-        toast.error(COPY.share.creator.loginRequired, {
+        toast.error(SHARE_COPY.creator.loginRequired, {
           action: {
-            label: COPY.share.creator.loginAction,
+            label: SHARE_COPY.creator.loginAction,
             onClick: () => {
               const next = `${window.location.pathname}${window.location.search}${window.location.hash}`;
               window.location.href = `/login?next=${encodeURIComponent(next)}`;
@@ -145,16 +145,16 @@ export function useShareAgentCreator(): UseShareAgentCreatorReturn {
         const copied = await copyText(data.shareUrl);
         if (copied) {
           setFallback(null);
-          toast.success(COPY.share.creator.doneCopied);
+          toast.success(SHARE_COPY.creator.doneCopied);
           return;
         }
         setFallback({
           title: snapshot.title,
           shareUrl: data.shareUrl,
         });
-        toast.message(COPY.share.creator.doneLinkCreated);
+        toast.message(SHARE_COPY.creator.doneLinkCreated);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : COPY.share.creator.createFailed;
+        const msg = err instanceof Error ? err.message : SHARE_COPY.creator.createFailed;
         toast.error(msg);
       } finally {
         setIsCreating(false);

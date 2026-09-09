@@ -9,14 +9,14 @@
 import { useCallback, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { COPY } from '@/lib/ui/copy';
+import { FENSHEN_COPY } from '@/lib/ui/copy-fenshen';
 import { fenshenCreateEgo, fenshenUploadAudio } from './fenshen-client';
 import type { FenshenEgoDto, FenshenSourceType } from './fenshen-events';
 
 type Track = FenshenSourceType;
 
 // 名人堂首发只有孔子一位（产品已拍板；扩容时往这里加）
-const HALL_NAMES = [COPY.fenshen.hallConfucius] as const;
+const HALL_NAMES = [FENSHEN_COPY.hallConfucius] as const;
 
 interface FenshenOnboardFlowProps {
   onCreated: (ego: FenshenEgoDto) => void;
@@ -41,7 +41,7 @@ export function FenshenOnboardFlow({ onCreated, onCancel }: FenshenOnboardFlowPr
         const ego = await fenshenCreateEgo(payload);
         onCreated(ego);
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : COPY.fenshen.createFailed);
+        setError(cause instanceof Error ? cause.message : FENSHEN_COPY.createFailed);
       } finally {
         setSubmitting(false);
       }
@@ -58,7 +58,7 @@ export function FenshenOnboardFlow({ onCreated, onCancel }: FenshenOnboardFlowPr
     if (track === 'upload') {
       if (!name.trim()) return;
       if (!file) {
-        setError(COPY.fenshen.uploadMissing);
+        setError(FENSHEN_COPY.uploadMissing);
         return;
       }
       if (submitting) return;
@@ -69,7 +69,7 @@ export function FenshenOnboardFlow({ onCreated, onCancel }: FenshenOnboardFlowPr
         const ego = await fenshenCreateEgo({ name: name.trim(), sourceType: 'upload', sourceRef });
         onCreated(ego);
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : COPY.fenshen.createFailed);
+        setError(cause instanceof Error ? cause.message : FENSHEN_COPY.createFailed);
       } finally {
         setSubmitting(false);
       }
@@ -77,14 +77,14 @@ export function FenshenOnboardFlow({ onCreated, onCancel }: FenshenOnboardFlowPr
   }, [file, link, name, onCreated, submit, submitting, track]);
 
   const tabs: Array<{ key: Track; label: string }> = [
-    { key: 'hall', label: COPY.fenshen.tabHall },
-    { key: 'bilibili', label: COPY.fenshen.tabBilibili },
-    { key: 'upload', label: COPY.fenshen.tabUpload },
+    { key: 'hall', label: FENSHEN_COPY.tabHall },
+    { key: 'bilibili', label: FENSHEN_COPY.tabBilibili },
+    { key: 'upload', label: FENSHEN_COPY.tabUpload },
   ];
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col px-5 py-6">
-      <p className="text-[13px] leading-relaxed text-ink-secondary">{COPY.fenshen.onboardBody}</p>
+      <p className="text-[13px] leading-relaxed text-ink-secondary">{FENSHEN_COPY.onboardBody}</p>
 
       <div className="mt-5 flex gap-1.5" role="tablist">
         {tabs.map((tab) => (
@@ -131,28 +131,28 @@ export function FenshenOnboardFlow({ onCreated, onCancel }: FenshenOnboardFlowPr
         ) : (
           <div className="flex flex-col gap-3">
             <label className="flex flex-col gap-1.5">
-              <span className="text-[12px] text-ink-muted">{COPY.fenshen.nameLabel}</span>
+              <span className="text-[12px] text-ink-muted">{FENSHEN_COPY.nameLabel}</span>
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                placeholder={COPY.fenshen.namePlaceholder}
+                placeholder={FENSHEN_COPY.namePlaceholder}
                 maxLength={50}
                 className="rounded-lg border border-divider bg-card px-3 py-2 text-[13px] text-ink outline-none focus:border-pine/50"
               />
             </label>
             {track === 'bilibili' ? (
               <label className="flex flex-col gap-1.5">
-                <span className="text-[12px] text-ink-muted">{COPY.fenshen.bilibiliLabel}</span>
+                <span className="text-[12px] text-ink-muted">{FENSHEN_COPY.bilibiliLabel}</span>
                 <input
                   value={link}
                   onChange={(event) => setLink(event.target.value)}
-                  placeholder={COPY.fenshen.bilibiliPlaceholder}
+                  placeholder={FENSHEN_COPY.bilibiliPlaceholder}
                   className="rounded-lg border border-divider bg-card px-3 py-2 text-[13px] text-ink outline-none focus:border-pine/50"
                 />
               </label>
             ) : (
               <div className="flex flex-col gap-1.5">
-                <span className="text-[12px] text-ink-muted">{COPY.fenshen.uploadLabel}</span>
+                <span className="text-[12px] text-ink-muted">{FENSHEN_COPY.uploadLabel}</span>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -165,7 +165,7 @@ export function FenshenOnboardFlow({ onCreated, onCancel }: FenshenOnboardFlowPr
                   onClick={() => fileInputRef.current?.click()}
                   className="rounded-lg border border-dashed border-divider bg-card px-3 py-2.5 text-left text-[13px] text-ink-secondary transition hover:border-pine/40 hover:text-ink"
                 >
-                  {file ? file.name : COPY.fenshen.uploadPick}
+                  {file ? file.name : FENSHEN_COPY.uploadPick}
                 </button>
               </div>
             )}
@@ -178,7 +178,7 @@ export function FenshenOnboardFlow({ onCreated, onCancel }: FenshenOnboardFlowPr
       {track !== 'hall' ? (
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="naked" onClick={onCancel} disabled={submitting}>
-            {COPY.fenshen.back}
+            {FENSHEN_COPY.back}
           </Button>
           <Button
             variant="pine"
@@ -186,7 +186,7 @@ export function FenshenOnboardFlow({ onCreated, onCancel }: FenshenOnboardFlowPr
             disabled={track === 'bilibili' ? !name.trim() || !link.trim() : !name.trim()}
             onClick={() => void handleSubmit()}
           >
-            {submitting ? COPY.fenshen.submitting : COPY.fenshen.submit}
+            {submitting ? FENSHEN_COPY.submitting : FENSHEN_COPY.submit}
           </Button>
         </div>
       ) : null}

@@ -28,6 +28,7 @@ import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { COPY } from '@/lib/ui/copy';
+import { SHARE_COPY } from '@/lib/ui/copy-share';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { useOctoMood } from '@/lib/hooks/useOctoMood';
 import { ArtifactRender } from '@/components/share/ArtifactRender';
@@ -55,7 +56,7 @@ function ArtifactExhibit({
   artifactKind: ShareArtifactKind;
   artifact?: unknown;
 }) {
-  const title = COPY.share.landing.artifactTitle(artifactKind);
+  const title = SHARE_COPY.landing.artifactTitle(artifactKind);
   return (
     <section className="relative overflow-hidden rounded-[28px] border border-divider/70 bg-card shadow-float">
       <div className="px-5 py-7 sm:px-8 sm:py-9">
@@ -187,10 +188,10 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
       octoReact('shared');
       toast.success(
         data.alreadyClaimed
-          ? COPY.share.landing.claimAlready
-          : COPY.share.landing.claimDone,
+          ? SHARE_COPY.landing.claimAlready
+          : SHARE_COPY.landing.claimDone,
         {
-          description: COPY.share.landing.claimRedirecting,
+          description: SHARE_COPY.landing.claimRedirecting,
         },
       );
       // P0 闭环最后一步：领取成功 → 1.2 秒后跳工作台，让 B 从分享态自然进入
@@ -232,9 +233,9 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
     const url = window.location.href;
     try {
       await navigator.clipboard.writeText(url);
-      toast.success(COPY.share.creator.doneCopied);
+      toast.success(SHARE_COPY.creator.doneCopied);
     } catch {
-      toast.error(COPY.share.landing.reshareFailed);
+      toast.error(SHARE_COPY.landing.reshareFailed);
     }
   }, []);
 
@@ -266,10 +267,10 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
       <main className="mx-auto flex min-h-screen max-w-2xl flex-col items-center justify-center gap-4 px-4 py-10 text-center bg-paper">
         <OctoAvatar mood="surprised" size="xl" aura={false} />
         <h1 className="text-lg font-semibold tracking-h text-ink">
-          {COPY.share.landing.notFoundTitle}
+          {SHARE_COPY.landing.notFoundTitle}
         </h1>
         <p className="text-sm leading-relaxed text-ink-secondary max-w-md">
-          {COPY.share.landing.notFoundBody}
+          {SHARE_COPY.landing.notFoundBody}
         </p>
         <Link
           href="/"
@@ -342,17 +343,17 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
               <span className="size-1.5 rounded-full bg-pine animate-rec-pulse" />
               <span>
                 {share.sharerNickname
-                  ? COPY.share.landing.sharedBy(sharerNickname)
-                  : COPY.share.landing.sharedByAnon}
+                  ? SHARE_COPY.landing.sharedBy(sharerNickname)
+                  : SHARE_COPY.landing.sharedByAnon}
                 {' · '}
-                {COPY.share.landing.artifactTitle(share.artifactKind)}
+                {SHARE_COPY.landing.artifactTitle(share.artifactKind)}
               </span>
             </p>
             <h1 className="font-serif-italic text-3xl leading-tight tracking-tight text-ink sm:text-4xl">
               {share.title}
             </h1>
             <p className="font-mono text-[11px] uppercase tracking-caps text-ink-muted">
-              {[share.subject, COPY.share.landing.viewCount(share.viewCount)].filter(Boolean).join(' · ')}
+              {[share.subject, SHARE_COPY.landing.viewCount(share.viewCount)].filter(Boolean).join(' · ')}
             </p>
           </div>
         </header>
@@ -383,15 +384,15 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
             ) : null}
             <span className="relative">
               {claimed
-                ? COPY.share.landing.claimDone
+                ? SHARE_COPY.landing.claimDone
                 : claiming
-                  ? COPY.share.landing.claiming
+                  ? SHARE_COPY.landing.claiming
                   : isAuthenticated
-                    ? COPY.share.landing.claimAction
-                    : COPY.share.landing.claimGo}
+                    ? SHARE_COPY.landing.claimAction
+                    : SHARE_COPY.landing.claimGo}
             </span>
           </button>
-          <p className="text-[12px] text-ink-muted">{COPY.share.landing.claimSub}</p>
+          <p className="text-[12px] text-ink-muted">{SHARE_COPY.landing.claimSub}</p>
         </div>
 
         {/* ===== 对话面板 ===== */}
@@ -432,12 +433,12 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
             ) : null}
             <span className="relative">
               {claimed
-                ? COPY.share.landing.claimDone
+                ? SHARE_COPY.landing.claimDone
                 : claiming
-                  ? COPY.share.landing.claiming
+                  ? SHARE_COPY.landing.claiming
                   : isAuthenticated
-                    ? COPY.share.landing.claimAction
-                    : COPY.share.landing.claimGo}
+                    ? SHARE_COPY.landing.claimAction
+                    : SHARE_COPY.landing.claimGo}
             </span>
           </button>
           <button
@@ -445,7 +446,7 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
             onClick={handleReshare}
             className="rounded-full border border-divider bg-card px-4 py-2.5 text-sm font-medium text-ink-secondary transition-all duration-150 ease-out hover:border-pine hover:text-pine hover:-translate-y-px"
           >
-            {COPY.share.landing.reshareAction}
+            {SHARE_COPY.landing.reshareAction}
           </button>
         </footer>
       </main>

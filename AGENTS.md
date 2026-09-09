@@ -43,7 +43,7 @@
 | 新增 API 路由、请求体字段、响应契约、stream marker、事件名 | `src/app/api/**/DOMAIN.md` + 相关 `docs/*` |
 | 新增模型 provider、默认模型、API key、环境变量 | `src/lib/config/DOMAIN.md` + `.env.example`（涉 Tutor 再加 `docs/TUTOR_AGENT.md`） |
 | 改 Tutor / ASR / teach / fenshen / 记忆 主链路 | 对应 `DOMAIN.md` + `docs/TUTOR_AGENT.md` / `docs/ASR_PIPELINE.md` / `docs/TEACH_TUTOR_ENGINE.md` |
-| 改用户面文案或设置项 | `src/lib/ui/copy.ts`（营销页 Landing / Technology 在 `copy-landing.ts`）或设置页说明 + 偏好 key 所在 `DOMAIN.md` |
+| 改用户面文案或设置项 | `src/lib/ui/copy.ts`（按体积拆出的域文件同一口吻规则：`copy-landing` 营销页 / `copy-apps` 应用窗口 / `copy-global-ask` 问同学 / `copy-intent` / `copy-settings` / `copy-share` / `copy-fenshen`）或设置页说明 + 偏好 key 所在 `DOMAIN.md` |
 | 交付里程碑 | `CHANGELOG.md` 一条（可追到 commit）+ `make ledger` |
 
 ---
@@ -137,7 +137,7 @@ make smoke-context-live # 真 Hindsight + Tutor + 浏览器全链路验收（SMO
 | **改跨设备同步** | `roadmap/v2.1-cross-browser-sync-gap.md` → `workspace-evidence-service.ts` + `backfill-captures-to-indexeddb.ts` |
 | **改桌面壳 / 全端采集** | `roadmap/v4.0-everywhere-capture.md` → `desktop/DOMAIN.md` → `src/lib/services/keyframe/DOMAIN.md` |
 | **改标题 / 课后理解** | `src/lib/services/lesson-title-service.ts` + `lesson-understanding-service.ts` + `src/app/api/DOMAIN.md` AI 能力段 |
-| **改用户面文案** | `src/lib/ui/copy.ts`（唯一真相源；营销页 Landing / Technology 按体积拆在 `copy-landing.ts`，口吻规则相同） |
+| **改用户面文案** | `src/lib/ui/copy.ts`（口吻真相源；/app 首屏用不到的域按体积拆成同目录 `copy-*.ts`：landing / apps / global-ask / intent / settings / share / fenshen，规则相同——新增字符串先看所属域文件） |
 | **改状态管理 / 类型 / 配置 / 模型** | `src/stores/DOMAIN.md` / `src/types/DOMAIN.md` / `src/lib/config/DOMAIN.md` → `app.config.ts` → `llm-service.ts` |
 | **改设置项 / 用户偏好** | `src/app/DOMAIN.md` 设置页 → `src/lib/utils/DOMAIN.md` → 所有消费该偏好的 hooks/components |
 | **改共享学习记忆 / Context 服务 / 记忆开发者接入** | `docs/plans/LEARNING_MEMORY_V1_SPEC.md`（V1 目标）→ `docs/plans/CONTEXT_M1_DELIVERY.md`（已实现能力与限制）→ `src/lib/services/context/DOMAIN.md` + `src/app/api/context/DOMAIN.md`；UI 看 `src/components/context/DOMAIN.md`，接入包看 `packages/context-sdk/DOMAIN.md`；旧入口与迁移背景见 `src/app/api/memory/DOMAIN.md` + `docs/plans/LEARNING_MEMORY_P0_HANDOFF.md` |
@@ -201,7 +201,7 @@ src/
 │   ├── prompts/    # tutor-prompts.ts（六模式唯一 prompt 源）
 │   ├── ai-native/  # 应用插件系统（8 plugins + catalog）
 │   ├── db/         # IndexedDB schema（v8）+ CRUD
-│   ├── ui/copy.ts  # 用户面文案唯一真相源（copy-landing.ts：营销页文案，按体积拆出）
+│   ├── ui/copy.ts  # 用户面文案口吻真相源（copy-*.ts：landing / apps / global-ask / intent / settings / share / fenshen 按体积拆出）
 │   └── config/     # app.config.ts（模型注册表，env 驱动）
 ├── desktop/        # Electron 壳（仓库根 desktop/：main/shell-window/quick-panel/screenshot/updater）
 └── tests/eval/     # SWE-Bench 风格 harness + baselines

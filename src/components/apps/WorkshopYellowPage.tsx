@@ -34,6 +34,8 @@ import { FenshenEntryChip } from '@/components/fenshen/FenshenEntryChip';
 import { isShareableArtifactAppKey } from '@/components/share/share-artifact-model';
 import { WorkshopAppCard, type WorkshopCardStatus } from './WorkshopAppCard';
 import { COPY } from '@/lib/ui/copy';
+import { FENSHEN_COPY } from '@/lib/ui/copy-fenshen';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import { parsePointsBlock, describePointsBlock } from '@/hooks/points-guard';
 import { openPaywallGlobal } from '@/hooks/usePaywall';
 import { notifyPointsChanged } from '@/hooks/usePointsSummary';
@@ -1016,11 +1018,11 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         status={status}
         variant={options.variant}
         stepIndex={options.stepIndex}
-        stepLabel={COPY.apps.path.stepLabels[app.key]}
+        stepLabel={APPS_COPY.path.stepLabels[app.key]}
         recommended={isRecommended}
         recommendationReason={isRecommended ? recommendationReason : undefined}
         outcomeLine={formatOutcomeLine(app.key, outcomeSummary)}
-        redoHint={generated && outcomeAnchorCount > 0 ? COPY.apps.path.redoWithOutcomes(outcomeAnchorCount) : undefined}
+        redoHint={generated && outcomeAnchorCount > 0 ? APPS_COPY.path.redoWithOutcomes(outcomeAnchorCount) : undefined}
         progressLabel={dockTask ? <ElapsedTimer startMs={dockTask.startedAt} /> : undefined}
         onStart={() => startAndOpen(app)}
         onOpen={() => openTaskResult(app.key)}
@@ -1056,13 +1058,13 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       data-readiness-state={readinessFailed ? 'fallback' : isAssessing ? 'assessing' : assessment ? 'remote' : 'none'}
     >
       <header className={`${styles.header} ${styles.lessonHead}`}>
-        <p className={styles.eyebrow}>{COPY.apps.path.lessonEyebrow}</p>
+        <p className={styles.eyebrow}>{APPS_COPY.path.lessonEyebrow}</p>
         <h2 className={styles.lessonTitle}>{blockedCopy?.title ?? props.contextTitle ?? COPY.apps.matrix.title}</h2>
         <p className={styles.lessonMeta}>{lessonMeta}</p>
         {blockedCopy?.body ? (
           <p className={styles.subTitle}>{blockedCopy.body}</p>
         ) : (
-          <p className={styles.lessonSummary}>{summaryOverview?.trim() || COPY.apps.path.summaryFallback}</p>
+          <p className={styles.lessonSummary}>{summaryOverview?.trim() || APPS_COPY.path.summaryFallback}</p>
         )}
         {assessment?.status !== 'not_ready' && (runningCount > 0 || failedCount > 0) ? (
           <p className={styles.subStatus} data-testid="workshop-task-summary">
@@ -1082,7 +1084,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       {recommendedApp && !pathCompleted ? (
         <section className={styles.matrixSection} aria-labelledby="workshop-recommended-title">
           <div className={styles.sectionHeading}>
-            <h3 id="workshop-recommended-title" className={styles.sectionTitle}>{COPY.apps.path.nextTitle}</h3>
+            <h3 id="workshop-recommended-title" className={styles.sectionTitle}>{APPS_COPY.path.nextTitle}</h3>
           </div>
           {renderAppCard(recommendedApp, { variant: 'featured' })}
         </section>
@@ -1093,8 +1095,8 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         <section className={styles.wrapCard} aria-labelledby="workshop-wrap-title" data-testid="workshop-path-complete">
           <span className={styles.wrapCheck} aria-hidden><Check size={18} strokeWidth={2.4} /></span>
           <div>
-            <h3 id="workshop-wrap-title" className={styles.wrapTitle}>{COPY.apps.path.wrap.title}</h3>
-            <p className={styles.wrapBody}>{COPY.apps.path.wrap.body}</p>
+            <h3 id="workshop-wrap-title" className={styles.wrapTitle}>{APPS_COPY.path.wrap.title}</h3>
+            <p className={styles.wrapBody}>{APPS_COPY.path.wrap.body}</p>
             <ul className={styles.wrapOutcomes}>
               {pathApps.map((app) => {
                 const line = formatOutcomeLine(app.key, outcomeSummary);
@@ -1109,8 +1111,8 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       {pathApps.length > 0 ? (
         <section className={styles.matrixSection} aria-labelledby="workshop-path-title">
           <div className={styles.sectionHeading}>
-            <h3 id="workshop-path-title" className={styles.sectionTitle}>{COPY.apps.path.pathTitle}</h3>
-            <p className={styles.pathHint}>{COPY.apps.path.pathHint}</p>
+            <h3 id="workshop-path-title" className={styles.sectionTitle}>{APPS_COPY.path.pathTitle}</h3>
+            <p className={styles.pathHint}>{APPS_COPY.path.pathHint}</p>
           </div>
           <div className={styles.pathGrid}>
             {pathApps.map((app, index) => renderAppCard(app, { variant: 'step', stepIndex: index + 1 }))}
@@ -1127,7 +1129,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         <section className={styles.matrixSection} aria-labelledby="workshop-all-title">
           <div className={styles.sectionHeading}>
             <h3 id="workshop-all-title" className={styles.sectionTitle}>
-              {assessment?.status === 'not_ready' ? COPY.apps.matrix.previewTitle : COPY.apps.path.quietTitle}
+              {assessment?.status === 'not_ready' ? COPY.apps.matrix.previewTitle : APPS_COPY.path.quietTitle}
             </h3>
           </div>
           <div className={styles.quietList}>{quietApps.map((app) => renderAppCard(app, { variant: 'quiet' }))}</div>
@@ -1138,7 +1140,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       <section className={styles.matrixSection} aria-labelledby="fenshen-entry-title">
         <div className={styles.sectionHeading}>
           <h3 id="fenshen-entry-title" className={styles.sectionTitle}>
-            {COPY.fenshen.entrySectionTitle}
+            {FENSHEN_COPY.entrySectionTitle}
           </h3>
         </div>
         <FenshenEntryChip variant="card" sessionId={sessionId} lessonTitle={props.contextTitle} />

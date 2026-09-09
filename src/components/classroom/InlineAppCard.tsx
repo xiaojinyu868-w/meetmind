@@ -14,6 +14,7 @@ import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
 import { cn } from '@/lib/utils';
 import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 
 export interface InlineAppCardProps {
   inlineApp: NonNullable<import('./types').CompanionMessage['inlineApp']>;
@@ -121,7 +122,7 @@ export function InlineAppCard({ inlineApp, onRetry }: InlineAppCardProps) {
       <header className="flex items-center justify-between gap-4 border-b border-divider bg-white px-5 py-3.5">
         <div className="min-w-0">
           <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">{appName}</p>
-          <p className="mt-0.5 truncate text-[11.5px] text-ink-muted">{COPY.apps.inlineSource}</p>
+          <p className="mt-0.5 truncate text-[11.5px] text-ink-muted">{APPS_COPY.inlineSource}</p>
         </div>
         <span className="shrink-0 rounded-full border border-divider bg-canvas px-3 py-1 text-[11px] text-ink-muted">
           {COPY.identity.name}

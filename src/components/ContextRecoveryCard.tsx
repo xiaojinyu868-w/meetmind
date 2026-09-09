@@ -2,7 +2,7 @@
 
 import { ArrowRight, CornerDownRight } from 'lucide-react';
 import type { LearningActivityEntry, LearningThreadEntry } from '@/types/user';
-import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 
 interface ContextRecoveryCardProps {
   thread?: LearningThreadEntry;
@@ -27,7 +27,7 @@ export function ContextRecoveryCard({ thread, activity, onResume, compact = fals
           <CornerDownRight size={15} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[12px] font-medium text-vermilion">{COPY.globalAsk.recoveryEyebrow}</span>
+          <span className="block text-[12px] font-medium text-vermilion">{GLOBAL_ASK_COPY.recoveryEyebrow}</span>
           <span className="mt-0.5 block truncate text-[15px] font-semibold text-ink">{title}</span>
         </span>
         <ArrowRight size={15} className="text-vermilion transition-transform group-hover:translate-x-0.5" />
@@ -46,12 +46,12 @@ export function ContextRecoveryCard({ thread, activity, onResume, compact = fals
           <CornerDownRight size={14} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block font-mono text-[9.5px] font-semibold uppercase tracking-[0.1em] text-pine">{COPY.globalAsk.recoveryEyebrow}</span>
+          <span className="block font-mono text-[9.5px] font-semibold uppercase tracking-[0.1em] text-pine">{GLOBAL_ASK_COPY.recoveryEyebrow}</span>
           <span className="mt-1 block truncate text-[14px] font-semibold text-ink">{title}</span>
           {detail ? <span className="mt-1 block line-clamp-2 text-[11.5px] leading-5 text-ink-secondary">{detail}</span> : null}
         </span>
         <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-pine">
-          <span className="hidden sm:inline">{COPY.globalAsk.recoveryResume}</span>
+          <span className="hidden sm:inline">{GLOBAL_ASK_COPY.recoveryResume}</span>
           <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
         </span>
       </div>

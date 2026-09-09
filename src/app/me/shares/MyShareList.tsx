@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { OctoBuddySprite } from '@/components/classroom/OctoBuddy';
 import { COPY } from '@/lib/ui/copy';
+import { SHARE_COPY } from '@/lib/ui/copy-share';
 import type { MySharedAgentSummary } from '@/lib/services/share-agent-service';
 
 const KIND_LABEL: Record<string, string> = {
@@ -105,7 +106,7 @@ export default function MyShareList() {
     const url = `${window.location.origin}/share/${token}`;
     try {
       await navigator.clipboard.writeText(url);
-      toast.success(COPY.share.creator.doneCopied);
+      toast.success(SHARE_COPY.creator.doneCopied);
     } catch {
       toast.error('复制失败，请手动复制');
     }

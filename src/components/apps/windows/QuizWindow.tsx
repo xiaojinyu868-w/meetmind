@@ -8,7 +8,7 @@ import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { TranscriptSegment } from '@/types';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
 import { formatQuizActivity, formatQuizCompleteActivity } from '@/components/review-learning-activity';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import {
   formatQuizEvidenceTime,
   isQuizAnswerCorrect,
@@ -51,10 +51,10 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
   const [startTime] = useState(() => Date.now());
   const seenReferences = useRef(new Set<string>());
   if (!result) {
-    return <AppWindowPlaceholder status="loading" appName={COPY.apps.quiz.appName} />;
+    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.quiz.appName} />;
   }
   if (questions.length === 0) {
-    return <AppWindowPlaceholder status="empty" appName={COPY.apps.quiz.appName} />;
+    return <AppWindowPlaceholder status="empty" appName={APPS_COPY.quiz.appName} />;
   }
 
   const current = activeQuestions[Math.min(index, activeQuestions.length - 1)];
@@ -89,7 +89,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
     setSelected((prev) => ({ ...prev, [current.id]: correct ? QUIZ_SELF_CORRECT : QUIZ_SELF_WRONG }));
     setSubmitted((prev) => ({ ...prev, [current.id]: true }));
     // 自评不是观测到的作答：observation 里标 learner_self_report，Context 侧不把它当独立答对
-    recordAttempt(correct ? COPY.apps.quiz.selfCorrect : COPY.apps.quiz.selfWrong, correct ? 'correct' : 'incorrect');
+    recordAttempt(correct ? APPS_COPY.quiz.selfCorrect : APPS_COPY.quiz.selfWrong, correct ? 'correct' : 'incorrect');
   };
   const progress = activeQuestions.length > 0 ? ((index + 1) / activeQuestions.length) * 100 : 0;
   const elapsedMinutes = Math.round((Date.now() - startTime) / 60000);
@@ -106,9 +106,9 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
       <div className="flex h-full min-h-[420px] flex-col items-center justify-center bg-canvas p-6">
         <div className="w-full max-w-md text-center">
           <div className="mx-auto mb-5 h-1 w-12 rounded-full bg-pine" aria-hidden />
-          <h2 className="mb-2 text-2xl font-semibold tracking-[-0.03em] text-ink">{COPY.apps.quiz.completeTitle}</h2>
+          <h2 className="mb-2 text-2xl font-semibold tracking-[-0.03em] text-ink">{APPS_COPY.quiz.completeTitle}</h2>
           <p className="mb-7 text-sm leading-relaxed text-ink-muted">
-            {COPY.apps.quiz.completeMeta(activeQuestions.length, elapsedMinutes < 1 ? '<1' : String(elapsedMinutes))}
+            {APPS_COPY.quiz.completeMeta(activeQuestions.length, elapsedMinutes < 1 ? '<1' : String(elapsedMinutes))}
           </p>
 
           <div className="relative inline-flex items-center justify-center w-32 h-32 mb-6">
@@ -121,7 +121,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-3xl font-semibold text-ink">{accuracy}%</span>
-              <span className="text-xs text-ink-muted">{COPY.apps.quiz.recallRate}</span>
+              <span className="text-xs text-ink-muted">{APPS_COPY.quiz.recallRate}</span>
             </div>
           </div>
 
@@ -129,19 +129,19 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
           <div className="mb-6 flex items-center justify-center gap-10">
             <div className="text-center">
               <div className="text-xl font-semibold text-ink">{correctCount}</div>
-              <div className="mt-1 text-xs text-ink-muted">{COPY.apps.quiz.solidCount}</div>
+              <div className="mt-1 text-xs text-ink-muted">{APPS_COPY.quiz.solidCount}</div>
             </div>
             <div className="h-8 w-px bg-divider" />
             <div className="text-center">
               <div className="text-xl font-semibold text-danger-500">{finishedCount - correctCount}</div>
-              <div className="mt-1 text-xs text-ink-muted">{COPY.apps.quiz.revisitCount}</div>
+              <div className="mt-1 text-xs text-ink-muted">{APPS_COPY.quiz.revisitCount}</div>
             </div>
           </div>
 
           {/* Wrong questions preview */}
           {wrongQuestions.length > 0 && (
             <div className="mb-6 max-h-[160px] overflow-y-auto px-1">
-              <p className="mb-3 text-xs font-medium tracking-wider text-ink-muted">{COPY.apps.quiz.missedReview}</p>
+              <p className="mb-3 text-xs font-medium tracking-wider text-ink-muted">{APPS_COPY.quiz.missedReview}</p>
               <div className="space-y-1.5">
                 {wrongQuestions.map((question) => (
                   <p key={question.id} className="truncate rounded-2xl border border-divider bg-white px-4 py-3 text-left text-sm text-ink-secondary">
@@ -168,7 +168,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
                 }}
                 className="rounded-full bg-ink px-8 py-2.5 text-sm font-medium text-white transition hover:opacity-85"
               >
-                {COPY.apps.quiz.reviewMissed(wrongQuestions.length)}
+                {APPS_COPY.quiz.reviewMissed(wrongQuestions.length)}
               </button>
             )}
             <button
@@ -183,7 +183,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
               }}
               className="rounded-full px-8 py-2.5 text-sm text-ink-muted transition-colors hover:text-ink"
             >
-              {COPY.apps.quiz.restart}
+              {APPS_COPY.quiz.restart}
             </button>
           </div>
           {nextStep ? <NextStepCard {...nextStep} /> : null}
@@ -202,7 +202,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
       {/* Top: keyboard hint (desktop only) */}
       <div className="relative flex-shrink-0 pt-3 pb-1 text-center hidden md:block">
         <p className="text-[12px] tracking-wide text-ink-muted">
-          {COPY.apps.quiz.keyboardHint}
+          {APPS_COPY.quiz.keyboardHint}
         </p>
       </div>
 
@@ -214,7 +214,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
           onClick={goToPrev}
           disabled={index <= 0}
           className="group absolute left-3 top-1/3 z-10 hidden h-11 w-11 items-center justify-center rounded-full border border-divider bg-white transition-colors duration-200 hover:border-ink-muted disabled:pointer-events-none disabled:opacity-0 md:left-6 md:flex"
-          aria-label={COPY.apps.quiz.previous}
+          aria-label={APPS_COPY.quiz.previous}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-ink-muted transition-colors group-hover:text-ink" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
@@ -239,7 +239,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
                     : 'border-danger-200 bg-danger-50 text-danger-700'
                 }`}>
                   <div className={`h-1.5 w-1.5 rounded-full ${isCorrect ? 'bg-mint-500' : 'bg-danger-500'}`} />
-                  {isCorrect ? COPY.apps.quiz.correct : COPY.apps.quiz.wrong}
+                  {isCorrect ? APPS_COPY.quiz.correct : APPS_COPY.quiz.wrong}
                 </div>
               )}
             </div>
@@ -254,15 +254,15 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
               <div className="space-y-3">
                 {!revealed[current.id] ? (
                   <p className="rounded-2xl border border-dashed border-divider bg-canvas px-4 py-4 text-[14px] leading-[1.7] text-ink-muted">
-                    {COPY.apps.quiz.subjectivePrompt}
+                    {APPS_COPY.quiz.subjectivePrompt}
                   </p>
                 ) : (
                   <div className="rounded-2xl border border-mint-200 bg-mint-50 p-4">
-                    <p className="mb-1.5 text-[12px] font-medium tracking-wider text-ink-muted">{COPY.apps.quiz.referenceAnswer}</p>
-                    <p className="text-[15px] leading-[1.75] text-ink">{current.answer || COPY.apps.quiz.referenceFallback}</p>
+                    <p className="mb-1.5 text-[12px] font-medium tracking-wider text-ink-muted">{APPS_COPY.quiz.referenceAnswer}</p>
+                    <p className="text-[15px] leading-[1.75] text-ink">{current.answer || APPS_COPY.quiz.referenceFallback}</p>
                     {isSubmitted ? (
                       <p className={`mt-3 border-t border-mint-200 pt-3 text-[13px] font-medium ${selectedOption === QUIZ_SELF_CORRECT ? 'text-pine' : 'text-vermilion'}`}>
-                        {selectedOption === QUIZ_SELF_CORRECT ? COPY.apps.quiz.selfCorrect : COPY.apps.quiz.selfWrong}
+                        {selectedOption === QUIZ_SELF_CORRECT ? APPS_COPY.quiz.selfCorrect : APPS_COPY.quiz.selfWrong}
                       </p>
                     ) : null}
                   </div>
@@ -338,7 +338,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
               }`}>
                 {!subjective && !isCorrect && (
                   <p className="mb-2 text-sm font-medium text-danger-700">
-                    {COPY.apps.quiz.correctAnswer(stripQuizOptionPrefix(normalizedAnswer))}
+                    {APPS_COPY.quiz.correctAnswer(stripQuizOptionPrefix(normalizedAnswer))}
                   </p>
                 )}
                 <p className="text-[14px] leading-[1.75] text-ink-secondary">{current.explanation}</p>
@@ -352,8 +352,8 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
                 className="mt-4 text-[12px] text-ink-muted transition hover:text-ink disabled:cursor-default"
               >
                 {onSeek
-                  ? COPY.apps.quiz.returnToEvidenceAt(formatQuizEvidenceTime(current.evidence.startMs))
-                  : COPY.apps.quiz.evidenceAt(formatQuizEvidenceTime(current.evidence.startMs))}
+                  ? APPS_COPY.quiz.returnToEvidenceAt(formatQuizEvidenceTime(current.evidence.startMs))
+                  : APPS_COPY.quiz.evidenceAt(formatQuizEvidenceTime(current.evidence.startMs))}
               </button>
             )}
           </div>
@@ -366,7 +366,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
             onClick={goToNext}
             disabled={index >= activeQuestions.length - 1}
             className="group absolute right-3 top-1/3 z-10 hidden h-11 w-11 items-center justify-center rounded-full border border-divider bg-white transition-colors duration-200 hover:border-ink-muted disabled:pointer-events-none disabled:opacity-0 md:right-6 md:flex"
-            aria-label={COPY.apps.quiz.next}
+            aria-label={APPS_COPY.quiz.next}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-ink-muted transition-colors group-hover:text-ink" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 18 15 12 9 6" />
@@ -393,25 +393,25 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
                 }
               }}
             >
-              {subjective ? COPY.apps.quiz.revealReference : COPY.apps.quiz.confirmAnswer}
+              {subjective ? APPS_COPY.quiz.revealReference : APPS_COPY.quiz.confirmAnswer}
             </button>
           ) : subjective && !isSubmitted ? (
             // 填空 / 简答：对照参考后在同一位置自评——主动作始终在底部同一处，不用在卡片里找按钮
             <div className="flex items-center gap-2">
-              <span className="text-[13px] text-ink-muted">{COPY.apps.quiz.selfRate}</span>
+              <span className="text-[13px] text-ink-muted">{APPS_COPY.quiz.selfRate}</span>
               <button
                 type="button"
                 onClick={() => selfRate(true)}
                 className="rounded-full bg-ink px-5 py-2 text-sm font-medium text-white transition hover:opacity-85 active:scale-95"
               >
-                {COPY.apps.quiz.selfCorrect}
+                {APPS_COPY.quiz.selfCorrect}
               </button>
               <button
                 type="button"
                 onClick={() => selfRate(false)}
                 className="rounded-full border border-divider px-5 py-2 text-sm font-medium text-ink-secondary transition hover:border-vermilion/50 hover:text-vermilion active:scale-95"
               >
-                {COPY.apps.quiz.selfWrong}
+                {APPS_COPY.quiz.selfWrong}
               </button>
             </div>
           ) : isSubmitted ? (
@@ -422,7 +422,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
                   onClick={goToNext}
                   className="rounded-full bg-ink px-8 py-2.5 text-sm font-medium text-white transition hover:opacity-85 active:scale-95"
                 >
-                  {COPY.apps.quiz.nextQuestion}
+                  {APPS_COPY.quiz.nextQuestion}
                 </button>
               ) : allDone ? (
                 <button
@@ -435,7 +435,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
                   }}
                   className="rounded-full bg-ink px-8 py-2.5 text-sm font-medium text-white transition hover:opacity-85 active:scale-95"
                 >
-                  {COPY.apps.quiz.viewResult}
+                  {APPS_COPY.quiz.viewResult}
                 </button>
               ) : firstUnfinishedIndex >= 0 ? (
                 // 走到最后一题却还有跳过的：此前这里什么都不显示，学生看着"4 / 5 已完成"不知道差哪一题
@@ -444,7 +444,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
                   onClick={() => navigateTo(firstUnfinishedIndex, 'right')}
                   className="rounded-full border border-ink/15 bg-white px-6 py-2.5 text-sm font-medium text-ink transition hover:border-ink/40 active:scale-95"
                 >
-                  {COPY.apps.quiz.backToUnfinished(activeQuestions.length - finishedCount, firstUnfinishedIndex + 1)}
+                  {APPS_COPY.quiz.backToUnfinished(activeQuestions.length - finishedCount, firstUnfinishedIndex + 1)}
                 </button>
               ) : null}
             </>
@@ -468,7 +468,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
                   type="button"
                   onClick={() => { if (i !== index) navigateTo(i, i > index ? 'left' : 'right'); }}
                   className={`h-2 rounded-full transition-all duration-300 ${dotColor} ${isCurrent ? 'w-6' : 'w-2'}`}
-                  aria-label={COPY.apps.quiz.jumpTo(i + 1)}
+                  aria-label={APPS_COPY.quiz.jumpTo(i + 1)}
                 />
               );
             })}
@@ -483,7 +483,7 @@ export function QuizWindow({ result, onSeek, onLearningActivity, onAssessment, n
               />
             </div>
             <span className="whitespace-nowrap text-[12px] tabular-nums tracking-wide text-ink-muted">
-              {COPY.apps.quiz.answered(finishedCount, activeQuestions.length)}
+              {APPS_COPY.quiz.answered(finishedCount, activeQuestions.length)}
             </span>
           </div>
         </div>

@@ -11,6 +11,7 @@
 import { Check } from 'lucide-react';
 import type { Anchor, TranscriptSegment } from '@/types';
 import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import { cn } from '@/lib/utils';
 import { describeMoment } from '@/lib/learning/moment-title';
 
@@ -43,7 +44,7 @@ export function MomentList({ anchors, segments, onSelect }: MomentListProps) {
       <ul className="min-h-0 flex-1 divide-y divide-divider-light overflow-y-auto">
         {ordered.map((anchor) => {
           const moment = describeMoment(anchor, segments);
-          const typeLabel = COPY.globalAsk.desk.anchorType[anchor.type] ?? '';
+          const typeLabel = GLOBAL_ASK_COPY.desk.anchorType[anchor.type] ?? '';
           return (
             <li key={anchor.id}>
               <button

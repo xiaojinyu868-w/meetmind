@@ -6,7 +6,8 @@
 
 'use client';
 
-import { COPY } from '@/lib/ui/copy';
+import { SETTINGS_COPY } from '@/lib/ui/copy-settings';
+import { INTENT_COPY } from '@/lib/ui/copy-intent';
 import { LEARNER_STAGE_LABELS, type LearnerProfile, type LearnerStage } from '@/types/user';
 import {
   ActionButtonRow,
@@ -17,15 +18,15 @@ import {
   StaticRow,
 } from './primitives';
 
-const S = COPY.settings.about;
+const S = SETTINGS_COPY.about;
 
 type CoachBio = { headline: string; detail?: string; updatedAt?: string };
 type CoachGoal = { id: string; title: string; summary?: string; status?: string; horizon?: 'near' | 'term' | 'long' };
 
 const HORIZON_LABELS = {
-  near: COPY.intent.horizonNear,
-  term: COPY.intent.horizonTerm,
-  long: COPY.intent.horizonLong,
+  near: INTENT_COPY.horizonNear,
+  term: INTENT_COPY.horizonTerm,
+  long: INTENT_COPY.horizonLong,
 } as const;
 
 export function AboutYouSection({

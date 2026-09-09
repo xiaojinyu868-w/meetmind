@@ -1,5 +1,5 @@
 import type { AppExecutionResult } from '@/lib/ai-native/types';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 
 function buildPodcastActivityDetail(result: AppExecutionResult): string | null {
   if (result.render?.mode !== 'audio' && result.raw?.appKey !== 'audio-overview') return null;
@@ -8,9 +8,9 @@ function buildPodcastActivityDetail(result: AppExecutionResult): string | null {
     lines?: unknown[];
     sections?: unknown[];
   };
-  if (payload.audioUrl?.trim()) return COPY.apps.podcast.activityAudioReady;
+  if (payload.audioUrl?.trim()) return APPS_COPY.podcast.activityAudioReady;
   if ((payload.lines?.length || 0) > 0 || (payload.sections?.length || 0) > 0) {
-    return COPY.apps.podcast.activityScriptReady;
+    return APPS_COPY.podcast.activityScriptReady;
   }
   return '';
 }

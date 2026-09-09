@@ -9,7 +9,7 @@
  */
 
 import { Tool, ToolContent, ToolHeader } from '@/components/ai-elements/tool';
-import { COPY } from '@/lib/ui/copy';
+import { FENSHEN_COPY } from '@/lib/ui/copy-fenshen';
 import type { DistillProgressEntry } from './fenshen-events';
 
 interface DistillProgressViewProps {
@@ -25,7 +25,7 @@ export function DistillProgressView({ entries, done }: DistillProgressViewProps)
       <ToolHeader
         type="tool-distill"
         state={done ? 'output-available' : 'input-available'}
-        title={COPY.fenshen.progressLedger(entries.length)}
+        title={FENSHEN_COPY.progressLedger(entries.length)}
       />
       <ToolContent>
         <ol className="max-h-48 space-y-1.5 overflow-y-auto px-4 pb-3">

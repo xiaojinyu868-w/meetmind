@@ -5,7 +5,7 @@ import { Check, Copy, Download, ImageIcon, Loader2, RefreshCw, Sparkles } from '
 import { toast } from 'sonner';
 
 import type { AppExecutionResult } from '@/lib/ai-native/types';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import {
   type DraftPayload,
   type ImageConfigResponse,
@@ -31,8 +31,8 @@ function PreparingState() {
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-pine-mist text-pine">
           <Loader2 size={26} strokeWidth={2} className="animate-spin" />
         </div>
-        <p className="mt-4 text-[15px] font-semibold text-ink">{COPY.apps.infographic.preparing}</p>
-        <p className="mt-1.5 text-[12px] leading-6 text-ink-muted">{COPY.apps.infographic.preparingHint}</p>
+        <p className="mt-4 text-[15px] font-semibold text-ink">{APPS_COPY.infographic.preparing}</p>
+        <p className="mt-1.5 text-[12px] leading-6 text-ink-muted">{APPS_COPY.infographic.preparingHint}</p>
       </div>
     </section>
   );
@@ -127,9 +127,9 @@ export function InfographicWindow({
     ].filter(Boolean);
     try {
       await navigator.clipboard.writeText(lines.join('\n'));
-      toast.success(COPY.apps.infographic.readableCopied);
+      toast.success(APPS_COPY.infographic.readableCopied);
     } catch {
-      toast.error(COPY.apps.infographic.readableCopyFailed);
+      toast.error(APPS_COPY.infographic.readableCopyFailed);
     }
   }, [previewDraft]);
 
@@ -141,14 +141,14 @@ export function InfographicWindow({
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `${previewDraft.title || COPY.apps.infographic.appName}.png`;
+      anchor.download = `${previewDraft.title || APPS_COPY.infographic.appName}.png`;
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
-      toast.success(COPY.apps.infographic.downloaded);
+      toast.success(APPS_COPY.infographic.downloaded);
     } catch {
-      toast.error(COPY.apps.infographic.downloadFailed);
+      toast.error(APPS_COPY.infographic.downloadFailed);
     }
   }, [imageUrl, previewDraft.title]);
 
@@ -174,7 +174,7 @@ export function InfographicWindow({
       : basePrompt;
 
     if (!finalPrompt.trim()) {
-      toast.error(COPY.apps.infographic.missingContext);
+      toast.error(APPS_COPY.infographic.missingContext);
       return;
     }
 
@@ -203,7 +203,7 @@ export function InfographicWindow({
         model?: string;
       } | null;
       if (!response.ok || !data?.ok || !data.imageUrl) {
-        throw new Error(data?.error || COPY.apps.infographic.generateFailed);
+        throw new Error(data?.error || APPS_COPY.infographic.generateFailed);
       }
 
       try {
@@ -218,9 +218,9 @@ export function InfographicWindow({
       }));
       setCustomizeMode(false);
       setImageFailed(false);
-      toast.success(COPY.apps.infographic.finished);
+      toast.success(APPS_COPY.infographic.finished);
     } catch {
-      toast.error(COPY.apps.infographic.generateFailed);
+      toast.error(APPS_COPY.infographic.generateFailed);
       setImageFailed(true);
       setCustomizeMode(false);
     } finally {
@@ -261,13 +261,13 @@ export function InfographicWindow({
       const baseResult = await resolveInfographicGenerationBase(result, onGenerateDraft);
       if (!baseResult && onGenerateDraft) {
         setImageFailed(true);
-        toast.error(COPY.apps.infographic.generateFailed);
+        toast.error(APPS_COPY.infographic.generateFailed);
         return;
       }
       await requestImage(baseResult);
     } catch {
       setImageFailed(true);
-      toast.error(COPY.apps.infographic.generateFailed);
+      toast.error(APPS_COPY.infographic.generateFailed);
     } finally {
       setGenerating(false);
     }
@@ -287,11 +287,11 @@ export function InfographicWindow({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <p className="truncate text-[14px] font-semibold text-ink">
-                {previewDraft.title || COPY.apps.infographic.appName}
+                {previewDraft.title || APPS_COPY.infographic.appName}
               </p>
               <span className="inline-flex items-center gap-1 rounded-full bg-pine-mist px-2 py-0.5 text-[10px] font-medium text-pine">
                 <Check size={11} strokeWidth={2.5} />
-                {COPY.apps.infographic.finished}
+                {APPS_COPY.infographic.finished}
               </span>
             </div>
           </div>
@@ -306,18 +306,18 @@ export function InfographicWindow({
                     previewMode === mode ? 'bg-ink text-canvas' : 'text-ink-muted'
                   }`}
                 >
-                  {mode === 'fit' ? COPY.apps.infographic.fit : COPY.apps.infographic.full}
+                  {mode === 'fit' ? APPS_COPY.infographic.fit : APPS_COPY.infographic.full}
                 </button>
               ))}
             </div>
             <button
               type="button"
               onClick={downloadImage}
-              aria-label={COPY.apps.infographic.save}
+              aria-label={APPS_COPY.infographic.save}
               className="inline-flex h-8 items-center gap-1.5 rounded-full border border-divider bg-card px-3 text-[11px] font-medium text-ink"
             >
               <Download size={14} strokeWidth={ICON_STROKE} />
-              <span className="hidden sm:inline">{COPY.apps.infographic.save}</span>
+              <span className="hidden sm:inline">{APPS_COPY.infographic.save}</span>
             </button>
             <button
               type="button"
@@ -325,7 +325,7 @@ export function InfographicWindow({
               className="inline-flex h-8 items-center gap-1.5 rounded-full bg-pine px-3 text-[11px] font-medium text-white"
             >
               <RefreshCw size={13} strokeWidth={ICON_STROKE} />
-              {COPY.apps.infographic.adjust}
+              {APPS_COPY.infographic.adjust}
             </button>
           </div>
         </header>
@@ -334,7 +334,7 @@ export function InfographicWindow({
           <div className="flex min-h-full items-center justify-center py-4">
             <img
               src={imageUrl}
-              alt={previewDraft.title || COPY.apps.infographic.appName}
+              alt={previewDraft.title || APPS_COPY.infographic.appName}
               className={previewMode === 'fit'
                 ? 'h-auto max-h-full w-auto max-w-full rounded-2xl border border-divider object-contain'
                 : 'h-auto max-w-none rounded-2xl border border-divider object-contain'}
@@ -355,23 +355,23 @@ export function InfographicWindow({
         <div className="mx-auto max-w-xl">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <p className="text-[13px] font-semibold text-ink">{COPY.apps.infographic.readableReady}</p>
-              <p className="mt-0.5 text-[11px] leading-5 text-ink-muted">{COPY.apps.infographic.readableHint}</p>
+              <p className="text-[13px] font-semibold text-ink">{APPS_COPY.infographic.readableReady}</p>
+              <p className="mt-0.5 text-[11px] leading-5 text-ink-muted">{APPS_COPY.infographic.readableHint}</p>
             </div>
             <button
               type="button"
               onClick={() => setCustomizeMode(true)}
               className="shrink-0 rounded-full border border-divider bg-card px-3 py-1.5 text-[11px] font-medium text-ink-secondary"
             >
-              {COPY.apps.infographic.adjust}
+              {APPS_COPY.infographic.adjust}
             </button>
           </div>
 
           <article className="overflow-hidden rounded-[28px] border border-pine/20 bg-paper shadow-soft">
             <div className="border-b border-pine/15 bg-pine px-5 py-5 text-white">
-              <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-white/65">MeetMind · {COPY.apps.infographic.appName}</p>
+              <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-white/65">MeetMind · {APPS_COPY.infographic.appName}</p>
               <h2 className="mt-3 font-serif text-[26px] leading-[1.16] tracking-[-0.02em]">
-                {previewDraft.title || COPY.apps.infographic.appName}
+                {previewDraft.title || APPS_COPY.infographic.appName}
               </h2>
               {previewDraft.subtitle ? (
                 <p className="mt-2 text-[12px] leading-6 text-white/75">{previewDraft.subtitle}</p>
@@ -396,7 +396,7 @@ export function InfographicWindow({
               className="inline-flex items-center gap-1.5 rounded-full border border-divider bg-card px-3.5 py-2 text-[11px] font-medium text-ink-secondary"
             >
               <Copy size={13} strokeWidth={ICON_STROKE} />
-              {COPY.apps.infographic.copyReadable}
+              {APPS_COPY.infographic.copyReadable}
             </button>
             {imageEnabled ? (
               <button
@@ -405,7 +405,7 @@ export function InfographicWindow({
                 className="inline-flex items-center gap-1.5 rounded-full bg-pine px-3.5 py-2 text-[11px] font-medium text-white"
               >
                 <RefreshCw size={13} strokeWidth={ICON_STROKE} />
-                {COPY.apps.infographic.retryImage}
+                {APPS_COPY.infographic.retryImage}
               </button>
             ) : null}
           </div>
@@ -426,30 +426,30 @@ export function InfographicWindow({
           </div>
           <div>
             <h2 className="text-[17px] font-semibold text-ink">
-              {result ? COPY.apps.infographic.adjustTitle : COPY.apps.infographic.createTitle}
+              {result ? APPS_COPY.infographic.adjustTitle : APPS_COPY.infographic.createTitle}
             </h2>
             <p className="mt-1 text-[12px] leading-6 text-ink-muted">
-              {result ? COPY.apps.infographic.adjustHint : COPY.apps.infographic.createHint}
+              {result ? APPS_COPY.infographic.adjustHint : APPS_COPY.infographic.createHint}
             </p>
           </div>
         </div>
 
         {taskState?.status === 'error' ? (
           <div className="mt-5 rounded-2xl bg-vermilion-mist px-4 py-3 text-[12px] leading-6 text-vermilion">
-            {COPY.apps.infographic.generateFailed}
+            {APPS_COPY.infographic.generateFailed}
           </div>
         ) : null}
 
         {!imageEnabled ? (
           <div className="mt-5 rounded-2xl border border-divider bg-canvas px-4 py-3">
-            <p className="text-[13px] font-medium text-ink">{COPY.apps.infographic.serviceUnavailable}</p>
-            <p className="mt-1 text-[12px] leading-6 text-ink-muted">{COPY.apps.infographic.serviceUnavailableBody}</p>
+            <p className="text-[13px] font-medium text-ink">{APPS_COPY.infographic.serviceUnavailable}</p>
+            <p className="mt-1 text-[12px] leading-6 text-ink-muted">{APPS_COPY.infographic.serviceUnavailableBody}</p>
           </div>
         ) : null}
 
         <div className="mt-6 space-y-6">
           <div>
-            <p className="text-[12px] font-medium text-ink">{COPY.apps.infographic.orientation}</p>
+            <p className="text-[12px] font-medium text-ink">{APPS_COPY.infographic.orientation}</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {ORIENTATIONS.map((option) => (
                 <button
@@ -470,7 +470,7 @@ export function InfographicWindow({
           </div>
 
           <div>
-            <p className="text-[12px] font-medium text-ink">{COPY.apps.infographic.style}</p>
+            <p className="text-[12px] font-medium text-ink">{APPS_COPY.infographic.style}</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {STYLE_PRESETS.map((item) => (
                 <button
@@ -490,11 +490,11 @@ export function InfographicWindow({
           </div>
 
           <label className="block">
-            <span className="text-[12px] font-medium text-ink">{COPY.apps.infographic.custom}</span>
+            <span className="text-[12px] font-medium text-ink">{APPS_COPY.infographic.custom}</span>
             <textarea
               value={customDesc}
               onChange={(event) => setCustomDesc(event.target.value)}
-              placeholder={COPY.apps.infographic.customPlaceholder}
+              placeholder={APPS_COPY.infographic.customPlaceholder}
               rows={3}
               className="mt-2 w-full resize-none rounded-2xl border border-divider bg-canvas px-4 py-3 text-[13px] leading-6 text-ink outline-none placeholder:text-ink-faint focus:border-pine"
             />
@@ -512,7 +512,7 @@ export function InfographicWindow({
             className="inline-flex items-center gap-2 rounded-full bg-pine px-5 py-2.5 text-[13px] font-semibold text-white transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
           >
             <ImageIcon size={ICON_SM} strokeWidth={ICON_STROKE} />
-            {result ? COPY.apps.infographic.regenerate : COPY.apps.infographic.generate}
+            {result ? APPS_COPY.infographic.regenerate : APPS_COPY.infographic.generate}
           </button>
         </div>
       </div>

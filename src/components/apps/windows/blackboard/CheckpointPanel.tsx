@@ -4,10 +4,10 @@
  * CheckpointPanel — checkpoint 等待态按钮组（我会了 / 给我提示 / 看解析）。
  *
  * 粉笔描边小按钮，板面内右下、字幕区上方（不遮字幕不压板书）；
- * 文案走 COPY.apps.explainer。
+ * 文案走 APPS_COPY.explainer。
  */
 
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import type { CheckpointState } from './board-checkpoint';
 import { waitButtons } from './board-checkpoint';
 
@@ -19,9 +19,9 @@ interface CheckpointPanelProps {
 }
 
 const BUTTON_LABELS = {
-  know: COPY.apps.explainer.checkpointKnow,
-  hint: COPY.apps.explainer.checkpointHint,
-  show_answer: COPY.apps.explainer.checkpointAnswer,
+  know: APPS_COPY.explainer.checkpointKnow,
+  hint: APPS_COPY.explainer.checkpointHint,
+  show_answer: APPS_COPY.explainer.checkpointAnswer,
 } as const;
 
 export function CheckpointPanel({ state, onKnow, onHint, onShowAnswer }: CheckpointPanelProps) {

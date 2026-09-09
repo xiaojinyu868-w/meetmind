@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { CalendarCheck2, Check, ChevronRight, PencilLine, X } from 'lucide-react';
-import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import { cn } from '@/lib/utils';
 import type { CourseContextGroup } from '@/lib/utils/course-context';
 import type { CourseAssessmentEntry, CourseContextPreference } from '@/types/user';
@@ -22,7 +22,7 @@ function createAssessment(courseTitle: string): CourseAssessmentEntry {
   const now = new Date().toISOString();
   return {
     id: `exam-${Date.now()}`,
-    name: COPY.globalAsk.courseAssessmentDefaultName(courseTitle),
+    name: GLOBAL_ASK_COPY.courseAssessmentDefaultName(courseTitle),
     mode: 'unknown',
     status: 'active',
     createdAt: now,
@@ -38,9 +38,9 @@ function assessmentMeta(assessment: CourseAssessmentEntry): string[] {
       meta.push(new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(date));
     }
   }
-  if (assessment.mode === 'open-book') meta.push(COPY.globalAsk.courseAssessmentOpenBook);
-  if (assessment.mode === 'closed-book') meta.push(COPY.globalAsk.courseAssessmentClosedBook);
-  if (assessment.syllabus) meta.push(COPY.globalAsk.courseAssessmentHasScope);
+  if (assessment.mode === 'open-book') meta.push(GLOBAL_ASK_COPY.courseAssessmentOpenBook);
+  if (assessment.mode === 'closed-book') meta.push(GLOBAL_ASK_COPY.courseAssessmentClosedBook);
+  if (assessment.syllabus) meta.push(GLOBAL_ASK_COPY.courseAssessmentHasScope);
   return meta;
 }
 
@@ -76,34 +76,34 @@ export function CourseAssessmentCard({
       <div className="mt-3 rounded-[18px] border border-pine/18 bg-white p-3.5 sm:p-4">
         <div className="flex items-center gap-2">
           <CalendarCheck2 size={14} className="text-pine" />
-          <p className="text-[12px] font-semibold text-ink">{COPY.globalAsk.courseAssessmentEditTitle}</p>
+          <p className="text-[12px] font-semibold text-ink">{GLOBAL_ASK_COPY.courseAssessmentEditTitle}</p>
         </div>
         <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_150px]">
           <label className="min-w-0">
-            <span className="sr-only">{COPY.globalAsk.courseAssessmentName}</span>
+            <span className="sr-only">{GLOBAL_ASK_COPY.courseAssessmentName}</span>
             <input
               value={draft.name}
               onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
-              placeholder={COPY.globalAsk.courseAssessmentNameHint}
+              placeholder={GLOBAL_ASK_COPY.courseAssessmentNameHint}
               className="h-10 w-full rounded-xl border border-divider bg-canvas px-3 text-[13px] text-ink outline-none focus:border-pine/45"
             />
           </label>
           <label>
-            <span className="sr-only">{COPY.globalAsk.courseAssessmentDate}</span>
+            <span className="sr-only">{GLOBAL_ASK_COPY.courseAssessmentDate}</span>
             <input
               type="date"
               value={draft.targetDate || ''}
               onChange={(event) => setDraft((current) => ({ ...current, targetDate: event.target.value || undefined }))}
               className="h-10 w-full rounded-xl border border-divider bg-canvas px-3 text-[12px] text-ink outline-none focus:border-pine/45"
-              aria-label={COPY.globalAsk.courseAssessmentDate}
+              aria-label={GLOBAL_ASK_COPY.courseAssessmentDate}
             />
           </label>
         </div>
-        <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label={COPY.globalAsk.courseAssessmentMode}>
+        <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label={GLOBAL_ASK_COPY.courseAssessmentMode}>
           {([
-            ['unknown', COPY.globalAsk.courseAssessmentUnknown],
-            ['closed-book', COPY.globalAsk.courseAssessmentClosedBook],
-            ['open-book', COPY.globalAsk.courseAssessmentOpenBook],
+            ['unknown', GLOBAL_ASK_COPY.courseAssessmentUnknown],
+            ['closed-book', GLOBAL_ASK_COPY.courseAssessmentClosedBook],
+            ['open-book', GLOBAL_ASK_COPY.courseAssessmentOpenBook],
           ] as const).map(([value, label]) => (
             <button
               key={value}
@@ -120,11 +120,11 @@ export function CourseAssessmentCard({
           ))}
         </div>
         <label className="mt-3 block">
-          <span className="sr-only">{COPY.globalAsk.courseAssessmentScope}</span>
+          <span className="sr-only">{GLOBAL_ASK_COPY.courseAssessmentScope}</span>
           <textarea
             value={draft.syllabus || ''}
             onChange={(event) => setDraft((current) => ({ ...current, syllabus: event.target.value || undefined }))}
-            placeholder={COPY.globalAsk.courseAssessmentScopeHint}
+            placeholder={GLOBAL_ASK_COPY.courseAssessmentScopeHint}
             rows={2}
             className="w-full resize-none rounded-xl border border-divider bg-canvas px-3 py-2.5 text-[12px] leading-5 text-ink outline-none placeholder:text-ink-muted focus:border-pine/45"
           />
@@ -140,7 +140,7 @@ export function CourseAssessmentCard({
               }}
               className="rounded-full px-3 py-2 text-[11px] text-ink-muted hover:bg-paper-warm hover:text-vermilion disabled:opacity-40"
             >
-              {COPY.globalAsk.courseAssessmentStop}
+              {GLOBAL_ASK_COPY.courseAssessmentStop}
             </button>
           ) : <span />}
           <div className="flex items-center gap-2">
@@ -148,7 +148,7 @@ export function CourseAssessmentCard({
               type="button"
               onClick={() => setEditing(false)}
               className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted hover:bg-paper-warm"
-              aria-label={COPY.globalAsk.courseContextCancel}
+              aria-label={GLOBAL_ASK_COPY.courseContextCancel}
             >
               <X size={13} />
             </button>
@@ -166,7 +166,7 @@ export function CourseAssessmentCard({
               }}
               className="inline-flex h-8 items-center gap-1.5 rounded-full bg-pine px-3.5 text-[11px] font-medium text-white disabled:opacity-40"
             >
-              <Check size={12} />{COPY.globalAsk.courseAssessmentSave}
+              <Check size={12} />{GLOBAL_ASK_COPY.courseAssessmentSave}
             </button>
           </div>
         </div>
@@ -181,7 +181,7 @@ export function CourseAssessmentCard({
         onClick={beginEditing}
         className="mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[11.5px] text-ink-muted hover:bg-white hover:text-pine"
       >
-        <CalendarCheck2 size={12} />{COPY.globalAsk.courseAssessmentAdd}
+        <CalendarCheck2 size={12} />{GLOBAL_ASK_COPY.courseAssessmentAdd}
       </button>
     );
   }
@@ -200,7 +200,7 @@ export function CourseAssessmentCard({
         type="button"
         onClick={beginEditing}
         className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-ink-muted hover:bg-paper-warm hover:text-pine"
-        aria-label={COPY.globalAsk.courseAssessmentEdit}
+        aria-label={GLOBAL_ASK_COPY.courseAssessmentEdit}
       >
         <PencilLine size={12} />
       </button>
@@ -210,7 +210,7 @@ export function CourseAssessmentCard({
           onClick={() => onOpenCheatsheet(course)}
           className="inline-flex h-8 flex-shrink-0 items-center gap-1 rounded-full bg-pine px-3 text-[11px] font-medium text-white"
         >
-          {COPY.globalAsk.courseAssessmentPrepare}<ChevronRight size={11} />
+          {GLOBAL_ASK_COPY.courseAssessmentPrepare}<ChevronRight size={11} />
         </button>
       ) : null}
     </div>

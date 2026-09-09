@@ -29,7 +29,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createLogger } from '@/lib/logger';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import type { BoardAction, BoardPage } from '@/lib/ai-native/plugins/board-script';
 import {
   BOARD_HEIGHT,
@@ -443,7 +443,7 @@ export function BoardCanvas({
                 letterSpacing: '0.12em',
               }}
             >
-              {COPY.apps.explainer.preparing}
+              {APPS_COPY.explainer.preparing}
             </div>
           ) : null}
           {/* 流式画布：页首 title 通栏，正文一页两栏、栏内从上到下追加。

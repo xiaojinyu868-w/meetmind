@@ -9,7 +9,7 @@
  */
 
 import { ArrowRight } from 'lucide-react';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 
 export interface NextStepCardProps {
   /** 动作词（记住核心 / 讲给同桌听 / 做成一张图…） */
@@ -26,7 +26,7 @@ export function NextStepCard({ action, appName, reason, onOpen }: NextStepCardPr
       data-testid="next-step-card"
     >
       <div className="min-w-0 flex-1">
-        <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.14em] text-pine">{COPY.apps.path.nextInWindowTitle}</p>
+        <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.14em] text-pine">{APPS_COPY.path.nextInWindowTitle}</p>
         <p className="mt-1 text-[13px] leading-[1.6] text-ink">{reason}</p>
         <p className="mt-0.5 text-[11px] text-ink-muted">{appName}</p>
       </div>
@@ -35,7 +35,7 @@ export function NextStepCard({ action, appName, reason, onOpen }: NextStepCardPr
         onClick={onOpen}
         className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-pine px-4 py-2 text-[12.5px] font-semibold text-white transition hover:bg-pine-deep active:scale-[0.98]"
       >
-        {COPY.apps.path.nextInWindowAction(action)}
+        {APPS_COPY.path.nextInWindowAction(action)}
         <ArrowRight size={13} strokeWidth={2} />
       </button>
     </div>

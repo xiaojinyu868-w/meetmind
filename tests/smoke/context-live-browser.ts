@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { sharedContextCopy } from '@/lib/ui/shared-context-copy';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium, expect } from '@playwright/test';
@@ -30,7 +31,7 @@ export async function verifyLiveContextBrowser(
       localStorage.setItem('meetmind_access_token', accessToken);
     }, token);
     await page.goto(`${base}/context`);
-    const c = COPY.sharedContext;
+    const c = sharedContextCopy;
     await expect(page.getByRole('heading', { name: c.title, exact: true })).toBeVisible();
     await expect(page.getByTestId('context-portrait').locator('article').first()).toBeVisible({ timeout: 60_000 });
     if (event.spaceId !== 'personal') {
@@ -97,14 +98,14 @@ export async function verifyContextStates(base: string, token: string, outputDir
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
     await page.addInitScript((accessToken: string) => localStorage.setItem('meetmind_access_token', accessToken), token);
     await page.goto(`${base}/context`);
-    await expect(page.getByText(COPY.sharedContext.portraitEmpty, { exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(sharedContextCopy.portraitEmpty, { exact: true })).toBeVisible({ timeout: 60_000 });
     await page.screenshot({ path: path.join(outputDir, 'context-empty-mobile.png') });
     await page.route('**/api/context/v1/prepare', (route) => route.fulfill({ json: {
       schemaVersion: 1, memories: [], observations: [], sources: [], text: '', contextVersion: 'explicit-ui-fixture',
       pendingEventIds: [], degraded: true, reason: 'backend_unavailable',
     } }));
-    await page.getByRole('button', { name: COPY.sharedContext.refresh, exact: true }).click();
-    await expect(page.getByText(COPY.sharedContext.degraded, { exact: true })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole('button', { name: sharedContextCopy.refresh, exact: true }).click();
+    await expect(page.getByText(sharedContextCopy.degraded, { exact: true })).toBeVisible({ timeout: 60_000 });
     await page.screenshot({ path: path.join(outputDir, 'context-degraded-ui-fixture-mobile.png') });
   } finally { await browser.close(); }
 }

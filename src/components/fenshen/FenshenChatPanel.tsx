@@ -25,7 +25,7 @@ import { Loader } from '@/components/ai-elements/loader';
 import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { COPY } from '@/lib/ui/copy';
+import { FENSHEN_COPY } from '@/lib/ui/copy-fenshen';
 import { DistillProgressView } from './DistillProgressView';
 import type {
   FenshenEgoDto,
@@ -104,11 +104,11 @@ export function FenshenChatPanel({ ego, onBack, sessionId, lessonTitle, lessonSn
 
   const statusBadge =
     status === 'ready' ? (
-      <Badge variant="pine" dot>{COPY.fenshen.statusReady}</Badge>
+      <Badge variant="pine" dot>{FENSHEN_COPY.statusReady}</Badge>
     ) : status === 'failed' ? (
-      <Badge variant="vermilion">{COPY.fenshen.statusFailed}</Badge>
+      <Badge variant="vermilion">{FENSHEN_COPY.statusFailed}</Badge>
     ) : (
-      <Badge variant="mute" dot>{COPY.fenshen.statusLearning}</Badge>
+      <Badge variant="mute" dot>{FENSHEN_COPY.statusLearning}</Badge>
     );
 
   return (
@@ -121,7 +121,7 @@ export function FenshenChatPanel({ ego, onBack, sessionId, lessonTitle, lessonSn
           className="inline-flex items-center gap-1 text-[12px] text-ink-muted transition-colors hover:text-ink"
         >
           <ChevronLeft size={14} aria-hidden />
-          {COPY.fenshen.back}
+          {FENSHEN_COPY.back}
         </button>
         <h3 className="flex-1 truncate text-center text-[14px] font-medium text-ink">{ego.name}</h3>
         {statusBadge}
@@ -130,7 +130,7 @@ export function FenshenChatPanel({ ego, onBack, sessionId, lessonTitle, lessonSn
       {/* 常驻课名 chip：分身「正在读哪节课」从产品上显式在场（上下文本是隐式的） */}
       {lessonTitle ? (
         <div className="border-b border-divider bg-pine-fog/60 px-4 py-1.5 text-center text-[11px] text-ink-secondary">
-          {COPY.fenshen.chatLessonChip(lessonTitle)}
+          {FENSHEN_COPY.chatLessonChip(lessonTitle)}
         </div>
       ) : null}
 
@@ -145,7 +145,7 @@ export function FenshenChatPanel({ ego, onBack, sessionId, lessonTitle, lessonSn
         <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-lg bg-vermilion-mist px-3 py-2 text-[12px] text-vermilion">
           <span>{session.error}</span>
           <button type="button" onClick={session.clearError} className="shrink-0 underline">
-            {COPY.fenshen.close}
+            {FENSHEN_COPY.close}
           </button>
         </div>
       ) : null}
@@ -155,7 +155,7 @@ export function FenshenChatPanel({ ego, onBack, sessionId, lessonTitle, lessonSn
         <ConversationContent className="mx-auto w-full max-w-2xl">
           {session.messages.length === 0 ? (
             <ConversationEmptyState
-              title={chatReady ? COPY.fenshen.chatEmptyReady(ego.name) : COPY.fenshen.chatEmptyLearning(ego.name)}
+              title={chatReady ? FENSHEN_COPY.chatEmptyReady(ego.name) : FENSHEN_COPY.chatEmptyLearning(ego.name)}
             />
           ) : (
             session.messages.map((message) => (
@@ -173,7 +173,7 @@ export function FenshenChatPanel({ ego, onBack, sessionId, lessonTitle, lessonSn
           {waitingReply ? (
             <div className="flex items-center gap-2 text-[12px] text-ink-muted">
               <Loader size={14} />
-              {COPY.fenshen.speaking}
+              {FENSHEN_COPY.speaking}
             </div>
           ) : null}
         </ConversationContent>
@@ -184,13 +184,13 @@ export function FenshenChatPanel({ ego, onBack, sessionId, lessonTitle, lessonSn
       {chatReady && !hasUserMessage ? (
         <div className="border-t border-divider bg-card px-4 py-2">
           <div className="mx-auto flex w-full max-w-2xl items-center gap-2 text-[12px] text-ink-muted">
-            <span>{COPY.fenshen.listenHint}</span>
+            <span>{FENSHEN_COPY.listenHint}</span>
             <button
               type="button"
-              onClick={() => void handleSend(COPY.fenshen.listenSuggestion)}
+              onClick={() => void handleSend(FENSHEN_COPY.listenSuggestion)}
               className="shrink-0 rounded-full border border-pine/40 px-2.5 py-1 text-pine transition-colors hover:bg-pine-mist"
             >
-              {COPY.fenshen.listenSuggestion}
+              {FENSHEN_COPY.listenSuggestion}
             </button>
           </div>
         </div>
@@ -201,14 +201,14 @@ export function FenshenChatPanel({ ego, onBack, sessionId, lessonTitle, lessonSn
         <div className="border-t border-divider bg-card px-4 py-2">
           <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
             <div className="flex items-center gap-2 text-[12px]">
-              <span className="text-ink-muted">{COPY.fenshen.feedbackPrompt}</span>
+              <span className="text-ink-muted">{FENSHEN_COPY.feedbackPrompt}</span>
               <button
                 type="button"
                 disabled={feedbackSubmitting}
                 onClick={() => void handleFeedback('like')}
                 className="rounded-full border border-pine/40 px-2.5 py-1 text-pine transition-colors hover:bg-pine-mist disabled:opacity-50"
               >
-                {COPY.fenshen.feedbackLike}
+                {FENSHEN_COPY.feedbackLike}
               </button>
               {feedback === 'idle' ? (
                 <button
@@ -216,7 +216,7 @@ export function FenshenChatPanel({ ego, onBack, sessionId, lessonTitle, lessonSn
                   onClick={() => setFeedback('editing-unlike')}
                   className="rounded-full border border-vermilion/40 px-2.5 py-1 text-vermilion transition-colors hover:bg-vermilion-mist"
                 >
-                  {COPY.fenshen.feedbackUnlike}
+                  {FENSHEN_COPY.feedbackUnlike}
                 </button>
               ) : null}
             </div>
@@ -225,7 +225,7 @@ export function FenshenChatPanel({ ego, onBack, sessionId, lessonTitle, lessonSn
                 <input
                   value={unlikeNote}
                   onChange={(event) => setUnlikeNote(event.target.value)}
-                  placeholder={COPY.fenshen.feedbackUnlikeNotePlaceholder}
+                  placeholder={FENSHEN_COPY.feedbackUnlikeNotePlaceholder}
                   maxLength={200}
                   className="flex-1 rounded-lg border border-divider bg-paper px-3 py-1.5 text-[12px] text-ink outline-none focus:border-vermilion/50"
                 />
@@ -235,7 +235,7 @@ export function FenshenChatPanel({ ego, onBack, sessionId, lessonTitle, lessonSn
                   loading={feedbackSubmitting}
                   onClick={() => void handleFeedback('unlike', unlikeNote.trim() || undefined)}
                 >
-                  {COPY.fenshen.feedbackUnlikeSubmit}
+                  {FENSHEN_COPY.feedbackUnlikeSubmit}
                 </Button>
               </div>
             ) : null}
@@ -245,7 +245,7 @@ export function FenshenChatPanel({ ego, onBack, sessionId, lessonTitle, lessonSn
       {feedback === 'done' ? (
         <div className="border-t border-divider bg-card px-4 py-2">
           <p className="mx-auto w-full max-w-2xl text-[12px] text-ink-muted">
-            {forcedLearning ? COPY.fenshen.feedbackRelearning : COPY.fenshen.feedbackThanks}
+            {forcedLearning ? FENSHEN_COPY.feedbackRelearning : FENSHEN_COPY.feedbackThanks}
           </p>
         </div>
       ) : null}
@@ -263,7 +263,7 @@ export function FenshenChatPanel({ ego, onBack, sessionId, lessonTitle, lessonSn
             ref={inputRef}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder={chatReady ? COPY.fenshen.chatPlaceholder(ego.name) : COPY.fenshen.chatPlaceholderLearning}
+            placeholder={chatReady ? FENSHEN_COPY.chatPlaceholder(ego.name) : FENSHEN_COPY.chatPlaceholderLearning}
             disabled={!chatReady}
             maxLength={2000}
             className="flex-1 rounded-full border border-divider bg-paper px-4 py-2 text-[13px] text-ink outline-none transition-colors focus:border-pine/50 disabled:opacity-50"
@@ -273,8 +273,8 @@ export function FenshenChatPanel({ ego, onBack, sessionId, lessonTitle, lessonSn
               type="button"
               size="icon"
               variant="ghost"
-              aria-label={COPY.fenshen.interrupt}
-              title={COPY.fenshen.interrupt}
+              aria-label={FENSHEN_COPY.interrupt}
+              title={FENSHEN_COPY.interrupt}
               onClick={() => void session.interrupt()}
             >
               <Square size={14} />
@@ -285,7 +285,7 @@ export function FenshenChatPanel({ ego, onBack, sessionId, lessonTitle, lessonSn
             size="icon"
             variant="pine"
             disabled={!chatReady || !draft.trim()}
-            aria-label={COPY.fenshen.submit}
+            aria-label={FENSHEN_COPY.submit}
           >
             <SendHorizonal size={14} />
           </Button>

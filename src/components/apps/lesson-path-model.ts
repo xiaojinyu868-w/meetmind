@@ -14,7 +14,7 @@ import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { conceptLabel } from '@/lib/utils/concept-label';
 import type { Anchor, TranscriptSegment } from '@/types';
 import type { LearningAssessmentDraft, LearningAssessmentItem } from '@/types/learning-event';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 
 /** 路径顺序即学习顺序：先暴露问题，再巩固，再输出，最后带走。 */
 export const LEARNING_PATH: readonly WorkshopAppKey[] = ['quiz', 'flashcards', 'teach-back', 'infographic'];
@@ -91,7 +91,7 @@ export function summarizeSessionOutcomes(assessments: readonly LearningAssessmen
 
 /** 路径卡上的一行结果摘要；没有结果返回 undefined（卡片显示状态词）。 */
 export function formatOutcomeLine(appKey: WorkshopAppKey, summary: SessionOutcomeSummary): string | undefined {
-  const copy = COPY.apps.path.outcome;
+  const copy = APPS_COPY.path.outcome;
   if (appKey === 'quiz' && summary.quiz) return copy.quiz(summary.quiz.total, summary.quiz.correct);
   if (appKey === 'flashcards' && summary.flashcards) return copy.flashcards(summary.flashcards.total, summary.flashcards.got);
   if (appKey === 'teach-back' && summary.teachBack) {
@@ -139,7 +139,7 @@ const shortConcept = (text: string): string => conceptLabel(text, 14);
  * 3. 四步都做完 → completed
  */
 export function recommendNextStep(signals: NextStepSignals): NextStepRecommendation {
-  const copy = COPY.apps.path.reason;
+  const copy = APPS_COPY.path.reason;
   const { outcomes, generated, allowed } = signals;
   const can = (key: WorkshopAppKey) => allowed.has(key);
   const pathDone = LEARNING_PATH.every((key) => generated.has(key) || !allowed.has(key));
@@ -202,13 +202,13 @@ export function buildOutcomeAnchors(
   const now = new Date().toISOString();
   const items: Array<{ prefix: string; item: LearningAssessmentItem }> = [];
   if (summary.quiz && targetApp !== 'quiz') {
-    summary.quiz.wrongConcepts.forEach((item) => items.push({ prefix: COPY.apps.path.anchorPrefix.quizWrong, item }));
+    summary.quiz.wrongConcepts.forEach((item) => items.push({ prefix: APPS_COPY.path.anchorPrefix.quizWrong, item }));
   }
   if (summary.flashcards && targetApp !== 'flashcards') {
-    summary.flashcards.missedConcepts.forEach((item) => items.push({ prefix: COPY.apps.path.anchorPrefix.flashcardsMissed, item }));
+    summary.flashcards.missedConcepts.forEach((item) => items.push({ prefix: APPS_COPY.path.anchorPrefix.flashcardsMissed, item }));
   }
   if (summary.teachBack && targetApp !== 'teach-back') {
-    summary.teachBack.weakConcepts.forEach((item) => items.push({ prefix: COPY.apps.path.anchorPrefix.teachBackWeak, item }));
+    summary.teachBack.weakConcepts.forEach((item) => items.push({ prefix: APPS_COPY.path.anchorPrefix.teachBackWeak, item }));
   }
   return items.slice(0, 8).map(({ prefix, item }, index) => ({
     id: `outcome-${targetApp}-${index}`,
@@ -228,5 +228,5 @@ export function formatLessonMeta(transcript: readonly TranscriptSegment[], ancho
   const durationMs = transcript.length > 0 ? transcript[transcript.length - 1].endMs : 0;
   const minutes = Math.max(1, Math.round(durationMs / 60000));
   const activeAnchors = anchors.filter((anchor) => !anchor.cancelled).length;
-  return COPY.apps.path.lessonMeta(minutes, activeAnchors, difficulties);
+  return APPS_COPY.path.lessonMeta(minutes, activeAnchors, difficulties);
 }

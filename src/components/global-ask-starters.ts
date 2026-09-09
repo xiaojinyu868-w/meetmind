@@ -7,7 +7,7 @@
  */
 
 import type { LearningActivityEntry, LearningMemoryEntry } from '@/types/user';
-import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 
 export interface GlobalAskStarterInput {
   depth: 'quick' | 'deep';
@@ -26,11 +26,11 @@ function shortTitle(title: string): string {
 }
 
 function isGenericTitle(title: string): boolean {
-  return title === COPY.globalAsk.sourceCurrentLesson;
+  return title === GLOBAL_ASK_COPY.sourceCurrentLesson;
 }
 
 export function buildGlobalAskStarters(input: GlobalAskStarterInput): string[] {
-  const copy = COPY.globalAsk.starters;
+  const copy = GLOBAL_ASK_COPY.starters;
   const out: string[] = [];
   const push = (text: string) => {
     if (out.length < MAX_STARTERS && !out.includes(text)) out.push(text);
@@ -43,7 +43,7 @@ export function buildGlobalAskStarters(input: GlobalAskStarterInput): string[] {
   if (input.depth === 'deep') {
     if (recentLesson) push(copy.deepFromLesson(shortTitle(recentLesson.title)));
     else if (material && !isGenericTitle(material)) push(copy.deepFromMaterial(shortTitle(material)));
-    for (const fallback of COPY.globalAsk.deepExamples) push(fallback);
+    for (const fallback of GLOBAL_ASK_COPY.deepExamples) push(fallback);
     return out;
   }
 
@@ -52,7 +52,7 @@ export function buildGlobalAskStarters(input: GlobalAskStarterInput): string[] {
   }
   if (openChallenge) push(copy.quickFromChallenge(shortTitle(openChallenge.title)));
   if (recentLesson && !(material && isGenericTitle(material))) push(copy.quickFromLesson(shortTitle(recentLesson.title)));
-  for (const fallback of COPY.globalAsk.quickExamples) push(fallback);
+  for (const fallback of GLOBAL_ASK_COPY.quickExamples) push(fallback);
   return out;
 }
 
@@ -63,7 +63,7 @@ export function describeGlobalAskContext(input: {
   memoryCount: number;
 }): string {
   if (input.currentMaterialTitles.length === 1) {
-    return COPY.globalAsk.contextSummaryNamed(shortTitle(input.currentMaterialTitles[0]), input.recentCount, input.memoryCount);
+    return GLOBAL_ASK_COPY.contextSummaryNamed(shortTitle(input.currentMaterialTitles[0]), input.recentCount, input.memoryCount);
   }
-  return COPY.globalAsk.contextSummary(input.currentMaterialTitles.length, input.recentCount, input.memoryCount);
+  return GLOBAL_ASK_COPY.contextSummary(input.currentMaterialTitles.length, input.recentCount, input.memoryCount);
 }

@@ -33,6 +33,7 @@ import {
 import { Loader } from '@/components/ai-elements/loader';
 import { ChatComposer, useChatComposer } from '@/components/chat';
 import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import { normalizeNarrationMarks } from '@/lib/utils/normalize-narration-marks';
 // 与迁移前 ChatRenderer→StreamingMarkdown 对齐的数学公式能力（remark-math + KaTeX）；
 // Streamdown 默认不含 math，这里用默认链 + 追加的方式补齐
@@ -42,7 +43,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import type { TeachChatMessage } from './teach-events';
 
-/** tool-call → 活动行图标（标签在 COPY.apps.teach.toolChip） */
+/** tool-call → 活动行图标（标签在 APPS_COPY.teach.toolChip） */
 const CHIP_ICON: Record<string, string> = {
   write: '✏️',
   circle: '⭕',
@@ -138,7 +139,7 @@ export function TeachChatPanel({
       <Conversation className="bg-card">
         <ConversationContent className="gap-5 px-4 py-6">
           {messages.length === 0 ? (
-            <p className="pt-10 text-center text-[13px] text-ink-muted">{COPY.apps.teach.emptyChat}</p>
+            <p className="pt-10 text-center text-[13px] text-ink-muted">{APPS_COPY.teach.emptyChat}</p>
           ) : (
             messages.map((message, index) => {
               const isLast = index === messages.length - 1;
@@ -167,7 +168,7 @@ export function TeachChatPanel({
                       {aggregateChips(message.chips).map((item) => (
                         <span key={item.name} className="inline-flex items-center gap-0.5">
                           <span aria-hidden="true">{CHIP_ICON[item.name] ?? '🔧'}</span>
-                          {COPY.apps.teach.toolChip[item.name] ?? item.name}
+                          {APPS_COPY.teach.toolChip[item.name] ?? item.name}
                           {item.count > 1 ? ` ×${item.count}` : ''}
                         </span>
                       ))}
@@ -191,7 +192,7 @@ export function TeachChatPanel({
           {waitingReply ? (
             <div className="flex items-center gap-2 text-[12.5px] text-ink-muted">
               <Loader size={14} className="text-pine" aria-hidden />
-              <span>{COPY.apps.teach.thinking}</span>
+              <span>{APPS_COPY.teach.thinking}</span>
             </div>
           ) : null}
         </ConversationContent>
@@ -204,8 +205,8 @@ export function TeachChatPanel({
         onSubmit={composer.submit}
         busy={false}
         capabilities={{ mic: true }}
-        micDisabledHint={COPY.apps.teach.voiceSoon}
-        placeholder={COPY.apps.teach.askPlaceholder}
+        micDisabledHint={APPS_COPY.teach.voiceSoon}
+        placeholder={APPS_COPY.teach.askPlaceholder}
         topSlot={
           quote ? (
             <div className="flex items-start gap-2 rounded-lg border border-divider bg-paper-warm px-2.5 py-1.5">
@@ -216,8 +217,8 @@ export function TeachChatPanel({
                 type="button"
                 onClick={() => onQuoteChange(null)}
                 className="shrink-0 p-0.5 text-ink-muted hover:text-ink"
-                aria-label={COPY.apps.teach.removeQuote}
-                title={COPY.apps.teach.removeQuote}
+                aria-label={APPS_COPY.teach.removeQuote}
+                title={APPS_COPY.teach.removeQuote}
               >
                 <X size={12} strokeWidth={2} />
               </button>

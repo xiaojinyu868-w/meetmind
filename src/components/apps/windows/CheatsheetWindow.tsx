@@ -16,7 +16,7 @@ import { Printer, Copy, Check, ChevronDown, ChevronRight, X, PencilLine, MoreHor
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
 import { CheatsheetRichText } from '@/components/apps/windows/CheatsheetRichText';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import type {
   CheatsheetItem,
   CheatsheetPayload,
@@ -94,7 +94,7 @@ function ItemRow({
   const termNode = (
     <strong className="cs-term" style={{ color: accent }}>
       {isStrong ? (
-        <mark className="cs-hl" title={COPY.apps.cheatsheet.focusTitle} aria-label={COPY.apps.cheatsheet.focusTitle}>
+        <mark className="cs-hl" title={APPS_COPY.cheatsheet.focusTitle} aria-label={APPS_COPY.cheatsheet.focusTitle}>
           {item.term}
         </mark>
       ) : item.term}
@@ -108,25 +108,25 @@ function ItemRow({
           <input
             value={draftTerm}
             onChange={(event) => setDraftTerm(event.target.value)}
-            aria-label={COPY.apps.cheatsheet.editTerm}
+            aria-label={APPS_COPY.cheatsheet.editTerm}
             className="w-full rounded-lg border border-divider bg-canvas px-2.5 py-2 text-[12px] font-semibold text-ink outline-none focus:border-pine/40"
           />
           <textarea
             value={draftBody}
             onChange={(event) => setDraftBody(event.target.value)}
-            aria-label={COPY.apps.cheatsheet.editBody}
+            aria-label={APPS_COPY.cheatsheet.editBody}
             rows={3}
             className="w-full resize-none rounded-lg border border-divider bg-canvas px-2.5 py-2 text-[11.5px] leading-5 text-ink outline-none focus:border-pine/40"
           />
           <input
             value={draftLatex}
             onChange={(event) => setDraftLatex(event.target.value)}
-            aria-label={COPY.apps.cheatsheet.editFormula}
+            aria-label={APPS_COPY.cheatsheet.editFormula}
             className="w-full rounded-lg border border-divider bg-canvas px-2.5 py-2 font-mono text-[11px] text-ink outline-none focus:border-pine/40"
           />
           <div className="flex justify-end gap-1.5">
             <button type="button" onClick={() => setEditing(false)} className="rounded-full px-3 py-1.5 text-[10.5px] text-ink-muted hover:bg-paper-warm">
-              {COPY.apps.cheatsheet.cancelEdit}
+              {APPS_COPY.cheatsheet.cancelEdit}
             </button>
             <button
               type="button"
@@ -141,7 +141,7 @@ function ItemRow({
               }}
               className="rounded-full bg-pine px-3 py-1.5 text-[10.5px] font-medium text-white disabled:opacity-40"
             >
-              {COPY.apps.cheatsheet.saveEdit}
+              {APPS_COPY.cheatsheet.saveEdit}
             </button>
           </div>
         </div>
@@ -178,8 +178,8 @@ function ItemRow({
             type="button"
             onClick={beginEdit}
             className="print:hidden absolute right-7 top-0 hidden h-5 w-5 items-center justify-center rounded-full bg-white/85 text-ink-muted opacity-0 ring-[0.5px] ring-ink/[0.18] transition group-hover:opacity-100 hover:bg-white hover:text-pine hover:ring-pine/35 active:scale-90 sm:inline-flex"
-            title={COPY.apps.cheatsheet.editItem}
-            aria-label={COPY.apps.cheatsheet.editItem}
+            title={APPS_COPY.cheatsheet.editItem}
+            aria-label={APPS_COPY.cheatsheet.editItem}
           >
             <PencilLine size={9.5} strokeWidth={2.1} />
           </button>
@@ -187,8 +187,8 @@ function ItemRow({
             type="button"
             onClick={onHide}
             className="print:hidden absolute right-1 top-0 hidden h-5 w-5 items-center justify-center rounded-full bg-white/85 text-ink-muted opacity-0 ring-[0.5px] ring-ink/[0.18] transition group-hover:opacity-100 hover:bg-white hover:text-vermilion hover:ring-vermilion/40 active:scale-90 sm:inline-flex"
-            title={COPY.apps.cheatsheet.hideItem}
-            aria-label={COPY.apps.cheatsheet.hideItem}
+            title={APPS_COPY.cheatsheet.hideItem}
+            aria-label={APPS_COPY.cheatsheet.hideItem}
           >
             <X size={10} strokeWidth={2.4} />
           </button>
@@ -197,7 +197,7 @@ function ItemRow({
             onClick={() => setActionsOpen((open) => !open)}
             className="print:hidden absolute right-0.5 top-0 inline-flex h-6 w-6 items-center justify-center rounded-full text-ink-muted transition active:bg-paper-warm sm:hidden"
             aria-expanded={actionsOpen}
-            aria-label={COPY.apps.cheatsheet.itemActions}
+            aria-label={APPS_COPY.cheatsheet.itemActions}
           >
             <MoreHorizontal size={14} strokeWidth={1.9} aria-hidden />
           </button>
@@ -211,7 +211,7 @@ function ItemRow({
             className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-paper-warm px-3 text-[11px] font-medium text-ink-secondary"
           >
             <PencilLine size={11} strokeWidth={1.9} aria-hidden />
-            {COPY.apps.cheatsheet.editShort}
+            {APPS_COPY.cheatsheet.editShort}
           </button>
           <button
             type="button"
@@ -222,7 +222,7 @@ function ItemRow({
             className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-paper-warm px-3 text-[11px] font-medium text-vermilion"
           >
             <X size={11} strokeWidth={2} aria-hidden />
-            {COPY.apps.cheatsheet.hideShort}
+            {APPS_COPY.cheatsheet.hideShort}
           </button>
         </div>
       ) : null}
@@ -259,7 +259,7 @@ function SectionCard({
       <section className="cs-section print:hidden">
         <header className="cs-sec-head">
           <h3 className="cs-sec-title" style={{ color: headerColor, opacity: 0.55 }}>{section.label}</h3>
-          <span className="cs-sec-meta">{COPY.apps.cheatsheet.removedCount(hiddenCount)}</span>
+          <span className="cs-sec-meta">{APPS_COPY.cheatsheet.removedCount(hiddenCount)}</span>
         </header>
       </section>
     );
@@ -272,8 +272,8 @@ function SectionCard({
           type="button"
           onClick={onToggleCollapse}
           className="print:hidden -ml-1 inline-flex h-4 w-4 items-center justify-center rounded text-ink-muted/70 transition hover:text-ink"
-          title={collapsed ? COPY.apps.cheatsheet.expand : COPY.apps.cheatsheet.collapse}
-          aria-label={collapsed ? COPY.apps.cheatsheet.expand : COPY.apps.cheatsheet.collapse}
+          title={collapsed ? APPS_COPY.cheatsheet.expand : APPS_COPY.cheatsheet.collapse}
+          aria-label={collapsed ? APPS_COPY.cheatsheet.expand : APPS_COPY.cheatsheet.collapse}
           aria-expanded={!collapsed}
         >
           {collapsed ? <ChevronRight size={11} strokeWidth={2} /> : <ChevronDown size={11} strokeWidth={2} />}
@@ -281,14 +281,14 @@ function SectionCard({
         <h3 className="cs-sec-title" style={{ color: headerColor }}>{section.label}</h3>
         <span className="cs-sec-meta print:hidden">
           {strongCount > 0 ? (
-            <span style={{ color: colorful ? '#B03A2E' : 'inherit' }} title={COPY.apps.cheatsheet.focusCount(strongCount)}>
-              {COPY.apps.cheatsheet.focusCount(strongCount)}
+            <span style={{ color: colorful ? '#B03A2E' : 'inherit' }} title={APPS_COPY.cheatsheet.focusCount(strongCount)}>
+              {APPS_COPY.cheatsheet.focusCount(strongCount)}
             </span>
           ) : null}
           {strongCount > 0 ? <span aria-hidden className="opacity-40"> · </span> : null}
-          <span>{COPY.apps.cheatsheet.itemCount(visibleItems.length)}</span>
+          <span>{APPS_COPY.cheatsheet.itemCount(visibleItems.length)}</span>
           {hiddenCount > 0 ? (
-            <span className="opacity-50" title={COPY.apps.cheatsheet.removedTitle(hiddenCount)}>
+            <span className="opacity-50" title={APPS_COPY.cheatsheet.removedTitle(hiddenCount)}>
               /-{hiddenCount}
             </span>
           ) : null}
@@ -296,7 +296,7 @@ function SectionCard({
       </header>
       {collapsed ? (
         <p className="cs-collapsed print:hidden">
-          {COPY.apps.cheatsheet.collapsedCount(visibleItems.length)}
+          {APPS_COPY.cheatsheet.collapsedCount(visibleItems.length)}
         </p>
       ) : (
         <ul className="cs-items">
@@ -372,7 +372,7 @@ export function CheatsheetWindow({ result }: CheatsheetWindowProps) {
     const md = payloadToMarkdown(editedPayload, {
       hiddenItemIds,
       collapsedSections,
-      focusLabel: COPY.apps.cheatsheet.focus,
+      focusLabel: APPS_COPY.cheatsheet.focus,
     });
     try {
       await navigator.clipboard.writeText(md);
@@ -422,7 +422,7 @@ export function CheatsheetWindow({ result }: CheatsheetWindowProps) {
   }, [collapsedSections, editedPayload, hiddenItemIds, pages.length, visibleSections]);
 
   if (!payload) {
-    return <AppWindowPlaceholder status="empty" appName={COPY.apps.cheatsheet.appName} description={COPY.apps.cheatsheet.emptyBody} />;
+    return <AppWindowPlaceholder status="empty" appName={APPS_COPY.cheatsheet.appName} description={APPS_COPY.cheatsheet.emptyBody} />;
   }
 
   return (
@@ -438,22 +438,22 @@ export function CheatsheetWindow({ result }: CheatsheetWindowProps) {
             {stats ? (
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] tabular-nums text-ink-muted/85">
                 <span>
-                  {COPY.apps.cheatsheet.sectionCount(stats.visibleSections, stats.visibleItems)}
+                  {APPS_COPY.cheatsheet.sectionCount(stats.visibleSections, stats.visibleItems)}
                 </span>
                 {stats.strongCount > 0 ? (
                   <>
                     <span aria-hidden className="text-ink-muted/40">·</span>
                     <span className="inline-flex items-center" style={{ color: markerColor }}>
-                      {COPY.apps.cheatsheet.focusCount(stats.strongCount)}
+                      {APPS_COPY.cheatsheet.focusCount(stats.strongCount)}
                     </span>
                   </>
                 ) : null}
                 <span aria-hidden className="text-ink-muted/40">·</span>
-                <span>{COPY.apps.cheatsheet.pageTotal(stats.pageCount)}</span>
+                <span>{APPS_COPY.cheatsheet.pageTotal(stats.pageCount)}</span>
                 {stats.hiddenCount > 0 ? (
                   <>
                     <span aria-hidden className="text-ink-muted/40">·</span>
-                    <span className="text-ink-muted/70">{COPY.apps.cheatsheet.removedCount(stats.hiddenCount)}</span>
+                    <span className="text-ink-muted/70">{APPS_COPY.cheatsheet.removedCount(stats.hiddenCount)}</span>
                   </>
                 ) : null}
               </div>
@@ -472,7 +472,7 @@ export function CheatsheetWindow({ result }: CheatsheetWindowProps) {
                   }`}
                   aria-pressed={colorMode === mode}
                 >
-                  {mode === 'mono' ? COPY.apps.cheatsheet.mono : COPY.apps.cheatsheet.color}
+                  {mode === 'mono' ? APPS_COPY.cheatsheet.mono : APPS_COPY.cheatsheet.color}
                 </button>
               ))}
             </div>
@@ -480,19 +480,19 @@ export function CheatsheetWindow({ result }: CheatsheetWindowProps) {
               type="button"
               onClick={handleCopyMarkdown}
               className="inline-flex h-[28px] items-center gap-1.5 rounded-full bg-white px-3 text-[12px] font-medium text-ink ring-[0.5px] ring-ink/[0.18] transition hover:ring-ink/[0.4] active:scale-95"
-              title={COPY.apps.cheatsheet.copyTitle}
+              title={APPS_COPY.cheatsheet.copyTitle}
             >
               {copyState === 'done' ? <Check size={12} strokeWidth={2} /> : <Copy size={12} strokeWidth={1.8} />}
-              {copyState === 'done' ? COPY.apps.cheatsheet.copied : COPY.apps.cheatsheet.copyMarkdown}
+              {copyState === 'done' ? APPS_COPY.cheatsheet.copied : APPS_COPY.cheatsheet.copyMarkdown}
             </button>
             <button
               type="button"
               onClick={handlePrint}
               className="inline-flex h-[28px] items-center gap-1.5 rounded-full bg-ink px-3.5 text-[12px] font-medium text-white transition hover:opacity-85 active:scale-95"
-              title={COPY.apps.cheatsheet.printTitle}
+              title={APPS_COPY.cheatsheet.printTitle}
             >
               <Printer size={12} strokeWidth={1.8} />
-              {COPY.apps.cheatsheet.print}
+              {APPS_COPY.cheatsheet.print}
             </button>
           </div>
         </div>
@@ -503,7 +503,7 @@ export function CheatsheetWindow({ result }: CheatsheetWindowProps) {
         <div className="cheatsheet-pages mx-auto flex w-full max-w-[820px] flex-col gap-6 print:block">
           {pages.length === 0 ? (
             <div className="rounded-[20px] border border-dashed border-divider bg-white px-6 py-16 text-center text-[12.5px] text-ink-muted print:hidden">
-              {COPY.apps.cheatsheet.allRemoved}
+              {APPS_COPY.cheatsheet.allRemoved}
             </div>
           ) : pages.map((page, pageIndex) => (
             <article key={page.id} className="cs-sheet">
@@ -513,14 +513,14 @@ export function CheatsheetWindow({ result }: CheatsheetWindowProps) {
                   <p className="cs-title-sub">{payload.overview}</p>
                   {payload.sources && payload.sources.length > 0 ? (
                     <p className="cs-title-src">
-                      {COPY.apps.cheatsheet.sourcesLabel}：{payload.sources.map((source) => source.title).join(' · ')}
+                      {APPS_COPY.cheatsheet.sourcesLabel}：{payload.sources.map((source) => source.title).join(' · ')}
                     </p>
                   ) : null}
                 </header>
               ) : (
                 <header className="cs-running-head">
                   <span>{payload.title}</span>
-                  <span className="tabular-nums">{COPY.apps.cheatsheet.pageNumber(pageIndex + 1, pages.length)}</span>
+                  <span className="tabular-nums">{APPS_COPY.cheatsheet.pageNumber(pageIndex + 1, pages.length)}</span>
                 </header>
               )}
               <div className="cs-grid">
@@ -554,7 +554,7 @@ export function CheatsheetWindow({ result }: CheatsheetWindowProps) {
           className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full border border-divider bg-white px-3 text-[11.5px] font-medium text-ink-secondary"
         >
           {copyState === 'done' ? <Check size={13} strokeWidth={2} aria-hidden /> : <Copy size={13} strokeWidth={1.8} aria-hidden />}
-          {copyState === 'done' ? COPY.apps.cheatsheet.copied : COPY.apps.cheatsheet.mobileCopy}
+          {copyState === 'done' ? APPS_COPY.cheatsheet.copied : APPS_COPY.cheatsheet.mobileCopy}
         </button>
         <button
           type="button"
@@ -562,7 +562,7 @@ export function CheatsheetWindow({ result }: CheatsheetWindowProps) {
           className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full bg-ink px-4 text-[11.5px] font-medium text-white active:scale-[0.98]"
         >
           <Printer size={13} strokeWidth={1.8} aria-hidden />
-          {COPY.apps.cheatsheet.mobilePrint}
+          {APPS_COPY.cheatsheet.mobilePrint}
         </button>
       </div>
 

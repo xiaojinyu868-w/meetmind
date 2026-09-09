@@ -20,7 +20,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BoardPage } from '@/lib/ai-native/plugins/board-script';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import { applyCodeEditToBoard, applyImageUrlToBoard, boardEffectOf, buildWireText, createElementIdResolver, engineTitleFollow, isVisibleTool, parseWireText } from './teach-events';
 import type { TeachChatMessage, TeachEvent } from './teach-events';
 import { useTeachBoardSync } from './useTeachBoardSync';
@@ -405,7 +405,7 @@ export function useTeachSession(): UseTeachSessionResult {
       }
       // 真实：先订阅（等 thread 首事件 = 连接建立），再发开课指令，不错过早事件
       subscribeReal(meta.id, () => {
-        void teachPostMessage(meta.id, COPY.apps.teach.lessonStart).then((response) => {
+        void teachPostMessage(meta.id, APPS_COPY.teach.lessonStart).then((response) => {
           if (response.ok) setBothStreaming(true);
           else setError(`开课失败（HTTP ${response.status}）`);
         });

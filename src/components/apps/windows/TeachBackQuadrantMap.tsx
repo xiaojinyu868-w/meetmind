@@ -10,7 +10,7 @@
  */
 
 import type { TeachBackEvaluationItem, TeachBackQuadrant } from '@/lib/ai-native/types';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 
 interface TeachBackQuadrantMapProps {
   items: TeachBackEvaluationItem[];
@@ -28,25 +28,25 @@ interface CellDef {
 const CELLS: Record<'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight', CellDef> = {
   topLeft: {
     key: 'productive-struggle',
-    label: COPY.apps.teachBack.quadrantStruggle,
+    label: APPS_COPY.teachBack.quadrantStruggle,
     chipClass: 'border-pine/35 bg-pine-mist/40 text-pine',
     cellClass: 'bg-pine-fog/40',
   },
   topRight: {
     key: 'mastery',
-    label: COPY.apps.teachBack.quadrantMastery,
+    label: APPS_COPY.teachBack.quadrantMastery,
     chipClass: 'border-pine/45 bg-pine-mist text-pine',
     cellClass: 'bg-pine-fog',
   },
   bottomLeft: {
     key: 'aware-gap',
-    label: COPY.apps.teachBack.quadrantGap,
+    label: APPS_COPY.teachBack.quadrantGap,
     chipClass: 'border-divider bg-paper-warm text-ink-secondary',
     cellClass: 'bg-paper-warm/50',
   },
   bottomRight: {
     key: 'blind-spot',
-    label: COPY.apps.teachBack.quadrantBlindSpot,
+    label: APPS_COPY.teachBack.quadrantBlindSpot,
     chipClass: 'border-vermilion/45 bg-vermilion-mist text-vermilion',
     cellClass: 'bg-vermilion-fog/50',
     pulse: true,
@@ -110,7 +110,7 @@ export function TeachBackQuadrantMap({ items }: TeachBackQuadrantMapProps) {
       {uncovered.length > 0 ? (
         <div className="mt-3 border-t border-divider/60 pt-3">
           <p className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-muted">
-            {COPY.apps.teachBack.quadrantUncovered} · {uncovered.length}
+            {APPS_COPY.teachBack.quadrantUncovered} · {uncovered.length}
           </p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {uncovered.map((item, index) => (

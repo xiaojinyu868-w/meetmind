@@ -1,13 +1,13 @@
 /**
  * settings/AccountSection — 「账户」区：登录态 = 身份 hero + 资料/安全卡片；
  * 游客态 = 一张安静的登录卡片（原来是「状态：未登录 / 登录 / 注册」三行干列表，
- * 没有说明价值）。所有用户面字符串走 COPY.settings.account。
+ * 没有说明价值）。所有用户面字符串走 SETTINGS_COPY.account。
  */
 
 'use client';
 
 import Link from 'next/link';
-import { COPY } from '@/lib/ui/copy';
+import { SETTINGS_COPY } from '@/lib/ui/copy-settings';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   ActionButtonRow,
@@ -18,7 +18,7 @@ import {
   SettingSection,
 } from './primitives';
 
-const S = COPY.settings;
+const S = SETTINGS_COPY;
 
 export interface AccountUser {
   nickname?: string | null;

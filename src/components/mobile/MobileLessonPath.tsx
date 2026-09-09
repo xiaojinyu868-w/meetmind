@@ -17,6 +17,7 @@ import { useMemo } from 'react';
 import { ArrowRight, Check, ChevronRight } from 'lucide-react';
 import { WORKSHOP_APP_CATALOG, type WorkshopAppCatalogItem, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import { cn } from '@/lib/utils';
 import type { Anchor, TranscriptSegment } from '@/types';
 import {
@@ -44,7 +45,7 @@ interface MobileLessonPathProps {
 }
 
 export function MobileLessonPath({ sessionId, title, segments, anchors, keyDifficulties, apps, modelPick, onOpen }: MobileLessonPathProps) {
-  const copy = COPY.apps.path;
+  const copy = APPS_COPY.path;
   const outcomes = useSessionOutcomes(sessionId);
   const summary = useMemo(() => summarizeSessionOutcomes(outcomes), [outcomes]);
   const allowed = useMemo(() => new Set(apps.map((app) => app.key)), [apps]);

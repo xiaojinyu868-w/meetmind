@@ -9,19 +9,19 @@
  */
 
 import { Check, X } from 'lucide-react';
-import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import { cn } from '@/lib/utils';
 import { useMasteryTrail } from '@/hooks/useMasteryTrail';
 import type { MasteryStatus } from './mastery-trail';
 
 const STATUS_STYLE: Record<MasteryStatus, { dot: string; text: string; label: string }> = {
-  unstable: { dot: 'bg-vermilion', text: 'text-vermilion', label: COPY.globalAsk.masteryTrail.statusUnstable },
-  improving: { dot: 'bg-pine ring-4 ring-pine/15', text: 'text-pine', label: COPY.globalAsk.masteryTrail.statusImproving },
-  stable: { dot: 'bg-pine', text: 'text-pine', label: COPY.globalAsk.masteryTrail.statusStable },
+  unstable: { dot: 'bg-vermilion', text: 'text-vermilion', label: GLOBAL_ASK_COPY.masteryTrail.statusUnstable },
+  improving: { dot: 'bg-pine ring-4 ring-pine/15', text: 'text-pine', label: GLOBAL_ASK_COPY.masteryTrail.statusImproving },
+  stable: { dot: 'bg-pine', text: 'text-pine', label: GLOBAL_ASK_COPY.masteryTrail.statusStable },
 };
 
 function stepLabel(appKey: string): string {
-  return COPY.globalAsk.masteryTrail.stepLabels[appKey] ?? appKey;
+  return GLOBAL_ASK_COPY.masteryTrail.stepLabels[appKey] ?? appKey;
 }
 
 export function MasteryTrailSection({ className }: { className?: string }) {
@@ -33,9 +33,9 @@ export function MasteryTrailSection({ className }: { className?: string }) {
   return (
     <section className={cn('mt-9', className)} aria-labelledby="mastery-trail-title" data-testid="mastery-trail">
       <div className="mb-3 px-1">
-        <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.12em] text-pine">{COPY.globalAsk.masteryTrail.eyebrow}</p>
-        <h2 id="mastery-trail-title" className="mt-2 text-[17px] font-semibold tracking-[-0.02em] text-ink">{COPY.globalAsk.masteryTrail.title}</h2>
-        <p className="mt-1 text-[11.5px] leading-5 text-ink-muted">{COPY.globalAsk.masteryTrail.body}</p>
+        <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.12em] text-pine">{GLOBAL_ASK_COPY.masteryTrail.eyebrow}</p>
+        <h2 id="mastery-trail-title" className="mt-2 text-[17px] font-semibold tracking-[-0.02em] text-ink">{GLOBAL_ASK_COPY.masteryTrail.title}</h2>
+        <p className="mt-1 text-[11.5px] leading-5 text-ink-muted">{GLOBAL_ASK_COPY.masteryTrail.body}</p>
       </div>
       <ul className="divide-y divide-divider border-y border-divider">
         {trail.map((entry) => {
@@ -62,7 +62,7 @@ export function MasteryTrailSection({ className }: { className?: string }) {
           );
         })}
       </ul>
-      <p className="mt-2 px-1 text-[10.5px] text-ink-muted">{fromAccount ? COPY.globalAsk.masteryTrail.accountScopeHint : COPY.globalAsk.masteryTrail.deviceScopeHint}</p>
+      <p className="mt-2 px-1 text-[10.5px] text-ink-muted">{fromAccount ? GLOBAL_ASK_COPY.masteryTrail.accountScopeHint : GLOBAL_ASK_COPY.masteryTrail.deviceScopeHint}</p>
     </section>
   );
 }

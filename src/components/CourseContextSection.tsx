@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useAudioSessions } from '@/hooks/useAudioSessions';
 import { CourseAssessmentCard } from '@/components/CourseAssessmentCard';
-import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import { buildCourseContextGroups, type CourseContextGroup } from '@/lib/utils/course-context';
 import { cn } from '@/lib/utils';
 import type { CourseContextPreference } from '@/types/user';
@@ -43,11 +43,11 @@ function formatDate(value: string): string {
 }
 
 function confidenceLabel(course: CourseContextGroup): string {
-  if (course.status === 'paused') return COPY.globalAsk.courseContextPaused;
-  if (course.detachedFromCourseKey) return COPY.globalAsk.courseContextDetached;
-  if (course.confidence === 'suggested') return COPY.globalAsk.courseContextSuggested;
-  if (course.confidence === 'unclassified') return COPY.globalAsk.courseContextUnclassified;
-  return COPY.globalAsk.courseContextActive;
+  if (course.status === 'paused') return GLOBAL_ASK_COPY.courseContextPaused;
+  if (course.detachedFromCourseKey) return GLOBAL_ASK_COPY.courseContextDetached;
+  if (course.confidence === 'suggested') return GLOBAL_ASK_COPY.courseContextSuggested;
+  if (course.confidence === 'unclassified') return GLOBAL_ASK_COPY.courseContextUnclassified;
+  return GLOBAL_ASK_COPY.courseContextActive;
 }
 
 function CourseCard({
@@ -94,7 +94,7 @@ function CourseCard({
                       value={draft}
                       onChange={(event) => setDraft(event.target.value)}
                       autoFocus
-                      placeholder={COPY.globalAsk.courseContextRenameHint}
+                      placeholder={GLOBAL_ASK_COPY.courseContextRenameHint}
                       className="min-w-0 flex-1 rounded-xl border border-pine/30 bg-canvas px-3 py-2 text-[15px] font-semibold text-ink outline-none focus:border-pine/55"
                     />
                     <button
@@ -109,7 +109,7 @@ function CourseCard({
                         setEditing(false);
                       }}
                       className="flex h-8 w-8 items-center justify-center rounded-full bg-pine text-white disabled:opacity-40"
-                      aria-label={COPY.globalAsk.courseContextSave}
+                      aria-label={GLOBAL_ASK_COPY.courseContextSave}
                     >
                       <Check size={13} />
                     </button>
@@ -117,7 +117,7 @@ function CourseCard({
                       type="button"
                       onClick={() => { setDraft(course.title); setDraftTags(course.tags.join('、')); setEditing(false); }}
                       className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted hover:bg-paper-warm"
-                      aria-label={COPY.globalAsk.courseContextCancel}
+                      aria-label={GLOBAL_ASK_COPY.courseContextCancel}
                     >
                       <X size={13} />
                     </button>
@@ -128,18 +128,18 @@ function CourseCard({
                 {editing ? (
                   <label className="mt-2 flex items-center gap-2 rounded-xl border border-divider bg-canvas px-3 py-2">
                     <Tag size={12} className="flex-shrink-0 text-ink-muted" />
-                    <span className="sr-only">{COPY.globalAsk.courseContextTags}</span>
+                    <span className="sr-only">{GLOBAL_ASK_COPY.courseContextTags}</span>
                     <input
                       value={draftTags}
                       onChange={(event) => setDraftTags(event.target.value)}
-                      placeholder={COPY.globalAsk.courseContextTagsHint}
+                      placeholder={GLOBAL_ASK_COPY.courseContextTagsHint}
                       className="min-w-0 flex-1 bg-transparent text-[11.5px] text-ink outline-none placeholder:text-ink-muted"
                     />
                   </label>
                 ) : null}
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-muted">
-                  <span>{COPY.globalAsk.courseContextLessons(course.lessons.length)}</span>
-                  {course.totalDurationMin > 0 ? <span>{COPY.globalAsk.courseContextMinutes(course.totalDurationMin)}</span> : null}
+                  <span>{GLOBAL_ASK_COPY.courseContextLessons(course.lessons.length)}</span>
+                  {course.totalDurationMin > 0 ? <span>{GLOBAL_ASK_COPY.courseContextMinutes(course.totalDurationMin)}</span> : null}
                   {course.scheduleLabel ? (
                     <span className="inline-flex items-center gap-1"><CalendarDays size={11} />{course.scheduleLabel}</span>
                   ) : null}
@@ -169,7 +169,7 @@ function CourseCard({
                 className="inline-flex items-center gap-1.5 rounded-full border border-divider px-3 py-2 text-[11.5px] text-ink-secondary hover:border-pine/25 hover:text-pine"
               >
                 {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                {expanded ? COPY.globalAsk.courseContextCollapse : COPY.globalAsk.courseContextDetails}
+                {expanded ? GLOBAL_ASK_COPY.courseContextCollapse : GLOBAL_ASK_COPY.courseContextDetails}
               </button>
             </div>
           </div>
@@ -185,7 +185,7 @@ function CourseCard({
                 onClick={() => { setDraft(course.title); setDraftTags(course.tags.join('、')); setEditing(true); }}
                 className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[11.5px] text-ink-muted hover:bg-white hover:text-pine"
               >
-                <PencilLine size={12} />{COPY.globalAsk.courseContextRename}
+                <PencilLine size={12} />{GLOBAL_ASK_COPY.courseContextRename}
               </button>
             ) : null}
             <button
@@ -195,7 +195,7 @@ function CourseCard({
               className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[11.5px] text-ink-muted hover:bg-white hover:text-pine disabled:opacity-40"
             >
               {paused ? <Play size={12} /> : <Pause size={12} />}
-              {paused ? COPY.globalAsk.courseContextResume : COPY.globalAsk.courseContextPause}
+              {paused ? GLOBAL_ASK_COPY.courseContextResume : GLOBAL_ASK_COPY.courseContextPause}
             </button>
             {!paused && course.lessons.length >= 2 && course.confidence === 'suggested' ? (
               <button
@@ -204,7 +204,7 @@ function CourseCard({
                 onClick={() => void onUpdatePreference(course.courseKey, { confirmedByUser: true })}
                 className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[11.5px] text-pine hover:bg-white disabled:opacity-40"
               >
-                <Check size={12} />{COPY.globalAsk.courseContextConfirm}
+                <Check size={12} />{GLOBAL_ASK_COPY.courseContextConfirm}
               </button>
             ) : null}
             {!paused && !course.assessment && course.confidence === 'confirmed' && cheatsheetCourses.reduce((sum, item) => sum + item.lessons.length, 0) >= 2 ? (
@@ -213,7 +213,7 @@ function CourseCard({
                 onClick={() => onOpenCheatsheet(cheatsheetCourses, [course.courseKey])}
                 className="inline-flex items-center gap-1.5 rounded-full bg-pine px-3.5 py-2 text-[11.5px] font-medium text-white"
               >
-                <FileText size={12} />{COPY.globalAsk.courseContextCheatsheet}
+                <FileText size={12} />{GLOBAL_ASK_COPY.courseContextCheatsheet}
               </button>
             ) : null}
             {course.detachedFromCourseKey ? (
@@ -223,7 +223,7 @@ function CourseCard({
                 onClick={() => void onRestoreLesson(course)}
                 className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[11.5px] text-pine hover:bg-white disabled:opacity-40"
               >
-                <Undo2 size={12} />{COPY.globalAsk.courseContextRestore}
+                <Undo2 size={12} />{GLOBAL_ASK_COPY.courseContextRestore}
               </button>
             ) : null}
           </div>
@@ -247,10 +247,10 @@ function CourseCard({
                   disabled={saving}
                   onClick={() => void onDetachLesson(course, lesson.sessionId)}
                   className="inline-flex flex-shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10.5px] text-ink-muted hover:bg-white hover:text-vermilion disabled:opacity-40"
-                  title={COPY.globalAsk.courseContextDetachTitle(lesson.title)}
-                  aria-label={COPY.globalAsk.courseContextDetachTitle(lesson.title)}
+                  title={GLOBAL_ASK_COPY.courseContextDetachTitle(lesson.title)}
+                  aria-label={GLOBAL_ASK_COPY.courseContextDetachTitle(lesson.title)}
                 >
-                  <Unlink size={10.5} />{COPY.globalAsk.courseContextDetach}
+                  <Unlink size={10.5} />{GLOBAL_ASK_COPY.courseContextDetach}
                 </button>
               ) : null}
             </div>
@@ -319,8 +319,8 @@ export function CourseContextSection({
     <section ref={sectionRef} className={cn('scroll-mt-4', !standalone && 'mt-10 border-t border-divider pt-8 sm:mt-12 sm:pt-10')}>
       <div className="mb-5 flex items-end justify-between gap-4 px-1">
         <div>
-          <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.12em] text-vermilion">{COPY.globalAsk.memoryCoursesTab}</p>
-          <h2 className="mt-2 font-serif text-[25px] italic tracking-[-0.025em] text-ink sm:text-[28px]">{COPY.globalAsk.courseContextTitle}</h2>
+          <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.12em] text-vermilion">{GLOBAL_ASK_COPY.memoryCoursesTab}</p>
+          <h2 className="mt-2 font-serif text-[25px] italic tracking-[-0.025em] text-ink sm:text-[28px]">{GLOBAL_ASK_COPY.courseContextTitle}</h2>
         </div>
         {courses.length > 0 ? <span className="mb-1 text-[11px] tabular-nums text-ink-muted">{courses.length}</span> : null}
       </div>
@@ -338,10 +338,10 @@ export function CourseContextSection({
           </span>
           <div className="min-w-0 flex-1">
             <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.1em] text-vermilion">
-              {COPY.globalAsk.courseCheatsheetEntryEyebrow}
+              {GLOBAL_ASK_COPY.courseCheatsheetEntryEyebrow}
             </p>
-            <h3 className="mt-1 text-[17px] font-semibold text-ink">{COPY.globalAsk.courseCheatsheetEntryTitle}</h3>
-            <p className="mt-1.5 text-[12px] leading-5 text-ink-secondary">{COPY.globalAsk.courseCheatsheetEntryBody}</p>
+            <h3 className="mt-1 text-[17px] font-semibold text-ink">{GLOBAL_ASK_COPY.courseCheatsheetEntryTitle}</h3>
+            <p className="mt-1.5 text-[12px] leading-5 text-ink-secondary">{GLOBAL_ASK_COPY.courseCheatsheetEntryBody}</p>
           </div>
           {eligibleCheatsheetLessonCount >= 2 ? (
             <button
@@ -349,25 +349,25 @@ export function CourseContextSection({
               onClick={() => onOpenCheatsheet(eligibleCheatsheetCourses)}
               className="ml-auto hidden min-h-10 shrink-0 items-center justify-center rounded-full bg-pine px-4 text-[11.5px] font-medium text-white sm:inline-flex"
             >
-              {COPY.globalAsk.courseCheatsheetEntryAction}
+              {GLOBAL_ASK_COPY.courseCheatsheetEntryAction}
             </button>
-          ) : <span className="ml-auto hidden max-w-[170px] shrink-0 text-right text-[10.5px] leading-5 text-ink-muted sm:block">{COPY.globalAsk.courseCheatsheetEntryEmpty}</span>}
+          ) : <span className="ml-auto hidden max-w-[170px] shrink-0 text-right text-[10.5px] leading-5 text-ink-muted sm:block">{GLOBAL_ASK_COPY.courseCheatsheetEntryEmpty}</span>}
         </div>
 
         {eligibleCheatsheetLessonCount >= 2 ? (
           <div className="mt-3 flex items-center justify-between gap-3 pl-[52px] sm:hidden">
-            <p className="text-[10.5px] text-ink-muted">{COPY.globalAsk.courseCheatsheetEntryAvailable(eligibleCheatsheetCourses.length, eligibleCheatsheetLessonCount)}</p>
+            <p className="text-[10.5px] text-ink-muted">{GLOBAL_ASK_COPY.courseCheatsheetEntryAvailable(eligibleCheatsheetCourses.length, eligibleCheatsheetLessonCount)}</p>
             <button type="button" onClick={() => onOpenCheatsheet(eligibleCheatsheetCourses)} className="shrink-0 rounded-full bg-pine px-4 py-2.5 text-[11.5px] font-medium text-white">
-              {COPY.globalAsk.courseCheatsheetEntryAction}
+              {GLOBAL_ASK_COPY.courseCheatsheetEntryAction}
             </button>
           </div>
-        ) : <p className="mt-3 pl-[52px] text-[10.5px] leading-5 text-ink-muted sm:hidden">{COPY.globalAsk.courseCheatsheetEntryEmpty}</p>}
+        ) : <p className="mt-3 pl-[52px] text-[10.5px] leading-5 text-ink-muted sm:hidden">{GLOBAL_ASK_COPY.courseCheatsheetEntryEmpty}</p>}
       </div>
 
       <div className="space-y-3">
         {courses.length === 0 ? (
           <div className="border-b border-divider px-1 py-8 text-[12.5px] leading-6 text-ink-muted">
-            {COPY.globalAsk.courseContextEmpty}
+            {GLOBAL_ASK_COPY.courseContextEmpty}
           </div>
         ) : courses.map((course) => (
           <CourseCard

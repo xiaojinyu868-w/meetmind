@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { COPY } from '@/lib/ui/copy';
+import { sharedContextCopy } from '@/lib/ui/shared-context-copy';
 import { useSharedContext } from '@/hooks/useSharedContext';
 import { ContextPortrait } from './ContextPortrait';
 import { ContextEvidenceDialog } from './ContextEvidenceDialog';
@@ -20,7 +20,7 @@ export function SharedContextPanel() {
   const [task, setTask] = useState('');
   const [appId, setAppId] = useState('');
   const [write, setWrite] = useState(false);
-  const c = COPY.sharedContext;
+  const c = sharedContextCopy;
   async function save(event: FormEvent) {
     event.preventDefault();
     if (await context.append(note.trim(), space)) setNote('');

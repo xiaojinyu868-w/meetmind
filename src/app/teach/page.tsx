@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Menu, Volume2, VolumeX, X } from 'lucide-react';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import { flattenPage } from '@/components/apps/windows/blackboard/board-lecture';
 import { teachDefaultTopic, isMockMode } from '@/components/teach/teach-client';
 import { teachListThreads } from '@/components/teach/teach-client';
@@ -152,12 +152,12 @@ export default function TeachPage() {
           type="button"
           className="rounded-lg p-1.5 text-ink-secondary hover:bg-paper-warm lg:hidden"
           onClick={() => setDrawerOpen(true)}
-          aria-label={COPY.apps.teach.history}
+          aria-label={APPS_COPY.teach.history}
         >
           <Menu size={16} strokeWidth={1.8} />
         </button>
         <h1 className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink">
-          {session.title || COPY.apps.teach.appName}
+          {session.title || APPS_COPY.teach.appName}
         </h1>
         {session.streaming ? (
           <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-muted">
@@ -178,8 +178,8 @@ export default function TeachPage() {
             }
           }}
           className="rounded-lg p-1.5 text-ink-secondary transition-colors hover:bg-paper-warm"
-          aria-label={session.muted ? COPY.apps.teach.soundOff : COPY.apps.teach.soundOn}
-          title={session.muted ? COPY.apps.teach.soundOff : COPY.apps.teach.soundOn}
+          aria-label={session.muted ? APPS_COPY.teach.soundOff : APPS_COPY.teach.soundOn}
+          title={session.muted ? APPS_COPY.teach.soundOff : APPS_COPY.teach.soundOn}
         >
           {session.muted ? (
             <VolumeX size={16} strokeWidth={1.8} />
@@ -261,12 +261,12 @@ export default function TeachPage() {
               void startNewLesson(topicDraft);
             }}
           >
-            <h2 className="text-[15px] font-medium text-ink">{COPY.apps.teach.topicPromptTitle}</h2>
+            <h2 className="text-[15px] font-medium text-ink">{APPS_COPY.teach.topicPromptTitle}</h2>
             <input
               autoFocus
               value={topicDraft}
               onChange={(event) => setTopicDraft(event.target.value)}
-              placeholder={COPY.apps.teach.topicPromptPlaceholder}
+              placeholder={APPS_COPY.teach.topicPromptPlaceholder}
               maxLength={100}
               className="mt-3 w-full rounded-lg border border-divider bg-paper-warm px-3 py-2 text-[14px] text-ink outline-none placeholder:text-ink-muted focus:border-pine/50"
             />
@@ -276,7 +276,7 @@ export default function TeachPage() {
                 disabled={!topicDraft.trim()}
                 className="rounded-lg bg-pine px-4 py-1.5 text-[13px] text-white transition-opacity disabled:opacity-40"
               >
-                {COPY.apps.teach.topicPromptStart}
+                {APPS_COPY.teach.topicPromptStart}
               </button>
             </div>
           </form>

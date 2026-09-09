@@ -5,6 +5,7 @@ import { ArrowRight, Check, ChevronRight, Layers3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { LearningThreadEntry } from '@/types/user';
 import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { GlobalAskDesk } from '@/components/GlobalAskDesk';
 import type { DeskGroup, DeskItem } from '@/components/global-ask-desk';
@@ -17,7 +18,7 @@ import type { DeskGroup, DeskItem } from '@/components/global-ask-desk';
  * 点一件实物，一句指向具体位置的问题就落进输入框。视觉用 v9 B 方向（globals.css 的 v9-*
  * 基元）：签名色光场在背后缓慢漂移，Octo 带听课涟漪，表面是浮在光上的毛玻璃。
  *
- * 文案契约不变：全部来自 COPY.globalAsk；免费档的深度模式入口带 Pro 标识
+ * 文案契约不变：全部来自 GLOBAL_ASK_COPY；免费档的深度模式入口带 Pro 标识
  * （`deepLocked`，由 panel 按会员档位传入）。
  */
 
@@ -57,8 +58,8 @@ export function GlobalAskWelcome({
   const prompts = groundedPrompts && groundedPrompts.length > 0
     ? groundedPrompts
     : depth === 'deep'
-      ? COPY.globalAsk.deepExamples
-      : COPY.globalAsk.quickExamples;
+      ? GLOBAL_ASK_COPY.deepExamples
+      : GLOBAL_ASK_COPY.quickExamples;
   const deskHasItems = Boolean(desk && desk.length > 0);
   const showStarters = !deskHasItems || depth === 'deep';
 
@@ -75,13 +76,13 @@ export function GlobalAskWelcome({
           <OctoAvatar mood="listening" size="md" aura={false} />
         </div>
         <p className="v9-rise v9-d2 mt-2 font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-pine">
-          {COPY.globalAsk.welcomeEyebrow}
+          {GLOBAL_ASK_COPY.welcomeEyebrow}
         </p>
         <h2 className="v9-rise v9-d3 mt-2.5 max-w-2xl font-serif text-[28px] italic leading-[1.2] tracking-[-0.02em] text-ink sm:text-[36px]">
-          {depth === 'deep' ? COPY.globalAsk.deepEmptyTitle : COPY.globalAsk.emptyTitle}
+          {depth === 'deep' ? GLOBAL_ASK_COPY.deepEmptyTitle : GLOBAL_ASK_COPY.emptyTitle}
         </h2>
         <p className="v9-rise v9-d4 mt-2.5 max-w-lg text-[13px] leading-6 text-ink-secondary">
-          {depth === 'deep' ? COPY.globalAsk.deepEmptyBody : COPY.globalAsk.emptyBody}
+          {depth === 'deep' ? GLOBAL_ASK_COPY.deepEmptyBody : GLOBAL_ASK_COPY.emptyBody}
         </p>
       </div>
 
@@ -94,10 +95,10 @@ export function GlobalAskWelcome({
         >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-pine/10 text-pine transition group-hover:bg-pine/15"><ArrowRight size={14} /></span>
           <span className="min-w-0 flex-1">
-            <span className="block font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-pine">{COPY.globalAsk.threadTitle}</span>
+            <span className="block font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-pine">{GLOBAL_ASK_COPY.threadTitle}</span>
             <span className="mt-1 block truncate text-[13px] font-semibold text-ink">{activeThread.title}</span>
           </span>
-          <span className="hidden text-[11px] font-medium text-ink-muted sm:block">{COPY.globalAsk.threadResume}</span>
+          <span className="hidden text-[11px] font-medium text-ink-muted sm:block">{GLOBAL_ASK_COPY.threadResume}</span>
           <ChevronRight size={14} className="shrink-0 text-ink-muted transition group-hover:translate-x-0.5 group-hover:text-pine" />
         </button>
       ) : null}
@@ -116,7 +117,7 @@ export function GlobalAskWelcome({
         ) : null}
         <div className="px-4 pt-4 sm:px-5">{composer}</div>
         <div className="flex flex-col gap-2 border-t border-ink/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-          <div className="flex items-center gap-1" aria-label={COPY.globalAsk.modeSelectorLabel}>
+          <div className="flex items-center gap-1" aria-label={GLOBAL_ASK_COPY.modeSelectorLabel}>
             {(['quick', 'deep'] as const).map((option) => {
               const selected = depth === option;
               return (
@@ -131,7 +132,7 @@ export function GlobalAskWelcome({
                   )}
                 >
                   {selected ? <Check size={11} /> : null}
-                  {option === 'quick' ? COPY.globalAsk.quickMode : COPY.globalAsk.deepMode}
+                  {option === 'quick' ? GLOBAL_ASK_COPY.quickMode : GLOBAL_ASK_COPY.deepMode}
                   {option === 'deep' && deepLocked ? (
                     <span className={cn(
                       'rounded-full px-1.5 py-px text-[9px] font-semibold',
@@ -160,7 +161,7 @@ export function GlobalAskWelcome({
             深度模式的句式不同（系统学懂并检验），仍保留 ── */}
       {showStarters ? (
       <div className="v9-rise v9-d6 relative mt-6">
-        <p className="text-center font-mono text-[9.5px] uppercase tracking-[0.16em] text-ink-muted">{COPY.globalAsk.startersTitle}</p>
+        <p className="text-center font-mono text-[9.5px] uppercase tracking-[0.16em] text-ink-muted">{GLOBAL_ASK_COPY.startersTitle}</p>
         <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
           {prompts.map((prompt) => (
             <button

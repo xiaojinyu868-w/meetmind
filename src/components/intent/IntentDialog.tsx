@@ -31,7 +31,7 @@ import {
   useChatComposer,
   useChatFileUpload,
 } from '@/components/chat';
-import { COPY } from '@/lib/ui/copy';
+import { INTENT_COPY } from '@/lib/ui/copy-intent';
 import { IntentMessageItem } from './IntentMessageItem';
 import { IntentOpeningFlow } from './IntentOpeningFlow';
 import { IntentStepBar } from './IntentStepBar';
@@ -327,25 +327,25 @@ export function IntentDialog({
   const quizQuestions: Array<{ question: string; options: string[]; answer: string | null }> = [];
   if (quizActive) {
     quizQuestions.push({
-      question: COPY.intent.openingStep1Question,
-      options: COPY.intent.openingStep1Options,
+      question: INTENT_COPY.openingStep1Question,
+      options: INTENT_COPY.openingStep1Options,
       answer: quizIdentity || null,
     });
     if (quizIdentity === '在校学生' || quizIdentity === '工作中') {
       quizQuestions.push({
         question: quizIdentity === '在校学生'
-          ? COPY.intent.openingStep2StudentQuestion
-          : COPY.intent.openingStep2WorkQuestion,
+          ? INTENT_COPY.openingStep2StudentQuestion
+          : INTENT_COPY.openingStep2WorkQuestion,
         options: quizIdentity === '在校学生'
-          ? COPY.intent.openingStep2StudentOptions
-          : COPY.intent.openingStep2WorkOptions,
+          ? INTENT_COPY.openingStep2StudentOptions
+          : INTENT_COPY.openingStep2WorkOptions,
         answer: quizStage || null,
       });
     }
     if (quizStep >= 2 || quizQuestions[quizQuestions.length - 1].answer) {
       quizQuestions.push({
-        question: COPY.intent.openingStep3Question,
-        options: COPY.intent.openingStep3Options,
+        question: INTENT_COPY.openingStep3Question,
+        options: INTENT_COPY.openingStep3Options,
         answer: null,
       });
     }
@@ -358,7 +358,7 @@ export function IntentDialog({
       className="fixed inset-0 z-[80] flex flex-col bg-paper"
       role="dialog"
       aria-modal="true"
-      aria-label={COPY.intent.title}
+      aria-label={INTENT_COPY.title}
     >
       {/* 极淡的双签名色柔光（纸感不死板） */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
@@ -377,8 +377,8 @@ export function IntentDialog({
         <div className="flex items-center gap-3">
           <OctoAvatar mood={assistantMood} size="sm" aura />
           <div>
-            <p className="text-[15px] font-semibold tracking-[-0.01em] text-ink">{COPY.intent.title}</p>
-            <p className="text-[11.5px] italic text-ink-muted" style={serifStyle}>{COPY.intent.subtitle}</p>
+            <p className="text-[15px] font-semibold tracking-[-0.01em] text-ink">{INTENT_COPY.title}</p>
+            <p className="text-[11.5px] italic text-ink-muted" style={serifStyle}>{INTENT_COPY.subtitle}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -479,7 +479,7 @@ export function IntentDialog({
         capabilities={{ file: true, mic: true }}
         onVoiceTranscript={(text) => composer.setValue([composer.value, text].filter(Boolean).join(' '))}
         placeholder="点上面的选项就好，也可以自己说"
-        busyPlaceholder={COPY.intent.inputPlaceholderBusy}
+        busyPlaceholder={INTENT_COPY.inputPlaceholderBusy}
         variant="paper"
         className="relative z-10"
       />
@@ -491,7 +491,7 @@ export function IntentDialog({
             onClick={onSkip}
             className="text-[12px] text-ink-muted transition-colors hover:text-ink-secondary hover:underline"
           >
-            {COPY.intent.firstTimeSkip}
+            {INTENT_COPY.firstTimeSkip}
           </button>
         </div>
       ) : null}

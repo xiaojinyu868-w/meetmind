@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Check, X } from 'lucide-react';
-import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 
 interface LearningProgressMemoryCardProps {
   points: string[];
@@ -24,15 +24,15 @@ export function LearningProgressMemoryCard({
   if (saved) {
     return (
       <div className="rounded-2xl border border-pine/18 bg-pine-fog px-4 py-3 text-[12.5px] text-pine">
-        <span className="inline-flex items-center gap-2"><Check size={14} />{COPY.globalAsk.progressSaved}</span>
+        <span className="inline-flex items-center gap-2"><Check size={14} />{GLOBAL_ASK_COPY.progressSaved}</span>
       </div>
     );
   }
 
   return (
     <section className="rounded-[20px] border border-divider bg-white px-4 py-4">
-      <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-pine">{COPY.globalAsk.progressEyebrow}</p>
-      <p className="mt-1 text-[11.5px] text-ink-muted">{COPY.globalAsk.progressHint}</p>
+      <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-pine">{GLOBAL_ASK_COPY.progressEyebrow}</p>
+      <p className="mt-1 text-[11.5px] text-ink-muted">{GLOBAL_ASK_COPY.progressHint}</p>
       <div className="mt-3 space-y-2">
         {points.map((point, index) => (
           <button
@@ -50,7 +50,7 @@ export function LearningProgressMemoryCard({
       </div>
       <div className="mt-4 flex items-center justify-between">
         <button type="button" onClick={onDismiss} className="inline-flex items-center gap-1.5 px-2 py-2 text-[12px] text-ink-muted hover:text-ink">
-          <X size={13} />{COPY.globalAsk.progressDismiss}
+          <X size={13} />{GLOBAL_ASK_COPY.progressDismiss}
         </button>
         <button
           type="button"
@@ -61,7 +61,7 @@ export function LearningProgressMemoryCard({
           }}
           className="inline-flex items-center gap-1.5 rounded-full bg-pine px-4 py-2 text-[12px] font-medium text-white disabled:opacity-40"
         >
-          <Check size={13} />{COPY.globalAsk.progressSave}
+          <Check size={13} />{GLOBAL_ASK_COPY.progressSave}
         </button>
       </div>
     </section>

@@ -11,7 +11,7 @@
 
 import { useState } from 'react';
 import { Check, X } from 'lucide-react';
-import { COPY } from '@/lib/ui/copy';
+import { INTENT_COPY } from '@/lib/ui/copy-intent';
 
 interface IntentSummaryCardProps {
   /** AI 提炼出的观察点列表 */
@@ -29,9 +29,9 @@ interface IntentSummaryCardProps {
 type PointState = 'pending' | 'accepted' | 'rejected';
 
 const HORIZON_LABEL: Record<'near' | 'term' | 'long', string> = {
-  near: COPY.intent.horizonNear,
-  term: COPY.intent.horizonTerm,
-  long: COPY.intent.horizonLong,
+  near: INTENT_COPY.horizonNear,
+  term: INTENT_COPY.horizonTerm,
+  long: INTENT_COPY.horizonLong,
 };
 
 export function IntentSummaryCard({

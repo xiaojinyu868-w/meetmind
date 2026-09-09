@@ -1,7 +1,7 @@
 import type { TranscriptSegment } from '@/types';
 import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import type {
   AppExecutionContext,
   AppExecutionResult,
@@ -243,7 +243,7 @@ function getExamEvidence(context: AppExecutionContext): TranscriptSegment[] {
       confidence: 1,
       isFinal: true,
       sourceItemId: 'exam-syllabus',
-      sourceTitle: COPY.apps.cheatsheet.syllabusSource,
+      sourceTitle: APPS_COPY.cheatsheet.syllabusSource,
     });
   }
   exam?.pastPapers?.forEach((paper, index) => {
@@ -256,7 +256,7 @@ function getExamEvidence(context: AppExecutionContext): TranscriptSegment[] {
       confidence: 1,
       isFinal: true,
       sourceItemId: `past-paper:${index}`,
-      sourceTitle: paper.title?.trim() || COPY.apps.cheatsheet.pastPaperSource(index + 1),
+      sourceTitle: paper.title?.trim() || APPS_COPY.cheatsheet.pastPaperSource(index + 1),
     });
   });
   return evidence;

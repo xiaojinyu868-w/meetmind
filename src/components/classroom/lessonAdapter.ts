@@ -18,7 +18,7 @@
  */
 
 import type { AudioSession } from '@/lib/db/schema';
-import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import { resolvePendingAudioFailureStatus } from '@/lib/utils/page-utils';
 import type { Lesson, LessonStatus } from './types';
 
@@ -178,9 +178,9 @@ function deriveTitle(session: AudioSession, evidence?: LessonExtras['titleEviden
   if (summaryTitle) return summaryTitle;
   const transcriptTitle = titleFromEvidence(evidence?.transcriptPreview);
   if (transcriptTitle) return transcriptTitle;
-  if (session.sourceType === 'video-file' || session.sourceType === 'video-link') return COPY.globalAsk.courseContextVideoLesson;
-  if (session.sourceType === 'upload') return COPY.globalAsk.courseContextUploadLesson;
-  return COPY.globalAsk.courseContextRecordingLesson;
+  if (session.sourceType === 'video-file' || session.sourceType === 'video-link') return GLOBAL_ASK_COPY.courseContextVideoLesson;
+  if (session.sourceType === 'upload') return GLOBAL_ASK_COPY.courseContextUploadLesson;
+  return GLOBAL_ASK_COPY.courseContextRecordingLesson;
 }
 
 export function audioSessionToLesson(

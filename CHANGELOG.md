@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-09-09 — `/app` 首屏 JS 回到 299 KB gzip：文案按域拆文件
+
+- **发现**：合并记忆底座后重量 `make bundle-report`，/app 首屏 312 KB——但在合并前的提交乃至记录 298 KB 的那个提交（d375082）上重建，
+  今天同一把尺也量出 311 KB，说明 13 KB 的差异来自当时的量法而不是这两天的代码；不争论，直接再省
+- **修法**：`copy.ts` 27.8 KB 里，`apps`（除 `matrix`）/ `globalAsk` / `intent` / `settings` / `share` / `fenshen` / M1 的 `sharedContext`
+  六块 ≈20 KB 在 /app 首屏零消费方（消费组件全是 dynamic 的），却随 COPY 单体进首屏——按 `copy-landing.ts` 的先例拆成同目录
+  `copy-apps` / `copy-global-ask` / `copy-intent` / `copy-settings` / `copy-share` / `copy-fenshen`，84 个消费文件机械改 import，
+  口吻规则不变；`apps.matrix` 留在核心（app-catalog 首屏用）。结果 copy.ts 16.0 KB，首屏 **299 KB**
+- 附：`make bundle-report` 与 `git worktree` 在旧提交上重建是可复现的对比法（同一 node_modules、同一脚本）
+
+---
+
 ## 2026-09-09 — 共享记忆底座（Hindsight）合入主线：读写归一，课堂那句话回到了测验里
 
 - **合入什么**：`origin/feat/context-m1-handoff`（Context M1：Hindsight 0.9.2 客户端 / Context v1 API / worker / 授权 / 暂停·忘记 / prepare /

@@ -17,6 +17,7 @@
 
 import * as React from 'react';
 import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import { OctoBuddySprite } from '@/components/classroom/OctoBuddy';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { BrewingStrip } from '@/components/ui/thinking-strip';
@@ -91,7 +92,7 @@ function ListeningLoading({ appName, loadingLabel }: { appName: string; loadingL
           {message}
         </p>
         <BrewingStrip>
-          <span className="font-mono tabular-nums text-pine">{COPY.apps.placeholder.workingElapsed(seconds)}</span>
+          <span className="font-mono tabular-nums text-pine">{APPS_COPY.placeholder.workingElapsed(seconds)}</span>
         </BrewingStrip>
       </div>
     </div>
@@ -117,10 +118,10 @@ function EmptyGuide({ appName, description, onRetry, onBack, backLabel }: {
       {/* 文案 */}
       <div className="text-center">
         <p className="text-[15px] font-medium text-ink">
-          {COPY.apps.placeholder.emptyTitle(appName)}
+          {APPS_COPY.placeholder.emptyTitle(appName)}
         </p>
         <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-ink-muted">
-          {description || COPY.apps.placeholder.emptyBody(appName)}
+          {description || APPS_COPY.placeholder.emptyBody(appName)}
         </p>
       </div>
 
@@ -132,7 +133,7 @@ function EmptyGuide({ appName, description, onRetry, onBack, backLabel }: {
             onClick={onRetry}
             className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white shadow-soft transition hover:opacity-85 active:scale-[0.97]"
           >
-            {COPY.apps.placeholder.remake}
+            {APPS_COPY.placeholder.remake}
           </button>
         ) : null}
         {onBack ? (
@@ -141,7 +142,7 @@ function EmptyGuide({ appName, description, onRetry, onBack, backLabel }: {
             onClick={onBack}
             className="rounded-lg border border-divider bg-card px-4 py-2 text-sm font-medium text-ink-secondary transition hover:border-pine hover:text-pine"
           >
-            {backLabel || COPY.apps.placeholder.back}
+            {backLabel || APPS_COPY.placeholder.back}
           </button>
         ) : null}
       </div>
@@ -176,14 +177,14 @@ function ErrorState({ appName, errorMessage, onRetry, onBack, backLabel }: {
       </div>
       <div className="relative text-center">
         <p className="text-[15px] font-medium text-ink">
-          {COPY.apps.placeholder.failedTitle(appName)}
+          {APPS_COPY.placeholder.failedTitle(appName)}
         </p>
         {errorMessage ? (
           <p className="mt-2 max-w-sm text-[12.5px] leading-relaxed text-ink-muted" title={errorMessage}>
             {errorMessage.length > 120 ? `${errorMessage.slice(0, 120)}…` : errorMessage}
           </p>
         ) : (
-          <p className="mt-2 text-[12.5px] text-ink-muted">{COPY.apps.placeholder.failedBody}</p>
+          <p className="mt-2 text-[12.5px] text-ink-muted">{APPS_COPY.placeholder.failedBody}</p>
         )}
       </div>
       <div className="relative flex items-center gap-3">
@@ -193,7 +194,7 @@ function ErrorState({ appName, errorMessage, onRetry, onBack, backLabel }: {
             onClick={onRetry}
             className="rounded-full bg-ink px-5 py-2 text-[13px] font-medium text-white shadow-soft transition hover:opacity-85 active:scale-[0.97]"
           >
-            {COPY.apps.placeholder.retry}
+            {APPS_COPY.placeholder.retry}
           </button>
         ) : null}
         {onBack ? (
@@ -202,7 +203,7 @@ function ErrorState({ appName, errorMessage, onRetry, onBack, backLabel }: {
             onClick={onBack}
             className="rounded-full border border-divider bg-card px-5 py-2 text-[13px] font-medium text-ink-secondary transition hover:border-pine hover:text-pine"
           >
-            {backLabel || COPY.apps.placeholder.back}
+            {backLabel || APPS_COPY.placeholder.back}
           </button>
         ) : null}
       </div>
@@ -217,7 +218,7 @@ function ErrorState({ appName, errorMessage, onRetry, onBack, backLabel }: {
 export function AppWindowPlaceholder(props: AppWindowPlaceholderProps) {
   const {
     status,
-    appName = COPY.apps.placeholder.defaultAppName,
+    appName = APPS_COPY.placeholder.defaultAppName,
     errorMessage,
     onRetry,
     onBack,

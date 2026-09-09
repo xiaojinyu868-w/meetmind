@@ -8,7 +8,7 @@
  * - 桌面左侧锚点导航 → SettingsNav.tsx（md 以下隐藏，移动保持单列）
  * - 账户区 → AccountSection.tsx（含游客登录卡）；关于你 → AboutYouSection.tsx
  *   （学习档案 / 教练画像拆双卡）
- * - 用户面字符串统一 COPY.settings（src/lib/ui/copy.ts）
+ * - 用户面字符串统一 SETTINGS_COPY（src/lib/ui/copy.ts）
  * - 版本号从「更多」卡片移出，收口到页脚（设置页惯例，卡片只放可点条目）
  */
 
@@ -18,6 +18,7 @@ import dynamic from 'next/dynamic';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { getPreference, setPreference } from '@/lib/db';
 import { COPY } from '@/lib/ui/copy';
+import { SETTINGS_COPY } from '@/lib/ui/copy-settings';
 import { useAdminLens } from '@/components/admin/AdminLensProvider';
 import { PointsSettingsSection } from '@/components/points/PointsSettingsSection';
 import {
@@ -55,7 +56,7 @@ const IntentDialogContainer = dynamic(
 const WechatQrAuthDialog = dynamic(() => import('@/components/WechatQrAuthDialog'), { ssr: false });
 const WECHAT_LOGIN_ENABLED = process.env.NEXT_PUBLIC_ENABLE_WECHAT_LOGIN === 'true';
 
-const S = COPY.settings;
+const S = SETTINGS_COPY;
 const APP_VERSION = '1.0.0';
 
 const SETTINGS_KEYS = {

@@ -6,7 +6,7 @@ import { getSessionById } from '@/lib/db/sessions';
 import { useAuth } from '@/lib/hooks/useAuth';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
-import { COPY } from '@/lib/ui/copy';
+import { SHARE_COPY } from '@/lib/ui/copy-share';
 import type { TranscriptSegment } from '@/types';
 import {
   buildSharedArtifactSnapshot,
@@ -77,11 +77,11 @@ export function ShareArtifactAction({
         onClick={() => void handleShare()}
         disabled={isCreating}
         className={className ?? 'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full border border-divider bg-white px-3 text-[12px] font-semibold text-ink-secondary transition hover:border-pine/35 hover:text-pine disabled:opacity-55'}
-        aria-label={COPY.share.creator.currentAction}
+        aria-label={SHARE_COPY.creator.currentAction}
         data-testid={`share-artifact-${appKey}`}
       >
         <Share2 size={14} strokeWidth={1.8} aria-hidden />
-        <span>{isCreating ? COPY.share.creator.currentPreparing : COPY.share.creator.currentAction}</span>
+        <span>{isCreating ? SHARE_COPY.creator.currentPreparing : SHARE_COPY.creator.currentAction}</span>
       </button>
       {modal}
     </>

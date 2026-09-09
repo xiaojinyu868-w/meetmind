@@ -11,7 +11,7 @@
 
 import type { LearningActivityEntry, LearningMemoryEntry } from '@/types/user';
 import { conceptLabel, type MasteryTrailEntry } from '@/components/mastery-trail';
-import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import { formatTimestamp } from '@/lib/utils/time-utils';
 import { clipDisplay, describeMoment, type MomentSegment } from '@/lib/learning/moment-title';
 
@@ -81,11 +81,11 @@ function shortTitle(title: string, maxUnits = TITLE_MAX): string {
 }
 
 function isGenericLessonTitle(title: string | undefined): boolean {
-  return !title || title === COPY.globalAsk.sourceCurrentLesson;
+  return !title || title === GLOBAL_ASK_COPY.sourceCurrentLesson;
 }
 
 export function buildAskDesk(input: AskDeskInput): DeskGroup[] {
-  const copy = COPY.globalAsk.desk;
+  const copy = GLOBAL_ASK_COPY.desk;
   const groups: DeskGroup[] = [];
 
   // 正在读：当前课堂 + 打开的材料
@@ -146,7 +146,7 @@ export function buildAskDesk(input: AskDeskInput): DeskGroup[] {
       return {
         id: `concept:${entry.concept}`,
         label,
-        meta: entry.status === 'unstable' ? COPY.globalAsk.masteryTrail.statusUnstable : COPY.globalAsk.masteryTrail.statusImproving,
+        meta: entry.status === 'unstable' ? GLOBAL_ASK_COPY.masteryTrail.statusUnstable : GLOBAL_ASK_COPY.masteryTrail.statusImproving,
         prompt: entry.status === 'unstable' ? copy.promptFromUnstable(label) : copy.promptFromImproving(label),
         tone: entry.status === 'unstable' ? 'vermilion' : 'pine',
       };
@@ -165,7 +165,7 @@ export function buildAskDesk(input: AskDeskInput): DeskGroup[] {
       recent.push({
         id: `recent:${activity.id}`,
         label: shortTitle(title, LABEL_MAX),
-        meta: activity.kind === 'app' && activity.appKey ? COPY.globalAsk.masteryTrail.stepLabels[activity.appKey] : undefined,
+        meta: activity.kind === 'app' && activity.appKey ? GLOBAL_ASK_COPY.masteryTrail.stepLabels[activity.appKey] : undefined,
         prompt: copy.promptFromRecent(shortTitle(title)),
       });
       if (recent.length >= RECENT_MAX) break;

@@ -8,7 +8,7 @@
  */
 
 import { Check } from 'lucide-react';
-import { COPY } from '@/lib/ui/copy';
+import { INTENT_COPY } from '@/lib/ui/copy-intent';
 
 interface IntentStepBarProps {
   /** 当前步骤：0 说说 / 1 捋一捋 / 2 记下了；-1 不展示 */
@@ -17,7 +17,7 @@ interface IntentStepBarProps {
 
 export function IntentStepBar({ stepIndex }: IntentStepBarProps) {
   if (stepIndex < 0) return null;
-  const steps = [COPY.intent.stepChat, COPY.intent.stepShape, COPY.intent.stepSaved];
+  const steps = [INTENT_COPY.stepChat, INTENT_COPY.stepShape, INTENT_COPY.stepSaved];
   return (
     <div className="relative z-10 flex shrink-0 items-center justify-center gap-1.5 py-2.5" aria-hidden>
       {steps.map((label, idx) => {

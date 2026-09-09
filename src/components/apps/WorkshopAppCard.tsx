@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import type { WorkshopAppCatalogItem, WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import styles from './WorkshopYellowPage.module.css';
 
 export type WorkshopCardStatus = 'idle' | 'running' | 'success' | 'error';
@@ -66,10 +67,10 @@ const APP_ICONS: Record<WorkshopAppKey, typeof Layers> = {
 };
 
 function statusLabel(status: WorkshopCardStatus): string {
-  if (status === 'running') return COPY.apps.path.running;
-  if (status === 'success') return COPY.apps.path.ready;
-  if (status === 'error') return COPY.apps.path.failed;
-  return COPY.apps.path.notStarted;
+  if (status === 'running') return APPS_COPY.path.running;
+  if (status === 'success') return APPS_COPY.path.ready;
+  if (status === 'error') return APPS_COPY.path.failed;
+  return APPS_COPY.path.notStarted;
 }
 
 export function WorkshopAppCard({

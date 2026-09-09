@@ -7,7 +7,7 @@ import { Layers3, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import useAuth from '@/lib/hooks/useAuth';
 import { cn } from '@/lib/utils';
-import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import { useLearningContext } from '@/hooks/useLearningContext';
 import { useGlobalAskHistory } from '@/hooks/useGlobalAskHistory';
 import { usePointsSummary } from '@/hooks/usePointsSummary';
@@ -131,7 +131,7 @@ export function GlobalAskPanel({
       }))
       .filter((item) => item.content.trim());
     if (currentTranscript) {
-      materials.unshift({ title: COPY.globalAsk.sourceCurrentLesson, content: currentTranscript });
+      materials.unshift({ title: GLOBAL_ASK_COPY.sourceCurrentLesson, content: currentTranscript });
     }
     return materials.slice(0, 6);
   }, [currentTranscript, sourceItems]);
@@ -236,7 +236,7 @@ export function GlobalAskPanel({
       : Promise.resolve();
     await recordLearningActivity({
       kind: 'conversation',
-      title: persistedDepth === 'deep' ? COPY.globalAsk.recentDeepSession : COPY.globalAsk.recentConversation,
+      title: persistedDepth === 'deep' ? GLOBAL_ASK_COPY.recentDeepSession : GLOBAL_ASK_COPY.recentConversation,
       detail: toLearningActivityPreview(text),
       sourceId,
     });
@@ -253,7 +253,7 @@ export function GlobalAskPanel({
     messages,
     setMessages,
     getMessageText: collectMessageText,
-    fallbackTitle: COPY.globalAsk.recentConversation,
+    fallbackTitle: GLOBAL_ASK_COPY.recentConversation,
     onDepthRestored: handleDepthRestored,
     onAssistantPersisted: handleAssistantPersisted,
   });
@@ -309,10 +309,10 @@ export function GlobalAskPanel({
       }
     } catch {
       if (fallbackPlan) {
-        toast.message(COPY.globalAsk.refiningError);
+        toast.message(GLOBAL_ASK_COPY.refiningError);
         await beginDeepSession(fallbackPlan, query);
       } else {
-        toast.message(COPY.globalAsk.preparingError);
+        toast.message(GLOBAL_ASK_COPY.preparingError);
         setDepth('quick');
         sendQuick(query);
         setPendingQuery('');
@@ -429,8 +429,8 @@ export function GlobalAskPanel({
       isDragging={fileUpload.isDragging}
       capabilities={{ file: true, mic: true }}
       onVoiceTranscript={(text) => composer.setValue([composer.value, text].filter(Boolean).join(' '))}
-      placeholder={effectiveDepth === 'deep' ? COPY.globalAsk.composerDeep : COPY.globalAsk.composerQuick}
-      statusLabel={intentBusy ? COPY.globalAsk.preparingIntent : undefined}
+      placeholder={effectiveDepth === 'deep' ? GLOBAL_ASK_COPY.composerDeep : GLOBAL_ASK_COPY.composerQuick}
+      statusLabel={intentBusy ? GLOBAL_ASK_COPY.preparingIntent : undefined}
       className={embedded ? '!border-0 !bg-transparent !px-0 !pb-3 !pt-0' : undefined}
     />
   );
@@ -444,7 +444,7 @@ export function GlobalAskPanel({
           initialFocus={memoryFocus}
           onTalkToMeetMind={() => {
             setView('ask');
-            composer.setValue(COPY.globalAsk.memoryTalkPrompt);
+            composer.setValue(GLOBAL_ASK_COPY.memoryTalkPrompt);
             window.setTimeout(() => composer.textareaRef.current?.focus(), 0);
           }}
           onResumeThread={() => {
@@ -467,17 +467,17 @@ export function GlobalAskPanel({
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <OctoAvatar mood="listening" size="sm" />
             <div className="min-w-0">
-              <h1 className="truncate text-[15px] font-semibold text-ink">{COPY.globalAsk.title}</h1>
-              <p className="hidden truncate text-[11.5px] text-ink-muted sm:block">{history.hydrated ? (history.restoredTitle ? `${COPY.globalAsk.historyRestored} · ${history.restoredTitle}` : COPY.globalAsk.subtitle) : COPY.globalAsk.historyLoading}</p>
+              <h1 className="truncate text-[15px] font-semibold text-ink">{GLOBAL_ASK_COPY.title}</h1>
+              <p className="hidden truncate text-[11.5px] text-ink-muted sm:block">{history.hydrated ? (history.restoredTitle ? `${GLOBAL_ASK_COPY.historyRestored} · ${history.restoredTitle}` : GLOBAL_ASK_COPY.subtitle) : GLOBAL_ASK_COPY.historyLoading}</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
             <AdminAiInspectorLink controlKey="tutor:global" context={agentContext} query={inspectorQuery} compact={isMobile} />
-            <button type="button" onClick={() => setContextOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-divider bg-white px-3 text-[11.5px] text-ink-secondary hover:border-pine/25 hover:text-pine" aria-label={COPY.globalAsk.contextRailTitle} title={COPY.globalAsk.contextRailTitle}>
-              <Layers3 size={13} /> <span className="hidden sm:inline">{COPY.globalAsk.contextAction}</span>
+            <button type="button" onClick={() => setContextOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-divider bg-white px-3 text-[11.5px] text-ink-secondary hover:border-pine/25 hover:text-pine" aria-label={GLOBAL_ASK_COPY.contextRailTitle} title={GLOBAL_ASK_COPY.contextRailTitle}>
+              <Layers3 size={13} /> <span className="hidden sm:inline">{GLOBAL_ASK_COPY.contextAction}</span>
             </button>
-            {messages.length > 0 ? <button type="button" onClick={startNewConversation} className="flex h-9 w-9 items-center justify-center rounded-full border border-divider bg-white text-ink-muted hover:text-pine" aria-label={COPY.globalAsk.newConversation}><Plus size={14} /></button> : null}
-            <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-paper-warm hover:text-ink" aria-label={COPY.globalAsk.close}><X size={16} /></button>
+            {messages.length > 0 ? <button type="button" onClick={startNewConversation} className="flex h-9 w-9 items-center justify-center rounded-full border border-divider bg-white text-ink-muted hover:text-pine" aria-label={GLOBAL_ASK_COPY.newConversation}><Plus size={14} /></button> : null}
+            <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-paper-warm hover:text-ink" aria-label={GLOBAL_ASK_COPY.close}><X size={16} /></button>
           </div>
         </header>
 
@@ -543,7 +543,7 @@ export function GlobalAskPanel({
             );
           })}
           {pendingQuery && !activeIntent ? <ChatBubble role="user"><span className="whitespace-pre-wrap">{pendingQuery}</span></ChatBubble> : null}
-          {intentBusy ? <ChatThinkingStripBubble label={COPY.globalAsk.preparingIntent} avatar={<OctoAvatar mood="thinking" size="sm" aura />} /> : null}
+          {intentBusy ? <ChatThinkingStripBubble label={GLOBAL_ASK_COPY.preparingIntent} avatar={<OctoAvatar mood="thinking" size="sm" aura />} /> : null}
           {intentPlan ? (
             <LearningIntentConfirmationCard
               plan={intentPlan}
@@ -553,8 +553,8 @@ export function GlobalAskPanel({
               onCancel={cancelIntent}
             />
           ) : null}
-          {showThinking ? <ChatThinkingStripBubble label={COPY.globalAsk.thinking} avatar={<OctoAvatar mood="thinking" size="sm" aura />} /> : null}
-          {error ? <div className="rounded-xl border border-vermilion/15 bg-vermilion-fog px-4 py-3 text-[12.5px] text-vermilion">{pointsBlock ? describePointsBlock(pointsBlock) : COPY.globalAsk.responseError}</div> : null}
+          {showThinking ? <ChatThinkingStripBubble label={GLOBAL_ASK_COPY.thinking} avatar={<OctoAvatar mood="thinking" size="sm" aura />} /> : null}
+          {error ? <div className="rounded-xl border border-vermilion/15 bg-vermilion-fog px-4 py-3 text-[12.5px] text-vermilion">{pointsBlock ? describePointsBlock(pointsBlock) : GLOBAL_ASK_COPY.responseError}</div> : null}
             </ChatMessageList>
 
             {!showWelcome ? renderComposer(false) : null}

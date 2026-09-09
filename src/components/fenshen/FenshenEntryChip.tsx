@@ -14,7 +14,7 @@
 
 import { useState } from 'react';
 import { ChevronRight, Sparkles } from 'lucide-react';
-import { COPY } from '@/lib/ui/copy';
+import { FENSHEN_COPY } from '@/lib/ui/copy-fenshen';
 import { FenshenShelf, FenshenShelfViews } from './FenshenShelf';
 
 export function FenshenEntryChip({
@@ -52,14 +52,14 @@ export function FenshenEntryChip({
         </span>
         <span className="min-w-0">
           <strong className="block text-[14px] font-medium leading-snug">
-            {COPY.fenshen.entryLabel}
+            {FENSHEN_COPY.entryLabel}
           </strong>
           <span className="mt-0.5 block truncate text-[12px] leading-snug text-ink-secondary">
-            {COPY.fenshen.entryBody}
+            {FENSHEN_COPY.entryBody}
           </span>
         </span>
         <span className="inline-flex items-center gap-0.5 text-[12px] font-medium text-pine">
-          {COPY.fenshen.invite}
+          {FENSHEN_COPY.invite}
           <ChevronRight size={14} strokeWidth={1.8} aria-hidden />
         </span>
       </button>
@@ -71,11 +71,11 @@ export function FenshenEntryChip({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        title={COPY.fenshen.entryBody}
+        title={FENSHEN_COPY.entryBody}
         className="inline-flex items-center gap-1.5 rounded-full border border-pine/40 bg-white px-3 py-1.5 text-[12px] text-pine transition hover:bg-pine-mist active:scale-[0.98]"
       >
         <Sparkles size={12} aria-hidden />
-        {COPY.fenshen.entryLabel}
+        {FENSHEN_COPY.entryLabel}
       </button>
       <FenshenShelf open={open} onClose={() => setOpen(false)} sessionId={sessionId} lessonTitle={lessonTitle} />
     </>

@@ -12,7 +12,7 @@
 import * as React from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 
 export interface ChatReasoningBlockProps {
   reasoning: string;
@@ -41,7 +41,7 @@ export function ChatReasoningBlock({ reasoning, isStreaming, className }: ChatRe
           size={13}
           className={cn('transition-transform duration-200', open ? 'rotate-0' : '-rotate-90')}
         />
-        {isStreaming ? COPY.globalAsk.reasoningStreaming : COPY.globalAsk.reasoningTitle}
+        {isStreaming ? GLOBAL_ASK_COPY.reasoningStreaming : GLOBAL_ASK_COPY.reasoningTitle}
       </button>
       {open ? (
         <div className="mt-1.5 border-l-2 border-pine/20 pl-3 text-[12.5px] leading-[1.75] text-ink-muted/90 whitespace-pre-wrap">

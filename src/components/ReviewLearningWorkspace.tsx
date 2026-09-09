@@ -9,6 +9,7 @@ import { getWorkshopAppByKey, type WorkshopAppKey } from '@/lib/ai-native/app-ca
 import { useAppExecution } from '@/components/apps/hooks/useAppExecution';
 import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import { useAppLearningActivity } from '@/hooks/useAppLearningActivity';
 import { recordSessionAssessment, useSessionOutcomes } from '@/components/apps/review-session-outcomes';
 import { LEARNING_PATH, buildOutcomeAnchors, recommendNextStep, summarizeSessionOutcomes } from '@/components/apps/lesson-path-model';
@@ -88,7 +89,7 @@ export function ReviewLearningWorkspace({
 
   const resultActivityDetail = buildAppResultActivityDetail(
     execution.result,
-    COPY.globalAsk.appResultSummary,
+    GLOBAL_ASK_COPY.appResultSummary,
   );
   const { recordInteraction, recordAssessment: recordAssessmentEvent } = useAppLearningActivity({
     appKey: app.key,
@@ -96,7 +97,7 @@ export function ReviewLearningWorkspace({
     resultReady: Boolean(execution.result) && execution.taskState.status === 'success',
     resultUpdatedAt: execution.taskState.updatedAt,
     resultDetail: resultActivityDetail,
-    activityTitle: COPY.globalAsk.appActivity(app.name),
+    activityTitle: GLOBAL_ASK_COPY.appActivity(app.name),
     lessonTitle: contextTitle,
     onLearningActivity,
   });

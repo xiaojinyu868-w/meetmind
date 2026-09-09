@@ -8,7 +8,7 @@
  */
 
 import { Plus, Trash2 } from 'lucide-react';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import { cn } from '@/lib/utils';
 import type { TeachThreadMeta } from './teach-store';
 
@@ -24,14 +24,14 @@ export function TeachThreadList({ threads, activeId, onSelect, onNew, onRemove }
   return (
     <div className="flex h-full min-h-0 flex-col bg-paper">
       <div className="flex items-center justify-between border-b border-divider-light px-3 py-2.5">
-        <span className="text-[13px] font-medium text-ink-secondary">{COPY.apps.teach.history}</span>
+        <span className="text-[13px] font-medium text-ink-secondary">{APPS_COPY.teach.history}</span>
         <button
           type="button"
           onClick={onNew}
           className="inline-flex items-center gap-1 rounded-lg border border-divider bg-white px-2 py-1 text-[12px] text-ink-secondary transition-colors hover:bg-paper-warm"
         >
           <Plus size={12} strokeWidth={2} />
-          {COPY.apps.teach.newLesson}
+          {APPS_COPY.teach.newLesson}
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">

@@ -15,6 +15,7 @@ import { AppWindowShell } from '@/components/apps/windows/AppWindowShell';
 import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 import { ShareArtifactAction } from '@/components/share/ShareArtifactAction';
 import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import { useAppLearningActivity } from '@/hooks/useAppLearningActivity';
 import { buildAppResultActivityDetail } from '@/lib/utils/app-learning-activity';
 
@@ -327,8 +328,8 @@ export default function AppMatrixWindowPage() {
   const { recordInteraction } = useAppLearningActivity({
     appKey, sessionId, resultReady: Boolean(execution.result) && execution.taskState.status === 'success',
     resultUpdatedAt: execution.taskState.updatedAt,
-    resultDetail: buildAppResultActivityDetail(execution.result, COPY.globalAsk.appResultSummary),
-    activityTitle: COPY.globalAsk.appActivity(app?.name || appKey),
+    resultDetail: buildAppResultActivityDetail(execution.result, GLOBAL_ASK_COPY.appResultSummary),
+    activityTitle: GLOBAL_ASK_COPY.appActivity(app?.name || appKey),
   });
 
   if (!app) {

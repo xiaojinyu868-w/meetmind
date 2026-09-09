@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ArrowRight, Check, ChevronLeft, Sparkles } from 'lucide-react';
 import type { LearningIntentAnswer, LearningIntentPlan } from '@/types/learning-intent';
-import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import {
   buildLearningIntentAnswers,
   hasLearningIntentAnswer,
@@ -47,14 +47,14 @@ export function LearningIntentConfirmationCard({
 
   if (questions.length > 0) {
     return (
-      <section className="rounded-[22px] border border-divider bg-card px-5 py-5" aria-label={COPY.globalAsk.intentEyebrow}>
+      <section className="rounded-[22px] border border-divider bg-card px-5 py-5" aria-label={GLOBAL_ASK_COPY.intentEyebrow}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-[12px] font-medium text-vermilion">
             <Sparkles size={14} />
-            {COPY.globalAsk.intentEyebrow}
+            {GLOBAL_ASK_COPY.intentEyebrow}
           </div>
           <span className="font-mono text-[10px] tabular-nums text-ink-muted">
-            {COPY.globalAsk.intentProgress(activeQuestionIndex + 1, questions.length)}
+            {GLOBAL_ASK_COPY.intentProgress(activeQuestionIndex + 1, questions.length)}
           </span>
         </div>
 
@@ -88,7 +88,7 @@ export function LearningIntentConfirmationCard({
               {activeQuestion?.prompt}
             </legend>
             <p className="mt-1 text-[12px] text-ink-muted">
-              {activeQuestion?.kind === 'multiple' ? COPY.globalAsk.intentMultiple : COPY.globalAsk.intentSingle}
+              {activeQuestion?.kind === 'multiple' ? GLOBAL_ASK_COPY.intentMultiple : GLOBAL_ASK_COPY.intentSingle}
             </p>
             <div className="mt-3 flex flex-wrap gap-2.5">
               {activeQuestion?.options.map((option) => {
@@ -118,7 +118,7 @@ export function LearningIntentConfirmationCard({
             className="inline-flex items-center gap-1 px-1 py-2 text-[13px] text-ink-muted hover:text-ink"
           >
             {activeQuestionIndex > 0 ? <ChevronLeft size={14} /> : null}
-            {activeQuestionIndex > 0 ? COPY.globalAsk.intentBack : COPY.globalAsk.intentCancel}
+            {activeQuestionIndex > 0 ? GLOBAL_ASK_COPY.intentBack : GLOBAL_ASK_COPY.intentCancel}
           </button>
           <button
             type="button"
@@ -126,7 +126,7 @@ export function LearningIntentConfirmationCard({
             disabled={busy || !ready}
             className="inline-flex min-h-11 items-center gap-2 rounded-full bg-pine px-5 text-[13.5px] font-semibold text-white transition hover:bg-pine-deep disabled:opacity-35"
           >
-            {isLastQuestion ? COPY.globalAsk.intentResolve : COPY.globalAsk.intentContinue}
+            {isLastQuestion ? GLOBAL_ASK_COPY.intentResolve : GLOBAL_ASK_COPY.intentContinue}
             <ArrowRight size={15} />
           </button>
         </div>
@@ -135,11 +135,11 @@ export function LearningIntentConfirmationCard({
   }
 
   return (
-    <section className="relative overflow-hidden rounded-[22px] border border-pine/16 bg-pine-fog px-5 py-5" aria-label={COPY.globalAsk.intentEyebrow}>
+    <section className="relative overflow-hidden rounded-[22px] border border-pine/16 bg-pine-fog px-5 py-5" aria-label={GLOBAL_ASK_COPY.intentEyebrow}>
       <span className="absolute inset-y-0 left-0 w-1 bg-vermilion" aria-hidden />
       <div className="flex items-center gap-2 text-[12px] font-medium text-pine">
         <Sparkles size={14} />
-        {COPY.globalAsk.intentEyebrow}
+        {GLOBAL_ASK_COPY.intentEyebrow}
       </div>
 
       <h3 className="mt-3 text-[20px] font-semibold leading-7 tracking-[-0.025em] text-ink">{plan.title}</h3>
@@ -147,14 +147,14 @@ export function LearningIntentConfirmationCard({
 
       {plan.checkpoints.length > 0 ? (
         <div className="mt-4 rounded-[14px] border border-pine/12 bg-white/75 px-4 py-3">
-          <p className="text-[12px] font-medium text-vermilion">{COPY.globalAsk.intentFirstStep}</p>
+          <p className="text-[12px] font-medium text-vermilion">{GLOBAL_ASK_COPY.intentFirstStep}</p>
           <p className="mt-1 text-[13.5px] leading-6 text-ink-secondary">{plan.checkpoints[0]}</p>
         </div>
       ) : null}
 
       <div className="mt-5 flex items-center justify-between gap-3">
         <button type="button" onClick={onCancel} disabled={busy} className="px-1 py-2 text-[13px] text-ink-muted hover:text-ink">
-          {COPY.globalAsk.intentCancel}
+          {GLOBAL_ASK_COPY.intentCancel}
         </button>
         <button
           type="button"
@@ -162,7 +162,7 @@ export function LearningIntentConfirmationCard({
           disabled={busy}
           className="inline-flex min-h-11 items-center gap-2 rounded-full bg-pine px-5 text-[13.5px] font-semibold text-white transition hover:bg-pine-deep disabled:opacity-40"
         >
-          {COPY.globalAsk.intentStart}
+          {GLOBAL_ASK_COPY.intentStart}
           <ArrowRight size={15} />
         </button>
       </div>

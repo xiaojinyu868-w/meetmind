@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import type { Browser, Page } from '@playwright/test';
 import { ContextClient } from '../../packages/context-sdk/src';
 import { COPY } from '../../src/lib/ui/copy';
@@ -24,7 +25,7 @@ export async function verifyQuizBrowser(browser: Browser, base: string, token: s
     await page.getByText(question.stem, { exact: true }).waitFor({ timeout: 60_000 });
     await page.getByRole('button', { name: /Conditional probability/ }).click();
     const first = await submitAttempt(page, owner, async () => {
-      await page.getByRole('button', { name: COPY.apps.quiz.confirmAnswer, exact: true }).click();
+      await page.getByRole('button', { name: APPS_COPY.quiz.confirmAnswer, exact: true }).click();
       releaseAuth();
     });
     const firstContent = JSON.parse((await owner.source(first)).event.content!);
@@ -32,19 +33,19 @@ export async function verifyQuizBrowser(browser: Browser, base: string, token: s
     assert.equal(firstContent.response.submittedAnswer, question.options[1]);
     assert.equal(firstContent.conditions.referenceSeenInCurrentViewBeforeSubmission, false);
 
-    await page.getByRole('button', { name: COPY.apps.quiz.nextQuestion, exact: true }).click();
+    await page.getByRole('button', { name: APPS_COPY.quiz.nextQuestion, exact: true }).click();
     await page.getByText(subjective.stem, { exact: true }).waitFor();
-    await page.getByRole('button', { name: COPY.apps.quiz.revealReference, exact: true }).click();
-    const self = await submitAttempt(page, owner, () => page.getByRole('button', { name: COPY.apps.quiz.selfCorrect, exact: true }).click());
+    await page.getByRole('button', { name: APPS_COPY.quiz.revealReference, exact: true }).click();
+    const self = await submitAttempt(page, owner, () => page.getByRole('button', { name: APPS_COPY.quiz.selfCorrect, exact: true }).click());
     const selfContent = JSON.parse((await owner.source(self)).event.content!);
     assert.equal(selfContent.response.submittedAnswer, null);
     assert.equal(selfContent.grading.basis, 'learner_self_report');
     assert.equal(selfContent.conditions.referenceSeenInCurrentViewBeforeSubmission, true);
 
-    await page.getByRole('button', { name: COPY.apps.quiz.viewResult, exact: true }).click();
-    await page.getByRole('button', { name: COPY.apps.quiz.restart, exact: true }).click();
+    await page.getByRole('button', { name: APPS_COPY.quiz.viewResult, exact: true }).click();
+    await page.getByRole('button', { name: APPS_COPY.quiz.restart, exact: true }).click();
     await page.getByRole('button', { name: /Conditional probability/ }).click();
-    const repeat = await submitAttempt(page, owner, () => page.getByRole('button', { name: COPY.apps.quiz.confirmAnswer, exact: true }).click());
+    const repeat = await submitAttempt(page, owner, () => page.getByRole('button', { name: APPS_COPY.quiz.confirmAnswer, exact: true }).click());
     assert.notEqual(repeat, first);
     const repeated = JSON.parse((await owner.source(repeat)).event.content!);
     assert.equal(repeated.conditions.referenceSeenInCurrentViewBeforeSubmission, true);

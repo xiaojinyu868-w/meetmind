@@ -1,3 +1,4 @@
+import { SETTINGS_COPY } from '@/lib/ui/copy-settings';
 # Page Routes — 页面路由层
 
 > 页面路由是 Next.js App Router 的 UI 入口，职责：获取数据 → 渲染组件。
@@ -81,7 +82,7 @@ src/app/
 |------|------|------|
 | `login/page.tsx` | ~640 | 登录：密码模式接受邮箱或管理员用户名，验证码模式保持邮箱格式校验；微信内 OAuth；桌面端原地公众号扫码并自动进入目标页 |
 | `forgot-password/page.tsx` | 347 | 忘记密码流程 |
-| `settings/page.tsx` | ~430 | 统一设置页装配层：游客/登录态共用；展示拆到 `components/settings/`（行原子 / SettingsNav 桌面锚点导航 / AccountSection / AboutYouSection），文案收口 COPY.settings |
+| `settings/page.tsx` | ~430 | 统一设置页装配层：游客/登录态共用；展示拆到 `components/settings/`（行原子 / SettingsNav 桌面锚点导航 / AccountSection / AboutYouSection），文案收口 SETTINGS_COPY |
 | `profile/page.tsx` | — | 兼容重定向到 `settings#account` |
 | `profile/password/page.tsx` | 267 | 修改密码 |
 

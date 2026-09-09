@@ -14,7 +14,7 @@ import { sanitizeBoardScript } from '@/lib/ai-native/plugins/board-script';
 import type { BoardScript } from '@/lib/ai-native/plugins/board-script';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
 import { BlackboardPlayer } from '@/components/apps/windows/blackboard/BlackboardPlayer';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 
 interface ExplainerWindowProps {
   result: AppExecutionResult | null;
@@ -52,7 +52,7 @@ function normalizeExplainerPayload(result: AppExecutionResult | null): Explainer
     title:
       script.title ||
       (typeof result?.render?.title === 'string' && result.render.title.trim()) ||
-      COPY.apps.explainer.appName,
+      APPS_COPY.explainer.appName,
     quoteStats: stats
       ? {
           total: typeof stats.total === 'number' ? stats.total : 0,
@@ -67,10 +67,10 @@ export function ExplainerWindow({ result }: ExplainerWindowProps) {
   const payload = useMemo(() => normalizeExplainerPayload(result), [result]);
 
   if (!result) {
-    return <AppWindowPlaceholder status="loading" appName={COPY.apps.explainer.appName} />;
+    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.explainer.appName} />;
   }
   if (!payload) {
-    return <AppWindowPlaceholder status="empty" appName={COPY.apps.explainer.appName} />;
+    return <AppWindowPlaceholder status="empty" appName={APPS_COPY.explainer.appName} />;
   }
 
   const stats = payload.quoteStats;
@@ -85,12 +85,12 @@ export function ExplainerWindow({ result }: ExplainerWindowProps) {
         </h2>
         {stats && stats.verified > 0 ? (
           <span className="text-[12px] text-pine">
-            {COPY.apps.explainer.quotesVerified(stats.verified)}
+            {APPS_COPY.explainer.quotesVerified(stats.verified)}
           </span>
         ) : null}
         {stats && stats.downgraded > 0 ? (
           <span className="text-[12px] text-ink-muted">
-            {COPY.apps.explainer.quotesDowngraded(stats.downgraded)}
+            {APPS_COPY.explainer.quotesDowngraded(stats.downgraded)}
           </span>
         ) : null}
       </header>

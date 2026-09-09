@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { TeachBackTarget } from '@/lib/ai-native/types';
 import { OctoBuddySprite } from '@/components/classroom/OctoBuddy';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 
 interface TeachBackClassroomProps {
   lessonTitle?: string;
@@ -55,7 +55,7 @@ export function TeachBackClassroom({ lessonTitle, targets }: TeachBackClassroomP
         </div>
         <div className="tbc-blackboard">
           <div className="tbc-board-head">
-            <p className="tbc-board-title">{lessonTitle || COPY.apps.teachBack.appName}</p>
+            <p className="tbc-board-title">{lessonTitle || APPS_COPY.teachBack.appName}</p>
           </div>
           <div className="tbc-board-chalk">
             {chalkTargets.map((target) => (
@@ -78,7 +78,7 @@ export function TeachBackClassroom({ lessonTitle, targets }: TeachBackClassroomP
           return (
             <div key={student.id} className={`tbc-student tbc-student-${student.row} tbc-student-${index}`}>
               {index === 3 ? (
-                <div className="tbc-bubble">{COPY.apps.teachBack.classroomWaiting}</div>
+                <div className="tbc-bubble">{APPS_COPY.teachBack.classroomWaiting}</div>
               ) : null}
               <OctoBuddySprite mood="idle" size={student.size} />
               <div className="tbc-desk" style={{ width: student.deskWidth }} />

@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { TranscriptSegment } from '@/types';
 import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import { isGuestDemoFlashcardsResult } from '@/components/classroom/guest-demo-entry';
 import { buildFlashcardsTrialShareText } from './flashcards-share-actions';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
@@ -167,7 +168,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessm
   }, [goToNext, goToPrev]);
 
   if (!result) {
-    return <AppWindowPlaceholder status="loading" appName={COPY.apps.flashcards.appName} />;
+    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.flashcards.appName} />;
   }
   if (fallbackMessage) {
     return (
@@ -179,7 +180,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessm
     );
   }
   if (cards.length === 0) {
-    return <AppWindowPlaceholder status="empty" appName={COPY.apps.flashcards.appName} />;
+    return <AppWindowPlaceholder status="empty" appName={APPS_COPY.flashcards.appName} />;
   }
 
   const current = activeCards[Math.min(index, activeCards.length - 1)];
@@ -201,8 +202,8 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessm
       <div className="flex h-full min-h-[420px] flex-col items-center justify-center overflow-hidden bg-paper p-6">
         <div className="text-center">
           <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-pine" aria-hidden />
-          <h2 className="mb-1 text-2xl font-bold text-ink">{COPY.apps.flashcards.completeTitle}</h2>
-          <p className="mb-8 text-sm text-ink-muted">{COPY.apps.flashcards.roundSummary(activeCards.length)}</p>
+          <h2 className="mb-1 text-2xl font-bold text-ink">{APPS_COPY.flashcards.completeTitle}</h2>
+          <p className="mb-8 text-sm text-ink-muted">{APPS_COPY.flashcards.roundSummary(activeCards.length)}</p>
 
           {/* Score ring */}
           <div className="relative inline-flex items-center justify-center w-32 h-32 mb-8">
@@ -215,19 +216,19 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessm
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-3xl font-bold text-ink">{recallRate}%</span>
-              <span className="text-xs text-ink-muted">{COPY.apps.flashcards.recallRate}</span>
+              <span className="text-xs text-ink-muted">{APPS_COPY.flashcards.recallRate}</span>
             </div>
           </div>
 
           <div className="flex items-center justify-center gap-10 mb-8">
             <div className="text-center">
               <div className="text-xl font-bold text-pine">{gotCount}</div>
-              <div className="mt-0.5 text-xs text-ink-muted">{COPY.apps.flashcards.gotCount}</div>
+              <div className="mt-0.5 text-xs text-ink-muted">{APPS_COPY.flashcards.gotCount}</div>
             </div>
             <div className="h-8 w-px bg-divider" />
             <div className="text-center">
               <div className="text-xl font-bold text-vermilion">{missedCount}</div>
-              <div className="mt-0.5 text-xs text-ink-muted">{COPY.apps.flashcards.missedCount}</div>
+              <div className="mt-0.5 text-xs text-ink-muted">{APPS_COPY.flashcards.missedCount}</div>
             </div>
           </div>
 
@@ -260,7 +261,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessm
                 }}
                 className="rounded-full border border-pine/25 bg-pine-mist px-8 py-2.5 text-sm font-medium text-pine transition-all hover:bg-pine/15"
               >
-                {COPY.apps.flashcards.reviewMissed(missedCount)}
+                {APPS_COPY.flashcards.reviewMissed(missedCount)}
               </button>
             )}
             <button
@@ -268,7 +269,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessm
               onClick={() => { setReviewCardIds(null); setIndex(0); setFlipped(false); setShowHint(false); setScores({}); }}
               className="rounded-full px-8 py-2.5 text-sm text-ink-muted transition-colors hover:text-ink"
             >
-              {COPY.apps.flashcards.restart}
+              {APPS_COPY.flashcards.restart}
             </button>
           </div>
           {nextStep ? <NextStepCard {...nextStep} /> : null}
@@ -298,7 +299,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessm
       {/* Top: keyboard hint (desktop only) */}
       <div className="relative flex-shrink-0 pt-3 pb-1 text-center hidden md:block">
         <p className="text-[11px] tracking-wider text-ink-muted">
-          {COPY.apps.flashcards.keyboardHint}
+          {APPS_COPY.flashcards.keyboardHint}
         </p>
       </div>
 
@@ -310,7 +311,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessm
           onClick={goToPrev}
           disabled={index <= 0}
           className="group absolute left-3 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-divider bg-white/90 shadow-soft transition-all duration-200 disabled:pointer-events-none disabled:opacity-0 md:left-6"
-          aria-label={COPY.apps.flashcards.previous}
+          aria-label={APPS_COPY.flashcards.previous}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-ink-muted transition-colors group-hover:text-ink" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
@@ -359,7 +360,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessm
                           setShowHint(true);
                         }}
                       >
-                        {COPY.apps.flashcards.showHint}
+                        {APPS_COPY.flashcards.showHint}
                       </button>
                     )
                   ) : null}
@@ -374,7 +375,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessm
                       handleFlip();
                     }}
                   >
-                    {COPY.apps.flashcards.reveal}
+                    {APPS_COPY.flashcards.reveal}
                   </button>
                 </div>
               </div>
@@ -391,7 +392,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessm
                 <div className="min-h-[220px] md:min-h-[240px] flex flex-col justify-center items-center text-center">
                   <div className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-white/75 px-3 py-1 ring-1 ring-pine/10">
                     <div className="h-1.5 w-1.5 rounded-full bg-pine" />
-                    <span className="text-[11px] font-medium tracking-wide text-pine">{COPY.apps.flashcards.answer}</span>
+                    <span className="text-[11px] font-medium tracking-wide text-pine">{APPS_COPY.flashcards.answer}</span>
                   </div>
                   <p className="text-[17px] font-semibold leading-[1.7] tracking-wide text-ink md:text-xl">
                     {current.back}
@@ -410,11 +411,11 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessm
                       disabled={!onSeek}
                     >
                       {onSeek
-                        ? COPY.apps.flashcards.returnToEvidenceAt(formatFlashcardEvidenceTime(current.evidence.startMs))
-                        : COPY.apps.flashcards.evidenceAt(formatFlashcardEvidenceTime(current.evidence.startMs))}
+                        ? APPS_COPY.flashcards.returnToEvidenceAt(formatFlashcardEvidenceTime(current.evidence.startMs))
+                        : APPS_COPY.flashcards.evidenceAt(formatFlashcardEvidenceTime(current.evidence.startMs))}
                     </button>
                   ) : (
-                    <span className="text-[11px] tracking-wide text-ink-muted">{COPY.apps.flashcards.reveal}</span>
+                    <span className="text-[11px] tracking-wide text-ink-muted">{APPS_COPY.flashcards.reveal}</span>
                   )}
                 </div>
               </div>
@@ -428,7 +429,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessm
           onClick={goToNext}
           disabled={index >= activeCards.length - 1}
           className="group absolute right-3 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-divider bg-white/90 shadow-soft transition-all duration-200 disabled:pointer-events-none disabled:opacity-0 md:right-6"
-          aria-label={COPY.apps.flashcards.next}
+          aria-label={APPS_COPY.flashcards.next}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-ink-muted transition-colors group-hover:text-ink" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="9 18 15 12 9 6" />
@@ -449,7 +450,7 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessm
                   : 'border-divider bg-white text-ink-secondary hover:border-vermilion/35 hover:text-vermilion'
               }`}
             >
-              {COPY.apps.flashcards.missed}
+              {APPS_COPY.flashcards.missed}
             </button>
             <button
               type="button"
@@ -460,11 +461,11 @@ export function FlashcardsWindow({ result, onSeek, onLearningActivity, onAssessm
                   : 'border-divider bg-white text-ink-secondary hover:border-pine/45 hover:text-pine'
               }`}
             >
-              {COPY.apps.flashcards.got}
+              {APPS_COPY.flashcards.got}
             </button>
           </div>
         ) : (
-          <p className="mb-4 text-center text-[12px] text-ink-muted">{COPY.apps.flashcards.recallFirst}</p>
+          <p className="mb-4 text-center text-[12px] text-ink-muted">{APPS_COPY.flashcards.recallFirst}</p>
         )}
 
         {/* Progress */}

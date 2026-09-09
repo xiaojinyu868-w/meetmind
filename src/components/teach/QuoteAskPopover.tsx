@@ -9,7 +9,7 @@
  * 同源——点按钮本身不会把选区弹掉。
  */
 
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import type { TextSelectionInfo } from '@/hooks/useTextSelection';
 
 interface QuoteAskPopoverProps {
@@ -41,7 +41,7 @@ export function QuoteAskPopover({ selection, onQuote, onDismiss }: QuoteAskPopov
         <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h8M8 14h5m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        {COPY.apps.teach.quoteAsk}
+        {APPS_COPY.teach.quoteAsk}
       </button>
     </div>
   );

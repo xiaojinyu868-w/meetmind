@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Plus, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { COPY } from '@/lib/ui/copy';
+import { FENSHEN_COPY } from '@/lib/ui/copy-fenshen';
 import { useSegments } from '@/stores/capture-editor-store';
 import { FenshenChatPanel } from './FenshenChatPanel';
 import { FenshenOnboardFlow } from './FenshenOnboardFlow';
@@ -42,9 +42,9 @@ interface FenshenShelfViewsProps {
 type ShelfView = { kind: 'shelf' } | { kind: 'onboard' } | { kind: 'chat'; ego: FenshenEgoDto };
 
 function EgoStatusBadge({ ego }: { ego: FenshenEgoDto }) {
-  if (ego.status === 'ready') return <Badge variant="pine" dot>{COPY.fenshen.statusReady}</Badge>;
-  if (ego.status === 'failed') return <Badge variant="vermilion">{COPY.fenshen.statusFailed}</Badge>;
-  return <Badge variant="mute" dot>{COPY.fenshen.statusLearning}</Badge>;
+  if (ego.status === 'ready') return <Badge variant="pine" dot>{FENSHEN_COPY.statusReady}</Badge>;
+  if (ego.status === 'failed') return <Badge variant="vermilion">{FENSHEN_COPY.statusFailed}</Badge>;
+  return <Badge variant="mute" dot>{FENSHEN_COPY.statusLearning}</Badge>;
 }
 
 /** 架内排序：就绪优先，其后学习中、失败；同状态按最近更新倒序 */
@@ -147,11 +147,11 @@ export function FenshenShelfViews({ onClose, sessionId, lessonTitle }: FenshenSh
           <div className="flex items-center justify-between border-b border-divider px-5 py-4">
             <div>
               <h2 className="text-[16px] font-medium text-ink">
-                {view.kind === 'onboard' ? COPY.fenshen.onboardTitle : COPY.fenshen.shelfTitle}
+                {view.kind === 'onboard' ? FENSHEN_COPY.onboardTitle : FENSHEN_COPY.shelfTitle}
               </h2>
               {view.kind === 'shelf' ? (
                 <p className="mt-0.5 text-[12px] text-ink-muted">
-                  {lessonTitle ? COPY.fenshen.shelfLessonBody(lessonTitle) : COPY.fenshen.entryBody}
+                  {lessonTitle ? FENSHEN_COPY.shelfLessonBody(lessonTitle) : FENSHEN_COPY.entryBody}
                 </p>
               ) : null}
             </div>
@@ -159,7 +159,7 @@ export function FenshenShelfViews({ onClose, sessionId, lessonTitle }: FenshenSh
               type="button"
               onClick={view.kind === 'onboard' ? () => setView({ kind: 'shelf' }) : onClose}
               className="inline-flex h-8 w-8 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-paper-warm hover:text-ink"
-              aria-label={COPY.fenshen.close}
+              aria-label={FENSHEN_COPY.close}
             >
               <X size={16} aria-hidden />
             </button>
@@ -180,7 +180,7 @@ export function FenshenShelfViews({ onClose, sessionId, lessonTitle }: FenshenSh
                 </div>
               ) : egos.length === 0 ? (
                 <p className="pt-16 text-center text-[13px] leading-relaxed text-ink-muted">
-                  {COPY.fenshen.shelfEmpty}
+                  {FENSHEN_COPY.shelfEmpty}
                 </p>
               ) : (
                 sortEgos(egos).map((ego) => {
@@ -196,8 +196,8 @@ export function FenshenShelfViews({ onClose, sessionId, lessonTitle }: FenshenSh
                       <span className="flex-1">
                         <span className="block text-[14px] font-medium text-ink">{ego.name}</span>
                         <span className="mt-0.5 block text-[11px] text-ink-muted">
-                          {COPY.fenshen.sourceLabel(ego.sourceType)}
-                          {dupNames.has(ego.name) ? ` · ${COPY.fenshen.egoCreatedAt(ego.createdAt)}` : ''}
+                          {FENSHEN_COPY.sourceLabel(ego.sourceType)}
+                          {dupNames.has(ego.name) ? ` · ${FENSHEN_COPY.egoCreatedAt(ego.createdAt)}` : ''}
                           {ego.status === 'failed' && ego.failReason ? ` · ${ego.failReason}` : ''}
                         </span>
                       </span>
@@ -213,7 +213,7 @@ export function FenshenShelfViews({ onClose, sessionId, lessonTitle }: FenshenSh
                 className="mt-2 flex items-center justify-center gap-1.5 rounded-2xl border border-dashed border-pine/40 bg-pine-fog px-4 py-3.5 text-[13px] font-medium text-pine transition hover:bg-pine-mist"
               >
                 <Plus size={15} aria-hidden />
-                {COPY.fenshen.invite}
+                {FENSHEN_COPY.invite}
               </button>
             </div>
           )}
@@ -230,7 +230,7 @@ export function FenshenShelf({ open, onClose, sessionId, lessonTitle }: FenshenS
       className="fixed inset-0 z-[80] flex flex-col bg-paper"
       role="dialog"
       aria-modal="true"
-      aria-label={COPY.fenshen.shelfTitle}
+      aria-label={FENSHEN_COPY.shelfTitle}
     >
       <FenshenShelfViews onClose={onClose} sessionId={sessionId} lessonTitle={lessonTitle} />
     </div>

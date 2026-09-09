@@ -20,7 +20,7 @@ import {
   extractIntentOptions,
   stripPartialIntentBlocks,
 } from '@/components/chat';
-import { COPY } from '@/lib/ui/copy';
+import { INTENT_COPY } from '@/lib/ui/copy-intent';
 import { IntentSummaryCard } from './IntentSummaryCard';
 import { IntentBioCard } from './IntentBioCard';
 import { IntentOptionChips } from './IntentOptionChips';
@@ -133,7 +133,7 @@ export function IntentMessageItem({
     footers.push(
       <IntentOptionChips
         key="fallback-options"
-        options={[COPY.intent.fallbackContinue, COPY.intent.fallbackWrapUp]}
+        options={[INTENT_COPY.fallbackContinue, INTENT_COPY.fallbackWrapUp]}
         disabled={busy}
         onPick={onPickOption}
       />,

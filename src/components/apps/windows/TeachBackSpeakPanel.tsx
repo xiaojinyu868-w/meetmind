@@ -8,11 +8,11 @@
  *   → 可编辑 textarea（语音转写追加进来，可手改）
  *   → 左下 VoiceMicButton（点录再点停 → /api/asr/oneshot → 文字追加进框）
  *   → 按钮行：回到目标 / 讲给同桌（提交一段）/ 讲完了（进入核对）
- * 全部用户面字符串走 COPY.apps.teachBack。
+ * 全部用户面字符串走 APPS_COPY.teachBack。
  */
 
 import { VoiceMicButton } from '@/components/VoiceMicButton';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 
 interface TeachBackSpeakPanelProps {
   /** 同桌正在出声 */
@@ -47,7 +47,7 @@ export function TeachBackSpeakPanel({
   onBack,
   finishDisabled,
 }: TeachBackSpeakPanelProps) {
-  const copy = COPY.apps.teachBack;
+  const copy = APPS_COPY.teachBack;
   const visibleLines = deskmateLines.slice(0, 2);
   const canSubmit = pendingText.trim().length > 0;
 

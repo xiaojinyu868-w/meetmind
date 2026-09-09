@@ -9,7 +9,7 @@ import type { TranscriptSegment } from '@/types';
 import { EvidenceChip } from '@/components/apps/evidence/EvidenceChip';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
 import { RefreshCw, Loader2 } from 'lucide-react';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import { isInternalPodcastFailureSection } from './podcast-window-model';
 
 interface PodcastWindowProps {
@@ -117,9 +117,9 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
     if (!scriptPlainText) return;
     try {
       await navigator.clipboard.writeText(scriptPlainText);
-      toast.success(COPY.apps.podcast.scriptCopied);
+      toast.success(APPS_COPY.podcast.scriptCopied);
     } catch {
-      toast.error(COPY.apps.podcast.copyFailed);
+      toast.error(APPS_COPY.podcast.copyFailed);
     }
   }, [scriptPlainText]);
 
@@ -128,7 +128,7 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
       return (
         <AppWindowPlaceholder
           status="error"
-          appName={COPY.apps.podcast.appName}
+          appName={APPS_COPY.podcast.appName}
           errorMessage={taskState.error}
           onRetry={onRegenerate}
         />
@@ -138,13 +138,13 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
       return (
         <AppWindowPlaceholder
           status="empty"
-          appName={COPY.apps.podcast.appName}
-          description={COPY.apps.podcast.emptyBody}
+          appName={APPS_COPY.podcast.appName}
+          description={APPS_COPY.podcast.emptyBody}
           onRetry={onRegenerate}
         />
       );
     }
-    return <AppWindowPlaceholder status="loading" appName={COPY.apps.podcast.appName} />;
+    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.podcast.appName} />;
   }
 
   const seekAudio = (startMs: number) => {
@@ -166,19 +166,19 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
   const supportingMaterial = scriptLines.length > 0 || sections.length > 0 ? (
     <details className="mt-3 border-t border-divider pt-3" open={!payload.audioUrl}>
       <summary className="cursor-pointer select-none text-xs font-medium text-ink-secondary hover:text-ink">
-        {COPY.apps.podcast.details}
+        {APPS_COPY.podcast.details}
       </summary>
       <div className="mt-3 space-y-4">
         {scriptLines.length > 0 ? (
           <div>
             <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold tracking-[0.12em] text-ink-muted">{COPY.apps.podcast.script}</p>
+              <p className="text-xs font-semibold tracking-[0.12em] text-ink-muted">{APPS_COPY.podcast.script}</p>
               <button
                 type="button"
                 onClick={copyScript}
                 className="rounded-full border border-divider bg-white px-2.5 py-1 text-[11px] font-medium text-ink-secondary transition hover:bg-paper-warm"
               >
-                {COPY.apps.podcast.copyScript}
+                {APPS_COPY.podcast.copyScript}
               </button>
             </div>
             <div ref={scriptContainerRef} className="max-h-[480px] space-y-2 overflow-y-auto">
@@ -217,9 +217,9 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
                 <article key={section.id || `section-${index}`} className="rounded-2xl border border-divider bg-paper-warm p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-ink">{section.title || COPY.apps.podcast.chapter(index + 1)}</p>
+                      <p className="text-sm font-semibold text-ink">{section.title || APPS_COPY.podcast.chapter(index + 1)}</p>
                       <p className="mt-1 text-sm leading-6 text-ink-secondary">
-                        {sanitizeNarration(section.body || '') || COPY.apps.podcast.chapterEmpty}
+                        {sanitizeNarration(section.body || '') || APPS_COPY.podcast.chapterEmpty}
                       </p>
                     </div>
                     {citation ? (
@@ -228,7 +228,7 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
                         className="rounded-full border border-divider bg-white px-3 py-1.5 text-xs font-medium text-ink-secondary hover:bg-paper-warm"
                         onClick={() => seekAudio(citation.startMs)}
                       >
-                        {COPY.apps.podcast.seekChapter}
+                        {APPS_COPY.podcast.seekChapter}
                       </button>
                     ) : null}
                   </div>
@@ -265,25 +265,25 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
               onClick={onRegenerate}
               disabled={!onRegenerate || isRegenerating}
               className="flex w-full items-center gap-4 rounded-xl bg-paper-warm px-4 py-3 text-left transition hover:bg-paper-deep disabled:cursor-default disabled:opacity-70"
-              aria-label={isRegenerating ? COPY.apps.podcast.audioGenerating : COPY.apps.podcast.audioRetry}
+              aria-label={isRegenerating ? APPS_COPY.podcast.audioGenerating : APPS_COPY.podcast.audioRetry}
             >
               <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-ink text-white">
                 {isRegenerating ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-semibold text-ink">
-                  {isRegenerating ? COPY.apps.podcast.audioGenerating : COPY.apps.podcast.audioRetry}
+                  {isRegenerating ? APPS_COPY.podcast.audioGenerating : APPS_COPY.podcast.audioRetry}
                 </span>
                 <span className="mt-0.5 block truncate text-xs text-ink-muted">
                   {isRegenerating
-                    ? COPY.apps.podcast.audioGeneratingHint
+                    ? APPS_COPY.podcast.audioGeneratingHint
                     : supportingMaterial
-                      ? COPY.apps.podcast.audioRetryHint
-                      : COPY.apps.podcast.audioRetryNoScriptHint}
+                      ? APPS_COPY.podcast.audioRetryHint
+                      : APPS_COPY.podcast.audioRetryNoScriptHint}
                 </span>
               </span>
               <span className="flex-shrink-0 rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-white">
-                {isRegenerating ? COPY.apps.podcast.generating : COPY.apps.podcast.retry}
+                {isRegenerating ? APPS_COPY.podcast.generating : APPS_COPY.podcast.retry}
               </span>
             </button>
             {supportingMaterial}

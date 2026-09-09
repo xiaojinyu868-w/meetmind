@@ -1,3 +1,4 @@
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 # Workshop Windows — 应用窗口组件
 
 > AI 原生应用的窗口化展示系统，包含思维导图、信息图、回响卡等可视化窗口。
@@ -118,7 +119,7 @@ quiz-observation.ts 为提交动作附加完整 practice.attempt 观察：保留
 ### ExplainerWindow（板书精讲）
 
 - 渲染 `explainer` 插件产出的 BoardScript（render mode `'board'`）：`blackboard/BlackboardPlayer` 驱动——AmIWrite 架构（LLM 只产「讲稿 + 板书动作 DSL」，播放器按序执行；分页不擦除；坏动作跳过不崩）。
-- 窗口对 payload 再过一遍 `sanitizeBoardScript`（历史快照 / 分享链路防御），头部只放标题与引用核对统计（"N 处老师原话已核对"；有降级时提示"N 处引用未对上原话，已改为转述"），文案走 `COPY.apps.explainer`。
+- 窗口对 payload 再过一遍 `sanitizeBoardScript`（历史快照 / 分享链路防御），头部只放标题与引用核对统计（"N 处老师原话已核对"；有降级时提示"N 处引用未对上原话，已改为转述"），文案走 `APPS_COPY.explainer`。
 - 引用逐字校验与失败降级（narration 去「」+ 移出 quotes）都在服务端插件完成（`explainer-quotes.ts` + `explainer.plugin.ts`），窗口不做二次校验。
 - 播放器分层（均在 `blackboard/`，纯函数层可单测）：
   - `board-model.ts` — 时间轴（`buildPageTimeline`；**v20 嘴手一体：cue 微提前 `anticipateCharsFor`——write 只提前 300ms 起笔量，嘴上开讲=落笔开始，书写与对应讲解共现（v9 按总时长倒排"念到已写完"是"一个人在讲、另一个人在写"的成因，已修正）；标注提前 500ms** + 动作时间窗预算 `budgetMs` + 书写变速 `paceScaleFor`；**v15 科学节奏：`MS_PER_CHAR` 标定 150（节奏诊断实测 cosyvoice 真实 137-163ms/字，原 280 把全轴稀释 1.8 倍）；全部动作（含无 cue、pause）统一锚定讲稿字位——消灭"cue 跟语音、非 cue 跟估算"双时间轴；段长 = 朗读估算不再被书写撑长**；**v19 人性化书写节奏：`buildWritePaceForTokens` 单一来源——每 token 耗时带确定性 hash 抖动（0.82~1.25×）+ token 间抬笔停顿（词间 70~140 / 标点 150~270 / CJK 每 4~6 字换气 190~340 / 字间微顿 25~70，全角标点按字符判定同样停顿），`estimateWriteMs` = 书写+停顿总时长（cue 倒排自动包含停顿，写完仍落在被念到的时刻）；`paceScaleFor` clamp 改 0.7~1——预算宽裕**不再拉伸书写填满窗口**（匀速慢放是"机器人写字"根源），按自然节奏写完抬笔休息，剩余窗口留给讲**；**v23 反向背压判定 `shouldDeferForInk`（纯函数：笔有积压时 write/标注延后、pause/ref 不背压）+ `MAX_INK_HOLD_MS` 3500 超时上限**）+ 逐字基准节奏（CHAR_PACE/`charPaceMs`）+ 字符分类（`isLatinBoardChar`/`isAsciiBoardPunct`）+ `hashSeed`；布局引擎拆在 `board-layout.ts`（行数限制）。同步架构的权威参考映射见 `docs/BOARD_PLAYER_SYNC.md`。

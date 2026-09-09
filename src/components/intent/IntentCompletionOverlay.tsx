@@ -9,7 +9,7 @@
 
 import { Sparkles } from 'lucide-react';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
-import { COPY } from '@/lib/ui/copy';
+import { INTENT_COPY } from '@/lib/ui/copy-intent';
 
 interface IntentCompletionOverlayProps {
   /** 刚保存的目标标题 */
@@ -32,19 +32,19 @@ export function IntentCompletionOverlay({ title, onDone, onContinue }: IntentCom
           className="mt-5 text-[22px] text-ink"
           style={{ fontFamily: '"Instrument Serif", "Inter", serif' }}
         >
-          {COPY.intent.doneTitle}
+          {INTENT_COPY.doneTitle}
         </p>
         <p className="mt-3 rounded-2xl bg-pine-mist/40 px-4 py-2.5 text-[14.5px] leading-6 text-pine">
           {title}
         </p>
-        <p className="mt-4 text-[12.5px] leading-5 text-ink-muted">{COPY.intent.doneHint}</p>
+        <p className="mt-4 text-[12.5px] leading-5 text-ink-muted">{INTENT_COPY.doneHint}</p>
         <div className="mt-7 flex w-full flex-col gap-2.5">
           <button
             type="button"
             onClick={onDone}
             className="inline-flex h-11 w-full items-center justify-center rounded-full bg-pine text-[14px] font-medium text-white transition-all hover:brightness-105 active:scale-[0.97]"
           >
-            {COPY.intent.donePrimary}
+            {INTENT_COPY.donePrimary}
           </button>
           <button
             type="button"
@@ -52,7 +52,7 @@ export function IntentCompletionOverlay({ title, onDone, onContinue }: IntentCom
             className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-full border border-divider bg-white text-[14px] font-medium text-ink-secondary transition-colors hover:bg-paper-warm"
           >
             <Sparkles size={14} strokeWidth={1.8} />
-            {COPY.intent.doneSecondary}
+            {INTENT_COPY.doneSecondary}
           </button>
         </div>
       </div>

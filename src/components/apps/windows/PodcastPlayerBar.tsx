@@ -10,7 +10,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ChangeEvent } from 'react';
 import { Pause, Play } from 'lucide-react';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import { cn } from '@/lib/utils';
 
 const RATES = [1, 1.25, 1.5] as const;
@@ -84,7 +84,7 @@ export const PodcastPlayerBar = forwardRef<HTMLAudioElement, PodcastPlayerBarPro
   };
 
   const progress = duration > 0 ? Math.min(1000, Math.round((time / duration) * 1000)) : 0;
-  const copy = COPY.apps.podcast;
+  const copy = APPS_COPY.podcast;
 
   return (
     <div className={cn('flex items-center gap-3.5 rounded-[18px] border border-divider bg-paper-warm px-3.5 py-3', className)} data-testid="podcast-player-bar">

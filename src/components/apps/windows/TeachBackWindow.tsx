@@ -17,7 +17,7 @@ import { useTeachBackVoice } from '@/components/apps/windows/use-teach-back-voic
 import { formatTeachBackCompleteActivity } from '@/components/review-learning-activity';
 import { buildTeachBackAssessment, type AssessmentDraft } from './assessment-events';
 import { NextStepCard, type NextStepCardProps } from './NextStepCard';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import {
   buildTeachBackResultView,
   formatEvidenceTimestamp,
@@ -56,7 +56,7 @@ const GROUP_STYLES: Record<TeachBackQuadrantGroup, { dot: string; text: string }
 };
 
 function groupLabel(group: TeachBackQuadrantGroup): string {
-  const copy = COPY.apps.teachBack;
+  const copy = APPS_COPY.teachBack;
   if (group === 'blind-spot') return copy.quadrantBlindSpot;
   if (group === 'aware-gap') return copy.quadrantGap;
   if (group === 'productive-struggle') return copy.quadrantStruggle;
@@ -66,7 +66,7 @@ function groupLabel(group: TeachBackQuadrantGroup): string {
 
 function EvidenceButton({ item, onSeek }: { item: TeachBackEvaluationItem; onSeek?: (startMs: number) => void }) {
   if (!item.evidence) return null;
-  const label = `[${formatEvidenceTimestamp(item.evidence.startMs)}] ${COPY.apps.teachBack.backToEvidence}`;
+  const label = `[${formatEvidenceTimestamp(item.evidence.startMs)}] ${APPS_COPY.teachBack.backToEvidence}`;
   if (!onSeek) return <span className="font-mono-cite text-[11px] text-ink-muted">{label}</span>;
   return (
     <button
@@ -236,10 +236,10 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
   /* ── 渲染 ── */
 
   if (!result) {
-    return <AppWindowPlaceholder status="loading" appName={COPY.apps.teachBack.appName} />;
+    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.teachBack.appName} />;
   }
   if (targets.length === 0) {
-    return <AppWindowPlaceholder status="empty" appName={COPY.apps.teachBack.appName} />;
+    return <AppWindowPlaceholder status="empty" appName={APPS_COPY.teachBack.appName} />;
   }
 
   if (phase === 'teach') {
@@ -273,18 +273,18 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
       .filter((turn) => turn.role === 'user')
       .reduce((total, turn) => total + turn.text.length, 0);
     const stageCopy = [
-      COPY.apps.teachBack.evaluating,
-      COPY.apps.teachBack.evaluatingStage2,
-      COPY.apps.teachBack.evaluatingStage3,
+      APPS_COPY.teachBack.evaluating,
+      APPS_COPY.teachBack.evaluatingStage2,
+      APPS_COPY.teachBack.evaluatingStage3,
     ][evalStage];
     return (
       <div className="flex h-full min-h-0 flex-col items-center justify-center gap-4 bg-paper px-6">
         {evalFailed ? (
           <>
             <p className="max-w-[320px] text-center text-[13px] leading-6 text-ink-secondary">
-              {rateLimited ? COPY.apps.teachBack.evalRateLimited : COPY.apps.teachBack.evalFailed}
+              {rateLimited ? APPS_COPY.teachBack.evalRateLimited : APPS_COPY.teachBack.evalFailed}
             </p>
-            <p className="text-[12px] text-ink-muted">{COPY.apps.teachBack.yourTeachingStats(teachingChars)}</p>
+            <p className="text-[12px] text-ink-muted">{APPS_COPY.teachBack.yourTeachingStats(teachingChars)}</p>
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -295,10 +295,10 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
                 className="inline-flex items-center gap-1.5 rounded-full bg-pine px-4 py-2 text-[12px] font-medium text-white"
               >
                 <RotateCcw size={13} strokeWidth={2} />
-                {COPY.apps.teachBack.retryEval}
+                {APPS_COPY.teachBack.retryEval}
               </button>
               <button type="button" onClick={handleRetry} className="text-[12px] text-ink-muted transition-colors hover:text-ink">
-                {COPY.apps.teachBack.retry}
+                {APPS_COPY.teachBack.retry}
               </button>
             </div>
           </>
@@ -317,7 +317,7 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
     return (
       <div className="flex h-full min-h-0 flex-col bg-paper">
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-          <h2 className="text-[17px] font-semibold text-ink">{COPY.apps.teachBack.resultTitle}</h2>
+          <h2 className="text-[17px] font-semibold text-ink">{APPS_COPY.teachBack.resultTitle}</h2>
           {view.headline ? <p className="mt-1.5 text-[13px] leading-6 text-ink-secondary">{view.headline}</p> : null}
           <div className="mt-4">
             <TeachBackQuadrantMap items={evaluation.items} />
@@ -332,7 +332,7 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
                   </p>
                 </div>
                 {group.key === 'blind-spot' ? (
-                  <p className="mt-1 text-[12px] leading-5 text-ink-muted">{COPY.apps.teachBack.blindSpotHint}</p>
+                  <p className="mt-1 text-[12px] leading-5 text-ink-muted">{APPS_COPY.teachBack.blindSpotHint}</p>
                 ) : null}
                 <div className="mt-2 flex flex-col gap-2">
                   {group.items.map((item) => (
@@ -361,7 +361,7 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
                             }}
                             className="flex-shrink-0 rounded-full border border-pine/40 px-2.5 py-1 text-[11px] font-medium text-pine transition-colors hover:bg-pine-mist"
                           >
-                            {COPY.apps.teachBack.reteachPoint}
+                            {APPS_COPY.teachBack.reteachPoint}
                           </button>
                         ) : null}
                       </div>
@@ -375,7 +375,7 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
         </div>
         <div className="flex flex-shrink-0 items-center justify-between border-t border-divider bg-card px-5 py-3">
           <button type="button" onClick={handleRetry} className="text-[12px] text-ink-muted transition-colors hover:text-ink">
-            {COPY.apps.teachBack.backToTargets}
+            {APPS_COPY.teachBack.backToTargets}
           </button>
           <button
             type="button"
@@ -391,7 +391,7 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
             }}
             className="rounded-full bg-pine px-5 py-2.5 text-[13px] font-medium text-white"
           >
-            {COPY.apps.teachBack.retry}
+            {APPS_COPY.teachBack.retry}
           </button>
         </div>
       </div>
@@ -411,8 +411,8 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col items-center gap-2.5 px-5 pb-6 pt-14" style={{ background: 'linear-gradient(180deg, transparent, rgba(242,240,233,0.92) 38%)' }}>
         <div className="pointer-events-auto flex w-full max-w-[420px] flex-col items-center gap-2.5 rounded-2xl border border-divider/80 bg-card/90 px-5 py-4 shadow-card backdrop-blur-md">
           <div className="text-center">
-            <p className="text-[14px] font-semibold text-ink">{COPY.apps.teachBack.targetsTitle}</p>
-            <p className="mt-0.5 text-[12px] text-ink-muted">{COPY.apps.teachBack.targetsSubtitle}</p>
+            <p className="text-[14px] font-semibold text-ink">{APPS_COPY.teachBack.targetsTitle}</p>
+            <p className="mt-0.5 text-[12px] text-ink-muted">{APPS_COPY.teachBack.targetsSubtitle}</p>
           </div>
           <button
             type="button"
@@ -425,9 +425,9 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
             className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-pine px-5 py-3 text-[14px] font-medium text-white transition-opacity hover:opacity-90"
           >
             <Mic size={15} strokeWidth={2} />
-            {COPY.apps.teachBack.startVoice}
+            {APPS_COPY.teachBack.startVoice}
           </button>
-          <p className="text-center text-[11px] leading-5 text-ink-muted">{COPY.apps.teachBack.voiceHint}</p>
+          <p className="text-center text-[11px] leading-5 text-ink-muted">{APPS_COPY.teachBack.voiceHint}</p>
         </div>
       </div>
     </div>

@@ -12,7 +12,7 @@
 
 import { ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import type { DeskGroup, DeskItem } from '@/components/global-ask-desk';
 
 interface GlobalAskDeskProps {
@@ -36,7 +36,7 @@ function ToneDot({ tone }: { tone: DeskItem['tone'] }) {
 }
 
 export function GlobalAskDesk({ groups, onChoose, onStartDemo, className }: GlobalAskDeskProps) {
-  const copy = COPY.globalAsk.desk;
+  const copy = GLOBAL_ASK_COPY.desk;
 
   if (groups.length === 0) {
     return (

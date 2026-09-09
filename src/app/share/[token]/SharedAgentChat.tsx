@@ -21,6 +21,7 @@ import * as React from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { COPY } from '@/lib/ui/copy';
+import { SHARE_COPY } from '@/lib/ui/copy-share';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
 import {
   ChatBubble,
@@ -139,7 +140,7 @@ export function SharedAgentChat({
               className="absolute left-0 top-3 bottom-3 w-[3px] rounded-r-sm bg-vermilion/70"
             />
             <p className="pl-2 text-[13px] leading-7 text-ink-secondary">
-              {COPY.share.landing.sharedBy(sharerNickname)}。可以问我任何关于这节课的事。
+              {SHARE_COPY.landing.sharedBy(sharerNickname)}。可以问我任何关于这节课的事。
             </p>
           </div>
         }
@@ -202,7 +203,7 @@ export function SharedAgentChat({
         busy={busy}
         onStop={stop}
         capabilities={{}}
-        placeholder={COPY.share.landing.chatPlaceholder}
+        placeholder={SHARE_COPY.landing.chatPlaceholder}
         busyPlaceholder="同学在想…"
         variant="paper"
       />

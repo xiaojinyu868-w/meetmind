@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { COPY } from '@/lib/ui/copy';
+import { sharedContextCopy } from '@/lib/ui/shared-context-copy';
 import type { ContextEventRecord } from '@/types/context';
 
 export function ContextEvidenceDialog({ source, close }: { source: ContextEventRecord | null; close: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const c = COPY.sharedContext;
+  const c = sharedContextCopy;
   useEffect(() => {
     if (source && !dialog.current?.open) dialog.current?.showModal();
     if (!source && dialog.current?.open) dialog.current?.close();

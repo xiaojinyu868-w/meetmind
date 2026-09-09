@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { BookOpen, Check, Layers3 } from 'lucide-react';
 import { getWorkshopAppByKey } from '@/lib/ai-native/app-catalog';
 import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import type { CourseContextGroup } from '@/lib/utils/course-context';
 import { useCourseContextPack } from '@/hooks/useCourseContextPack';
 import { useAppExecution } from '@/components/apps/hooks/useAppExecution';
@@ -57,7 +58,7 @@ export function CourseCheatsheetWorkspace({ courses, initialCourseKeys = [], onB
     const lessons = selectedCourses.flatMap((course) => course.lessons);
     const title = selectedCourses.length === 1
       ? selectedCourses[0].title
-      : COPY.globalAsk.courseContextCombinedScope(selectedCourses.length);
+      : GLOBAL_ASK_COPY.courseContextCombinedScope(selectedCourses.length);
     return {
       courseKey: `scope:${selectedCourses.map((course) => course.courseKey).sort().join('|')}`,
       title,
@@ -143,30 +144,30 @@ export function CourseCheatsheetWorkspace({ courses, initialCourseKeys = [], onB
         <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.12em] text-vermilion">
-              {COPY.globalAsk.courseCheatsheetScopeEyebrow}
+              {GLOBAL_ASK_COPY.courseCheatsheetScopeEyebrow}
             </p>
             <h2 className="mt-2 font-serif text-[27px] italic tracking-[-0.03em] text-ink sm:text-[31px]">
-              {COPY.globalAsk.courseAssessmentChooseScope}
+              {GLOBAL_ASK_COPY.courseAssessmentChooseScope}
             </h2>
             <p className="mt-2 max-w-2xl text-[12.5px] leading-6 text-ink-secondary">
-              {COPY.globalAsk.courseCheatsheetScopeHint}
+              {GLOBAL_ASK_COPY.courseCheatsheetScopeHint}
             </p>
           </div>
           <p className="text-[11px] tabular-nums text-ink-muted">
-            {COPY.globalAsk.courseCheatsheetSelectionSummary(selectedCourses.length, selectedLessonIds.size)}
+            {GLOBAL_ASK_COPY.courseCheatsheetSelectionSummary(selectedCourses.length, selectedLessonIds.size)}
           </p>
         </div>
 
         <div className="mt-6 grid min-h-0 flex-1 overflow-hidden rounded-[24px] border border-divider bg-white md:grid-cols-[250px_minmax(0,1fr)]">
           <aside className="min-w-0 border-b border-divider bg-paper px-3 py-3 md:border-b-0 md:border-r">
             <div className="flex items-center justify-between gap-3 px-2 pb-2">
-              <p className="text-[11px] font-semibold text-ink">{COPY.globalAsk.courseCheatsheetCoursesLabel}</p>
+              <p className="text-[11px] font-semibold text-ink">{GLOBAL_ASK_COPY.courseCheatsheetCoursesLabel}</p>
               <button
                 type="button"
                 onClick={() => setSelectedLessonIds(new Set())}
                 className="text-[10.5px] text-ink-muted hover:text-vermilion"
               >
-                {COPY.globalAsk.courseCheatsheetClear}
+                {GLOBAL_ASK_COPY.courseCheatsheetClear}
               </button>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1 md:grid md:max-h-[470px] md:gap-1.5 md:overflow-x-visible md:overflow-y-auto md:pb-0">
@@ -193,7 +194,7 @@ export function CourseCheatsheetWorkspace({ courses, initialCourseKeys = [], onB
                     <span className="min-w-0 flex-1">
                       <strong className="block truncate text-[12.5px] font-semibold text-ink">{course.title}</strong>
                       <span className="mt-0.5 block text-[10px] text-ink-muted">
-                        {COPY.globalAsk.courseCheatsheetCourseSelection(selectedCount, course.lessons.length)}
+                        {GLOBAL_ASK_COPY.courseCheatsheetCourseSelection(selectedCount, course.lessons.length)}
                       </span>
                     </span>
                   </button>
@@ -206,8 +207,8 @@ export function CourseCheatsheetWorkspace({ courses, initialCourseKeys = [], onB
             {selectedCourses.length === 0 ? (
               <div className="flex min-h-[280px] flex-col items-center justify-center text-center">
                 <span className="flex h-11 w-11 items-center justify-center rounded-[15px] bg-pine-fog text-pine"><Layers3 size={18} /></span>
-                <p className="mt-3 text-[13px] font-semibold text-ink">{COPY.globalAsk.courseCheatsheetEmptySelectionTitle}</p>
-                <p className="mt-1 max-w-sm text-[11.5px] leading-5 text-ink-muted">{COPY.globalAsk.courseCheatsheetEmptySelectionBody}</p>
+                <p className="mt-3 text-[13px] font-semibold text-ink">{GLOBAL_ASK_COPY.courseCheatsheetEmptySelectionTitle}</p>
+                <p className="mt-1 max-w-sm text-[11.5px] leading-5 text-ink-muted">{GLOBAL_ASK_COPY.courseCheatsheetEmptySelectionBody}</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -255,7 +256,7 @@ export function CourseCheatsheetWorkspace({ courses, initialCourseKeys = [], onB
         </div>
 
         <div className="sticky bottom-0 mt-4 flex items-center justify-between gap-3 border-t border-divider bg-canvas/95 px-1 pb-1 pt-4 backdrop-blur-sm">
-          <p className="text-[10.5px] text-ink-muted">{COPY.globalAsk.courseCheatsheetMinimumHint}</p>
+          <p className="text-[10.5px] text-ink-muted">{GLOBAL_ASK_COPY.courseCheatsheetMinimumHint}</p>
           <button
             type="button"
             disabled={selectedLessonIds.size < 2}
@@ -265,28 +266,28 @@ export function CourseCheatsheetWorkspace({ courses, initialCourseKeys = [], onB
             }}
             className="rounded-full bg-pine px-5 py-2.5 text-[12px] font-medium text-white disabled:opacity-35"
           >
-            {COPY.globalAsk.courseContextBeginCheatsheet(selectedLessonIds.size)}
+            {GLOBAL_ASK_COPY.courseContextBeginCheatsheet(selectedLessonIds.size)}
           </button>
         </div>
       </div>
     );
   } else if (context.loading) {
-    content = <AppWindowPlaceholder status="loading" appName={app.name} loadingLabel={COPY.globalAsk.courseContextCheatsheetLoading} />;
+    content = <AppWindowPlaceholder status="loading" appName={app.name} loadingLabel={GLOBAL_ASK_COPY.courseContextCheatsheetLoading} />;
   } else if (!context.pack) {
     content = (
       <AppWindowPlaceholder
         status="empty"
         appName={app.name}
-        description={COPY.globalAsk.courseContextCheatsheetNeedsTranscript(context.availableLessonCount)}
+        description={GLOBAL_ASK_COPY.courseContextCheatsheetNeedsTranscript(context.availableLessonCount)}
         onBack={onBack}
-        backLabel={COPY.globalAsk.courseContextBackToCourse}
+        backLabel={GLOBAL_ASK_COPY.courseContextBackToCourse}
       />
     );
   } else if (!execution.result && execution.taskState.status === 'running') {
-    content = <AppWindowPlaceholder status="loading" appName={app.name} loadingLabel={COPY.globalAsk.courseContextCheatsheetLoading} />;
+    content = <AppWindowPlaceholder status="loading" appName={app.name} loadingLabel={GLOBAL_ASK_COPY.courseContextCheatsheetLoading} />;
   } else if (!execution.result && execution.taskState.status === 'error') {
     const errorMessage = execution.taskState.error === COPY.apps.matrix.executeNotReady
-      ? COPY.globalAsk.courseContextCheatsheetNotReady
+      ? GLOBAL_ASK_COPY.courseContextCheatsheetNotReady
       : execution.taskState.error;
     content = (
       <AppWindowPlaceholder
@@ -295,7 +296,7 @@ export function CourseCheatsheetWorkspace({ courses, initialCourseKeys = [], onB
         errorMessage={errorMessage}
         onRetry={() => void execution.rerun()}
         onBack={onBack}
-        backLabel={COPY.globalAsk.courseContextBackToCourse}
+        backLabel={GLOBAL_ASK_COPY.courseContextBackToCourse}
       />
     );
   } else {
@@ -318,7 +319,7 @@ export function CourseCheatsheetWorkspace({ courses, initialCourseKeys = [], onB
       onRegenerate={() => void execution.rerun()}
       showPrimaryAction={started && Boolean(execution.result)}
       onBack={onBack}
-      backLabel={COPY.globalAsk.courseContextBackToCourse}
+      backLabel={GLOBAL_ASK_COPY.courseContextBackToCourse}
       headerActions={(
         <div className="flex items-center gap-2">
           {execution.result ? (

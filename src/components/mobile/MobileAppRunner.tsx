@@ -13,6 +13,7 @@ import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 import { WORKSHOP_APP_CATALOG, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import type { TranscriptSegment, Anchor } from '@/types';
 import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import { useAppLearningActivity } from '@/hooks/useAppLearningActivity';
 import { recordSessionAssessment } from '@/components/apps/review-session-outcomes';
 import type { LearningAssessmentDraft } from '@/types/learning-event';
@@ -69,7 +70,7 @@ export function MobileAppRunner({
   });
   const resultActivityDetail = buildAppResultActivityDetail(
     result,
-    COPY.globalAsk.appResultSummary,
+    GLOBAL_ASK_COPY.appResultSummary,
   );
   const { recordInteraction, recordAssessment: recordAssessmentEvent } = useAppLearningActivity({
     appKey,
@@ -77,7 +78,7 @@ export function MobileAppRunner({
     resultReady: Boolean(result) && taskState.status === 'success',
     resultUpdatedAt: taskState.updatedAt,
     resultDetail: resultActivityDetail,
-    activityTitle: COPY.globalAsk.appActivity(app?.name || appKey),
+    activityTitle: GLOBAL_ASK_COPY.appActivity(app?.name || appKey),
   });
   const recordAssessment = useCallback((draft: LearningAssessmentDraft) => {
     recordSessionAssessment(sessionId || 'mobile-session', draft);

@@ -23,6 +23,7 @@ import type { TranscriptSegment } from '@/types';
 import { getSpeakerLabel, getSpeakerColorClass } from '@/lib/services/asr/diarization-service';
 import { CrossCourseFeedPanel } from '@/components/CrossCourseFeedPanel';
 import { COPY } from '@/lib/ui/copy';
+import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import { getProvenanceSourceLabel } from '@/lib/capture/source-provenance';
 import { WORKSHOP_APP_CATALOG, getWorkshopAppByKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { MobileAppRunner } from './MobileAppRunner';
@@ -222,7 +223,7 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
             <p className="text-[14px] font-semibold leading-tight text-ink">MeetMind</p>
           </div>
           <div className="flex items-center gap-2">
-            <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted" onClick={() => p.onOpenSearch?.()} aria-label={COPY.globalAsk.title} title={COPY.globalAsk.title}>
+            <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted" onClick={() => p.onOpenSearch?.()} aria-label={GLOBAL_ASK_COPY.title} title={GLOBAL_ASK_COPY.title}>
               <Sparkles size={16} strokeWidth={2} />
             </button>
             <span className="relative">

@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { TranscriptSegment } from '@/types';
 import { EvidenceChip } from '@/components/apps/evidence/EvidenceChip';
-import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import {
   treeToMarkdown,
   markdownToTree,
@@ -481,8 +481,8 @@ function CustomMindmapRenderer({
       {/* 底部提示 */}
       <div className="pointer-events-none absolute bottom-3 left-3 z-10">
         <p className="rounded-full px-3 py-1 text-[11px]" style={{ background: `${PALETTE.bgSurface}cc`, border: `1px solid ${PALETTE.border}`, color: PALETTE.textMuted }}>
-          <span className="sm:hidden">{COPY.apps.mindmap.mobileGestureHint}</span>
-          <span className="hidden sm:inline">{COPY.apps.mindmap.desktopGestureHint}</span>
+          <span className="sm:hidden">{APPS_COPY.mindmap.mobileGestureHint}</span>
+          <span className="hidden sm:inline">{APPS_COPY.mindmap.desktopGestureHint}</span>
         </p>
       </div>
     </div>

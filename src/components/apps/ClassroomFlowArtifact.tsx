@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { ArrowLeft, ArrowUpRight, BookOpen, Clock3, Route } from 'lucide-react';
 import { usePersistedClassroomFlow } from '@/hooks/usePersistedClassroomFlow';
 import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import type { ClassroomFlowState, ClassroomMoment, ClassroomSignalKind } from '@/types/classroom-flow';
 
 const KIND_LABELS: Record<ClassroomSignalKind, string> = {
@@ -55,9 +56,9 @@ export function ClassroomFlowMatrixEntry({
     <section className={compact ? 'mb-3' : 'mb-6'} aria-labelledby="classroom-flow-artifact-title">
       <div className="mb-2 flex items-center justify-between gap-3 px-1">
         <h3 id="classroom-flow-artifact-title" className="text-[12px] font-semibold text-ink">
-          {COPY.apps.classroomFlowArtifact.sectionTitle}
+          {APPS_COPY.classroomFlowArtifact.sectionTitle}
         </h3>
-        <span className="text-[11px] text-pine">{COPY.apps.classroomFlowArtifact.ready}</span>
+        <span className="text-[11px] text-pine">{APPS_COPY.classroomFlowArtifact.ready}</span>
       </div>
       <button
         type="button"
@@ -69,13 +70,13 @@ export function ClassroomFlowMatrixEntry({
           <Route size={21} strokeWidth={1.7} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[15px] font-semibold text-ink">{COPY.apps.classroomFlowArtifact.name}</span>
+          <span className="block text-[15px] font-semibold text-ink">{APPS_COPY.classroomFlowArtifact.name}</span>
           <span className="mt-1 block text-[12px] leading-5 text-ink-muted">
-            {COPY.apps.classroomFlowArtifact.cardSummary(momentCount, flow.keep.length)}
+            {APPS_COPY.classroomFlowArtifact.cardSummary(momentCount, flow.keep.length)}
           </span>
         </span>
         <span className="inline-flex flex-shrink-0 items-center gap-1 text-[12px] font-semibold text-pine">
-          {COPY.apps.classroomFlowArtifact.open}
+          {APPS_COPY.classroomFlowArtifact.open}
           <ArrowUpRight size={14} strokeWidth={1.8} aria-hidden />
         </span>
       </button>
@@ -90,7 +91,7 @@ export function ClassroomFlowReviewWorkspace({
   onSeek,
 }: ClassroomFlowReviewWorkspaceProps) {
   const timeline = useMemo(() => buildTimeline(flow), [flow]);
-  const title = flow.title || contextTitle || COPY.apps.classroomFlowArtifact.name;
+  const title = flow.title || contextTitle || APPS_COPY.classroomFlowArtifact.name;
 
   return (
     <section className="flex h-full min-h-0 flex-col bg-paper" data-testid="classroom-flow-artifact-workspace">
@@ -100,17 +101,17 @@ export function ClassroomFlowReviewWorkspace({
             type="button"
             onClick={onBack}
             className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-paper-warm hover:text-ink"
-            aria-label={COPY.apps.classroomFlowArtifact.back}
+            aria-label={APPS_COPY.classroomFlowArtifact.back}
           >
             <ArrowLeft size={17} strokeWidth={1.8} aria-hidden />
           </button>
           <div className="min-w-0 flex-1">
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-pine">
-              {COPY.apps.classroomFlowArtifact.ready}
+              {APPS_COPY.classroomFlowArtifact.ready}
             </p>
             <h2 className="mt-1 truncate text-[20px] font-semibold tracking-[-0.025em] text-ink">{title}</h2>
             <p className="mt-1 text-[12.5px] leading-5 text-ink-muted">
-              {COPY.apps.classroomFlowArtifact.reviewSummary(timeline.length, flow.keep.length)}
+              {APPS_COPY.classroomFlowArtifact.reviewSummary(timeline.length, flow.keep.length)}
             </p>
           </div>
         </div>
@@ -120,7 +121,7 @@ export function ClassroomFlowReviewWorkspace({
         <div className="mx-auto max-w-[760px]">
           <div className="flex items-center gap-2">
             <Clock3 size={14} className="text-pine" aria-hidden />
-            <h3 className="text-[13px] font-semibold text-ink">{COPY.apps.classroomFlowArtifact.timelineTitle}</h3>
+            <h3 className="text-[13px] font-semibold text-ink">{APPS_COPY.classroomFlowArtifact.timelineTitle}</h3>
           </div>
           <div className="relative mt-4 space-y-1 pl-6 before:absolute before:bottom-4 before:left-[7px] before:top-4 before:w-px before:bg-divider">
             {timeline.map((moment) => (
@@ -150,7 +151,7 @@ export function ClassroomFlowReviewWorkspace({
             <section className="mt-7 border-t border-divider pt-6">
               <div className="flex items-center gap-2">
                 <BookOpen size={15} className="text-vermilion" aria-hidden />
-                <h3 className="text-[13px] font-semibold text-ink">{COPY.apps.classroomFlowArtifact.keepTitle}</h3>
+                <h3 className="text-[13px] font-semibold text-ink">{APPS_COPY.classroomFlowArtifact.keepTitle}</h3>
               </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {flow.keep.map((item) => (
