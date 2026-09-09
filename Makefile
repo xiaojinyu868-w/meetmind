@@ -59,6 +59,14 @@ smoke-context: ## 本机 Context HTTP+浏览器验收，临时合成账户在结
 smoke-context-live: ## 本地应用 + 真实 Hindsight + Tutor + 浏览器验收；上游清理确认后删除合成账户
 	@npx tsx tests/smoke/smoke-context-live.ts
 
+.PHONY: smoke-pocket
+smoke-pocket: ## 口袋闭环：合成账户 → /api/workspace/clip（ChatGPT 形状 HTML）→ /pocket 读到 → 撤销 → 清理；SMOKE_BROWSER=chromium 加截图
+	@SMOKE_BASE=$${SMOKE_BASE:-http://localhost:3101} npx tsx tests/smoke/smoke-pocket.ts
+
+.PHONY: test-desktop
+test-desktop: ## 桌面壳纯逻辑单测（口袋：选区读取 / 来源解析 / 离线队列；不需要 Electron）
+	@node --test ./desktop/pocket/pocket.test.js
+
 .PHONY: cleanup-context-live
 cleanup-context-live: ## 恢复本工作区记录的合成验收账户清理，要求 CONTEXT_FIXTURE_ID；worker 必须运行
 	@npx tsx tests/smoke/context-live-cleanup.ts

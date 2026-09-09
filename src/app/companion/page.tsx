@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
-import { CompanionPanel } from '@/components/companion/CompanionPanel';
+import { PocketPanel } from '@/components/pocket/PocketPanel';
 import { COPY } from '@/lib/ui/copy';
 
 export const metadata: Metadata = {
-  title: `${COPY.identity.productName} 小窗`,
-  description: COPY.desktopPanel.subtitle,
+  title: `${COPY.identity.productName} 口袋`,
+  description: '选中任何文字，按一下，就在这儿了。',
 };
 
 export default function CompanionPage() {
-  return <CompanionPanel />;
+  return <PocketPanel />;
 }

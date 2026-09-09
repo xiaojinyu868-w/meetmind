@@ -73,8 +73,8 @@ function formatHHmm(date) {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-// 一次完整上传：先传图拿 mediaUrl，再写一条 capture 进收集线
-async function uploadOnce(pngBuffer, origin, token, ts) {
+// 一次完整上传：先传图拿 mediaUrl，再写一条 capture 进收集线。返回 capture（口袋回执撤销要用 id）
+async function uploadOnce(pngBuffer, origin, token, ts, options = {}) {
   const form = new FormData();
   form.append('image', new Blob([pngBuffer], { type: 'image/png' }), `screenshot-${ts}.png`);
   form.append('imageKey', `shot-${ts}`);
@@ -101,13 +101,15 @@ async function uploadOnce(pngBuffer, origin, token, ts) {
       sourceKey: `desktop-shot-${ts}-${Math.random().toString(36).slice(2, 8)}`,
       role: 'support',
       contentType: 'image',
-      title: `屏幕截图 · ${formatHHmm(now)}`,
+      title: options.title || `屏幕截图 · ${formatHHmm(now)}`,
       mediaUrl: uploadData.mediaUrl,
       occurredAt: now.toISOString(),
-      metadata: { channel: 'desktop-companion' },
+      metadata: { channel: 'desktop-pocket', ...(options.metadata || {}) },
     }),
   });
   if (!captureRes.ok) throw new Error(`captures 返回 ${captureRes.status}`);
+  const captureData = await captureRes.json().catch(() => null);
+  return captureData && captureData.capture ? captureData.capture : null;
 }
 
 // 拖文件进收集线（桌宠拖放）：与截图同一条两步链，只是标题/来源不同
@@ -302,4 +304,8 @@ module.exports = {
   // 桌宠拖放图片进收集线
   uploadImageFile,
   readAccessToken,
+  // 口袋（pocket/index.js）复用：单次上传（返回 capture）、离线暂存、通知
+  uploadOnce,
+  stashPending,
+  notify,
 };

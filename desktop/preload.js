@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('meetmindCompanion', {
   toggleListen: () => ipcRenderer.invoke('pet:toggle-listen'),
   // 拖图片到宠物身上 → 收集线
   dropFiles: (files) => ipcRenderer.invoke('pet:drop-files', files),
+  // 拖文字 / HTML / 网址到宠物身上 → 口袋剪藏
+  dropClip: (dropped) => ipcRenderer.invoke('pocket:drop-clip', dropped),
   // 右键最小菜单（打开主窗口 / 退出）
   showPetMenu: () => ipcRenderer.invoke('pet:menu'),
   // 捕获成功的吞食动画（截图进收集线后由主进程推来）

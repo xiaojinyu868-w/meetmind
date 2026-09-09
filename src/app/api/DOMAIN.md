@@ -126,6 +126,8 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/workspace/current` | GET | 获取当前工作空间 |
 | `/api/workspace/local-migration` | POST | 把本地 IndexedDB 学习历史迁移到当前账号的 Workspace |
 | `/api/workspace/captures` | POST/PATCH/DELETE | capture 写入、更新与归档删除；写入时 canonicalize URL，同工作区相同原文自动合并，并持久化 `metadata.provenance` |
+| `/api/workspace/clip` | POST | **口袋剪藏**（桌面 ⌘⇧M / 口袋窗粘贴拖放 / 未来的浏览器扩展同一入口）：`{ text?, html?, source?: { app, windowTitle, url, pageTitle }, occurredAt?, clientId? }` → `pocket-clip-service` 做 HTML→Markdown（KaTeX 原始 TeX / 代码块语言 / UI 渣清理）、来源命名（chatgpt.com → ChatGPT）、30 分钟分组键，写 `sourceType='desktop-clip'`；网址放 `metadata.pocket.source.url` **不进 sourceUrl**（那是链接去重键，同一对话第二条会覆盖第一条）；clientId 幂等；422 `EMPTY_CLIP` 表示没有可收的文字 |
+| `/api/workspace/pocket` | GET | 口袋流：最近的 desktop-clip / desktop-screenshot / desktop-drop / manual-note，倒序，`?limit=&sinceHours=`；分组在客户端按相邻 `metadata.pocket.groupKey` 合并 |
 | `/api/workspace/captures/stats` | GET | captures 统计 |
 | `/api/workspace/captures/[captureId]/evidence` | GET | 按 capture 懒加载完整课堂证据（转录分段 + artifacts） |
 | `/api/workspace/captures/[captureId]/artifacts` | POST | 追加证据 artifact（kind 自由字符串，如 `keyframe`/`screenshot`），按 (captureId, kind, artifactKey) 幂等 upsert；桌面壳与录课关键帧的写入入口 |

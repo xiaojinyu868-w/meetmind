@@ -134,6 +134,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `keyframe/` | ~300 | 录课「屏幕观察」关键帧检测：64 位 DCT pHash（带死区防纯色同值簇失稳）+ 稳定期结算检测器 + 浏览器抓帧（详见 `keyframe/DOMAIN.md`，架构定位见 `roadmap/v4.0-everywhere-capture.md`） |
+| `pocket-clip-service.ts` | ~300 | 口袋剪藏转换层（纯函数为主，有测试）：`htmlToMarkdown`（turndown + gfm 表格；KaTeX `<annotation encoding="application/x-tex">` 抓回原始 TeX 写成 `$…$` / `$$…$$`；ChatGPT 带工具条的 `<pre>` 按 `code.language-x` 出围栏；button / svg / aria-hidden / 「复制代码」清掉）、`describeClipSource`（网址 → ChatGPT / Claude / Gemini…，否则 link-provider，否则域名；无网址用应用名收短）、`buildClipGroupKey`（同来源 30 分钟窗）、`deriveClipTitle`（第一句 ≥4 宽度用第一句，否则页标题）、`buildPocketCaptureInput`（网址不进 sourceUrl）、`createPocketClip` |
 | `lesson-title-service.ts` | ~290 | 课堂标题服务端：`主题 · 课程 · M-D` 契约 + titleSource 用户锁 + 存量回填（`make titles-backfill`）。质量门（2026-09 v2）只拒绝**完全由零信息词和虚词拼成**的主题（「课堂笔记」「内容总结」），含泛词但有具体所指的放行（「机器学习入门」「课程设计」）——之前 includes 黑名单把这些整个打回并永久打标；上限 16 字；模型可答「无」表示这段转录没有可命名主题。长转录头 / 中 / 尾三段采样（不再只看开场白）。回填失败打标只在"模型看了也出不来主题"时写（`titleBackfillGateV2FailedAt`），模型调用失败不打标。零信息判定用 `lib/learning/lesson-title-generic` |
 | `lesson-title-client.ts` | ~100 | 课堂标题客户端触发层：课后静默重命名 / 用户改名加锁 / 进入应用静默回填 / `requestLessonUnderstanding` 课后理解触发（2026-08 起 realtime 停录即触发，不再等课后 batch 定稿） |
 | `lesson-understanding-service.ts` | ~205 | 课后理解：一次 LLM 调用输出 topic+overview+takeaways+highlights（解析校验可单测），标题/摘要/精选三个产物一次落齐；理解完成后追加 `activity` 学习事件（`lesson-understanding:{captureId}` 幂等，fire-and-forget）——P0 学习记忆观察器范例 |

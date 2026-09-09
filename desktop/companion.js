@@ -592,15 +592,36 @@ window.meetmindCompanion?.onPetAction?.((action) => {
   if (action === 'capture') window.meetmindCompanion?.captureScreen?.();
 });
 
-/* ---------- 拖图片收下 ---------- */
-document.addEventListener('dragover', (event) => event.preventDefault());
+/* ---------- 拖东西过来：文字 / HTML / 网址 / 图片文件，都收 ---------- */
+document.addEventListener('dragover', (event) => { event.preventDefault(); T.mouthOpen = 1; });
+document.addEventListener('dragleave', () => { T.mouthOpen = 0; });
 document.addEventListener('drop', async (event) => {
   event.preventDefault();
   touch();
   const files = Array.from(event.dataTransfer?.files || []);
   const imagesOnly = files.filter((f) => f.type.startsWith('image/')).slice(0, 5);
   if (imagesOnly.length === 0) {
-    say('我还只会收图片', 1800);
+    // 不是文件：选中的文字（带 HTML）、网页里拖出的图（uri-list + html）、一条网址
+    const text = event.dataTransfer?.getData('text/plain') || '';
+    const html = event.dataTransfer?.getData('text/html') || '';
+    const uri = (event.dataTransfer?.getData('text/uri-list') || '').split('\n').find((line) => line && !line.startsWith('#')) || '';
+    if (!text.trim() && !html.trim() && !uri.trim()) {
+      say('这个我还收不了', 1800);
+      T.mouthOpen = 0;
+      return;
+    }
+    say('张嘴接住…', 1200);
+    try {
+      const result = await window.meetmindCompanion?.dropClip?.({ text, html, url: uri, app: 'drag' });
+      if (result?.ok) say('收下了', 1400);
+      else if (result?.reason === 'not-logged-in') say('先在主窗口登录一下', 2200);
+      else if (result?.reason === 'stashed') say('先存着，联网后补传', 2000);
+      else say('没收进去，再试一次', 1800);
+    } catch {
+      say('没收进去，再试一次', 1800);
+    } finally {
+      T.mouthOpen = 0;
+    }
     return;
   }
   say('张嘴接住…', 1200);

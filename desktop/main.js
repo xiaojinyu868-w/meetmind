@@ -11,12 +11,16 @@ const {
   toggleShellWindow,
   createTray,
 } = require('./shell-window');
-const { registerScreenshotHotkey, retryPendingShots, captureOnce, uploadImageFile, readAccessToken } = require('./screenshot');
+const { retryPendingShots, uploadImageFile, readAccessToken } = require('./screenshot');
+const pocket = require('./pocket');
 const { toggleQuickPanel, hideQuickPanel, registerQuickPanelHotkey } = require('./quick-panel');
 const { startUpdateChecker } = require('./updater');
 
 // Web 版 MeetMind 地址：生产默认走 capture 站点，本地调试用 MEETMIND_URL 覆盖
 const MEETMIND_URL = process.env.MEETMIND_URL || 'https://capture.meetmind.online/app';
+
+// 口袋编排的依赖（whenReady 里填），IPC 处理器复用
+let pocketDeps = null;
 
 // 单实例锁：重复启动只唤起已有实例的主窗口，避免多个悬浮球/重复热键抢注册
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -210,17 +214,19 @@ app.whenReady().then(() => {
   createShellWindow(MEETMIND_URL);
   createTray({ onToggle: toggleShellWindow });
 
-  const screenshotDeps = {
+  // 口袋：⌘⇧M 收下面前的东西（选中的文字 / 剪贴板里的图 / 框选一块屏）
+  pocketDeps = {
     meetmindUrl: MEETMIND_URL,
     getShellWindow,
     showShellWindow: () => showShellWindowAt(MEETMIND_URL),
     onCaptured: () => companionWindow?.webContents.send('pet:gulp'),
   };
-  registerScreenshotHotkey(screenshotDeps);
-  // 全局热键 Cmd/Ctrl+Shift+K：随时唤起小窗提问
+  pocket.registerPocketHotkey(pocketDeps);
+  // 全局热键 Cmd/Ctrl+Shift+K：随时唤起口袋窗
   registerQuickPanelHotkey(MEETMIND_URL);
-  // 上次失败暂存的截图，启动时补传一次（未登录则保留到下次）
-  void retryPendingShots(screenshotDeps);
+  // 上次失败暂存的截图 / 文字剪藏，启动时补传一次（未登录则保留到下次）
+  void retryPendingShots(pocketDeps);
+  void pocket.flushPending(pocketDeps);
   // 自动更新检查：发现新 desktop-v* release 时安静提示一次
   startUpdateChecker();
 
@@ -288,15 +294,12 @@ ipcMain.handle('panel:hide', () => {
   hideQuickPanel();
 });
 
-// 小窗「截图收进来」：与全局热键同一条流程
-ipcMain.handle('desktop:capture-screen', () => {
-  return captureOnce({
-    meetmindUrl: MEETMIND_URL,
-    getShellWindow,
-    showShellWindow: () => showShellWindowAt(MEETMIND_URL),
-    onCaptured: () => companionWindow?.webContents.send('pet:gulp'),
-  });
-});
+// 口袋窗「截一块」：直接进框选
+ipcMain.handle('desktop:capture-screen', () => (pocketDeps ? pocket.captureRegion(pocketDeps) : { ok: false }));
+// 口袋窗「收下选中的」：与 ⌘⇧M 同一条流程（面板通常没有选区 → 会进框选，主要给按钮一个入口）
+ipcMain.handle('desktop:capture-selection', () => (pocketDeps ? pocket.captureFromScreen(pocketDeps) : undefined));
+// 桌宠 / 口袋窗拖进来或粘贴进来的文字、HTML、网址
+ipcMain.handle('pocket:drop-clip', (_event, dropped) => (pocketDeps ? pocket.captureDropped(pocketDeps, dropped || {}) : { ok: false }));
 
 // 宠物双击「旁听」：驱动隐藏主窗口里的网页 Recorder（loopback 系统声录课）。
 // 网页钩子由 /app 注入 window.__meetmindDesktopRecording；未注入多半是未登录或旧版网页。

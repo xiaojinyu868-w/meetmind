@@ -374,6 +374,29 @@ function toEchoSummary(item: {
 }
 
 export const workspaceContextService = {
+  /**
+   * 口袋流：最近收进来的条目（按发生时间倒序）。口袋窗 / 收集流的"今天"视图用；
+   * 只取给定 sourceType（桌面剪藏 / 截图 / 拖放 / 随手记），不含课堂与导入。
+   */
+  async listRecentCapturesForUser(
+    userId: string,
+    options: { limit?: number; sourceTypes: string[]; since?: Date },
+  ): Promise<WorkspaceCaptureSummary[]> {
+    const workspace = await workspaceService.ensureDefaultWorkspace(userId);
+    if (!workspace) return [];
+    const rows = await prisma.workspaceCapture.findMany({
+      where: {
+        workspaceId: workspace.id,
+        status: 'active',
+        sourceType: { in: options.sourceTypes },
+        ...(options.since ? { occurredAt: { gte: options.since } } : {}),
+      },
+      orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
+      take: Math.min(200, Math.max(1, options.limit ?? 60)),
+    });
+    return rows.map(toCaptureSummary);
+  },
+
   async upsertCaptureForUser(userId: string, input: UpsertWorkspaceCaptureInput) {
     const workspace = await workspaceService.ensureDefaultWorkspace(userId);
     if (!workspace) {

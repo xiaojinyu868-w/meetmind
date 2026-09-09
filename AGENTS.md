@@ -41,9 +41,10 @@
 |---------|-----------|
 | 新增 / 删除 / 重命名文件、目录、关键职责 | 对应目录 `DOMAIN.md` + 必要时本文件 §3/§4 |
 | 新增 API 路由、请求体字段、响应契约、stream marker、事件名 | `src/app/api/**/DOMAIN.md` + 相关 `docs/*` |
+| 改桌面壳 / 口袋 | `desktop/DOMAIN.md` + `docs/plans/2026-09-09-pocket-capture.md`；改 `desktop/package.json` version 才会触发老用户更新提示 |
 | 新增模型 provider、默认模型、API key、环境变量 | `src/lib/config/DOMAIN.md` + `.env.example`（涉 Tutor 再加 `docs/TUTOR_AGENT.md`） |
 | 改 Tutor / ASR / teach / fenshen / 记忆 主链路 | 对应 `DOMAIN.md` + `docs/TUTOR_AGENT.md` / `docs/ASR_PIPELINE.md` / `docs/TEACH_TUTOR_ENGINE.md` |
-| 改用户面文案或设置项 | `src/lib/ui/copy.ts`（按体积拆出的域文件同一口吻规则：`copy-landing` 营销页 / `copy-apps` 应用窗口 / `copy-global-ask` 问同学 / `copy-intent` / `copy-settings` / `copy-share` / `copy-fenshen`）或设置页说明 + 偏好 key 所在 `DOMAIN.md` |
+| 改用户面文案或设置项 | `src/lib/ui/copy.ts`（按体积拆出的域文件同一口吻规则：`copy-landing` 营销页 / `copy-apps` 应用窗口 / `copy-global-ask` 问同学 / `copy-intent` / `copy-settings` / `copy-share` / `copy-fenshen` / `copy-pocket` 口袋）或设置页说明 + 偏好 key 所在 `DOMAIN.md` |
 | 交付里程碑 | `CHANGELOG.md` 一条（可追到 commit）+ `make ledger` |
 
 ---
@@ -81,6 +82,10 @@ make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
 
 # 共享记忆（Hindsight）
 make context-worker # Context 可靠投递进程（生产由 PM2 单独跑：meetmind-context-worker）
+
+# 口袋（桌面剪藏）
+make smoke-pocket # 合成账户 → /api/workspace/clip → /pocket 读到 → 撤销 → 清理（SMOKE_BASE 指服务，SMOKE_BROWSER=chromium 加截图）
+make test-desktop # 桌面壳纯逻辑单测（不需要 Electron）；框选 / 回执 / 热键体验要在 Mac 上 npm run desktop:dev
 make test-context # Context 权限 / 来源 / 重试 / HTTP 契约测试
 make smoke-context-live # 真 Hindsight + Tutor + 浏览器全链路验收（SMOKE_BASE 指隔离服务，SMOKE_BROWSER=chromium；非生产库）
 ```
@@ -95,7 +100,7 @@ make smoke-context-live # 真 Hindsight + Tutor + 浏览器全链路验收（SMO
 4. **应用矩阵 M14.6**：结构化产物不走 LLM marker，前端 SkillChip 直调 `/api/apps/execute` → `src/lib/ai-native/DOMAIN.md` + `docs/APPLICATION_MATRIX_PRD.md`
 5. **ASR 单遍化（2026-08）**：课中 realtime 即定稿，课后不再自动跑 batch 定稿与说话人分离（/api/transcribe*、/api/asr/diarize 保留供手动精转）；realtime 零产出时兜底批量转写仍保留；文本纠错由 post-edit（DeepSeek V4 Flash，默认开）接管 → `docs/ASR_PIPELINE.md` + `src/lib/services/asr/DOMAIN.md`
 6. **跨设备证据**：服务端正规化（TranscriptSegment + CaptureArtifact），按课堂懒拉回填 IndexedDB，不覆盖本机编辑 → `roadmap/v2.1-cross-browser-sync-gap.md`
-7. **v4.0 全端采集层**：桌面壳（Electron：参数化桌宠 Octo Buddy + 内嵌网页 + loopback 系统音频 + 全局热键截图/小窗热键 + 双击旁听）+ 课中主动截图关键帧 + 移动端 Capacitor（方向已定未动工）→ `roadmap/v4.0-everywhere-capture.md` + `desktop/DOMAIN.md`
+7. **v4.0 全端采集层**：桌面壳（Electron：参数化桌宠 Octo Buddy + 内嵌网页 + loopback 系统音频 + 双击旁听 + **口袋**：`⌘⇧M` 收下任何应用里的选中文字（HTML→Markdown 含 TeX、来源三元组）/ 剪贴板图 / 框选屏，`⌘⇧K` 口袋窗，拖到桌宠也收；服务端 `/api/workspace/clip` + `pocket-clip-service`，北极星 `docs/plans/2026-09-09-pocket-capture.md`）+ 课中主动截图关键帧 + 移动端 Capacitor（方向已定未动工）→ `roadmap/v4.0-everywhere-capture.md` + `desktop/DOMAIN.md`
 8. **标题与课后理解**：`主题 · 课程 · M-D` 契约 + 用户改名双锁；定稿后一次 LLM 调用出标题/摘要/精选 → `src/lib/services/lesson-understanding-service.ts` + `src/app/api/DOMAIN.md`
 9. **分享裂变 v3.0**：场景上下文可分享、个人上下文默认私有、Agent 是分享单元 → `roadmap/v3.0-virality-agent.md` + `src/app/share/DOMAIN.md`
 10. **微信链路**：公众号收集 + 绑定用户文字走微信 Agent（客服消息推送）+ 桌面扫码登录 → `src/app/api/DOMAIN.md` 微信段

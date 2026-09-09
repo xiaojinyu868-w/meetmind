@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>框选</title>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; cursor: crosshair; user-select: none; -webkit-user-select: none; font-family: Inter, -apple-system, "PingFang SC", "Noto Sans CJK SC", sans-serif; }
+  canvas { position: absolute; inset: 0; display: block; }
+  .hint {
+    position: absolute; left: 50%; top: 28px; transform: translateX(-50%);
+    padding: 8px 14px; border-radius: 999px; background: rgba(32, 49, 42, 0.86); color: #F6F8F6;
+    font-size: 12.5px; letter-spacing: 0.01em; box-shadow: 0 8px 28px rgba(0,0,0,0.25); pointer-events: none;
+    transition: opacity 200ms ease;
+  }
+  .hint kbd { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 11px; background: rgba(255,255,255,0.14); border-radius: 5px; padding: 1px 5px; margin: 0 2px; }
+  .size {
+    position: absolute; padding: 3px 8px; border-radius: 6px; background: rgba(32, 49, 42, 0.9); color: #F6F8F6;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 11px; pointer-events: none; display: none;
+  }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div class="hint" id="hint">拖一块要收的区域 · <kbd>Esc</kbd> 取消 · 双击或 <kbd>Enter</kbd> 整屏</div>
+  <div class="size" id="size"></div>
+  <script>
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    const hint = document.getElementById('hint');
+    const sizeTag = document.getElementById('size');
+    const image = new Image();
+    let frameReady = false;
+    let W = 0, H = 0;
+    let mouse = { x: -1, y: -1 };
+    let drag = null; // { x0, y0, x1, y1 }
+
+    const DIM = 'rgba(12, 20, 16, 0.42)';
+    const PINE = '#2F6B55';
+    const VERMILION = '#C45E4C';
+
+    function resize(width, height) {
+      W = width; H = height;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+      canvas.style.width = W + 'px';
+      canvas.style.height = H + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function rectOf(d) {
+      const x = Math.min(d.x0, d.x1), y = Math.min(d.y0, d.y1);
+      return { x, y, width: Math.abs(d.x1 - d.x0), height: Math.abs(d.y1 - d.y0) };
+    }
+
+    function draw() {
+      if (!frameReady) return;
+      ctx.clearRect(0, 0, W, H);
+      ctx.drawImage(image, 0, 0, W, H);
+      ctx.fillStyle = DIM;
+      ctx.fillRect(0, 0, W, H);
+      if (drag) {
+        const r = rectOf(drag);
+        if (r.width > 0 && r.height > 0) {
+          // 框内亮回原图
+          ctx.save();
+          ctx.beginPath(); ctx.rect(r.x, r.y, r.width, r.height); ctx.clip();
+          ctx.drawImage(image, 0, 0, W, H);
+          ctx.restore();
+          ctx.strokeStyle = PINE; ctx.lineWidth = 1.5;
+          ctx.strokeRect(r.x + 0.75, r.y + 0.75, r.width - 1.5, r.height - 1.5);
+          // 四角朱批小点
+          ctx.fillStyle = VERMILION;
+          for (const [cx, cy] of [[r.x, r.y], [r.x + r.width, r.y], [r.x, r.y + r.height], [r.x + r.width, r.y + r.height]]) {
+            ctx.beginPath(); ctx.arc(cx, cy, 3.5, 0, Math.PI * 2); ctx.fill();
+          }
+          sizeTag.style.display = 'block';
+          sizeTag.textContent = Math.round(r.width) + ' × ' + Math.round(r.height);
+          const tagX = Math.min(W - 90, r.x + r.width + 8);
+          const tagY = Math.min(H - 28, r.y + r.height + 8);
+          sizeTag.style.left = tagX + 'px'; sizeTag.style.top = tagY + 'px';
+        }
+      } else if (mouse.x >= 0) {
+        // 十字光标
+        ctx.strokeStyle = 'rgba(246, 248, 246, 0.55)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(mouse.x + 0.5, 0); ctx.lineTo(mouse.x + 0.5, H); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, mouse.y + 0.5); ctx.lineTo(W, mouse.y + 0.5); ctx.stroke();
+        sizeTag.style.display = 'none';
+      }
+    }
+
+    window.meetmindRegion?.onFrame((payload) => {
+      resize(payload.width, payload.height);
+      image.onload = () => { frameReady = true; draw(); };
+      image.src = payload.dataUrl;
+    });
+
+    window.addEventListener('mousemove', (e) => { mouse = { x: e.clientX, y: e.clientY }; if (drag) { drag.x1 = e.clientX; drag.y1 = e.clientY; } draw(); });
+    window.addEventListener('mousedown', (e) => { if (e.button !== 0) return; drag = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY }; hint.style.opacity = '0'; draw(); });
+    window.addEventListener('mouseup', (e) => {
+      if (!drag) return;
+      drag.x1 = e.clientX; drag.y1 = e.clientY;
+      const r = rectOf(drag);
+      drag = null;
+      if (r.width >= 8 && r.height >= 8) window.meetmindRegion?.done(r);
+      else { hint.style.opacity = '1'; draw(); }
+    });
+    window.addEventListener('dblclick', () => window.meetmindRegion?.done({ x: 0, y: 0, width: W, height: H }));
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') window.meetmindRegion?.cancel();
+      if (e.key === 'Enter') window.meetmindRegion?.done({ x: 0, y: 0, width: W, height: H });
+    });
+    window.addEventListener('contextmenu', (e) => { e.preventDefault(); window.meetmindRegion?.cancel(); });
+  </script>
+</body>
+</html>

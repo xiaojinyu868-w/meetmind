@@ -5,6 +5,26 @@
 
 ---
 
+## 2026-09-09 — 口袋：任何应用里选中，一个键，收下（桌面壳 v3 + `/api/workspace/clip`）
+
+- **形态**（`docs/plans/2026-09-09-pocket-capture.md`，对标 Raycast / Apple 快速备忘录 / Drafts / CleanShot / Yoink / Readwise）：
+  `⌘⇧M` 收下面前的东西——选中了文字 → 收文字（剪贴板 HTML + 来源三元组）；没选中而剪贴板里是图 → 收图；都没有 → **框选截图**
+  （不再整屏）。拖任何东西到桌宠或口袋窗也收。每次收下光标旁一张 1.6s 回执（不抢焦点，可撤销）+ 桌宠吞一口。
+  `⌘⇧K` 口袋窗：今天收的东西按来源成组的一条流（「来自 ChatGPT · 3 条 · 回到原处」）+ 记 / 问，本身是拖放与粘贴目标；浏览器里开同一页也能用
+- **有根**：热键那一刻取前台应用 / 窗口标题 / 浏览器网址（mac AppleScript 问 Chrome / Edge / Arc / Brave / Safari；win PowerShell），
+  服务端映射成 platformLabel（chatgpt.com → ChatGPT，claude.ai → Claude…），同来源 30 分钟内归一组
+- **格式不丢**（服务端 `pocket-clip-service`，turndown + gfm）：KaTeX 的 `<annotation encoding="application/x-tex">` 抓回原始 TeX 写成
+  `$…$` / `$$…$$`——从 ChatGPT 划过来的推导在口袋里是可再渲染的公式；ChatGPT 带工具条的 `<pre>` 也能出带语言的围栏；button / svg /「复制代码」清掉
+- **契约**：`POST /api/workspace/clip`（clientId 幂等；网址放 `metadata.pocket.source.url` 不进 `sourceUrl`——那是链接去重键，否则同一对话第二条覆盖第一条）、
+  `GET /api/workspace/pocket`；撤销用已有 `DELETE captures`。剪藏进同一条收集流 → 今日情报 / 问同学 / 记忆
+- **桌面壳**：读选区靠"快照剪贴板 → 模拟一次复制 → 读 → 原样还原"（无原生模块；mac 首次要「辅助功能」授权）；离线 `pending-clips.json` 启动补传；
+  `desktop/pocket/*` 九个文件，`make test-desktop` 9 个纯逻辑测试。**验证边界**：服务器没有 Electron 与显示服务，框选覆盖层 / 回执窗 / 热键要在 Mac 上
+  `npm run desktop:dev` 跑过再 `desktop:dist:mac`（version 1.4.0）
+- **验证**：`make smoke-pocket`（合成账户 → clip → pocket 读到 TeX / 围栏 / 同组两条 → 撤销 → 清理）5/5；口袋窗截图里公式已渲染
+- 旧 `/companion` 小窗（随手记 / 随口问 / 截图三按钮）与 `COPY.desktopPanel` 删除，由 `PocketPanel` + `copy-pocket.ts` 取代
+
+---
+
 ## 2026-09-09 — 同款病灶清零 + 状态不再说谎 + 视觉层级：把"半成品感"的来源一次挖干
 
 - **审计**：以"兜底题"为样本，在 services / api / ai-native / components / hooks 全量找"规则替模型判断 · 假成功 · 假空态 ·

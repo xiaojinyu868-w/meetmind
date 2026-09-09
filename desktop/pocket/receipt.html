@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>收下了</title>
+<style>
+  /* v7 晨雾学习台：paper / ink / pine / vermilion —— 独立页面不走 Tailwind，直接用 token 色值 */
+  :root {
+    --paper: #F6F8F6; --card: #FFFFFF; --ink: #20312A; --ink-2: #53645C; --ink-3: #819087;
+    --divider: #DCE5DF; --pine: #2F6B55; --pine-mist: #E3EEE8; --vermilion: #C45E4C; --vermilion-mist: #F6E6E2;
+  }
+  html, body { margin: 0; background: transparent; font-family: Inter, -apple-system, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; }
+  .card {
+    box-sizing: border-box; width: 340px; height: 84px; margin: 0; padding: 12px 14px 12px 12px;
+    display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; column-gap: 12px; align-items: center;
+    background: var(--card); border: 1px solid var(--divider); border-radius: 16px;
+    box-shadow: 0 16px 48px rgba(32, 49, 42, 0.14), 0 2px 8px rgba(32, 49, 42, 0.06);
+    opacity: 0; transform: translateY(6px) scale(0.98);
+    transition: opacity 160ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .card.show { opacity: 1; transform: translateY(0) scale(1); }
+  .icon {
+    width: 34px; height: 34px; border-radius: 11px; display: flex; align-items: center; justify-content: center;
+    background: var(--pine-mist); color: var(--pine); font-weight: 700; font-size: 13px; letter-spacing: 0.02em;
+  }
+  .card[data-kind="image"] .icon { background: var(--vermilion-mist); color: var(--vermilion); }
+  .card[data-kind="pending"] .icon, .card[data-kind="error"] .icon { background: #F3EFE3; color: #8A6D1F; }
+  .card[data-kind="undone"] .icon { background: #EEF1EF; color: var(--ink-3); }
+  .body { min-width: 0; }
+  .title { margin: 0; color: var(--ink); font-size: 13px; line-height: 1.35; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta { margin: 4px 0 0; display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .verb { color: var(--ink-3); font-size: 11px; }
+  .source {
+    display: inline-flex; align-items: center; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--vermilion);
+    background: var(--vermilion-mist); border-radius: 6px; padding: 1px 6px;
+  }
+  .undo {
+    appearance: none; border: 1px solid var(--divider); background: var(--card); color: var(--ink-2);
+    border-radius: 999px; padding: 6px 11px; font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap;
+    transition: border-color 120ms ease, color 120ms ease;
+  }
+  .undo:hover { border-color: var(--pine); color: var(--pine); }
+  .undo[hidden] { display: none; }
+</style>
+</head>
+<body>
+  <div class="card" id="card" data-kind="text">
+    <div class="icon" id="icon">文</div>
+    <div class="body">
+      <p class="title" id="title">收下了</p>
+      <p class="meta"><span class="verb" id="verb">收进口袋</span><span class="source" id="source" hidden></span></p>
+    </div>
+    <button class="undo" id="undo" type="button">撤销</button>
+  </div>
+  <script>
+    const card = document.getElementById('card');
+    const icon = document.getElementById('icon');
+    const title = document.getElementById('title');
+    const verb = document.getElementById('verb');
+    const source = document.getElementById('source');
+    const undo = document.getElementById('undo');
+    const ICONS = { text: '文', image: '图', pending: '待', error: '！', undone: '↩' };
+    const VERBS = { text: '收进口袋', image: '收进口袋', pending: '先存在口袋里，联网后补传', error: '没收进去', undone: '' };
+
+    window.meetmindReceipt?.onShow((payload) => {
+      card.dataset.kind = payload.kind || 'text';
+      icon.textContent = ICONS[payload.kind] || '文';
+      title.textContent = payload.title || '收下了';
+      verb.textContent = VERBS[payload.kind] ?? '';
+      if (payload.source) { source.textContent = payload.source; source.hidden = false; } else { source.hidden = true; }
+      undo.hidden = !payload.undoable;
+      card.classList.remove('show');
+      requestAnimationFrame(() => card.classList.add('show'));
+    });
+    undo.addEventListener('click', () => { undo.hidden = true; window.meetmindReceipt?.undo(); });
+    card.addEventListener('mouseenter', () => window.meetmindReceipt?.hover(true));
+    card.addEventListener('mouseleave', () => window.meetmindReceipt?.hover(false));
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') window.meetmindReceipt?.dismiss(); });
+  </script>
+</body>
+</html>
