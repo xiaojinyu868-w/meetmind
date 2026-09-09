@@ -357,11 +357,8 @@ export function GlobalAskPanel({
     if (query) sendQuick(query);
   }, [pendingQuery, sendQuick]);
 
-  const visibleSources = sourceItems.filter((item) => item.status !== 'failed').slice(-3).reverse();
-  // 计数只给「参考范围」抽屉用；第一屏不再念「会参考 6 份…」
-  const currentContextCount = currentMaterials.length + fileUpload.attachedFiles.length;
-  const recentContextCount = learning.recentActivities.length;
-  const memoryContextCount = learning.memories.filter((memory) => memory.status === 'active').length;
+  // 抽屉里列的就是真正会带进对话的那几份（与 currentMaterials 同一口径：最近 6 份）
+  const visibleSources = sourceItems.filter((item) => item.status !== 'failed').slice(-6).reverse();
   const showWelcome = messages.length === 0 && !intentPlan && !intentBusy && !pendingQuery;
   // 能在第一屏点名的材料：用户自己收的（不是系统写的）、不是图、标题是标题而不是一句话
   const namedMaterialTitles = React.useMemo(() => [
@@ -561,10 +558,11 @@ export function GlobalAskPanel({
 
         {contextOpen ? (
           <GlobalAskContextDrawer
-            currentCount={currentContextCount}
-            recentCount={recentContextCount}
-            memoryCount={memoryContextCount}
+            currentLessonTitle={currentTranscript ? (currentLesson.title || GLOBAL_ASK_COPY.desk.currentLesson) : undefined}
             sources={visibleSources}
+            attachedTitles={fileUpload.attachedFiles.map((file) => file.title)}
+            recentActivities={learning.recentActivities}
+            memories={learning.memories}
             activeThread={learning.activeThread}
             onClose={() => setContextOpen(false)}
             onOpenMemory={() => {

@@ -134,6 +134,45 @@ function isSpeakableMemoryTitle(title: string): boolean {
   return t.length > 0 && !/[。！？!?…；;]/.test(t) && displayWidth(t) <= 60;
 }
 
+export interface RecentLesson {
+  /** 触发这条的活动 id */
+  id: string;
+  title: string;
+  /** 听课那天（应用活动也归到课的时间——"昨天听的"指的是听课那天，不是做应用那天） */
+  at: string;
+  /** 最近一次是在这节课上做了哪个应用 */
+  appKey?: string;
+}
+
+/**
+ * 最近上过的课（新 → 旧，同名去重）。应用活动的标题是"完成了「测验」"，不是课名——
+ * 顺着 sessionId 找回那节课；找不到就不算。对话不是"学习现场"，不进来。第一屏与参考范围抽屉共用。
+ */
+export function resolveRecentLessons(activities: readonly LearningActivityEntry[]): RecentLesson[] {
+  const lessonBySession = new Map<string, { title: string; at: string }>();
+  for (const activity of activities) {
+    if (activity.kind === 'lesson' && activity.sessionId && activity.title.trim()) {
+      lessonBySession.set(activity.sessionId, { title: activity.title.trim(), at: activity.occurredAt });
+    }
+  }
+  const seen = new Set<string>();
+  const out: RecentLesson[] = [];
+  for (const activity of [...activities].reverse()) {
+    if (activity.kind !== 'lesson' && activity.kind !== 'app') continue;
+    let title = activity.title.trim();
+    let at = activity.occurredAt;
+    if (activity.kind === 'app') {
+      const lesson = activity.sessionId ? lessonBySession.get(activity.sessionId) : undefined;
+      if (lesson) { title = lesson.title; at = lesson.at; }
+      else if (isActivityDescription(title)) continue;
+    }
+    if (!isMaterialTitle(title) || seen.has(title)) continue;
+    seen.add(title);
+    out.push({ id: activity.id, title, at, appKey: activity.kind === 'app' ? activity.appKey : undefined });
+  }
+  return out;
+}
+
 export function buildAskDesk(input: AskDeskInput): DeskGroup[] {
   const copy = GLOBAL_ASK_COPY.desk;
   const groups: DeskGroup[] = [];
@@ -206,36 +245,13 @@ export function buildAskDesk(input: AskDeskInput): DeskGroup[] {
 
   // 最近学过：没有当前课堂时才需要它把人接回上一节
   if (!input.hasCurrentTranscript) {
-    // 应用活动的标题是"完成了「测验」"，课名要顺着 sessionId 找回那节课
-    // "昨天听的"指的是听课那天，不是做应用那天——时间也跟着课走
-    const lessonBySession = new Map<string, { title: string; at: string }>();
-    for (const activity of input.recentActivities) {
-      if (activity.kind === 'lesson' && activity.sessionId && activity.title.trim()) {
-        lessonBySession.set(activity.sessionId, { title: activity.title.trim(), at: activity.occurredAt });
-      }
-    }
-    const seen = new Set<string>();
-    const recent: DeskItem[] = [];
-    for (const activity of [...input.recentActivities].reverse()) {
-      if (activity.kind !== 'lesson' && activity.kind !== 'app') continue;
-      let title = activity.title.trim();
-      let at = activity.occurredAt;
-      if (activity.kind === 'app') {
-        const lesson = activity.sessionId ? lessonBySession.get(activity.sessionId) : undefined;
-        if (lesson) { title = lesson.title; at = lesson.at; }
-        else if (isActivityDescription(title)) continue;
-      }
-      if (!isMaterialTitle(title) || seen.has(title)) continue;
-      seen.add(title);
-      recent.push({
-        id: `recent:${activity.id}`,
-        label: shortTitle(title, LABEL_MAX),
-        meta: activity.kind === 'app' && activity.appKey ? GLOBAL_ASK_COPY.masteryTrail.stepLabels[activity.appKey] : undefined,
-        prompt: copy.promptFromRecent(shortTitle(title)),
-        at,
-      });
-      if (recent.length >= RECENT_MAX) break;
-    }
+    const recent: DeskItem[] = resolveRecentLessons(input.recentActivities).slice(0, RECENT_MAX).map((lesson) => ({
+      id: `recent:${lesson.id}`,
+      label: shortTitle(lesson.title, LABEL_MAX),
+      meta: lesson.appKey ? GLOBAL_ASK_COPY.masteryTrail.stepLabels[lesson.appKey] : undefined,
+      prompt: copy.promptFromRecent(shortTitle(lesson.title)),
+      at: lesson.at,
+    }));
     if (recent.length > 0) groups.push({ id: 'recent', title: copy.recentTitle, items: recent });
   }
 
