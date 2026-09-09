@@ -7,8 +7,6 @@
 
 export const GLOBAL_ASK_COPY = {
     title: '问同学',
-    subtitle: '相关课堂、资料和你的上下文会自动接上。',
-    welcomeEyebrow: '从你正在学的地方继续',
     quickMode: '直接回答',
     deepMode: '陪我学会',
     modeSelectorLabel: '选择问同学的方式',
@@ -19,17 +17,12 @@ export const GLOBAL_ASK_COPY = {
     historyRestored: '已接回上次对话',
     historyLoading: '正在接回上次对话…',
     freshConversation: '新的对话',
-    emptyTitle: '此刻，想弄明白什么？',
-    emptyBody: '直接说就好。MeetMind 会自己找到相关课堂、材料和你之前留下的线索。',
-    deepEmptyTitle: '这次，想真正学会什么？',
-    deepEmptyBody: 'MeetMind 会先理解你要达到的结果，再陪你解释、练习和验证；只有必要时才问一个选择。',
     quickExamples: ['帮我解释刚才课堂里最难的概念', '把这份材料和我最近学的内容连起来'] as const,
     deepExamples: ['我想系统学懂这个主题，并检验自己是否真的会了', '围绕期末目标，把相关课堂整理成一条学习路线'] as const,
     composerQuick: '问任何正在学、正在想的事',
     composerDeep: '说说这次想真正学会什么',
     reasoningTitle: '思考过程',
     reasoningStreaming: '同学正在想…',
-    startersTitle: '也可以从这里开始',
     send: '发送',
     stop: '停止',
     preparingIntent: '正在接上相关内容…',
@@ -52,22 +45,6 @@ export const GLOBAL_ASK_COPY = {
     contextMixed: '两边一起看',
     contextStatus: '已接入',
     contextAction: '参考范围',
-    contextSummary: (current: number, recent: number, memory: number): string => {
-      const parts = [
-        current > 0 ? `${current} 份当前内容` : '',
-        recent > 0 ? `${recent} 条最近学习` : '',
-        memory > 0 ? `${memory} 条长期理解` : '',
-      ].filter(Boolean);
-      return parts.length > 0 ? `会参考 ${parts.join('、')}` : '这次先从你的问题开始';
-    },
-    /** 只有一份当前材料时点名它（2026-09-08）：比"1 份当前内容"像人话 */
-    contextSummaryNamed: (title: string, recent: number, memory: number): string => {
-      const extra = [
-        recent > 0 ? `${recent} 条最近学习` : '',
-        memory > 0 ? `${memory} 条长期理解` : '',
-      ].filter(Boolean);
-      return `会带上《${title}》${extra.length > 0 ? `，还有 ${extra.join('、')}` : ''}`;
-    },
     /** 空态建议入口（2026-09-08）：从这个人正在学的地方接话，不再是谁看都一样的通用句 */
     starters: {
       quickFromCurrentLesson: '帮我讲清这节课里最难的地方',
@@ -81,8 +58,29 @@ export const GLOBAL_ASK_COPY = {
      * 空态「书桌」（2026-09-08）：同桌此刻在读什么、记得你什么，摆成可见可点的实物；
      * 点一件就变成一句指向具体位置的问题。全是学生自己留下的事实，不推断。
      */
+    /** 第一屏：同学开口的话——句子里的书名 / 时间点 / 概念本身可点 */
+    opening: {
+      speaker: '同学',
+      justHeard: ['刚听完《', '》。'] as const,
+      justHeardThisLesson: '刚听完这节课',
+      period: '。',
+      stoppedAt: ['你在 ', ' 停过。'] as const,
+      stoppedAtMore: (more: number): string => ` 等 ${more + 2} 处停过。`,
+      listSeparator: '、',
+      unstable: ['「', '」还没稳。'] as const,
+      lastTime: ['上次是《', '》。'] as const,
+      stuckBefore: ['你之前卡在「', '」。'] as const,
+      nothingYet: '我还没读到你的课。直接问也行，',
+      nothingYetDemo: '或者先试听一节示例课。',
+      nothingYetNoDemo: '或者先上一节课。',
+      demoAction: '先试听示例课',
+      resumeThread: (title: string): string => `接着上次的「${title}」`,
+      startersEyebrow: '可以从这里开始',
+      placeholderQuick: '想弄明白什么？',
+      placeholderDeep: '这次想真正学会什么？',
+      modeHint: '选一种方式',
+    },
     desk: {
-      eyebrow: '同学正在读',
       readingTitle: '正在读',
       momentsTitle: '你标的',
       unstableTitle: '还没稳',
@@ -90,7 +88,6 @@ export const GLOBAL_ASK_COPY = {
       memoryTitle: '记得',
       currentLesson: '这节课的转录',
       currentLessonMeta: '这节课',
-      overflow: (count: number): string => `+${count}`,
       anchorType: {
         confusion: '没跟上',
         important: '重点',
@@ -98,11 +95,6 @@ export const GLOBAL_ASK_COPY = {
       } as Record<'confusion' | 'important' | 'question', string>,
       memoryChallenge: '上次没弄明白',
       memoryTopic: '在学',
-      emptyTitle: '桌上还是空的。',
-      emptyBody: '上一节课、收一份材料，或者先试听一节示例课——同学读过什么，就会摆在这里。',
-      /** 登录用户没有试听入口（示例课只在访客态自动灌入），不提示它 */
-      emptyBodyNoDemo: '上一节课，或收一份材料——同学读过什么，就会摆在这里。',
-      emptyDemo: '先试听示例课',
       promptFromCurrentLesson: '帮我讲清这节课里最难的地方',
       promptFromLesson: (title: string): string => `帮我讲清《${title}》里最难的地方`,
       promptFromMaterial: (title: string): string => `帮我讲清《${title}》里最难的地方`,

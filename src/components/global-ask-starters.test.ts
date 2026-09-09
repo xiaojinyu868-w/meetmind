@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LearningActivityEntry, LearningMemoryEntry } from '@/types/user';
-import { buildGlobalAskStarters, describeGlobalAskContext } from './global-ask-starters';
+import { buildGlobalAskStarters } from './global-ask-starters';
 
 const lesson: LearningActivityEntry = { id: 'a1', kind: 'lesson', title: '贝叶斯定理入门', occurredAt: '2026-09-08T00:00:00Z' };
 const appActivity: LearningActivityEntry = { id: 'a2', kind: 'app', title: '闪卡训练', occurredAt: '2026-09-08T01:00:00Z' };
@@ -36,16 +36,5 @@ describe('buildGlobalAskStarters', () => {
     const deep = buildGlobalAskStarters({ depth: 'deep', currentMaterialTitles: [], recentActivities: [lesson], memories: [] });
     expect(deep[0]).toBe('围绕《贝叶斯定理入门》，帮我系统学懂并检验是否真的会了');
     expect(deep).toHaveLength(2);
-  });
-});
-
-describe('describeGlobalAskContext', () => {
-  it('只有一份当前材料时点名，多份回退计数', () => {
-    expect(describeGlobalAskContext({ currentMaterialTitles: ['贝叶斯定理入门'], recentCount: 3, memoryCount: 0 }))
-      .toBe('会带上《贝叶斯定理入门》，还有 3 条最近学习');
-    expect(describeGlobalAskContext({ currentMaterialTitles: ['a', 'b'], recentCount: 0, memoryCount: 2 }))
-      .toBe('会参考 2 份当前内容、2 条长期理解');
-    expect(describeGlobalAskContext({ currentMaterialTitles: [], recentCount: 0, memoryCount: 0 }))
-      .toBe('这次先从你的问题开始');
   });
 });

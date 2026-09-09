@@ -55,15 +55,3 @@ export function buildGlobalAskStarters(input: GlobalAskStarterInput): string[] {
   for (const fallback of GLOBAL_ASK_COPY.quickExamples) push(fallback);
   return out;
 }
-
-/** 底栏「会参考…」：只有一份当前材料时直接点名，比"1 份当前内容"更像人话。 */
-export function describeGlobalAskContext(input: {
-  currentMaterialTitles: readonly string[];
-  recentCount: number;
-  memoryCount: number;
-}): string {
-  if (input.currentMaterialTitles.length === 1) {
-    return GLOBAL_ASK_COPY.contextSummaryNamed(shortTitle(input.currentMaterialTitles[0]), input.recentCount, input.memoryCount);
-  }
-  return GLOBAL_ASK_COPY.contextSummary(input.currentMaterialTitles.length, input.recentCount, input.memoryCount);
-}

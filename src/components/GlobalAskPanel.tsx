@@ -35,8 +35,9 @@ import { LearningIntentConfirmationCard } from '@/components/LearningIntentConfi
 import { LearningMemoryPanel } from '@/components/LearningMemoryPanel';
 import { GlobalAskContextDrawer } from '@/components/GlobalAskContextDrawer';
 import { GlobalAskWelcome } from '@/components/GlobalAskWelcome';
-import { buildGlobalAskStarters, describeGlobalAskContext } from '@/components/global-ask-starters';
+import { buildGlobalAskStarters } from '@/components/global-ask-starters';
 import { buildAskDesk } from '@/components/global-ask-desk';
+import { composeAskOpening } from '@/components/global-ask-opening';
 import { buildLocalLearnerContext } from '@/components/learner-context-local';
 import { GUEST_DEMO_LESSON_TITLE, resetDemoEntryConsumed } from '@/components/classroom/guest-demo-entry';
 import { isDemoLessonLoaded } from '@/components/classroom/DemoLessonLoader';
@@ -357,6 +358,7 @@ export function GlobalAskPanel({
   }, [pendingQuery, sendQuick]);
 
   const visibleSources = sourceItems.filter((item) => item.status !== 'failed').slice(-3).reverse();
+  // 计数只给「参考范围」抽屉用；第一屏不再念「会参考 6 份…」
   const currentContextCount = currentMaterials.length + fileUpload.attachedFiles.length;
   const recentContextCount = learning.recentActivities.length;
   const memoryContextCount = learning.memories.filter((memory) => memory.status === 'active').length;
@@ -364,11 +366,6 @@ export function GlobalAskPanel({
     () => [...currentMaterials.map((item) => item.title), ...fileUpload.attachedFiles.map((file) => file.title)],
     [currentMaterials, fileUpload.attachedFiles],
   );
-  const contextSummary = describeGlobalAskContext({
-    currentMaterialTitles,
-    recentCount: recentContextCount,
-    memoryCount: memoryContextCount,
-  });
   const showWelcome = messages.length === 0 && !intentPlan && !intentBusy && !pendingQuery;
   const welcomeStarters = React.useMemo(() => buildGlobalAskStarters({
     depth: effectiveDepth,
@@ -398,6 +395,14 @@ export function GlobalAskPanel({
     trail: masteryTrail,
     memories: learning.memories,
   }), [anchors, currentLessonTitle, currentTranscript.length, fileUpload.attachedFiles, learning.memories, learning.recentActivities, masteryTrail, segments, sourceItems]);
+  // 同学开口的话 + 「可以从这里开始」：从书桌事实说成一两句，不再陈列 chip
+  const opening = React.useMemo(() => composeAskOpening({
+    desk: deskGroups,
+    activeThread: learning.activeThread,
+    fallbackStarters: welcomeStarters,
+    depth: effectiveDepth,
+    canStartDemo: !user,
+  }), [deskGroups, effectiveDepth, learning.activeThread, user, welcomeStarters]);
   // 空桌面的试听入口：只给访客（entry=demo 只在 guest=1 下自动灌课；登录用户从课堂 tab 进）
   const startDemoLesson = React.useCallback(() => {
     resetDemoEntryConsumed();
@@ -429,9 +434,12 @@ export function GlobalAskPanel({
       isDragging={fileUpload.isDragging}
       capabilities={{ file: true, mic: true }}
       onVoiceTranscript={(text) => composer.setValue([composer.value, text].filter(Boolean).join(' '))}
-      placeholder={effectiveDepth === 'deep' ? GLOBAL_ASK_COPY.composerDeep : GLOBAL_ASK_COPY.composerQuick}
+      placeholder={embedded
+        ? (effectiveDepth === 'deep' ? GLOBAL_ASK_COPY.opening.placeholderDeep : GLOBAL_ASK_COPY.opening.placeholderQuick)
+        : (effectiveDepth === 'deep' ? GLOBAL_ASK_COPY.composerDeep : GLOBAL_ASK_COPY.composerQuick)}
       statusLabel={intentBusy ? GLOBAL_ASK_COPY.preparingIntent : undefined}
-      className={embedded ? '!border-0 !bg-transparent !px-0 !pb-3 !pt-0' : undefined}
+      variant={embedded ? 'bare' : 'paper'}
+      className={embedded ? '!px-0 !pb-1 !pt-0' : undefined}
     />
   );
 
@@ -468,7 +476,11 @@ export function GlobalAskPanel({
             <OctoAvatar mood="listening" size="sm" />
             <div className="min-w-0">
               <h1 className="truncate text-[15px] font-semibold text-ink">{GLOBAL_ASK_COPY.title}</h1>
-              <p className="hidden truncate text-[11.5px] text-ink-muted sm:block">{history.hydrated ? (history.restoredTitle ? `${GLOBAL_ASK_COPY.historyRestored} · ${history.restoredTitle}` : GLOBAL_ASK_COPY.subtitle) : GLOBAL_ASK_COPY.historyLoading}</p>
+              {history.hydrated && history.restoredTitle ? (
+                <p className="hidden truncate text-[11.5px] text-ink-muted sm:block">{`${GLOBAL_ASK_COPY.historyRestored} · ${history.restoredTitle}`}</p>
+              ) : !history.hydrated ? (
+                <p className="hidden truncate text-[11.5px] text-ink-muted sm:block">{GLOBAL_ASK_COPY.historyLoading}</p>
+              ) : null}
             </div>
           </div>
           <div className="flex items-center gap-1.5">
@@ -483,40 +495,27 @@ export function GlobalAskPanel({
 
         <div className="flex min-h-0 flex-1">
           <main className="relative flex min-w-0 flex-1 flex-col">
-            {/* 呼吸森林光场铺满整个对话区（空态），composer 与建议卡浮在光上；有消息后退回纸面 */}
-            {showWelcome ? (
-              <div className="v9-aura" aria-hidden>
-                <div className="v9-blob v9-blob-pine" />
-                <div className="v9-blob v9-blob-sky" />
-                <div className="v9-blob v9-blob-sand" />
-              </div>
-            ) : null}
             <ChatMessageList
               watchKey={`${messages.length}:${latestText.length}:${intentBusy ? 1 : 0}`}
               showEmpty={showWelcome}
-              variant={showWelcome ? 'glass' : 'paper'}
+              variant="paper"
               contentMaxWidth="max-w-3xl"
               innerClassName={showWelcome ? 'min-h-full' : 'space-y-4'}
               emptyState={
                 <GlobalAskWelcome
                   depth={effectiveDepth}
-                  prompts={welcomeStarters}
-                  desk={deskGroups}
+                  opening={opening}
                   onStartDemo={user ? undefined : startDemoLesson}
                   deepLocked={deepLocked}
-                  activeThread={learning.activeThread}
                   composer={renderComposer(true)}
-                  contextSummary={contextSummary}
                   onDepthChange={handleDepthChange}
-                  onOpenContext={() => setContextOpen(true)}
                   onChoosePrompt={(prompt) => {
+                    // 「接着上次的…」：接回学习线索走深度模式，其余只是把问题落进输入框
+                    if (learning.activeThread?.status === 'active' && prompt === (learning.activeThread.intent || learning.activeThread.title)) {
+                      setDepth('deep');
+                      setActiveIntent(learningThreadToIntent(learning.activeThread));
+                    }
                     composer.setValue(prompt);
-                    window.setTimeout(() => composer.textareaRef.current?.focus(), 0);
-                  }}
-                  onResumeThread={() => {
-                    setDepth('deep');
-                    if (learning.activeThread) setActiveIntent(learningThreadToIntent(learning.activeThread));
-                    composer.setValue(learning.activeThread?.intent || '');
                     window.setTimeout(() => composer.textareaRef.current?.focus(), 0);
                   }}
                 />

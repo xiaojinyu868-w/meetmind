@@ -1,181 +1,170 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { ArrowRight, Check, ChevronRight, Layers3 } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { LearningThreadEntry } from '@/types/user';
 import { COPY } from '@/lib/ui/copy';
 import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
-import { GlobalAskDesk } from '@/components/GlobalAskDesk';
-import type { DeskGroup, DeskItem } from '@/components/global-ask-desk';
+import type { AskOpening, OpeningPart } from '@/components/global-ask-opening';
 
 /**
- * GlobalAskWelcome — 问同学空态（v9 呼吸森林 · 同桌的书桌）
+ * GlobalAskWelcome — 问同学第一屏：同学在场
  *
- * 问候在上，主角是一张"书桌"：上半是同桌此刻在读的东西（当前课堂、你标的时刻、
- * 还没稳的概念、最近学过、记得的困惑——全是可见可点的实物），输入框坐在这些上下文上面。
- * 点一件实物，一句指向具体位置的问题就落进输入框。视觉用 v9 B 方向（globals.css 的 v9-*
- * 基元）：签名色光场在背后缓慢漂移，Octo 带听课涟漪，表面是浮在光上的毛玻璃。
+ * 之前这一屏是：大头像 + 眉题 + 衬线大标题 + 副标题 + 「上次继续」列表行 + 一张写着「正在读 / 记住」
+ * 标签与 chip 的书桌 + 输入框 + 带勾的模式单选 + 「会参考 6 份当前内容、24 条最近学习、1 条长期线索」。
+ * 那是把上下文当库存陈列的表单，不是一个听过课的人开口。
  *
- * 文案契约不变：全部来自 GLOBAL_ASK_COPY；免费档的深度模式入口带 Pro 标识
- * （`deepLocked`，由 panel 按会员档位传入）。
+ * 现在只有三样东西，一列，左对齐：
+ *   1. 同学开口的一两句话（真实事实，书名 / 时间点 / 概念本身可点）
+ *   2. 输入框——这一屏的主角，模式是输入框脚下两个词，不是单选控件
+ *   3. 最多三行「可以从这里开始」，是句子，不是卡片
+ * 没有光场、没有玻璃叠玻璃、没有计数。参考范围在顶栏，需要时再看。
  */
 
 interface GlobalAskWelcomeProps {
   depth: 'quick' | 'deep';
-  /** 建议入口（宿主按当前材料 / 最近课堂 / 未过去的困惑算好；不传退回通用句） */
-  prompts?: readonly string[];
-  /** 书桌上的实物（宿主用 buildAskDesk 算好；空数组显示空桌面） */
-  desk?: readonly DeskGroup[];
-  /** 空桌面的试听入口 */
+  opening: AskOpening;
+  /** 访客的试听入口（同学还没读到任何东西时给出口） */
   onStartDemo?: () => void;
-  /** 免费档：深度模式（陪我学会）是 Pro/Max 专属，在入口上带 Pro 标识 */
+  /** 免费档：深度模式（陪我学会）是 Pro/Max 专属 */
   deepLocked?: boolean;
-  activeThread?: LearningThreadEntry;
   composer: ReactNode;
-  contextSummary: string;
   onDepthChange: (depth: 'quick' | 'deep') => void;
-  onOpenContext: () => void;
   onChoosePrompt: (prompt: string) => void;
-  onResumeThread: () => void;
+}
+
+function OpeningSentence({ parts, onChoose }: { parts: OpeningPart[]; onChoose: (prompt: string) => void }) {
+  return (
+    <p className="text-[17px] leading-[1.75] tracking-[-0.005em] text-ink sm:text-[18px]">
+      <span className="mr-2 font-serif italic text-pine">{GLOBAL_ASK_COPY.opening.speaker}</span>
+      {parts.map((part, index) => {
+        if (part.kind === 'text' || !part.prompt) return <span key={index}>{part.text}</span>;
+        if (part.kind === 'stamp') {
+          return (
+            <button
+              key={index}
+              type="button"
+              onClick={() => onChoose(part.prompt!)}
+              className="cite-ts mono mx-0.5 -translate-y-px cursor-pointer align-middle text-[12px] transition hover:brightness-95"
+              title={part.prompt}
+            >
+              {part.text}
+            </button>
+          );
+        }
+        // 书名 / 概念：句子里的字，带一条安静的下划线，悬停变成签名色
+        return (
+          <button
+            key={index}
+            type="button"
+            onClick={() => onChoose(part.prompt!)}
+            className="cursor-pointer rounded-sm text-ink underline decoration-pine/35 decoration-[1.5px] underline-offset-[5px] transition hover:text-pine hover:decoration-pine"
+            title={part.prompt}
+          >
+            {part.text}
+          </button>
+        );
+      })}
+    </p>
+  );
 }
 
 export function GlobalAskWelcome({
   depth,
-  prompts: groundedPrompts,
-  desk,
+  opening,
   onStartDemo,
   deepLocked = false,
-  activeThread,
   composer,
-  contextSummary,
   onDepthChange,
-  onOpenContext,
   onChoosePrompt,
-  onResumeThread,
 }: GlobalAskWelcomeProps) {
-  const prompts = groundedPrompts && groundedPrompts.length > 0
-    ? groundedPrompts
-    : depth === 'deep'
-      ? GLOBAL_ASK_COPY.deepExamples
-      : GLOBAL_ASK_COPY.quickExamples;
-  const deskHasItems = Boolean(desk && desk.length > 0);
-  const showStarters = !deskHasItems || depth === 'deep';
-
-  // 光场（v9-aura）由 GlobalAskPanel 铺满整个对话区，这里不再自带——
-  // 此前光场被 max-w-3xl 容器裁成一块"岛"，白色面板里浮着一块渐变，像两层容器。
+  const copy = GLOBAL_ASK_COPY.opening;
   return (
-    <div className="relative mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-4 pb-10 pt-6 sm:px-6">
-
-      {/* ── Hero：Octo + 问候（书桌是主角，问候收小一号） ── */}
-      <div className="relative flex flex-col items-center text-center">
-        <div className="v9-rise v9-d1 relative grid place-items-center p-3">
-          <span className="v9-ring" />
-          <span className="v9-ring v9-ring-delay" />
-          <OctoAvatar mood="listening" size="md" aura={false} />
+    <div className="mx-auto flex w-full max-w-[660px] flex-1 flex-col justify-center px-5 pb-14 pt-6 sm:px-6">
+      {/* 1. 同学开口 */}
+      <div className="flex items-start gap-3.5">
+        <div className="mt-1 shrink-0">
+          <OctoAvatar mood="listening" size="sm" aura={false} />
         </div>
-        <p className="v9-rise v9-d2 mt-2 font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-pine">
-          {GLOBAL_ASK_COPY.welcomeEyebrow}
-        </p>
-        <h2 className="v9-rise v9-d3 mt-2.5 max-w-2xl font-serif text-[28px] italic leading-[1.2] tracking-[-0.02em] text-ink sm:text-[36px]">
-          {depth === 'deep' ? GLOBAL_ASK_COPY.deepEmptyTitle : GLOBAL_ASK_COPY.emptyTitle}
-        </h2>
-        <p className="v9-rise v9-d4 mt-2.5 max-w-lg text-[13px] leading-6 text-ink-secondary">
-          {depth === 'deep' ? GLOBAL_ASK_COPY.deepEmptyBody : GLOBAL_ASK_COPY.emptyBody}
-        </p>
+        <div className="min-w-0 flex-1">
+          <OpeningSentence parts={opening.parts} onChoose={onChoosePrompt} />
+          {opening.empty && onStartDemo ? (
+            <button
+              type="button"
+              onClick={onStartDemo}
+              className="mt-2 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-pine underline-offset-4 hover:underline"
+            >
+              {copy.demoAction}
+              <ArrowRight size={13} />
+            </button>
+          ) : null}
+        </div>
       </div>
 
-      {/* ── 上次还在学：接回线程（玻璃条） ── */}
-      {activeThread?.status === 'active' ? (
-        <button
-          type="button"
-          onClick={onResumeThread}
-          className="v9-rise v9-d4 v9-glass group relative mt-7 flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition hover:-translate-y-0.5 hover:shadow-float"
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-pine/10 text-pine transition group-hover:bg-pine/15"><ArrowRight size={14} /></span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-pine">{GLOBAL_ASK_COPY.threadTitle}</span>
-            <span className="mt-1 block truncate text-[13px] font-semibold text-ink">{activeThread.title}</span>
-          </span>
-          <span className="hidden text-[11px] font-medium text-ink-muted sm:block">{GLOBAL_ASK_COPY.threadResume}</span>
-          <ChevronRight size={14} className="shrink-0 text-ink-muted transition group-hover:translate-x-0.5 group-hover:text-pine" />
-        </button>
-      ) : null}
-
-      {/* ── 主角：书桌（上半是同桌正在读的实物，下半是 composer） ── */}
-      <div className="v9-rise v9-d5 v9-glass relative mt-6 rounded-[28px] transition-shadow duration-500 focus-within:shadow-[0_0_0_4px_rgba(47,107,85,0.1),0_24px_56px_rgba(16,22,15,0.12)]">
-        {desk ? (
-          <>
-            <GlobalAskDesk
-              groups={desk}
-              onChoose={(item: DeskItem) => onChoosePrompt(item.prompt)}
-              onStartDemo={onStartDemo}
-            />
-            <div className="mx-4 mt-4 border-t border-ink/5 sm:mx-5" />
-          </>
-        ) : null}
-        <div className="px-4 pt-4 sm:px-5">{composer}</div>
-        <div className="flex flex-col gap-2 border-t border-ink/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-          <div className="flex items-center gap-1" aria-label={GLOBAL_ASK_COPY.modeSelectorLabel}>
-            {(['quick', 'deep'] as const).map((option) => {
+      {/* 2. 输入框——主角。模式是脚下两个词 */}
+      <div
+        className={cn(
+          'mt-7 rounded-[22px] border border-divider bg-card shadow-card transition-[box-shadow,border-color] duration-300',
+          'focus-within:border-pine/40 focus-within:shadow-[0_0_0_4px_rgba(47,107,85,0.08),0_16px_48px_rgba(32,49,42,0.10)]',
+        )}
+      >
+        <div className="px-4 pt-3.5 sm:px-5">{composer}</div>
+        <div className="flex items-center justify-between gap-3 px-4 pb-3 sm:px-5">
+          <div className="flex items-center gap-1 text-[12.5px]" role="radiogroup" aria-label={GLOBAL_ASK_COPY.modeSelectorLabel}>
+            {(['quick', 'deep'] as const).map((option, index) => {
               const selected = depth === option;
               return (
-                <button
-                  key={option}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => onDepthChange(option)}
-                  className={cn(
-                    'inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[11.5px] transition',
-                    selected ? 'bg-ink text-white shadow-sm' : 'text-ink-muted hover:bg-pine/8 hover:text-ink',
-                  )}
-                >
-                  {selected ? <Check size={11} /> : null}
-                  {option === 'quick' ? GLOBAL_ASK_COPY.quickMode : GLOBAL_ASK_COPY.deepMode}
-                  {option === 'deep' && deepLocked ? (
-                    <span className={cn(
-                      'rounded-full px-1.5 py-px text-[9px] font-semibold',
-                      selected ? 'bg-white/20 text-white' : 'bg-pine/10 text-pine',
-                    )}>
-                      {COPY.membership.tierName.pro}
-                    </span>
-                  ) : null}
-                </button>
+                <span key={option} className="inline-flex items-center">
+                  {index > 0 ? <span className="mx-1.5 text-ink-muted/60" aria-hidden>·</span> : null}
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => onDepthChange(option)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 transition',
+                      selected
+                        ? 'font-semibold text-ink underline decoration-pine decoration-[1.5px] underline-offset-[6px]'
+                        : 'text-ink-muted hover:text-ink',
+                    )}
+                  >
+                    {option === 'quick' ? GLOBAL_ASK_COPY.quickMode : GLOBAL_ASK_COPY.deepMode}
+                    {option === 'deep' && deepLocked ? (
+                      <span className="rounded-full bg-pine/10 px-1.5 py-px font-mono text-[9px] font-semibold text-pine">
+                        {COPY.membership.tierName.pro}
+                      </span>
+                    ) : null}
+                  </button>
+                </span>
               );
             })}
           </div>
-          <button
-            type="button"
-            onClick={onOpenContext}
-            className="inline-flex min-w-0 items-center gap-1.5 text-left text-[10.5px] text-ink-muted transition hover:text-pine"
-          >
-            <Layers3 size={12} className="shrink-0" />
-            <span className="truncate">{contextSummary}</span>
-            <ChevronRight size={11} className="shrink-0" />
-          </button>
+          <span className="hidden text-[11px] text-ink-muted sm:inline">
+            {depth === 'quick' ? GLOBAL_ASK_COPY.quickModeBody : GLOBAL_ASK_COPY.deepModeBody}
+          </span>
         </div>
       </div>
 
-      {/* ── 建议入口：玻璃卡，垫在 composer 下面。桌上已有实物时（直接回答），泛化句只是重复，收起；
-            深度模式的句式不同（系统学懂并检验），仍保留 ── */}
-      {showStarters ? (
-      <div className="v9-rise v9-d6 relative mt-6">
-        <p className="text-center font-mono text-[9.5px] uppercase tracking-[0.16em] text-ink-muted">{GLOBAL_ASK_COPY.startersTitle}</p>
-        <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
-          {prompts.map((prompt) => (
-            <button
-              key={prompt}
-              type="button"
-              onClick={() => onChoosePrompt(prompt)}
-              className="v9-glass group flex items-center justify-between gap-3 rounded-2xl px-4 py-3.5 text-left transition duration-300 hover:-translate-y-0.5 hover:bg-white/80 hover:shadow-float"
-            >
-              <span className="text-[12.5px] leading-5 text-ink-secondary transition group-hover:text-ink">{prompt}</span>
-              <ArrowRight size={14} className="shrink-0 text-ink-muted transition group-hover:translate-x-1 group-hover:text-pine" />
-            </button>
-          ))}
+      {/* 3. 可以从这里开始——句子，不是卡片 */}
+      {opening.starters.length > 0 ? (
+        <div className="mt-8">
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{copy.startersEyebrow}</p>
+          <ul className="mt-2.5 flex flex-col">
+            {opening.starters.map((starter) => (
+              <li key={starter.id}>
+                <button
+                  type="button"
+                  onClick={() => onChoosePrompt(starter.prompt)}
+                  className="group flex w-full items-baseline gap-2.5 rounded-lg px-1 py-2 text-left transition hover:bg-paper-warm/70"
+                >
+                  <ArrowRight size={13} className="mt-1 shrink-0 translate-y-px text-ink-muted transition group-hover:translate-x-0.5 group-hover:text-pine" />
+                  <span className="text-[14px] leading-6 text-ink-secondary transition group-hover:text-ink">{starter.text}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
-      </div>
       ) : null}
     </div>
   );

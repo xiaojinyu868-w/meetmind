@@ -24,7 +24,11 @@ import { cn } from '@/lib/utils';
 import { VoiceMicButton } from '@/components/VoiceMicButton';
 import type { AttachedFile } from './hooks/useChatFileUpload';
 
-export type ChatComposerVariant = 'paper' | 'glass';
+/**
+ * paper：纸面（默认）；glass：沉浸式深色背景上的毛玻璃；
+ * bare：宿主自己画外框（问同学第一屏的输入卡）——内层不再套一圈边框与底色，避免"框里套框"。
+ */
+export type ChatComposerVariant = 'paper' | 'glass' | 'bare';
 
 export interface ChatComposerCapabilities {
   /** 麦克风按钮（语音→文字回填） */
@@ -218,27 +222,37 @@ export function ChatComposer({
   const wrapperClasses =
     variant === 'glass'
       ? 'border-t border-white/15 bg-white/8 backdrop-blur-2xl'
-      : 'border-t border-divider-light bg-white';
+      : variant === 'bare'
+        ? 'border-0 bg-transparent'
+        : 'border-t border-divider-light bg-white';
 
   const innerInputClasses =
     variant === 'glass'
       ? 'flex flex-1 items-end rounded-2xl border border-white/20 bg-white/15 px-3 py-1.5 backdrop-blur-md'
-      : 'flex flex-1 items-end rounded-2xl border border-divider bg-paper px-3 py-1.5';
+      : variant === 'bare'
+        ? 'flex flex-1 items-end px-0 py-0.5'
+        : 'flex flex-1 items-end rounded-2xl border border-divider bg-paper px-3 py-1.5';
 
   const textareaClasses =
     variant === 'glass'
       ? 'flex-1 resize-none bg-transparent px-1 py-1.5 text-[15px] leading-6 text-white placeholder:text-white/55 focus:outline-none disabled:opacity-50'
-      : 'flex-1 resize-none bg-transparent px-1 py-1.5 text-[15px] leading-6 text-ink placeholder:text-ink-muted focus:outline-none disabled:opacity-50';
+      : variant === 'bare'
+        ? 'flex-1 resize-none bg-transparent px-1 py-2 text-[16.5px] leading-7 text-ink placeholder:text-ink-muted/80 focus:outline-none disabled:opacity-50'
+        : 'flex-1 resize-none bg-transparent px-1 py-1.5 text-[15px] leading-6 text-ink placeholder:text-ink-muted focus:outline-none disabled:opacity-50';
 
   const iconBtnClasses =
     variant === 'glass'
       ? 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/12 text-white/85 backdrop-blur-md transition-colors hover:bg-white/22 disabled:opacity-40'
-      : 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-divider bg-white text-ink-secondary transition-colors hover:bg-paper-warm disabled:opacity-40';
+      : variant === 'bare'
+        ? 'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-paper-warm hover:text-ink disabled:opacity-40'
+        : 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-divider bg-white text-ink-secondary transition-colors hover:bg-paper-warm disabled:opacity-40';
 
   const sendBtnClasses =
     variant === 'glass'
       ? 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-ink transition-colors hover:bg-white/90 disabled:opacity-30'
-      : 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ink text-white transition-colors hover:bg-pine disabled:opacity-30';
+      : variant === 'bare'
+        ? 'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-pine text-white transition-colors hover:opacity-90 disabled:bg-divider disabled:text-ink-muted disabled:opacity-100'
+        : 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ink text-white transition-colors hover:bg-pine disabled:opacity-30';
 
   const stopBtnClasses =
     variant === 'glass'
