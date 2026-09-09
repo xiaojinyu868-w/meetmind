@@ -45,5 +45,29 @@ module.exports = {
       min_uptime: '10s',
       restart_delay: 1000,
     },
+    {
+      // 共享记忆（Hindsight）可靠投递 worker：与 Web 同 cwd / 同库 / 同 .env（worker.ts 自己加载 .env），
+      // 把 ContextEvent 投给 Hindsight 并推进暂停 / 忘记的清理。Web 不依赖它在线（202 只表示本地接收）。
+      // 部署：make deploy 只重载 meetmind；worker 单独 `pm2 startOrReload ecosystem.config.js --only meetmind-context-worker`
+      name: 'meetmind-context-worker',
+      script: 'node_modules/tsx/dist/cli.mjs',
+      args: 'src/lib/services/context/worker.ts',
+      cwd: '/mnt/meetmind-capture-v1-server-handoff',
+      interpreter: '/usr/local/bin/node',
+      env: { NODE_ENV: 'production' },
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '512M',
+      error_file: '/root/.pm2/logs/meetmind-context-worker-error.log',
+      out_file: '/root/.pm2/logs/meetmind-context-worker-out.log',
+      merge_logs: true,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      kill_timeout: 15000,
+      max_restarts: 10,
+      min_uptime: '10s',
+      restart_delay: 2000,
+    },
   ],
 };
