@@ -1322,6 +1322,17 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
               <PodcastPlayerBar src={podcastPreview.url} autoPlay />
             </div>
             <div className={styles.previewActions}>
+              {/* 试听卡之外还有逐字稿与章节——此前缓存有音频时用户永远到不了播客窗口 */}
+              <button
+                type="button"
+                onClick={() => {
+                  setPodcastPreview(null);
+                  openAppSurface('audio-overview');
+                }}
+                className={styles.previewPrimaryAction}
+              >
+                {APPS_COPY.podcast.openScript}
+              </button>
               <button
                 type="button"
                 onClick={() => setPodcastPreview(null)}

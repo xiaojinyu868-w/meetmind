@@ -76,26 +76,16 @@ export function ExplainerWindow({ result, transcript }: ExplainerWindowProps) {
     return <AppWindowPlaceholder status="empty" appName={APPS_COPY.explainer.appName} />;
   }
 
-  const stats = payload.quoteStats;
-
   // 窗口本身是纸面（和闪卡 / 测验 / 导图同一皮肤），黑板只是墙上那一块（BlackboardPlayer 的深色框）。
-  // 此前整个窗口刷成深色房间：复习页中栏又窄又高，纸面只占上面 1/3，其余全黑，像坏了的投影幕
+  // 此前整个窗口刷成深色房间：复习页中栏又窄又高，纸面只占上面 1/3，其余全黑，像坏了的投影幕。
+  // 头部只剩课题：「N 处老师原话已核对」这类核对统计是引用系统的内部事，不该出现在一堂课的抬头上——
+  // quoteStats 仍在 payload 里（normalizeExplainerPayload 保留字段），只是不再当视觉主角。
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-1 pb-3">
+      <header className="px-1 pb-3">
         <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">
           {payload.title}
         </h2>
-        {stats && stats.verified > 0 ? (
-          <span className="text-[12px] text-pine">
-            {APPS_COPY.explainer.quotesVerified(stats.verified)}
-          </span>
-        ) : null}
-        {stats && stats.downgraded > 0 ? (
-          <span className="text-[12px] text-ink-muted">
-            {APPS_COPY.explainer.quotesDowngraded(stats.downgraded)}
-          </span>
-        ) : null}
       </header>
       <div className="min-h-0 flex-1">
         <BlackboardPlayer script={payload.script} />

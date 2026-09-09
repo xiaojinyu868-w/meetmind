@@ -51,6 +51,8 @@ function StatusIndicator({
   };
   const { dot, label, pulse } = config[status];
   const textColor = immersive ? 'text-white/55' : 'text-ink-muted';
+  // 做好了就不说：产物在眼前，一枚「做好了」的绿点只是噪音（正在做 / 没做好 / 待开始才值得占一行字）
+  if (status === 'success') return null;
 
   return (
     <span className={`inline-flex items-center gap-1.5 text-[11.5px] ${textColor}`} aria-label={label}>

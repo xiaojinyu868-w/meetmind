@@ -8,6 +8,20 @@
 export const APPS_COPY = {
     inlineSource: '已放进对话',
     /**
+     * 应用窗口公共壳（复习页中栏宿主 / 浮窗 / 独立页）。
+     * 口吻：动作全是两个字的动词，退成文字，不做 pill；状态只在"正在做 / 没做好"时说话，做好了就不说。
+     */
+    shell: {
+      fullscreen: '全屏',
+      exitFullscreen: '退出全屏',
+      close: '关闭',
+      minimize: '收起',
+      back: '返回',
+      generating: '正在做…',
+      crashed: (appName: string): string => `${appName}这次没显示出来`,
+      crashedRetry: '再试一次',
+    },
+    /**
      * 课后学习页 v2（2026-09-08）：一件事优先 + 学习路径 + 结果跟着人走。
      * 口吻：同桌陈述事实，不下命令；理由必须是学生能核对的（时刻、难点、上一步的结果）。
      */
@@ -323,12 +337,15 @@ export const APPS_COPY = {
       emptyBody: '开始整理后，会直接得到一版可以播放的课堂播客。',
       scriptCopied: '脚本已复制',
       copyFailed: '复制失败，请手动选择脚本内容',
-      details: '脚本与章节',
-      script: '播客脚本',
-      copyScript: '复制脚本',
+      /** 逐字稿说话人兜底名（模型给的是音色 id 时） */
+      hostA: '主持人 A',
+      hostB: '主持人 B',
+      chapters: '章节',
+      script: '逐字稿',
+      /** 试听卡上的入口：进完整播客窗口看逐字稿与章节 */
+      openScript: '看逐字稿',
+      copyScript: '复制',
       chapter: (index: number): string => `章节 ${index}`,
-      chapterEmpty: '这一章暂时没有摘要。',
-      seekChapter: '回到课堂片段',
       audioGenerating: '正在准备音频',
       audioRetry: '音频没做好，点这里再试一次',
       audioGeneratingHint: '完成后这里会直接变成播放条。',

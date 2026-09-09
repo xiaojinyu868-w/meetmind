@@ -64,17 +64,22 @@ function groupLabel(group: TeachBackQuadrantGroup): string {
   return copy.quadrantUncovered;
 }
 
+/**
+ * 回到老师原话——最轻的存在：一枚 ↩，hover 这一条时才出现，title 里才有时间戳。
+ * 此前是「[MM:SS] 回到老师原话」一整行绿链接，把核对结果页做成了引用系统的展示柜。
+ */
 function EvidenceButton({ item, onSeek }: { item: TeachBackEvaluationItem; onSeek?: (startMs: number) => void }) {
-  if (!item.evidence) return null;
-  const label = `[${formatEvidenceTimestamp(item.evidence.startMs)}] ${APPS_COPY.teachBack.backToEvidence}`;
-  if (!onSeek) return <span className="font-mono-cite text-[11px] text-ink-muted">{label}</span>;
+  if (!item.evidence || !onSeek) return null;
+  const startMs = item.evidence.startMs;
   return (
     <button
       type="button"
-      onClick={() => onSeek(item.evidence!.startMs)}
-      className="font-mono-cite text-[11px] text-pine underline decoration-pine/40 underline-offset-2 transition-colors hover:text-pine-mist"
+      onClick={() => onSeek(startMs)}
+      title={`${APPS_COPY.teachBack.backToEvidence} · ${formatEvidenceTimestamp(startMs)}`}
+      aria-label={`${APPS_COPY.teachBack.backToEvidence} ${formatEvidenceTimestamp(startMs)}`}
+      className="text-[12px] text-ink-muted opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-ink"
     >
-      {label}
+      ↩
     </button>
   );
 }
@@ -334,17 +339,18 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
                 {group.key === 'blind-spot' ? (
                   <p className="mt-1 text-[12px] leading-5 text-ink-muted">{APPS_COPY.teachBack.blindSpotHint}</p>
                 ) : null}
-                <div className="mt-2 flex flex-col gap-2">
+                {/* 一组一张纸：条目之间只有一道细线；盲区用左侧一道朱批竖线标出，不再一条一个描边卡片 */}
+                <div className="mt-2 divide-y divide-divider">
                   {group.items.map((item) => (
                     <div
                       key={item.targetId}
-                      className={`rounded-[14px] border bg-card px-4 py-3 ${
-                        group.key === 'blind-spot' ? 'border-vermilion/35' : 'border-divider'
-                      }`}
+                      className={`group flex gap-3 py-3 ${group.key === 'blind-spot' ? 'border-l-2 border-vermilion pl-3' : ''}`}
                     >
-                      <p className="text-[14px] font-medium leading-6 text-ink">{item.point}</p>
-                      <p className="mt-1 text-[12px] leading-5 text-ink-secondary">{item.note}</p>
-                      <div className="mt-2 flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[14px] font-medium leading-6 text-ink">{item.point}</p>
+                        <p className="mt-0.5 text-[12px] leading-5 text-ink-secondary">{item.note}</p>
+                      </div>
+                      <div className="flex shrink-0 items-start gap-3 pt-1">
                         <EvidenceButton item={item} onSeek={onSeek} />
                         {group.key === 'blind-spot' || group.key === 'aware-gap' ? (
                           <button
@@ -359,7 +365,7 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
                               voice.unlockAudio();
                               setPhase('teach');
                             }}
-                            className="flex-shrink-0 rounded-full border border-pine/40 px-2.5 py-1 text-[11px] font-medium text-pine transition-colors hover:bg-pine-mist"
+                            className="text-[12px] font-medium text-pine underline decoration-pine/30 underline-offset-[3px] transition-colors hover:decoration-pine"
                           >
                             {APPS_COPY.teachBack.reteachPoint}
                           </button>

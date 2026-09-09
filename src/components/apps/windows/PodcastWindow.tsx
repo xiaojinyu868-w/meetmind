@@ -1,16 +1,26 @@
 'use client';
 
+/**
+ * PodcastWindow — 课堂播客窗口。
+ *
+ * 一个主角：播放条。下面是"边听边看"的脚本——像播客 App 的逐字稿，不是一列圆角卡片：
+ * 说话人是左侧一枚小字标签，正在播的那句加一道朱批竖线、字变墨色，点任意一句跳到那里。
+ * 章节只是一份安静的目录（标题 + 一句摘要）。
+ *
+ * 2026-09-09：去掉「回到课堂片段」与 EvidenceChip——播客的时间轴是播客自己的，
+ * 章节引用的课堂时间戳与音频位置根本不对应；"回到老师原话"也不该是一个播客窗口的视觉主角。
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PodcastPlayerBar } from './PodcastPlayerBar';
 import { toast } from 'sonner';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { AppTaskState } from '@/components/apps/hooks/useAppExecution';
 import type { TranscriptSegment } from '@/types';
-import { EvidenceChip } from '@/components/apps/evidence/EvidenceChip';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
 import { RefreshCw, Loader2 } from 'lucide-react';
 import { APPS_COPY } from '@/lib/ui/copy-apps';
-import { isInternalPodcastFailureSection } from './podcast-window-model';
+import { splitPodcastSections } from './podcast-window-model';
 
 interface PodcastWindowProps {
   result: AppExecutionResult | null;
@@ -48,25 +58,28 @@ function sanitizeNarration(text: string): string {
 
 function normalizeSpeaker(raw: string | undefined, index: number, mapping: Map<string, string>): string {
   const speaker = (raw || '').trim();
-  if (!speaker) return index % 2 === 0 ? '主持人A' : '主持人B';
+  const copy = APPS_COPY.podcast;
+  if (!speaker) return index % 2 === 0 ? copy.hostA : copy.hostB;
   if (mapping.has(speaker)) return mapping.get(speaker) as string;
   if (SPEAKER_ID_PATTERN.test(speaker)) {
-    const alias = mapping.size % 2 === 0 ? '主持人A' : '主持人B';
+    const alias = mapping.size % 2 === 0 ? copy.hostA : copy.hostB;
     mapping.set(speaker, alias);
     return alias;
   }
   return speaker;
 }
 
-export function PodcastWindow({ result, transcript, taskState, onSeek, onRegenerate }: PodcastWindowProps) {
+export function PodcastWindow({ result, transcript, taskState, onRegenerate }: PodcastWindowProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const scriptContainerRef = useRef<HTMLDivElement>(null);
   const [activeLineIndex, setActiveLineIndex] = useState(-1);
   const payload = (result?.render?.payload || {}) as PodcastPayload;
   const isRegenerating = taskState?.status === 'running';
-  const sections = Array.isArray(payload.sections)
-    ? payload.sections.filter((section) => !isInternalPodcastFailureSection(section))
-    : [];
+  const { overview, chapters } = useMemo(
+    () => splitPodcastSections(Array.isArray(payload.sections) ? payload.sections : []),
+    [payload.sections],
+  );
+  const overviewText = sanitizeNarration(overview?.body || '');
 
   const scriptLines = useMemo(() => {
     const lines = Array.isArray(payload.lines) ? payload.lines : [];
@@ -79,10 +92,14 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
       .filter((line) => line.line);
   }, [payload.lines]);
 
-  const chapterCitations = useMemo(
-    () => result?.cards.map((card) => card.citations?.[0] || null) || [],
-    [result?.cards]
-  );
+  /** 两位主持人各自一个稳定的字母，做左侧的说话人标签 */
+  const speakerInitials = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const line of scriptLines) {
+      if (!map.has(line.speaker)) map.set(line.speaker, String.fromCharCode(65 + (map.size % 26)));
+    }
+    return map;
+  }, [scriptLines]);
 
   const scriptPlainText = useMemo(
     () => scriptLines.map((line) => `${line.speaker}：${line.line}`).join('\n\n'),
@@ -147,149 +164,114 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
     return <AppWindowPlaceholder status="loading" appName={APPS_COPY.podcast.appName} transcript={transcript} />;
   }
 
-  const seekAudio = (startMs: number) => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = Math.max(0, startMs / 1000);
-      void audioRef.current.play().catch(() => undefined);
-    }
-    onSeek?.(startMs);
-  };
-
   const seekToLine = (lineIndex: number) => {
     if (!audioRef.current || scriptLines.length === 0) return;
     const duration = audioRef.current.duration || 1;
-    const targetTime = (lineIndex / scriptLines.length) * duration;
-    audioRef.current.currentTime = targetTime;
+    audioRef.current.currentTime = (lineIndex / scriptLines.length) * duration;
     void audioRef.current.play().catch(() => undefined);
   };
 
-  const supportingMaterial = scriptLines.length > 0 || sections.length > 0 ? (
-    <details className="mt-3 border-t border-divider pt-3" open={!payload.audioUrl}>
-      <summary className="cursor-pointer select-none text-xs font-medium text-ink-secondary hover:text-ink">
-        {APPS_COPY.podcast.details}
-      </summary>
-      <div className="mt-3 space-y-4">
-        {scriptLines.length > 0 ? (
-          <div>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold tracking-[0.12em] text-ink-muted">{APPS_COPY.podcast.script}</p>
-              <button
-                type="button"
-                onClick={copyScript}
-                className="rounded-full border border-divider bg-white px-2.5 py-1 text-[11px] font-medium text-ink-secondary transition hover:bg-paper-warm"
-              >
-                {APPS_COPY.podcast.copyScript}
-              </button>
-            </div>
-            <div ref={scriptContainerRef} className="max-h-[480px] space-y-2 overflow-y-auto">
-              {scriptLines.map((line, index) => {
-                const isActive = index === activeLineIndex;
-                return (
-                  <button
-                    key={`line-${index}`}
-                    type="button"
-                    data-line-index={index}
-                    onClick={() => seekToLine(index)}
-                    className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${
-                      isActive
-                        ? 'border-vermilion/40 bg-vermilion-mist/50 ring-1 ring-vermilion/20'
-                        : 'border-divider bg-paper-warm hover:bg-white'
-                    }`}
-                  >
-                    <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${isActive ? 'text-vermilion' : 'text-ink-muted'}`}>
-                      {line.speaker}
-                    </p>
-                    <p className={`mt-2 text-sm leading-7 ${isActive ? 'text-ink' : 'text-ink-secondary'}`}>
-                      {line.line}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
+  const hasAudio = Boolean(payload.audioUrl);
 
-        {sections.length > 0 ? (
-          <div className="grid gap-3">
-            {sections.map((section, index) => {
-              const citation = chapterCitations[index];
-              return (
-                <article key={section.id || `section-${index}`} className="rounded-2xl border border-divider bg-paper-warm p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-ink">{section.title || APPS_COPY.podcast.chapter(index + 1)}</p>
-                      <p className="mt-1 text-sm leading-6 text-ink-secondary">
-                        {sanitizeNarration(section.body || '') || APPS_COPY.podcast.chapterEmpty}
-                      </p>
-                    </div>
-                    {citation ? (
-                      <button
-                        type="button"
-                        className="rounded-full border border-divider bg-white px-3 py-1.5 text-xs font-medium text-ink-secondary hover:bg-paper-warm"
-                        onClick={() => seekAudio(citation.startMs)}
-                      >
-                        {APPS_COPY.podcast.seekChapter}
-                      </button>
-                    ) : null}
-                  </div>
-                  {citation ? (
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <EvidenceChip citation={citation} transcript={transcript} onSeek={seekAudio} />
-                    </div>
+  return (
+    <section className="mx-auto flex max-w-2xl flex-col gap-6" data-testid="podcast-window">
+      {hasAudio ? (
+        <PodcastPlayerBar ref={audioRef} src={payload.audioUrl as string} title={result?.render?.title || undefined} />
+      ) : (
+        /* 音频未就绪（如火山 403）：播放条形态的重试条，点整条重新生成；成功后同位置直接变成播放条 */
+        <button
+          type="button"
+          onClick={onRegenerate}
+          disabled={!onRegenerate || isRegenerating}
+          className="flex w-full items-center gap-3.5 rounded-[18px] border border-divider bg-paper-warm px-3.5 py-3 text-left transition hover:bg-paper-deep disabled:cursor-default disabled:opacity-70"
+          aria-label={isRegenerating ? APPS_COPY.podcast.audioGenerating : APPS_COPY.podcast.audioRetry}
+        >
+          <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-ink text-white">
+            {isRegenerating ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] font-semibold text-ink">
+              {isRegenerating ? APPS_COPY.podcast.audioGenerating : APPS_COPY.podcast.audioRetry}
+            </span>
+            <span className="mt-0.5 block truncate text-[12px] text-ink-muted">
+              {isRegenerating
+                ? APPS_COPY.podcast.audioGeneratingHint
+                : scriptLines.length > 0
+                  ? APPS_COPY.podcast.audioRetryHint
+                  : APPS_COPY.podcast.audioRetryNoScriptHint}
+            </span>
+          </span>
+        </button>
+      )}
+
+      {/* 开场简介：这期播客讲什么，一段话，放在播放条正下方 */}
+      {overviewText ? <p className="text-[13px] leading-6 text-ink-secondary">{overviewText}</p> : null}
+
+      {chapters.length > 0 ? (
+        <nav aria-label={APPS_COPY.podcast.chapters}>
+          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-ink-muted">{APPS_COPY.podcast.chapters}</p>
+          <ol className="mt-2 divide-y divide-divider">
+            {chapters.map((section, index) => (
+              <li key={section.id || `section-${index}`} className="flex gap-3 py-2.5">
+                <span className="w-5 shrink-0 pt-px font-mono text-[11px] tabular-nums text-ink-muted">{String(index + 1).padStart(2, '0')}</span>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-medium leading-5 text-ink">{section.title || APPS_COPY.podcast.chapter(index + 1)}</p>
+                  {sanitizeNarration(section.body || '') ? (
+                    <p className="mt-0.5 text-[12px] leading-5 text-ink-muted">{sanitizeNarration(section.body || '')}</p>
                   ) : null}
-                </article>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      ) : null}
+
+      {scriptLines.length > 0 ? (
+        <div>
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-ink-muted">{APPS_COPY.podcast.script}</p>
+            <button type="button" onClick={copyScript} className="text-[12px] text-ink-muted transition hover:text-ink">
+              {APPS_COPY.podcast.copyScript}
+            </button>
+          </div>
+          {/* 逐字稿：说话人字母在左栏，正文在右；正在播的一句竖一道朱批、字变墨色。点任意一句跳到那里。 */}
+          <div ref={scriptContainerRef} className="mt-3 flex flex-col">
+            {scriptLines.map((line, index) => {
+              const isActive = index === activeLineIndex;
+              const initial = speakerInitials.get(line.speaker) || 'A';
+              return (
+                <button
+                  key={`line-${index}`}
+                  type="button"
+                  data-line-index={index}
+                  onClick={() => seekToLine(index)}
+                  disabled={!hasAudio}
+                  title={line.speaker}
+                  className={`group grid grid-cols-[28px_1fr] gap-x-3 border-l-2 py-2 pl-3 text-left transition-colors disabled:cursor-default ${
+                    isActive ? 'border-vermilion' : 'border-transparent hover:border-divider'
+                  }`}
+                >
+                  <span
+                    className={`mt-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold transition-colors ${
+                      isActive
+                        ? 'bg-ink text-white'
+                        : initial === 'A'
+                          ? 'bg-pine-mist text-pine'
+                          : 'bg-vermilion-fog text-vermilion-deep'
+                    }`}
+                    aria-hidden
+                  >
+                    {initial}
+                  </span>
+                  <p className={`text-[14px] leading-7 transition-colors ${isActive ? 'text-ink' : 'text-ink-secondary group-hover:text-ink'}`}>
+                    {line.line}
+                  </p>
+                </button>
               );
             })}
           </div>
-        ) : null}
-      </div>
-    </details>
-  ) : null;
-
-  return (
-    <section className="space-y-4" data-testid="podcast-window">
-      <div className="rounded-2xl border border-divider bg-white p-4 sm:p-5">
-        {payload.audioUrl ? (
-          <>
-            {/* 生成成功：首页就是一条播放条（v7 皮肤，不再是浏览器原生控件），其他都收起来 */}
-            <PodcastPlayerBar ref={audioRef} src={payload.audioUrl} title={result?.render?.title || undefined} />
-
-            {supportingMaterial}
-          </>
-        ) : (
-          /* 音频未就绪（如火山 403）：播放条形态的重试条，点整条重新生成；
-             生成中显示 spinner，成功后同位置直接变成上方播放条 */
-          <>
-            <button
-              type="button"
-              onClick={onRegenerate}
-              disabled={!onRegenerate || isRegenerating}
-              className="flex w-full items-center gap-4 rounded-xl bg-paper-warm px-4 py-3 text-left transition hover:bg-paper-deep disabled:cursor-default disabled:opacity-70"
-              aria-label={isRegenerating ? APPS_COPY.podcast.audioGenerating : APPS_COPY.podcast.audioRetry}
-            >
-              <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-ink text-white">
-                {isRegenerating ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold text-ink">
-                  {isRegenerating ? APPS_COPY.podcast.audioGenerating : APPS_COPY.podcast.audioRetry}
-                </span>
-                <span className="mt-0.5 block truncate text-xs text-ink-muted">
-                  {isRegenerating
-                    ? APPS_COPY.podcast.audioGeneratingHint
-                    : supportingMaterial
-                      ? APPS_COPY.podcast.audioRetryHint
-                      : APPS_COPY.podcast.audioRetryNoScriptHint}
-                </span>
-              </span>
-              <span className="flex-shrink-0 rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-white">
-                {isRegenerating ? APPS_COPY.podcast.generating : APPS_COPY.podcast.retry}
-              </span>
-            </button>
-            {supportingMaterial}
-          </>
-        )}
-      </div>
+        </div>
+      ) : null}
     </section>
   );
 }

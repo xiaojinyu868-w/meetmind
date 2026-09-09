@@ -7,6 +7,7 @@ import type { Anchor, TranscriptSegment } from '@/types';
 import type { DataSourceType } from '@/lib/ai-native/types';
 import { getWorkshopAppByKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import type { FloatingWorkshopWindowState } from './workshop-window-state';
 import { useAppExecution, type AppTaskState } from '@/components/apps/hooks/useAppExecution';
 import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
@@ -48,17 +49,16 @@ class WindowErrorBoundary extends React.Component<WindowErrorBoundaryProps, Wind
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
             </svg>
           </div>
-          <p className="text-sm font-medium text-ink-secondary">{this.props.appName} 渲染出错</p>
-          <p className="max-w-xs text-xs text-ink-muted">{this.state.error?.message || '未知错误'}</p>
+          <p className="text-sm font-medium text-ink-secondary">{APPS_COPY.shell.crashed(this.props.appName)}</p>
           <button
             type="button"
-            className="rounded-lg border border-divider px-3 py-1.5 text-xs font-medium text-ink-secondary hover:bg-paper-warm hover:text-ink"
+            className="text-xs font-medium text-pine underline decoration-pine/30 underline-offset-[3px] hover:decoration-pine"
             onClick={() => {
               this.setState({ hasError: false, error: undefined });
               this.props.onRetry?.();
             }}
           >
-            重试
+            {APPS_COPY.shell.crashedRetry}
           </button>
         </div>
       );
@@ -145,11 +145,11 @@ function taskLabel(taskState: AppTaskState): string {
   return COPY.apps.matrix.waiting;
 }
 
-function taskTone(taskState: AppTaskState): string {
-  if (taskState.status === 'running') return 'border-pine/20 bg-pine-fog text-pine';
-  if (taskState.status === 'success') return 'border-divider bg-white text-ink';
-  if (taskState.status === 'error') return 'border-vermilion/20 bg-vermilion-fog text-vermilion';
-  return 'border-divider bg-white text-ink-secondary';
+/** 状态词跟在课名后面；做好了就不说（产物在眼前） */
+function StatusWord({ taskState }: { taskState: AppTaskState }) {
+  if (taskState.status === 'success') return null;
+  const tone = taskState.status === 'error' ? 'text-vermilion' : 'text-ink-muted';
+  return <span className={`ml-2 text-[12px] font-normal ${tone}`}>{taskLabel(taskState)}</span>;
 }
 
 function taskDockBadge(taskState: AppTaskState): string {
@@ -270,19 +270,19 @@ function WindowCard(props: WindowCardProps) {
             type="button"
             className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-white/60 hover:text-white hover:bg-white/10 transition-colors"
             onClick={() => onClose(app.key)}
-            aria-label="关闭窗口"
+            aria-label={APPS_COPY.shell.close}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6" />
             </svg>
-            <span className="text-sm">返回</span>
+            <span className="text-sm">{APPS_COPY.shell.back}</span>
           </button>
           <div className="min-w-0 flex-1 text-center">
             <p className="text-sm font-medium text-white/80">{app.name}</p>
           </div>
           <div className="flex items-center gap-1.5">
             {execution.taskState.status === 'running' && (
-              <span className="text-xs text-white/60">生成中…</span>
+              <span className="text-xs text-white/60">{APPS_COPY.shell.generating}</span>
             )}
           </div>
         </header>
@@ -306,22 +306,23 @@ function WindowCard(props: WindowCardProps) {
         onMouseDown={() => onFocus(app.key)}
       >
         {/* 全屏 header */}
-        <header className="flex items-center gap-2 border-b border-divider bg-white px-4 py-2.5 select-none">
+        {/* 头部一行字：课名 + 状态（只在正在做 / 没做好时说）+ 模型 + 关闭；不再有状态 pill */}
+        <header className="flex items-center gap-3 border-b border-divider bg-white px-4 py-2.5 select-none">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-ink">{app.name}</p>
+            <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">
+              {app.name}
+              <StatusWord taskState={execution.taskState} />
+            </p>
             <p className="truncate text-xs text-ink-muted">{formatDataSource(dataSource)}</p>
           </div>
-          <span className={`rounded-full border px-2 py-1 text-xs font-medium ${taskTone(execution.taskState)}`}>
-            {taskLabel(execution.taskState)}
-          </span>
           <ModelSelector value={model} onChange={onModelChange} compact allowedProviders={['deepseek', 'qwen', 'volcengine']} />
           <button
             type="button"
-            className="rounded-md px-2 py-1 text-ink-muted hover:bg-paper-warm hover:text-ink"
+            className="text-[12px] text-ink-muted transition hover:text-ink"
             onClick={() => onClose(app.key)}
-            aria-label="关闭窗口"
+            aria-label={APPS_COPY.shell.close}
           >
-            ×
+            {APPS_COPY.shell.close}
           </button>
         </header>
 
@@ -363,35 +364,34 @@ function WindowCard(props: WindowCardProps) {
         onPointerMove={drag.onPointerMove}
         onPointerUp={drag.onPointerUp}
       >
+        {/* 浮窗头：收起 / 课名 + 状态词 / 模型 / 关闭，全是文字。此前副标题写「会话 7eeeed…4598」——会话 id 是内部黑话 */}
         <button
           type="button"
-          className="rounded-md px-2 py-1 text-ink-muted hover:bg-paper-warm hover:text-ink"
+          className="text-[12px] text-ink-muted transition hover:text-ink"
           onClick={() => onToggleMinimize(app.key)}
           data-testid={`workshop-window-minimize-${app.key}`}
-          aria-label="最小化窗口"
+          aria-label={APPS_COPY.shell.minimize}
         >
-          —
+          {APPS_COPY.shell.minimize}
         </button>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-ink">{app.name}</p>
-          <p className="hidden truncate text-xs text-ink-muted md:block">
-            会话 {sessionId.slice(0, 6)}…{sessionId.slice(-4)} · {formatDataSource(dataSource)}
+          <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">
+            {app.name}
+            <StatusWord taskState={execution.taskState} />
           </p>
+          <p className="hidden truncate text-xs text-ink-muted md:block">{formatDataSource(dataSource)}</p>
         </div>
-        <span className={`shrink-0 rounded-full border px-2 py-1 text-xs font-medium ${taskTone(execution.taskState)}`}>
-          {taskLabel(execution.taskState)}
-        </span>
         <div className="hidden md:block">
           <ModelSelector value={model} onChange={onModelChange} compact allowedProviders={['deepseek', 'qwen', 'volcengine']} />
         </div>
         <button
           type="button"
-          className="rounded-md px-2 py-1 text-ink-muted hover:bg-paper-warm hover:text-ink"
+          className="text-[12px] text-ink-muted transition hover:text-ink"
           onClick={() => onClose(app.key)}
           data-testid={`workshop-window-close-${app.key}`}
-          aria-label="关闭窗口"
+          aria-label={APPS_COPY.shell.close}
         >
-          ×
+          {APPS_COPY.shell.close}
         </button>
       </header>
 
@@ -503,7 +503,7 @@ export function WorkshopWindowManager(props: WorkshopWindowManagerProps) {
                   type="button"
                   className="rounded-full px-1 text-xs text-ink-muted hover:bg-paper-warm hover:text-ink"
                   onClick={() => onClose(windowState.appKey)}
-                  aria-label="关闭最小化窗口"
+                  aria-label={APPS_COPY.shell.close}
                 >
                   ×
                 </button>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Copy, Download, ImageIcon, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+import { ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 import type { AppExecutionResult } from '@/lib/ai-native/types';
@@ -23,19 +23,44 @@ import {
 } from './infographic-window-data';
 
 function PreparingState() {
+  // 等待态与讲给同桌听的核对等待同一语言：一条呼吸的细线 + 一句话，不放图标盒子
   return (
     <section
       className="flex h-full items-center justify-center bg-canvas px-6"
       data-testid="infographic-window"
     >
-      <div className="flex max-w-sm flex-col items-center text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-pine-mist text-pine">
-          <Loader2 size={26} strokeWidth={2} className="animate-spin" />
+      <div className="flex max-w-sm flex-col items-center gap-4 text-center">
+        <span className="thinking-strip h-1 w-40 rounded-full" />
+        <div>
+          <p className="text-[14px] font-medium text-ink">{APPS_COPY.infographic.preparing}</p>
+          <p className="mt-1 text-[12px] leading-6 text-ink-muted">{APPS_COPY.infographic.preparingHint}</p>
         </div>
-        <p className="mt-4 text-[15px] font-semibold text-ink">{APPS_COPY.infographic.preparing}</p>
-        <p className="mt-1.5 text-[12px] leading-6 text-ink-muted">{APPS_COPY.infographic.preparingHint}</p>
       </div>
     </section>
+  );
+}
+
+/** 两个词 + 下划线的切换（与导图顶栏、速查表工具条同一控件语言） */
+function WordToggle<T extends string>({ value, options, onChange }: { value: T; options: Array<{ value: T; label: string }>; onChange: (next: T) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            aria-pressed={active}
+            className={`text-[13px] underline-offset-[5px] transition ${
+              active ? 'font-medium text-ink underline decoration-ink' : 'text-ink-muted hover:text-ink'
+            }`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -284,48 +309,25 @@ export function InfographicWindow({
         className="flex h-full min-h-0 flex-col bg-canvas px-3 pb-4 sm:px-5"
         data-testid="infographic-window"
       >
-        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-divider py-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <p className="truncate text-[14px] font-semibold text-ink">
-                {previewDraft.title || APPS_COPY.infographic.appName}
-              </p>
-              <span className="inline-flex items-center gap-1 rounded-full bg-pine-mist px-2 py-0.5 text-[10px] font-medium text-pine">
-                <Check size={11} strokeWidth={2.5} />
-                {APPS_COPY.infographic.finished}
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="inline-flex rounded-full border border-divider bg-card p-0.5">
-              {(['fit', 'full'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setPreviewMode(mode)}
-                  className={`rounded-full px-2.5 py-1.5 text-[11px] font-medium transition ${
-                    previewMode === mode ? 'bg-ink text-canvas' : 'text-ink-muted'
-                  }`}
-                >
-                  {mode === 'fit' ? APPS_COPY.infographic.fit : APPS_COPY.infographic.full}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={downloadImage}
-              aria-label={APPS_COPY.infographic.save}
-              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-divider bg-card px-3 text-[11px] font-medium text-ink"
-            >
-              <Download size={14} strokeWidth={ICON_STROKE} />
-              <span className="hidden sm:inline">{APPS_COPY.infographic.save}</span>
+        {/* 一张海报是主角：头部一行字，切换与动作全退成文字；去掉「做好了」徽章——图在这儿就是做好了 */}
+        <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-divider py-3">
+          <p className="min-w-0 truncate text-[14px] font-semibold text-ink">
+            {previewDraft.title || APPS_COPY.infographic.appName}
+          </p>
+          <div className="flex items-baseline gap-4 text-[12px]">
+            <WordToggle
+              value={previewMode}
+              onChange={setPreviewMode}
+              options={[
+                { value: 'fit', label: APPS_COPY.infographic.fit },
+                { value: 'full', label: APPS_COPY.infographic.full },
+              ]}
+            />
+            <span className="h-3 w-px self-center bg-divider" aria-hidden />
+            <button type="button" onClick={downloadImage} className="text-ink-muted transition hover:text-ink">
+              {APPS_COPY.infographic.save}
             </button>
-            <button
-              type="button"
-              onClick={() => setCustomizeMode(true)}
-              className="inline-flex h-8 items-center gap-1.5 rounded-full bg-pine px-3 text-[11px] font-medium text-white"
-            >
-              <RefreshCw size={13} strokeWidth={ICON_STROKE} />
+            <button type="button" onClick={() => setCustomizeMode(true)} className="text-ink-muted transition hover:text-ink">
               {APPS_COPY.infographic.adjust}
             </button>
           </div>
@@ -337,8 +339,8 @@ export function InfographicWindow({
               src={imageUrl}
               alt={previewDraft.title || APPS_COPY.infographic.appName}
               className={previewMode === 'fit'
-                ? 'h-auto max-h-full w-auto max-w-full rounded-2xl border border-divider object-contain'
-                : 'h-auto max-w-none rounded-2xl border border-divider object-contain'}
+                ? 'h-auto max-h-full w-auto max-w-full rounded-[10px] object-contain shadow-card'
+                : 'h-auto max-w-none rounded-[10px] object-contain shadow-card'}
             />
           </div>
         </div>
@@ -378,7 +380,7 @@ export function InfographicWindow({
             <button
               type="button"
               onClick={() => setCustomizeMode(true)}
-              className="shrink-0 rounded-full border border-divider bg-card px-3 py-1.5 text-[11px] font-medium text-ink-secondary"
+              className="shrink-0 text-[12px] text-ink-muted transition hover:text-ink"
             >
               {APPS_COPY.infographic.adjust}
             </button>
@@ -406,22 +408,12 @@ export function InfographicWindow({
             </div>
           </article>
 
-          <div className="mt-4 flex flex-wrap justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => void copyReadableDraft()}
-              className="inline-flex items-center gap-1.5 rounded-full border border-divider bg-card px-3.5 py-2 text-[11px] font-medium text-ink-secondary"
-            >
-              <Copy size={13} strokeWidth={ICON_STROKE} />
+          <div className="mt-4 flex flex-wrap items-baseline justify-end gap-4 text-[12px]">
+            <button type="button" onClick={() => void copyReadableDraft()} className="text-ink-muted transition hover:text-ink">
               {APPS_COPY.infographic.copyReadable}
             </button>
             {imageEnabled ? (
-              <button
-                type="button"
-                onClick={() => void requestImage(result)}
-                className="inline-flex items-center gap-1.5 rounded-full bg-pine px-3.5 py-2 text-[11px] font-medium text-white"
-              >
-                <RefreshCw size={13} strokeWidth={ICON_STROKE} />
+              <button type="button" onClick={() => void requestImage(result)} className="font-medium text-pine transition hover:opacity-80">
                 {APPS_COPY.infographic.retryImage}
               </button>
             ) : null}
@@ -436,89 +428,65 @@ export function InfographicWindow({
       className="h-full overflow-auto bg-canvas px-4 py-6 sm:px-6"
       data-testid="infographic-window"
     >
-      <div className="mx-auto max-w-2xl rounded-[24px] border border-divider bg-card p-5 sm:p-7">
-        <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-pine-mist text-pine">
-            <Sparkles size={20} strokeWidth={1.8} />
-          </div>
-          <div>
-            <h2 className="text-[17px] font-semibold text-ink">
-              {result ? APPS_COPY.infographic.adjustTitle : APPS_COPY.infographic.createTitle}
-            </h2>
-            <p className="mt-1 text-[12px] leading-6 text-ink-muted">
-              {result ? APPS_COPY.infographic.adjustHint : APPS_COPY.infographic.createHint}
-            </p>
-          </div>
-        </div>
+      {/* 定制：不是表单，是纸上的三行字——每行左边一个词，右边几个可选的词，选中的加下划线；
+          补充要求是一条可以写字的横线。页面唯一饱和的东西是右下角那一个动作。 */}
+      <div className="mx-auto max-w-xl pt-2">
+        <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-ink">
+          {result ? APPS_COPY.infographic.adjustTitle : APPS_COPY.infographic.createTitle}
+        </h2>
+        <p className="mt-1 text-[12px] leading-6 text-ink-muted">
+          {result ? APPS_COPY.infographic.adjustHint : APPS_COPY.infographic.createHint}
+        </p>
 
         {taskState?.status === 'error' ? (
-          <div className="mt-5 rounded-2xl bg-vermilion-mist px-4 py-3 text-[12px] leading-6 text-vermilion">
+          <p className="mt-4 border-l-2 border-vermilion pl-3 text-[12px] leading-6 text-vermilion">
             {APPS_COPY.infographic.generateFailed}
-          </div>
+          </p>
         ) : null}
 
         {!imageEnabled ? (
-          <div className="mt-5 rounded-2xl border border-divider bg-canvas px-4 py-3">
+          <div className="mt-4 border-l-2 border-divider pl-3">
             <p className="text-[13px] font-medium text-ink">{APPS_COPY.infographic.serviceUnavailable}</p>
-            <p className="mt-1 text-[12px] leading-6 text-ink-muted">{APPS_COPY.infographic.serviceUnavailableBody}</p>
+            <p className="mt-0.5 text-[12px] leading-6 text-ink-muted">{APPS_COPY.infographic.serviceUnavailableBody}</p>
           </div>
         ) : null}
 
-        <div className="mt-6 space-y-6">
-          <div>
-            <p className="text-[12px] font-medium text-ink">{APPS_COPY.infographic.orientation}</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {ORIENTATIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setOrientation(option.value)}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-[12px] font-medium transition ${
-                    orientation === option.value
-                      ? 'border-pine bg-pine-mist text-pine'
-                      : 'border-divider bg-canvas text-ink-muted'
-                  }`}
-                >
-                  {orientation === option.value ? <Check size={12} strokeWidth={2.5} /> : null}
-                  {option.label}
-                </button>
-              ))}
-            </div>
+        <dl className="mt-7 divide-y divide-divider">
+          <div className="grid grid-cols-[64px_1fr] items-baseline gap-4 py-3.5">
+            <dt className="text-[12px] text-ink-muted">{APPS_COPY.infographic.orientation}</dt>
+            <dd>
+              <WordToggle
+                value={orientation}
+                onChange={setOrientation}
+                options={ORIENTATIONS.map((option) => ({ value: option.value, label: option.label }))}
+              />
+            </dd>
           </div>
-
-          <div>
-            <p className="text-[12px] font-medium text-ink">{APPS_COPY.infographic.style}</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {STYLE_PRESETS.map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => setStylePreset(item.key)}
-                  className={`rounded-full border px-3 py-2 text-[12px] font-medium transition ${
-                    stylePreset === item.key
-                      ? 'border-pine bg-pine-mist text-pine'
-                      : 'border-divider bg-canvas text-ink-muted'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
+          <div className="grid grid-cols-[64px_1fr] items-baseline gap-4 py-3.5">
+            <dt className="text-[12px] text-ink-muted">{APPS_COPY.infographic.style}</dt>
+            <dd>
+              <WordToggle
+                value={stylePreset}
+                onChange={setStylePreset}
+                options={STYLE_PRESETS.map((item) => ({ value: item.key, label: item.label }))}
+              />
+            </dd>
           </div>
+          <div className="grid grid-cols-[64px_1fr] items-start gap-4 py-3.5">
+            <dt className="pt-1.5 text-[12px] text-ink-muted">{APPS_COPY.infographic.custom}</dt>
+            <dd>
+              <textarea
+                value={customDesc}
+                onChange={(event) => setCustomDesc(event.target.value)}
+                placeholder={APPS_COPY.infographic.customPlaceholder}
+                rows={2}
+                className="w-full resize-none border-b border-divider bg-transparent px-0 py-1.5 text-[13px] leading-6 text-ink outline-none transition placeholder:text-ink-faint focus:border-ink"
+              />
+            </dd>
+          </div>
+        </dl>
 
-          <label className="block">
-            <span className="text-[12px] font-medium text-ink">{APPS_COPY.infographic.custom}</span>
-            <textarea
-              value={customDesc}
-              onChange={(event) => setCustomDesc(event.target.value)}
-              placeholder={APPS_COPY.infographic.customPlaceholder}
-              rows={3}
-              className="mt-2 w-full resize-none rounded-2xl border border-divider bg-canvas px-4 py-3 text-[13px] leading-6 text-ink outline-none placeholder:text-ink-faint focus:border-pine"
-            />
-          </label>
-        </div>
-
-        <div className="mt-7 flex justify-end">
+        <div className="mt-6 flex justify-end">
           <button
             type="button"
             onClick={() => {

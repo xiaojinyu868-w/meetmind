@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, RotateCw } from 'lucide-react';
 import type { TranscriptSegment } from '@/types';
 import type { Anchor } from '@/lib/services/anchor-service';
@@ -9,6 +9,7 @@ import { getWorkshopAppByKey, type WorkshopAppKey } from '@/lib/ai-native/app-ca
 import { useAppExecution } from '@/components/apps/hooks/useAppExecution';
 import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 import { COPY } from '@/lib/ui/copy';
+import { APPS_COPY } from '@/lib/ui/copy-apps';
 import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import { useAppLearningActivity } from '@/hooks/useAppLearningActivity';
 import { recordSessionAssessment, useSessionOutcomes } from '@/components/apps/review-session-outcomes';
@@ -121,36 +122,56 @@ export function ReviewLearningWorkspace({
     return { action: target.learningAction, appName: target.name, reason: rec.reason, onOpen: () => onOpenApp(targetKey) };
   }, [anchors, app.key, keyDifficulties, onOpenApp, sessionId, sessionOutcomes, transcript]);
 
+  // 全屏舞台：复习页中栏又窄又高，板书 / 教室 / 速查表这类"一张面"的应用在 400px 里只能缩成缩略图。
+  // 这里给所有应用一个统一的「全屏」——同一棵组件树换到 fixed 覆盖层，执行状态与结果都不丢；Esc 退出。
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    if (!fullscreen) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fullscreen]);
+
+  const status = execution.taskState.status;
+  const running = status === 'running';
+  const textAction = 'shrink-0 text-[12px] text-ink-muted transition hover:text-ink disabled:opacity-40 disabled:hover:text-ink-muted';
+
   return (
-    <section className={`flex h-full min-h-0 flex-col ${isImmersiveApp ? 'bg-[var(--mm-immersive)]' : 'bg-canvas'}`} data-testid="review-learning-workspace">
-      {/* 头部一律纸面：此前闪卡用深色头 + 浅色舞台，整页只有这一条深色带，像两套皮肤 */}
-      <header className="flex shrink-0 items-center gap-3 border-b border-divider bg-white px-4 py-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition border-divider bg-white text-ink-secondary hover:border-ink-muted hover:text-ink"
-        >
-          <ArrowLeft size={13} strokeWidth={1.8} />
-          {COPY.apps.matrix.backToMatrix}
+    <section
+      className={`flex min-h-0 flex-col ${isImmersiveApp ? 'bg-[var(--mm-immersive)]' : 'bg-canvas'} ${
+        fullscreen ? 'fixed inset-0 z-[200] h-full' : 'h-full'
+      }`}
+      data-testid="review-learning-workspace"
+      data-fullscreen={fullscreen || undefined}
+    >
+      {/* 头部：一行字。返回与动作都是文字，不做 pill；状态只在"正在做 / 没做好"时说一句，做好了就不说——
+          此前这一条有 3 个描边胶囊 + 1 个状态 pill，比窗口里的内容还抢眼 */}
+      <header className="flex shrink-0 items-center gap-3 border-b border-divider bg-white px-4 py-2.5">
+        <button type="button" onClick={fullscreen ? () => setFullscreen(false) : onBack} className={`${textAction} inline-flex items-center gap-1`}>
+          <ArrowLeft size={13} strokeWidth={1.8} aria-hidden />
+          <span className="hidden sm:inline">{fullscreen ? APPS_COPY.shell.exitFullscreen : COPY.apps.matrix.backToMatrix}</span>
         </button>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">{app.name}</p>
-          <p className="truncate text-[12px] text-ink-muted">{COPY.apps.matrix.workspaceSubtitle(app.learningAction, app.bestFor)}</p>
+          <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">
+            {app.name}
+            {running ? <span className="ml-2 text-[12px] font-normal text-ink-muted">{APPS_COPY.shell.generating}</span> : null}
+            {status === 'error' ? <span className="ml-2 text-[12px] font-normal text-vermilion">{COPY.apps.matrix.failed}</span> : null}
+          </p>
+          <p className="hidden truncate text-[12px] text-ink-muted sm:block">{COPY.apps.matrix.workspaceSubtitle(app.learningAction, app.bestFor)}</p>
         </div>
-        <span className="shrink-0 rounded-full border border-divider bg-white px-2.5 py-1 text-[11px] text-ink-muted">
-          {execution.taskState.status === 'running' ? COPY.apps.matrix.running : execution.taskState.status === 'success' ? COPY.apps.matrix.ready : execution.taskState.status === 'error' ? COPY.apps.matrix.failed : COPY.apps.matrix.waiting}
-        </span>
-        <button
-          type="button"
-          onClick={() => void execution.rerun()}
-          disabled={execution.taskState.status === 'running'}
-          className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition border-divider bg-white text-ink-secondary hover:border-ink-muted hover:text-ink"
-        >
-          <RotateCw size={12} strokeWidth={1.8} />
+        {!isImmersiveApp && !fullscreen ? (
+          <button type="button" onClick={() => setFullscreen(true)} className={`${textAction} hidden md:inline`}>
+            {APPS_COPY.shell.fullscreen}
+          </button>
+        ) : null}
+        <button type="button" onClick={() => void execution.rerun()} disabled={running} className={`${textAction} inline-flex items-center gap-1`}>
+          <RotateCw size={12} strokeWidth={1.8} aria-hidden />
           {COPY.apps.matrix.remake}
         </button>
       </header>
-      <div className={`min-h-0 flex-1 overflow-auto ${isImmersiveApp ? 'bg-[var(--mm-immersive)] p-0' : 'p-3'}`}>
+      <div className={`min-h-0 flex-1 overflow-auto ${isImmersiveApp ? 'bg-[var(--mm-immersive)] p-0' : fullscreen ? 'p-4 sm:p-6' : 'p-3'}`}>
         <AppRenderSurface
           appKey={app.key}
           result={execution.result}
