@@ -61,6 +61,7 @@ export interface CollectionCardProps {
 import { COPY } from '@/lib/ui/copy';
 import { badgeVariants } from '@/components/ui/badge';
 import { getProvenanceSourceLabel } from '@/lib/capture/source-provenance';
+import { isPlaceholderLessonTitle } from '@/lib/learning/lesson-title-generic';
 
 function TypeBadge({ type }: { type: string }) {
   const variantMap: Record<string, 'pine' | 'vermilion' | 'mute'> = {
@@ -373,9 +374,20 @@ export function CollectionCard({
             </p>
           ) : null}
 
-          {/* 音频类型 — 胶囊播放器 */}
+          {/* 音频类型 — 标题在前（一节课的名字，不能只是一个胶囊播放器），再是胶囊播放器 */}
           {item.type === 'audio' ? (
             <div className="space-y-2.5">
+              {item.title?.trim() && !isPlaceholderLessonTitle(item.title) ? (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); void onOpenReview(item); }}
+                  className="block w-full text-left"
+                >
+                  <p className="line-clamp-2 text-[14.5px] font-medium leading-snug tracking-[-0.01em] text-ink transition-colors group-hover:text-pine">
+                    {item.title}
+                  </p>
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => void onToggleAudioPlayback(item)}
