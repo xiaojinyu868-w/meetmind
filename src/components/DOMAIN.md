@@ -129,7 +129,7 @@ components/
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `Header.tsx` | ~280 | 顶部导航栏 |
-| `DesktopSidebar.tsx` | ~440 | 桌面侧栏（默认 168px，折叠 52px；录课专注态强制 52px）；「今日情报」是常驻一级入口，可从任意工作区打开个人上下文与目标驱动的情报抽屉；免费用户底部有安静的「开通会员」入口、用户菜单首行是会员项（按档位显示 开通/升级/续费），均直达 PaywallDialog——付费入口不藏在设置页 |
+| `DesktopSidebar.tsx` / `sidebar-recent-model.ts` | ~500 / ~110 | 桌面侧栏（2026-09-09 从 168 放宽到 216px，折叠 52px；录课专注态强制 52px；实际宽度写进 `--sidebar-width` 供问同学等整页面板从侧栏右侧开始）。**侧栏本身要有内容**（对标 HyperKnow 的 Continue Learning / Recent Activities，不能只是五个入口）：「继续学习」一张小卡——有活着的学习线索就是线索（点开问同学），否则是上一节课；「最近」= 可复习的课（收集列表里 contentType audio / video，宿主 `sidebarLessons` 算好）按时间倒序、同一 sessionId 去重、只念主题、相对日期（今天 / 昨天 / M-D），最多 6 条 + 「还有 N 节 →」进全部收集；正打开的一节高亮。纯模型 `sidebar-recent-model.ts`（测试同名）；「今日情报」是常驻一级入口，可从任意工作区打开个人上下文与目标驱动的情报抽屉；免费用户底部有安静的「开通会员」入口、用户菜单首行是会员项（按档位显示 开通/升级/续费），均直达 PaywallDialog——付费入口不藏在设置页 |
 | `AppLoading.tsx` | ~120 | 进入学习现场时的品牌过渡；只表达恢复状态和真实进度，不展示初始化、服务连接等工程阶段 |
 | `ModelSelector.tsx` | ~260 | AI 模型选择器 |
 | `WechatQrAuthDialog.tsx` | ~170 | 登录/设置复用的公众号原地扫码弹窗；状态由 `useWechatQrAuth` 驱动 |

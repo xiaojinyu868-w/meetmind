@@ -1423,6 +1423,20 @@ function StudentAppContent({
     ];
   }, [archivedLocalCollectionItems, sourceItems, workspaceCaptures]);
 
+  // 侧栏「最近」：可复习的课（录音 / 视频），同一节课去重、只念主题在 sidebar-recent-model 里做；当前打开的一节带 active
+  const sidebarLessons = useMemo(() => allCollectionItems
+    .filter((item) => (item.contentType === 'audio' || item.contentType === 'video') && item.status !== 'deleted')
+    .map((item) => {
+      const itemSessionId = typeof item.metadata?.sessionId === 'string' ? item.metadata.sessionId : null;
+      return {
+        id: item.id,
+        title: item.title,
+        at: item.occurredAt || item.createdAt,
+        sessionId: itemSessionId,
+        active: Boolean(itemSessionId && itemSessionId === sessionId && viewMode === 'review'),
+      };
+    }), [allCollectionItems, sessionId, viewMode]);
+
   const selectedCollectionContextText = useMemo(
     () =>
       buildSelectedCollectionContextText({
@@ -2031,6 +2045,11 @@ function StudentAppContent({
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           onOpenAISearch={() => setShowAISearch(true)}
+          recentLessons={sidebarLessons}
+          onOpenLesson={(id) => {
+            const item = allCollectionItems.find((c) => c.id === id);
+            if (item) void openReviewFromCollectionListItem(item);
+          }}
           onOpenHistory={() => {
             setShowMobileRecorder(false);
             setMobileCollectionSheet('history');

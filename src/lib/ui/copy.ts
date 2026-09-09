@@ -42,6 +42,15 @@ export const COPY = {
     collection: '收集',
     search: '问同学',
     allCollections: '全部收集',
+    /** 侧栏的两段内容（2026-09-09）：继续学习（学习线索 / 上一节课）与最近的课 */
+    continueLearning: '继续学习',
+    recent: '最近',
+    continueThread: '线索',
+    continueLesson: '上一节',
+    moreLessons: (n: number): string => `还有 ${n} 节 →`,
+    /** 相对日期：今天 / 昨天 / M-D */
+    today: '今天',
+    yesterday: '昨天',
   },
 
 

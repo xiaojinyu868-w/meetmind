@@ -3,8 +3,9 @@
 /**
  * DesktopSidebar — 桌面端可折叠侧边栏
  *
- * 设计参考 Get笔记 / Notion / Linear：
- * - 展开态 168px：Logo + 文字导航 + 搜索 + 用户信息
+ * 设计参考 Get笔记 / Notion / Linear / HyperKnow：
+ * - 展开态 216px（2026-09-09 从 168 放宽）：Logo + 文字导航 + 「继续学习」+ 「最近」+ 用户信息——
+ *   侧栏本身要有内容（HyperKnow 的 Continue Learning / Recent Activities），不能只是五个入口
  * - 折叠态 52px：仅图标，hover tooltip 提示
  * - 录课专注态自动使用折叠宽度，把空间还给课堂内容
  * - 顺滑 CSS transition 动画
@@ -21,6 +22,8 @@ import { useAdminLens } from '@/components/admin/AdminLensProvider';
 import { usePointsSummary } from '@/hooks/usePointsSummary';
 import { openPaywallGlobal } from '@/hooks/usePaywall';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useLearningContext } from '@/hooks/useLearningContext';
+import { buildSidebarRecent, type SidebarLessonInput } from '@/components/sidebar-recent-model';
 import {
   Mic,
   BookOpen,
@@ -74,6 +77,9 @@ interface DesktopSidebarProps {
   hasTimeline?: boolean;
   /** 录课专注态：强制收起侧栏，只保留图标导航 */
   focusMode?: boolean;
+  /** 「最近」：可复习的课（录音 / 视频），宿主从收集列表算好；当前打开的一节带 active */
+  recentLessons?: readonly SidebarLessonInput[];
+  onOpenLesson?: (id: string) => void;
 }
 
 export function DesktopSidebar({
@@ -89,12 +95,16 @@ export function DesktopSidebar({
   unresolvedAnchorCount = 0,
   hasTimeline = true,
   focusMode = false,
+  recentLessons = [],
+  onOpenLesson,
 }: DesktopSidebarProps) {
+  const learning = useLearningContext();
+  const recent = buildSidebarRecent({ lessons: recentLessons, activeThread: learning.activeThread });
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
   const effectiveCollapsed = collapsed || focusMode;
   // 侧栏实际宽度写进 CSS 变量：问同学等 fixed 定位的整页面板据此从侧栏右侧开始，而不是盖住侧栏
   useEffect(() => {
-    document.documentElement.style.setProperty('--sidebar-width', `${effectiveCollapsed ? 52 : 168}px`);
+    document.documentElement.style.setProperty('--sidebar-width', `${effectiveCollapsed ? 52 : 216}px`);
     return () => { document.documentElement.style.removeProperty('--sidebar-width'); };
   }, [effectiveCollapsed]);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -132,7 +142,7 @@ export function DesktopSidebar({
   return (
     <aside
       className="group/sidebar relative flex h-full flex-shrink-0 flex-col border-r border-divider bg-paper transition-[width] duration-200 ease-out"
-      style={{ width: effectiveCollapsed ? 52 : 168 }}
+      style={{ width: effectiveCollapsed ? 52 : 216 }}
     >
       {/* ── 顶部：Logo + 折叠按钮 ── */}
       <div className={`flex items-center ${effectiveCollapsed ? 'justify-center px-0' : 'justify-between px-3.5'} pb-1 pt-4`}>
@@ -288,6 +298,51 @@ export function DesktopSidebar({
           )}
         </button>
       </nav>
+
+      {/* ── 继续学习 / 最近（展开态；侧栏本身要有内容） ── */}
+      {!effectiveCollapsed && (recent.continueItem || recent.lessons.length > 0) ? (
+        <div className="mt-3 flex max-h-[48vh] min-h-0 flex-col overflow-hidden px-2.5">
+          {recent.continueItem ? (
+            <>
+              <p className="px-2.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{COPY.navigation.continueLearning}</p>
+              <button
+                type="button"
+                onClick={() => (recent.continueItem?.kind === 'thread' ? onOpenAISearch() : onOpenLesson?.(recent.continueItem!.id))}
+                className="mt-1.5 flex w-full flex-col items-start gap-0.5 rounded-xl border border-divider bg-white px-3 py-2.5 text-left shadow-[0_1px_0_rgba(16,22,15,0.03)] transition hover:border-pine/35 hover:bg-pine-fog/40"
+              >
+                <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.1em] text-pine">{recent.continueItem.kindLabel}</span>
+                <span className="w-full truncate text-[12.5px] font-medium leading-5 text-ink">{recent.continueItem.title}</span>
+                {recent.continueItem.detail ? <span className="w-full truncate text-[11px] leading-4 text-ink-muted">{recent.continueItem.detail}</span> : null}
+              </button>
+            </>
+          ) : null}
+          {recent.lessons.length > 0 ? (
+            <>
+              <p className={`px-2.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-muted ${recent.continueItem ? 'mt-4' : ''}`}>{COPY.navigation.recent}</p>
+              <ul className="mt-1 flex min-h-0 flex-col overflow-y-auto">
+                {recent.lessons.map((lesson) => (
+                  <li key={lesson.id}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenLesson?.(lesson.id)}
+                      title={lesson.fullTitle}
+                      className={`flex w-full items-center gap-2 rounded-md px-2.5 py-[5px] text-left text-[12.5px] leading-5 transition ${lesson.active ? 'bg-pine-fog text-pine' : 'text-ink-secondary hover:bg-paper-warm hover:text-ink'}`}
+                    >
+                      <span className="min-w-0 flex-1 truncate">{lesson.title}</span>
+                      <span className="shrink-0 font-mono text-[9.5px] tabular-nums text-ink-muted/80">{lesson.when}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {recent.more > 0 ? (
+                <button type="button" onClick={onOpenHistory} className="mt-0.5 px-2.5 py-1 text-left text-[11.5px] text-ink-muted transition hover:text-pine">
+                  {COPY.navigation.moreLessons(recent.more)}
+                </button>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* ── 弹性填充 ── */}
       <div className="flex-1" />

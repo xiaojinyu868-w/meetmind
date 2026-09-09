@@ -17,7 +17,7 @@ import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import { toast } from 'sonner';
-import { Mic, Camera, Paperclip, ArrowUp, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Sparkles, MapPin, ExternalLink, Newspaper, Pause, Play, UserRound } from 'lucide-react';
+import { Mic, Camera, Paperclip, ArrowUp, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Sparkles, MapPin, ExternalLink, Newspaper, Pause, Play, UserRound, Upload, Link2, PenLine, MessageCircle } from 'lucide-react';
 import type { SourceIngestItem } from '@/types/page-types';
 import type { TranscriptSegment } from '@/types';
 import { getSpeakerLabel, getSpeakerColorClass } from '@/lib/services/asr/diarization-service';
@@ -332,8 +332,28 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
         )}
 
         {p.collectionFeedItems.length === 0 && !flashPhoto ? (
-          <div className="rounded-[16px] border border-dashed border-divider bg-canvas/40 p-6 text-center">
-            <p className="text-[13px] text-ink-muted">{COPY.mobileHome.recentEmpty}</p>
+          /* 空态与桌面同一套语言（2026-09-09），但更轻：上面的行动卡已经有 Octo 与录课 / 放入资料，这里只留一句话 + 能力 pill */
+          <div className="flex flex-col items-center px-2 pb-4 pt-6 text-center">
+            <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-ink">{COPY.collection.emptyTitle}</h2>
+            <p className="mt-1.5 max-w-[300px] text-[12.5px] leading-5 text-ink-secondary">{COPY.collection.emptyBody}</p>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              {COPY.collection.emptyEntries.map((entry) => {
+                const Icon = entry.key === 'upload' ? Upload : entry.key === 'link' ? Link2 : entry.key === 'write' ? PenLine : entry.key === 'voice' ? Mic : MessageCircle;
+                const onClick = entry.key === 'upload'
+                  ? () => p.onOpenFilePicker('all')
+                  : entry.key === 'voice'
+                    ? () => void p.onToggleComposerDictation()
+                    : entry.key === 'wechat'
+                      ? () => toast.info(COPY.collection.emptyWechatTitle)
+                      : () => p.composerRef.current?.focus();
+                return (
+                  <button key={entry.key} type="button" onClick={onClick} className="inline-flex items-center gap-1.5 rounded-full border border-divider bg-white px-3 py-1.5 text-[12px] text-ink-secondary active:bg-pine-fog/50">
+                    <Icon size={13} strokeWidth={1.8} className="text-ink-muted" />
+                    {entry.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         ) : (
           <div className="space-y-2">
