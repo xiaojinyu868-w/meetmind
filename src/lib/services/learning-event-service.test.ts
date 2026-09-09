@@ -334,6 +334,8 @@ describe('curation 事件（用户本人维护画像）', () => {
 
     const added = (await appendLearningEvent(USER_ID, curation({ op: 'add', memory: { kind: 'preference', title: '喜欢先看例子再看定义' } })))!;
     await processLearningEvent(added);
+    // 同一句话再说一遍：不重复
+    await processLearningEvent((await appendLearningEvent(USER_ID, curation({ op: 'add', memory: { kind: 'topic', title: '喜欢先看例子 再看定义' } })))!);
     let state = (await readLearningContextState(USER_ID))!;
     expect(state.memories.map((m) => [m.title, m.source])).toEqual([['对偶问题', 'ai'], ['喜欢先看例子再看定义', 'user']]);
 

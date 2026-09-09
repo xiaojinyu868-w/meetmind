@@ -205,6 +205,9 @@ export function useLearningContext(): UseLearningContextReturn {
 
   const addMemory = useCallback(async (draft: MemoryDraft) => {
     const now = new Date().toISOString();
+    const normalized = draft.title.replace(/\s+/g, '');
+    // 同一句话说两遍不算两件事（服务端 curation 同一规则）
+    if (stateRef.current.memories.some((memory) => memory.status === 'active' && memory.title.replace(/\s+/g, '') === normalized)) return;
     await persist(mergeLearningMemory(stateRef.current, {
       id: createId('memory'),
       kind: draft.kind,

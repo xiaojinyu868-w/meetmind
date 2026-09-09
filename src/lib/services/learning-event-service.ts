@@ -233,6 +233,9 @@ export function applyCurationEvent(
   switch (payload.op) {
     case 'add': {
       if (!payload.memory) return state;
+      // 同一句话说两遍不算两件事：标题（去空白）相同且仍在用的，直接当已存在
+      const normalized = payload.memory.title.replace(/\s+/g, '');
+      if (state.memories.some((memory) => memory.status === 'active' && memory.title.replace(/\s+/g, '') === normalized)) return state;
       return mergeLearningMemory(state, {
         id: `memory-${eventId}`,
         kind: payload.memory.kind,
