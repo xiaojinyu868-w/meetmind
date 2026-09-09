@@ -579,10 +579,11 @@ export function GlobalAskPanel({
                 messageId={message.id}
               >
                 {message.role === 'assistant' ? (
-                  <>
+                  // minimal 气泡是 pre-wrap（给纯文本用）；markdown 渲染出的块之间有换行文本节点，pre-wrap 会把它们撑成空行，这里收回 normal
+                  <div className="whitespace-normal">
                     {reasoning ? <ChatReasoningBlock reasoning={reasoning} isStreaming={isStreaming} /> : null}
                     <ChatRenderer content={text} isStreaming={isStreaming} messageId={message.id} />
-                  </>
+                  </div>
                 ) : <span className="whitespace-pre-wrap">{text}</span>}
               </ChatBubble>
             );
