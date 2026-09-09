@@ -1274,7 +1274,7 @@ function StudentAppContent({
         title: item.title,
       }));
   }, [sourceItems, sessionId]);
-  const { digest: lessonDigest, loading: digestLoading } = useLessonDigest({
+  const { digest: lessonDigest, loading: digestLoading, refetch: refetchLessonDigest } = useLessonDigest({
     sessionId,
     segments,
     images: digestImages,
@@ -2746,8 +2746,8 @@ function StudentAppContent({
                               <img src="/images/octo-buddy/thinking.png" alt="Octo" className="h-full w-full object-cover" />
                             </div>
                           </div>
-                          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-pine mb-1">正在整理</p>
-                          <p className="text-[12px] text-ink-muted">同桌正在把这节课整理成笔记…</p>
+                          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-pine mb-1">{COPY.digest.working}</p>
+                          <p className="text-[12px] text-ink-muted">{COPY.digest.workingBody}</p>
                         </div>
                       ) : lessonDigest ? (
                         <LessonDigestCard
@@ -2766,11 +2766,16 @@ function StudentAppContent({
                           }}
                         />
                       ) : (
-                        <div className="flex flex-col items-center justify-center py-12">
-                          <p className="text-[12px] text-ink-muted mb-3">笔记生成失败</p>
-                          <button onClick={() => setMobileDigestView(false)} className="rounded-full bg-paper-warm px-3 py-1.5 text-[11px] font-medium text-ink-secondary">
-                            查看转录原文
-                          </button>
+                        <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+                          <p className="max-w-[240px] text-[13px] leading-relaxed text-ink-secondary">{COPY.digest.failedTitle}</p>
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={refetchLessonDigest} className="rounded-full bg-pine px-4 py-2 text-[12px] font-medium text-white shadow-soft transition hover:opacity-90 active:scale-[0.97]">
+                              {COPY.digest.retry}
+                            </button>
+                            <button type="button" onClick={() => setMobileDigestView(false)} className="rounded-full border border-divider bg-card px-4 py-2 text-[12px] font-medium text-ink-secondary transition hover:border-pine hover:text-pine">
+                              {COPY.digest.viewTranscript}
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>

@@ -154,6 +154,28 @@ function EmptyGuide({ appName, description, onRetry, onBack, backLabel }: {
 /*  错误态                                                              */
 /* ------------------------------------------------------------------ */
 
+/**
+ * 服务端错误码 → 人话。课中内联卡把 `/api/apps/execute` 的 error 原样传进来，
+ * 学生不该看到 `GENERATION_FAILED` 这种代码；Workshop 侧在 useAppExecution 已转过，
+ * 这里兜住剩下的入口，让两条路径说同一句话。
+ */
+export function describeAppExecutionError(raw: string | undefined): string | undefined {
+  const code = raw?.trim();
+  if (!code) return undefined;
+  switch (code) {
+    case 'GENERATION_FAILED':
+    case '生成失败':
+      return COPY.apps.matrix.executeGenerationFailed;
+    case 'CONTENT_NOT_READY':
+      return COPY.apps.matrix.executeNotReady;
+    case 'APP_NOT_SUITABLE':
+      return COPY.apps.matrix.executeNotSuitable;
+    default:
+      // 像错误码的全大写下划线串一律不外露
+      return /^[A-Z][A-Z0-9_]{3,}$/.test(code) ? undefined : code;
+  }
+}
+
 function ErrorState({ appName, errorMessage, onRetry, onBack, backLabel }: {
   appName: string;
   errorMessage?: string;
@@ -161,6 +183,7 @@ function ErrorState({ appName, errorMessage, onRetry, onBack, backLabel }: {
   onBack?: () => void;
   backLabel?: string;
 }) {
+  const shownMessage = describeAppExecutionError(errorMessage);
   return (
     <div className="relative flex h-full min-h-[360px] flex-col items-center justify-center gap-6 px-8 py-12">
       {/* 朱批红光晕 · 错误是"提醒"不是"惊吓" */}
@@ -179,9 +202,9 @@ function ErrorState({ appName, errorMessage, onRetry, onBack, backLabel }: {
         <p className="text-[15px] font-medium text-ink">
           {APPS_COPY.placeholder.failedTitle(appName)}
         </p>
-        {errorMessage ? (
-          <p className="mt-2 max-w-sm text-[12.5px] leading-relaxed text-ink-muted" title={errorMessage}>
-            {errorMessage.length > 120 ? `${errorMessage.slice(0, 120)}…` : errorMessage}
+        {shownMessage ? (
+          <p className="mt-2 max-w-sm text-[12.5px] leading-relaxed text-ink-muted" title={shownMessage}>
+            {shownMessage.length > 120 ? `${shownMessage.slice(0, 120)}…` : shownMessage}
           </p>
         ) : (
           <p className="mt-2 text-[12.5px] text-ink-muted">{APPS_COPY.placeholder.failedBody}</p>

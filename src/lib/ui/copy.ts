@@ -919,6 +919,14 @@ export const COPY = {
     endCall: '结束通话',
   },
 
+  /** 课堂笔记（分段总结）——桌面复习页与移动端共用的等待 / 失败态 */
+  digest: {
+    working: '正在整理',
+    workingBody: '同桌正在把这节课整理成笔记…',
+    failedTitle: '这次没整理出来。再试一次，通常就好。',
+    retry: '再试一次',
+    viewTranscript: '看转录原文',
+  },
   mobileJourney: {
     playAudio: '播放原声',
     pauseAudio: '暂停原声',

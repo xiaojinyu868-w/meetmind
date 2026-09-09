@@ -12,11 +12,15 @@
  *   - 知识点间的引导语
  */
 
-import type { TranscriptSegment } from '@/types';
 import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
+import { createLogger } from '@/lib/logger';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
 import { buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
+import { resolveGroundedEvidence } from '../evidence-grounding';
+import { normalizeQuizOptions, resolveAnswerIndex } from '../quiz-answer';
+
+const log = createLogger('class-check-plugin');
 
 interface ClassCheckMeta {
   /** 当前知识点主题 */
@@ -56,28 +60,30 @@ function formatTimestamp(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-function normalizeOptions(options: unknown): string[] {
-  if (!Array.isArray(options)) return [];
-  return options
-    .map((item) => (typeof item === 'string' ? item.trim() : ''))
-    .filter((item) => item.length > 0)
-    .slice(0, 6);
+interface UsableQuestion {
+  stem: string;
+  options: string[];
+  answer: string;
+  explanation: string;
 }
 
-function fallbackDraft(segment: TranscriptSegment): QuizDraft {
-  const text = segment.text.replace(/\s+/g, ' ').trim();
-  const phrases = text.split(/[，。；！？,.\\s]+/).filter((p) => p.length >= 4 && p.length <= 20);
-  const keyPhrase = phrases[0] || text.slice(0, 20);
+/**
+ * 模型输出 → 可用题。题干 / ≥2 选项 / 能解析到选项的答案，三者缺一就丢掉这道题。
+ * 没有兜底题：之前这里会用最近一段原话切出个"关键短语"拼一道"以下哪种理解最准确"，
+ * 正确答案永远是 A——学生答对没有含金量，答错还会当成真实薄弱点进记忆。
+ */
+export function normalizeClassCheckQuestion(draft: QuizDraft | undefined): UsableQuestion | null {
+  const stem = typeof draft?.stem === 'string' ? draft.stem.trim() : '';
+  if (!stem) return null;
+  const options = normalizeQuizOptions(draft?.options);
+  if (options.length < 2) return null;
+  const answerIndex = resolveAnswerIndex(draft?.answer, options);
+  if (answerIndex < 0) return null;
   return {
-    stem: `关于刚才讲的"${keyPhrase}"，以下哪种理解最准确？`,
-    options: [
-      `主要讨论了"${keyPhrase}"的定义和应用`,
-      `重点是对"${keyPhrase}"的否定和纠正`,
-      `只是简单提及，没有展开`,
-      `与前面的内容做了对比分析`,
-    ],
-    answer: 'A',
-    explanation: `回放确认：这段内容确实围绕"${keyPhrase}"展开。`,
+    stem,
+    options,
+    answer: String.fromCharCode(65 + answerIndex),
+    explanation: typeof draft?.explanation === 'string' ? draft.explanation.trim() : '',
   };
 }
 
@@ -172,53 +178,60 @@ export const classCheckPlugin: AppPlugin = {
     });
     const model = context.model || DEFAULT_MODEL_ID;
 
+    // 模型一次重试；仍没有可用的题就诚实失败（execute 路由返回 GENERATION_FAILED，
+    // 窗口体给"再试一次"）。不用原话切片拼题，不缓存，不写记忆。
     let llmOutput: ClassCheckLLMOutput | null = null;
-    try {
-      llmOutput = await generateWithLLM(context, model, promptContext.text, meta);
-    } catch {
-      llmOutput = null;
+    let questions: UsableQuestion[] = [];
+    for (let attempt = 0; attempt < 2 && questions.length === 0; attempt += 1) {
+      try {
+        llmOutput = await generateWithLLM(context, model, promptContext.text, meta);
+      } catch (error) {
+        llmOutput = null;
+        log.warn('class-check generation failed', {
+          attempt: attempt + 1,
+          message: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
+        });
+      }
+      questions = (Array.isArray(llmOutput?.questions) ? llmOutput.questions : [])
+        .map((draft) => normalizeClassCheckQuestion(draft))
+        .filter((q): q is UsableQuestion => q !== null)
+        .slice(0, meta.questionCount || 3);
     }
+    if (questions.length === 0) throw new Error('GENERATION_FAILED');
 
     const cards: AppExecutionResult['cards'] = [];
-    const recentSegments = context.input.transcript.slice(-6);
-
-    const questionDrafts =
-      Array.isArray(llmOutput?.questions) && llmOutput.questions.length > 0
-        ? llmOutput.questions.slice(0, meta.questionCount || 3)
-        : recentSegments.slice(0, 2).map((seg) => fallbackDraft(seg));
-
-    questionDrafts.forEach((draft, index) => {
-      const segment = recentSegments[index % Math.max(1, recentSegments.length)] || recentSegments[0];
-      const finalDraft = draft?.stem?.trim() ? draft : fallbackDraft(segment);
-      const stem = finalDraft.stem?.trim() || '请回答关于刚才内容的问题';
-      const options = normalizeOptions(finalDraft.options);
-      const normalizedOptions = options.length >= 2 ? options : fallbackDraft(segment).options!;
-      const answer = (finalDraft.answer || 'A').trim();
-      const explanation = finalDraft.explanation?.trim() || '请回放原片段核对。';
+    questions.forEach((question, index) => {
+      // 证据落地只决定「回放」跳到哪、要不要给跳转；在整份转录里找，落地不到就没有跳转按钮
+      const grounding = resolveGroundedEvidence(
+        `${question.stem} ${question.options[question.answer.charCodeAt(0) - 65] ?? ''} ${question.explanation}`,
+        context.input.transcript,
+      );
+      const segment = grounding.supported || grounding.method === 'timestamp' ? grounding.segment : undefined;
 
       cards.push({
         id: `class-check-${index + 1}`,
         type: 'quiz',
         title: `第 ${index + 1} 题`,
-        body: stem,
+        body: question.stem,
         priority: 'high',
-        citations: [{
-          startMs: segment.startMs,
-          endMs: segment.endMs,
-          snippet: segment.text.slice(0, 120),
-        }],
-        actions: [{
-          id: `seek-class-check-${index + 1}`,
-          label: `回放 ${formatTimestamp(segment.startMs)}`,
-          kind: 'seek',
-          payload: { timestamp: segment.startMs },
-        }],
+        ...(segment
+          ? {
+            citations: [{ startMs: segment.startMs, endMs: segment.endMs, snippet: segment.text.slice(0, 120) }],
+            actions: [{
+              id: `seek-class-check-${index + 1}`,
+              label: `回放 ${formatTimestamp(segment.startMs)}`,
+              kind: 'seek' as const,
+              payload: { timestamp: segment.startMs },
+            }],
+          }
+          : {}),
         meta: {
           cardKind: 'quiz',
-          stem,
-          options: normalizedOptions,
-          answer,
-          explanation,
+          stem: question.stem,
+          options: question.options,
+          answer: question.answer,
+          explanation: question.explanation,
+          evidence: grounding.supported ? 'text' : grounding.method === 'timestamp' ? 'timestamp' : 'none',
         },
       });
     });
@@ -235,25 +248,25 @@ export const classCheckPlugin: AppPlugin = {
         `transcript_segments=${context.input.transcript.length}`,
         `questions=${cards.length}`,
         `has_previous_errors=${Boolean(meta.previousErrors)}`,
-        `llm=${llmOutput ? 'enabled' : 'fallback'}`,
+        `grounded=${cards.filter((card) => card.meta?.evidence !== 'none').length}/${cards.length}`,
       ],
       cards,
       tasks: [],
       render: {
         mode: 'quiz',
         title: meta.topic || '随堂检验',
-        description: llmOutput?.greeting || '检验一下刚才的内容',
+        description: llmOutput?.greeting || '',
         payload: {
           greeting: llmOutput?.greeting || '',
           encouragement: llmOutput?.encouragement || '',
           nextPreview: llmOutput?.nextPreview || meta.nextHint || '',
-          questions: cards.map((card) => ({
+          questions: cards.map((card, index) => ({
             id: card.id,
             title: card.title,
-            stem: typeof card.meta?.stem === 'string' ? card.meta.stem : card.body,
-            options: Array.isArray(card.meta?.options) ? card.meta.options : [],
-            answer: typeof card.meta?.answer === 'string' ? card.meta.answer : 'A',
-            explanation: typeof card.meta?.explanation === 'string' ? card.meta.explanation : '',
+            stem: questions[index].stem,
+            options: questions[index].options,
+            answer: questions[index].answer,
+            explanation: questions[index].explanation,
           })),
         },
       },

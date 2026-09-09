@@ -8,7 +8,7 @@
 | 文件 | 职责 |
 |------|------|
 | `quiz.plugin.ts` | 测验插件（LLM 生成单选 / 判断 / 填空 / 简答）。**2026-09-09 起没有兜底题**：模型的题就是题；证据落地（在整份转录里找）只决定要不要给"回到原话"跳转（`meta.evidence = text / timestamp / none`），不再把落地失败的题换成"回放 X:XX 复述"模板题；LLM 一次重试，可用题 <2 抛 `GENERATION_FAILED`（窗口给"再试一次"，不写记忆） |
-| `class-check.plugin.ts` | 随堂检验插件（基于知识点结构的智能随堂检验，视频内触发，不在 catalog） |
+| `class-check.plugin.ts` | 随堂检验插件（基于知识点结构的智能随堂检验，视频内触发，不在 catalog）。题目只来自模型（一次重试，答案解析不到选项的题丢弃，仍无题抛 `GENERATION_FAILED`）；证据落地在整份转录里找，只决定「回放」跳到哪——2026-09 前会用最近一段原话切"关键短语"拼题且答案恒 A |
 | `studio-workshop.plugin.ts` | Studio Workshop 主文件（~340 行），子模块如下。2026-09-09 起：非播客模式模型两次无卡片、播客模式两次无脚本计划均抛 `GENERATION_FAILED`；卡片引用按整份转录落地给，不再按序号挂抽样片段、不再补"证据模块 N" |
 | `studio-workshop.types.ts` | 类型/模式检测/解析辅助（~210 行，有测试） |
 | `studio-workshop.podcast.ts` | 播客管线（~310 行）：plan/清洗/时间戳污染检测/脚本行选择；合成 provider 由 `PODCAST_TTS_PROVIDER` 一行切换（默认 dashscope 逐句合成+拼接，volc 一键成品备选）；音频没拿到即整次 execute 抛错（"不出音频不算好"） |

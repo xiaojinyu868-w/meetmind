@@ -35,7 +35,6 @@ Context v1 在 middleware 白名单中仅为委托认证：mmctx_ token 不符�
 | `live-translation-rows.ts` | 34 | 录课中稳定实时转写/翻译行构建 | `buildLiveTranslationRows` |
 | `translation-retry-policy.ts` | 23 | 翻译接口失败/429 后的前端退避策略 | `getTranslationRetryDelayMs`, `shouldSkipTranslationTerm`, `shouldSkipTranslationRequest` |
 | `inline-app-transcript.ts` | 19 | AI 同桌内联应用生成时选择最新可用转录 | `selectInlineAppTranscript`, `hasEnoughInlineAppTranscript` |
-| `inline-app-fallback.ts` | 103 | 内联应用后端生成失败时的本地兜底 payload | `buildInlineAppFallbackPayload` |
 | `normalize-narration-marks.ts` | 8 | teach narration 漏出的 `==高亮==` 归一为 markdown 加粗 | `normalizeNarrationMarks` |
 | `app-execution-cache.ts` | 223 | 应用矩阵 / 复习对话共用的 localStorage 产物缓存与 task 状态 key；进入历史对话时必须先读缓存，避免已生成应用重复执行 | `readCachedAppResult`, `writeCachedAppResult`, `readCachedTaskState`, `writeCachedTaskState` |
 | `learning-context.ts` | ~180 | 长期记忆 / 课堂归组偏好 / 近期活动 / 学习线索的纯恢复、合并、去重与 Tutor 上下文格式化；课堂原件不复制进画像，只同步用户对课程边界的纠正 | `learningContextFromProfile`, `mergeLearningMemory`, `mergeLearningActivity`, `toLearningActivityPreview`, `formatLearningContextForTutor` |

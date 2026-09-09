@@ -201,63 +201,19 @@ imageIndex 对应照片列表的序号（从0开始）。如果该段没有照�
   }
 }
 
-function buildFallbackDigest(
-  segments: TranscriptSegment[],
-  images: DigestImageRef[],
-): LessonDigest {
-  // 按 5 分钟粗分段
-  const CHUNK_MS = 5 * 60 * 1000;
-  const sections: DigestSection[] = [];
-  let chunkStart = 0;
-  let chunkEnd = CHUNK_MS;
-
-  while (chunkStart < (segments[segments.length - 1]?.endMs || 0)) {
-    const chunkSegs = segments.filter((s) => s.startMs >= chunkStart && s.startMs < chunkEnd);
-    if (chunkSegs.length > 0) {
-      const text = chunkSegs.map((s) => cleanText(s.text)).filter(Boolean).join(' ').slice(0, 200);
-      const img = findImageForSegment(images, chunkStart, chunkEnd);
-      sections.push({
-        heading: `第 ${Math.floor(chunkStart / 60000) + 1} 段`,
-        text: text || '（这段没有文字内容）',
-        imageId: img?.imageId,
-        startMs: chunkStart,
-        endMs: chunkEnd,
-      });
-    }
-    chunkStart = chunkEnd;
-    chunkEnd += CHUNK_MS;
-  }
-
-  const extraImages = images.filter((img) => img.capturedAtMs === null || img.capturedAtMs === undefined);
-  const extras: DigestExtra[] = extraImages.map((img) => ({
-    text: img.title || '课后补充照片',
-    imageId: img.imageId,
-  }));
-
-  return {
-    title: '课堂笔记',
-    overview: '',
-    sections: sections.length > 0 ? sections : [{
-      heading: '课堂内容',
-      text: '暂无可用转录内容。',
-      startMs: 0,
-      endMs: 0,
-    }],
-    extras,
-  };
-}
-
 /**
- * 把模型 JSON 归一化为前端可直接渲染的 digest。
+ * 把模型 JSON 归一化为前端可直接渲染的 digest；没有一段可用内容返回 null。
  * 用显式循环保留上一段 endMs，避免在 sections 初始化过程中
  * 反向引用 sections 本身导致 TDZ ReferenceError。
+ *
+ * 没有兜底笔记：之前模型失败会按 5 分钟切转录拼「第 N 段」当笔记返回，
+ * 客户端还按内容签名写进 IndexedDB——这节课之后永远显示那份假笔记。
  */
 export function normalizeLessonDigestOutput(
   llmOutput: DigestLLMOutput,
-  segments: TranscriptSegment[],
   images: DigestImageRef[],
   lessonTitle?: string,
-): LessonDigest {
+): LessonDigest | null {
   const title = cleanText(llmOutput.title || '') || lessonTitle || '课堂笔记';
   const overview = cleanText(llmOutput.overview || '');
   const sections: DigestSection[] = [];
@@ -300,16 +256,13 @@ export function normalizeLessonDigestOutput(
     }
   }
 
-  return {
-    title,
-    overview,
-    sections: sections.length > 0 ? sections : buildFallbackDigest(segments, images).sections,
-    extras,
-  };
+  if (sections.length === 0) return null;
+  return { title, overview, sections, extras };
 }
 
 /**
- * 生成 lesson-digest。
+ * 生成 lesson-digest。模型一次重试后仍没有可用分段 → 抛 GENERATION_FAILED，
+ * 路由转成失败响应，客户端显示失败态 + 再试一次，不落缓存。
  *
  * @param segments 转录 segments（有 startMs/endMs/text）
  * @param images 课中拍的图片列表（有 capturedAtMs 锚点）
@@ -321,9 +274,10 @@ export async function generateLessonDigest(
   lessonTitle?: string,
 ): Promise<LessonDigest> {
   if (segments.length === 0) {
+    // 没有转录是客观事实，不是失败：只带课后补充照片
     return {
-      title: lessonTitle || '课堂笔记',
-      overview: '这节课没有转录内容。',
+      title: lessonTitle || '',
+      overview: '',
       sections: [],
       extras: images.filter((img) => img.capturedAtMs === null).map((img) => ({
         text: img.title || '课后补充照片',
@@ -332,12 +286,12 @@ export async function generateLessonDigest(
     };
   }
 
-  const llmOutput = await generateDigestWithLLM(segments, images, lessonTitle);
-
-  if (!llmOutput) {
-    log.info('[lesson-digest] LLM failed, using fallback');
-    return buildFallbackDigest(segments, images);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const llmOutput = await generateDigestWithLLM(segments, images, lessonTitle);
+    if (!llmOutput) continue;
+    const digest = normalizeLessonDigestOutput(llmOutput, images, lessonTitle);
+    if (digest) return digest;
+    log.warn('[lesson-digest] model returned no usable sections', { attempt: attempt + 1 });
   }
-
-  return normalizeLessonDigestOutput(llmOutput, segments, images, lessonTitle);
+  throw new Error('GENERATION_FAILED');
 }

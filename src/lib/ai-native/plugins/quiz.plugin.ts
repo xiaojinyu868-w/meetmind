@@ -302,7 +302,8 @@ export const quizPlugin: AppPlugin = {
               stem: typeof card.meta?.stem === 'string' ? card.meta.stem : card.body,
               type: typeof card.meta?.type === 'string' ? card.meta.type : 'single',
               options: Array.isArray(card.meta?.options) ? card.meta.options : [],
-              answer: typeof card.meta?.answer === 'string' ? card.meta.answer : 'A',
+              // buildQuizCards 只保留有 answer 的题，这里不该再有默认值——没有就是没有
+              answer: typeof card.meta?.answer === 'string' ? card.meta.answer : '',
               explanation: typeof card.meta?.explanation === 'string' ? card.meta.explanation : '',
             })),
         },

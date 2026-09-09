@@ -902,7 +902,7 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
   const sessionId = useSessionStore(s => s.sessionId);
   const sourceItems = useCollectionStore(s => s.sourceItems);
   const digestImages = sourceItems.filter(i => i.type==='image'&&i.role==='support'&&i.sessionId===sessionId).map(i => ({ imageId:i.id, capturedAtMs:i.capturedAtMs??null, title:i.title, ocrText: i.fullText }));
-  const { digest, loading: digestLoading } = useLessonDigest({ sessionId, segments, images: digestImages, lessonTitle: reviewContext?.title||p.selectedReviewItem?.title, enabled: digestView && segments.length>0 });
+  const { digest, loading: digestLoading, refetch: refetchDigest } = useLessonDigest({ sessionId, segments, images: digestImages, lessonTitle: reviewContext?.title||p.selectedReviewItem?.title, enabled: digestView && segments.length>0 });
   const getImageUrl = useCallback((id:string) => { const i = sourceItems.find(s=>s.id===id); return i?.previewUrl||i?.attachmentUrl; }, [sourceItems]);
   const getOrig = useCallback((sMs:number,eMs:number) => { const c = segments.filter(s=>s.startMs>=sMs&&s.startMs<=eMs).map(s=>s.text).join(' '); return c||undefined; }, [segments]);
   const selectedItem = p.selectedReviewItem;
@@ -1083,8 +1083,8 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
               <div className="h-16 w-16 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden mb-4 animate-pulse m-octo-breath">
                 <img src="/images/octo-buddy/thinking.png" alt="" className="h-full w-full object-cover" />
               </div>
-              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-pine mb-1">正在整理</p>
-              <p className="text-[12px] text-ink-muted">同桌正在把这节课整理成笔记…</p>
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-pine mb-1">{COPY.digest.working}</p>
+              <p className="text-[12px] text-ink-muted">{COPY.digest.workingBody}</p>
             </div>
           ) : digest ? (
             <div className="space-y-4">
@@ -1098,9 +1098,12 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
               />
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-12">
-              <p className="text-[12px] text-ink-muted mb-3">笔记生成失败</p>
-              <button onClick={() => setDigestView(false)} className="rounded-full bg-paper-warm px-3 py-1.5 text-[11px] font-medium text-ink-secondary">查看转录原文</button>
+            <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+              <p className="max-w-[240px] text-[13px] leading-relaxed text-ink-secondary">{COPY.digest.failedTitle}</p>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={refetchDigest} className="rounded-full bg-pine px-4 py-2.5 text-[12px] font-medium text-white shadow-soft transition active:scale-[0.97]">{COPY.digest.retry}</button>
+                <button type="button" onClick={() => setDigestView(false)} className="rounded-full border border-divider bg-card px-4 py-2.5 text-[12px] font-medium text-ink-secondary">{COPY.digest.viewTranscript}</button>
+              </div>
             </div>
           )
         ) : segments.length>0 ? (

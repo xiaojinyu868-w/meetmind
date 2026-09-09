@@ -47,7 +47,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `llm-service.ts` | ~750 | 统一 LLM 调用层（StepFun / DeepSeek / 通义千问 / 火山方舟 / 中转站），默认优先 `step-3.7-flash`（阶跃星辰）；`chatStream` 默认开 word-level smoothing（中文按字 / 英文按词 / 标点独立段，10ms 节流），所有走流式的对话框（/api/chat、/api/workspace/search、legacy /api/tutor）自动按词平滑刷出，可 `options.smooth: 'off'` 关闭；`chat()` 内部统一接 `point-meter` 影子计量（feature/userId 由调用链 meter context 归属，调用方零侵入） |
 | `highlight-service.ts` | 675 | AI 精选片段（Smart/Fast 双模式） |
 | `summary-service.ts` | 246 | 课堂摘要生成 |
-| `lesson-digest-service.ts` | ~340 | 课堂结构化分段总结：segments + 图片锚点 → LLM 生成分段 digest + fallback 兜底；`normalizeLessonDigestOutput` 用前一段结束时间安全补齐模型遗漏的时间边界。桌面移动共享 |
+| `lesson-digest-service.ts` | ~290 | 课堂结构化分段总结：segments + 图片锚点 → LLM 生成分段 digest（一次重试；仍无可用分段抛 `GENERATION_FAILED`，路由 502，客户端失败态 + 再试一次、**不落 IndexedDB**——2026-09 前失败会按 5 分钟切片拼「第 N 段」假笔记并被永久缓存）；`normalizeLessonDigestOutput` 用前一段结束时间安全补齐模型遗漏的时间边界。桌面移动共享 |
 | `tutor-service.ts` | 273 | AI 家教：引用匹配 + LLM 解释 |
 | `learning-intent-service.ts` | ~220 | 深度学习意图确认：当前表达定义目标边界，历史上下文不能静默收窄宽泛愿望；只在学习路径确有歧义时生成 1-3 个动态单选/多选问题，用户作答后再次整理为最终计划，模型不可用时返回确定性计划 |
 | `learning-memory-distillation-service.ts` | ~170 | 全局学习问答持久化后的独立学习理解整理：不依赖用户手动选择模式，只从本轮真实表达/作答提炼最多 2 条，支持替换近义旧理解；拒绝愿望、建议、人格与敏感推断，证据不足返回空数组，不读取或改写客观学习现场 |

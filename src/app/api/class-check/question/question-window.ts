@@ -1,5 +1,6 @@
 import type { TranscriptSegment } from '@/types';
 import type { ClassCheckQuestionData } from '@/app/api/class-check/plan/route';
+import { normalizeQuizOptions, resolveAnswerIndex } from '@/lib/ai-native/quiz-answer';
 
 /**
  * 随堂检验出题的纯函数部分：选转录窗口、正规化模型输出。
@@ -49,47 +50,13 @@ export interface QuestionLLMRaw {
   explanation?: string;
 }
 
-function normalizeOptions(options: unknown): string[] {
-  if (!Array.isArray(options)) return [];
-  return options
-    .map((item) => (typeof item === 'string' ? item.trim() : ''))
-    .filter((item) => item.length > 0)
-    .slice(0, 6);
-}
-
-function stripOptionPrefix(option: string): string {
-  return option.replace(/^[A-Za-z][.、)．\s]+/, '').trim().toLowerCase();
-}
-
-/**
- * 把模型给的 answer 解析成选项下标。接受「B」「B.」「B、xxx」或选项原文；
- * 解析不出来返回 -1——这种题不能上：正确答案是猜的，学生答对答错都没有意义。
- */
-export function resolveAnswerIndex(answer: unknown, options: string[]): number {
-  if (typeof answer !== 'string') return -1;
-  const trimmed = answer.trim();
-  if (!trimmed) return -1;
-
-  const letter = trimmed.match(/^([A-Za-z])[.、)．\s]*$/);
-  if (letter) {
-    const idx = letter[1].toUpperCase().charCodeAt(0) - 65;
-    return idx >= 0 && idx < options.length ? idx : -1;
-  }
-
-  const lowered = trimmed.toLowerCase();
-  const exact = options.findIndex((option) => option.toLowerCase() === lowered);
-  if (exact >= 0) return exact;
-
-  const content = stripOptionPrefix(trimmed);
-  if (!content) return -1;
-  return options.findIndex((option) => stripOptionPrefix(option) === content);
-}
+export { resolveAnswerIndex } from '@/lib/ai-native/quiz-answer';
 
 /** 模型输出 → 可用题；题干 / 选项 / 答案任一不成立就丢掉这道题 */
 export function normalizeQuestion(raw: QuestionLLMRaw): ClassCheckQuestionData | null {
   const stem = typeof raw?.stem === 'string' ? raw.stem.trim() : '';
   if (!stem) return null;
-  const options = normalizeOptions(raw.options);
+  const options = normalizeQuizOptions(raw.options);
   if (options.length < 2) return null;
   const answerIndex = resolveAnswerIndex(raw.answer, options);
   if (answerIndex < 0) return null;

@@ -129,7 +129,6 @@ import {
   hasEnoughInlineAppTranscript,
   selectInlineAppTranscript,
 } from '@/lib/utils/inline-app-transcript';
-import { buildInlineAppFallbackResult } from '@/lib/utils/inline-app-fallback';
 import {
   AI_MODEL_AUTO_VALUE,
   AI_MODEL_PREFERENCE_KEY,
@@ -450,9 +449,10 @@ export function useClassroomCompanion(
             return;
           }
 
-          // 服务端诚实空态（材料不足/内容不适合）：不能用原文伪造一套假产物——
-          // 那直接违反「有根」。把气泡置为安静的失败态，告诉学生真实原因。
-          if (data?.error === 'CONTENT_NOT_READY' || data?.error === 'APP_NOT_SUITABLE') {
+          // 服务端诚实空态（材料不足 / 内容不适合 / 模型两次都没做出来）：不能用原文伪造
+          // 一套假产物——那直接违反「有根」。把气泡置为安静的失败态，告诉学生真实原因，
+          // 卡片上的「再试一次」走 retryInlineApp。
+          if (data?.error === 'CONTENT_NOT_READY' || data?.error === 'APP_NOT_SUITABLE' || data?.error === 'GENERATION_FAILED') {
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === messageId
@@ -473,16 +473,12 @@ export function useClassroomCompanion(
         await wait(getInlineAppRetryDelayMs(attempt));
       }
 
-      const fallbackResult = buildInlineAppFallbackResult(appKey, appSegments);
+      // 重试耗尽：诚实失败。之前这里会用最近几段原文切片拼一套"测验 / 速查卡 / 结构图"
+      // 标成 ready 并随对话持久化——学生做的是假题，答案永远是 A。没有产物就是没有产物。
       setMessages((prev) =>
         prev.map((m) =>
           m.id === messageId
-            ? fallbackResult
-              ? {
-                  ...m,
-                  inlineApp: { appKey, status: 'ready' as const, result: fallbackResult, payload: fallbackResult.render?.payload },
-                }
-              : { ...m, inlineApp: { appKey, status: 'error' as const, error: lastError } }
+            ? { ...m, inlineApp: { appKey, status: 'error' as const, error: lastError } }
             : m,
         ),
       );

@@ -56,6 +56,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ digest });
   } catch (error) {
+    if (error instanceof Error && error.message === 'GENERATION_FAILED') {
+      // 模型两次都没整理出可用分段：诚实失败，客户端给失败态 + 再试一次，不落缓存
+      log.warn('[lesson-digest] generation failed after retry');
+      return NextResponse.json({ error: 'GENERATION_FAILED' }, { status: 502 });
+    }
     log.error('[lesson-digest] Request error:', error);
     return NextResponse.json(
       { error: 'Failed to generate lesson digest' },
