@@ -6,6 +6,7 @@ import { resolveWorkshopModelId, WORKSHOP_MODEL_PREFERENCE_KEY } from '@/lib/uti
 import type { Anchor, TranscriptSegment } from '@/types';
 import type { DataSourceType } from '@/lib/ai-native/types';
 import { getWorkshopAppByKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
+import { COPY } from '@/lib/ui/copy';
 import type { FloatingWorkshopWindowState } from './workshop-window-state';
 import { useAppExecution, type AppTaskState } from '@/components/apps/hooks/useAppExecution';
 import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
@@ -137,10 +138,11 @@ function buildInfographicContentContext(summaryOverview: string | undefined, tra
 }
 
 function taskLabel(taskState: AppTaskState): string {
-  if (taskState.status === 'running') return '生成中';
-  if (taskState.status === 'success') return '已完成';
-  if (taskState.status === 'error') return '失败';
-  return '待生成';
+  // 与 AppWindowShell 的状态点同一套词（做好了 / 正在做 / 没做好 / 还没开始），不再一边「已完成」一边「做好了」
+  if (taskState.status === 'running') return COPY.apps.matrix.running;
+  if (taskState.status === 'success') return COPY.apps.matrix.ready;
+  if (taskState.status === 'error') return COPY.apps.matrix.failed;
+  return COPY.apps.matrix.waiting;
 }
 
 function taskTone(taskState: AppTaskState): string {

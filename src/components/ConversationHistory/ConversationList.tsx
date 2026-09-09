@@ -183,10 +183,9 @@ export function ConversationList({
           </div>
         ) : displayList.length === 0 ? (
           emptyContent || (
-            <div className="text-center py-8">
-              <div className="text-3xl mb-2">💬</div>
-              <p className="text-sm text-ink-muted">
-                {searchResults !== null ? '没有找到匹配的对话' : '暂无对话记录'}
+            <div className="px-4 py-8 text-center">
+              <p className="text-sm leading-6 text-ink-muted">
+                {searchResults !== null ? '没有找到匹配的对话，换个词试试。' : '还没有对话。在课堂里问同学一句，这里就会留下记录。'}
               </p>
             </div>
           )

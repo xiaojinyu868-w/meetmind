@@ -73,7 +73,17 @@ export function TeachThreadList({ threads, activeId, onSelect, onNew, onRemove }
           </div>
         ))}
         {threads.length === 0 ? (
-          <p className="px-2 pt-6 text-center text-[12px] text-ink-muted">讲过的课会列在这里</p>
+          <div className="flex flex-col items-center gap-3 px-2 pt-8 text-center">
+            <p className="text-[12px] leading-5 text-ink-muted">{APPS_COPY.teach.emptyBody}</p>
+            <button
+              type="button"
+              onClick={onNew}
+              className="inline-flex items-center gap-1 rounded-full bg-pine px-3.5 py-1.5 text-[12px] font-medium text-white shadow-soft transition hover:opacity-90"
+            >
+              <Plus size={12} strokeWidth={2} />
+              {APPS_COPY.teach.newLesson}
+            </button>
+          </div>
         ) : null}
       </div>
     </div>

@@ -260,6 +260,7 @@ export const APPS_COPY = {
     },
     teach: {
       appName: 'AI 家教',
+      emptyBody: '还没有上过课。开一节，老师会从你这节课的内容讲起。',
       lessonStart: '老师，开始上课吧',
       askPlaceholder: '随时提问，当前句讲完就答你…',
       thinking: '老师在想…',

@@ -544,9 +544,10 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
               const isResolved = anchor.status === 'resolved' || anchor.resolved === true;
               const isSelected = selectedAnchorId !== undefined && anchor.id === selectedAnchorId;
               return (
-                <div
+                <button
+                  type="button"
                   key={anchor.id || index}
-                  className={`absolute w-3 h-3 rounded-full transform -translate-x-1/2 transition-all cursor-pointer pointer-events-auto ${
+                  className={`absolute w-3 h-3 rounded-full transform -translate-x-1/2 transition-all cursor-pointer pointer-events-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pine/50 focus-visible:ring-offset-1 ${
                     isSelected 
                       ? 'bg-coral ring-2 ring-coral-300 ring-offset-1 scale-125 z-10' 
                       : isResolved 
@@ -555,6 +556,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                   }`}
                   style={{ left: `${position}%` }}
                   onClick={() => onAnchorClick?.(anchor)}
+                  aria-label={`困惑点 ${formatTimestampMs(anchor.timestamp)}${isResolved ? '（已解决）' : ''}`}
                   title={`困惑点 ${formatTimestampMs(anchor.timestamp)}${isResolved ? ' (已解决)' : ''}`}
                 />
               );
