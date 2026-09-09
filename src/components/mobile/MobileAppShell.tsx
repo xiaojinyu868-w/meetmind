@@ -1396,7 +1396,7 @@ function EchoScreen({ p }: { p: MobileAppShellProps }) {
               <img src="/images/octo-buddy/happy.png" alt="" className="h-full w-full object-cover" />
             </div>
             <div>
-              <p className="text-[15px] font-semibold text-ink">今日情报</p>
+              <p className="text-[15px] font-semibold text-ink">{COPY.feed.drawerTitle}</p>
               <p className="mt-0.5 text-[9px] text-ink-muted">由你的收藏与目标决定</p>
             </div>
           </div>

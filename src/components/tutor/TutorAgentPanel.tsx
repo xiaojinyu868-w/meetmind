@@ -674,12 +674,12 @@ export function TutorAgentPanel({
                   <button
                     type="button"
                     onClick={handleRegenerateLast}
-                    title="重生成"
-                    aria-label="重生成"
+                    title={COPY.tutor.regenerate}
+                    aria-label={COPY.tutor.regenerate}
                     className="inline-flex h-7 items-center gap-1 rounded-full px-2 text-[11.5px] text-ink-muted transition-colors hover:bg-paper-warm hover:text-ink-secondary"
                   >
                     <RefreshCw size={12} strokeWidth={1.8} />
-                    <span className="hidden sm:inline">重生成</span>
+                    <span className="hidden sm:inline">{COPY.tutor.regenerate}</span>
                   </button>
                 ) : null}
               </>

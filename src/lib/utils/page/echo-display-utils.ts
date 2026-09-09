@@ -79,9 +79,9 @@ export function resolveEchoDisplayTime(item: Pick<WorkspaceEchoMessage, 'created
 export function getEchoDebugReasonLabel(reason?: string): string {
   switch (reason) {
     case 'active':
-      return '今天的发现已经整理好了';
+      return '今日情报已经整理好了';
     case 'pending':
-      return '今天的发现还在整理中';
+      return '今日情报还在整理中';
     case 'context-too-thin':
       return '当前上下文还太薄，先多收一点';
     case 'too-short':
@@ -93,7 +93,7 @@ export function getEchoDebugReasonLabel(reason?: string): string {
     case 'workspace-missing':
       return '当前工作区不可用';
     case 'config-missing':
-      return '今日发现的服务还没配置好';
+      return '今日情报的服务还没配置好';
     default:
       return reason || '已跳过';
   }
@@ -156,9 +156,9 @@ export function buildManualEchoFeedbackFromPayload(payload: DailyEchoRefreshPayl
     case 'low-signal':
       return { tone: 'info', title: '这次没抓住线索', body: '先保留当前版本，晚点再试。' };
     case 'config-missing':
-      return { tone: 'error', title: '今日发现的服务还没接好', body: '先检查 CommonStack 配置。' };
+      return { tone: 'error', title: '今日情报的服务还没接好', body: '先检查 CommonStack 配置。' };
     default:
-      return { tone: 'info', title: '这次没有整理出新的发现', body: '可以稍后再试。' };
+      return { tone: 'info', title: '这次没有整理出新的情报', body: '可以稍后再试。' };
   }
 }
 
@@ -178,9 +178,9 @@ export function buildManualEchoUnavailableFeedback(params: {
     return { tone: 'pending', title: '正在确认账号状态', body: '确认完登录状态后再试。' };
   }
   if (params.isGuestFastEntry) {
-    return { tone: 'info', title: '游客模式下不能直接测今日发现', body: '先登录，再在工作区里触发。' };
+    return { tone: 'info', title: '游客模式下不能直接测今日情报', body: '先登录，再在工作区里触发。' };
   }
-  return { tone: 'info', title: '登录后才能测试今日发现', body: '先登录，再回来试这一条。' };
+  return { tone: 'info', title: '登录后才能测试今日情报', body: '先登录，再回来试这一条。' };
 }
 
 export function getManualEchoFeedbackClasses(tone: ManualEchoFeedbackTone) {

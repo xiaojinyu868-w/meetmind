@@ -46,6 +46,8 @@ export const COPY = {
 
 
   tutor: {
+    /** 对话里对上一条回答的重做；应用产物的重做叫「再做一版」，不混用 */
+    regenerate: '重新回答',
     emptyAfterName: '在这里。',
     reviewStarters: ['先讲清这节课的主线', '从我标记的地方开始'] as const,
     /** 复习态开场（2026-09-08）：同桌听过这节课，开场点名学生能核对的时刻 */
@@ -622,8 +624,8 @@ export const COPY = {
     capabilityFlashcards: '闪卡',
     capabilityQuiz: '测验',
     capabilityMindmap: '思维导图',
-    capabilityFeed: '今日发现',
-    intelligenceLabel: '今日发现',
+    capabilityFeed: '今日情报',
+    intelligenceLabel: '今日情报',
     intelligenceFallback: '从最近的学习里，找到一条值得继续的线索',
     intelligenceAction: '查看',
     recentLabel: '最近收下',

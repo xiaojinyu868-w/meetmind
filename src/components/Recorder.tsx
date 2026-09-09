@@ -1954,7 +1954,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
             </button>
             {anchorCount > 0 ? (
               <span className="rounded-full bg-divider-light px-2.5 py-1 text-[12px] text-ink-secondary">
-                已记 {anchorCount} 处卡点
+                已标记 {anchorCount} 处
               </span>
             ) : (
               <span className="text-[12px] text-ink-muted">听不懂时点一下</span>
