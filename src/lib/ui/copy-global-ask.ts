@@ -300,8 +300,6 @@ export const GLOBAL_ASK_COPY = {
     memoryEmpty: '还没有形成稳定的理解。先正常学习就好，MeetMind 会从真实过程里慢慢认识你。',
     /** 掌握轨迹（2026-09-08）：测验 / 闪卡 / 讲给同桌听留下的事实按概念连成线，让"曾经不稳 → 现在稳"被看见 */
     masteryTrail: {
-      eyebrow: '掌握轨迹',
-      title: '最近检验过的东西',
       body: '来自测验、闪卡和讲给同桌听的事实，不是判断。',
       statusUnstable: '还没稳',
       statusImproving: '刚记住',
