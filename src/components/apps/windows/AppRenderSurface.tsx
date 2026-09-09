@@ -4,6 +4,8 @@ import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import type { TranscriptSegment } from '@/types';
 import type { LearningObservationContent } from '@/types/learning-event';
+import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
+import { getWorkshopAppByKey } from '@/lib/ai-native/app-catalog';
 import type { AppTaskState } from '@/components/apps/hooks/useAppExecution';
 import { PodcastWindow } from './PodcastWindow';
 import { FlashcardsWindow } from './FlashcardsWindow';
@@ -56,6 +58,12 @@ export function AppRenderSurface({
   nextStep,
   mindmapDefaultViewMode = 'mindmap',
 }: AppRenderSurfaceProps) {
+  // 生成失败（含 GENERATION_FAILED）且没有旧成品：所有应用统一进"这次没做出来，再试一次"，
+  // 不再让窗口体停在加载态、只有头部一个"失败"小标
+  if (!result && taskState?.status === 'error') {
+    const app = getWorkshopAppByKey(appKey);
+    return <AppWindowPlaceholder status="error" appName={app?.name ?? appKey} errorMessage={taskState.error} onRetry={onRegenerate} />;
+  }
   if (appKey === 'audio-overview') {
     return <PodcastWindow result={result} transcript={transcript} taskState={taskState} onSeek={onSeek} onRegenerate={onRegenerate} />;
   }

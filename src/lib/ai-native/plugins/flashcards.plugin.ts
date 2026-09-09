@@ -8,6 +8,9 @@ import { resolveGroundedEvidence } from '../evidence-grounding';
 import { buildFlashcardsSystemPrompt, buildFlashcardsUserPrompt } from '../app-prompts';
 
 const TARGET_CARD_COUNT = 8;
+/** 少于这个数就当这次没做出来：宁可诚实失败让人重试，也不用模板卡凑数 */
+const MIN_CARD_COUNT = 2;
+export const GENERATION_FAILED = 'GENERATION_FAILED';
 
 interface FlashcardDraft {
   question?: string;
@@ -44,17 +47,6 @@ function isFillerOnly(value: string): boolean {
   return /^(嗯+|呃+|啊+|这个|那个|然后|就是|所以|好|行|对|是的?)$/i.test(core);
 }
 
-function pickEvidenceSegments(transcript: TranscriptSegment[], count: number): TranscriptSegment[] {
-  const source = transcript.filter((segment) => cleanText(segment.text || '').length > 0);
-  if (source.length === 0) return transcript.slice(0, count);
-  if (source.length <= count) return source;
-  const picked: TranscriptSegment[] = [];
-  const step = (source.length - 1) / Math.max(1, count - 1);
-  for (let index = 0; index < count; index += 1) {
-    picked.push(source[Math.round(index * step)]);
-  }
-  return picked;
-}
 
 function toTimestamp(value: unknown, fallback: number, timelineEndMs = 0): number {
   const normalizeNumber = (raw: number): number => {
@@ -104,18 +96,15 @@ export function resolveFlashcardEvidenceSegment(
   ).segment ?? segments[fallbackIndex % segments.length];
 }
 
-function fallbackDraft(segment: TranscriptSegment, tools: AppPluginTools): FlashcardDraft {
-  const summary = cleanText(tools.summarizeSegments([segment], 88) || segment.text || '');
-  // 优先用术语+对比的方式构造题面，避免"请解释 X"那种空白式提问
-  const topic = summary.slice(0, 24) || '本课核心概念';
-  return {
-    question: `用一句话区分"${topic}"和你之前学过的相关概念。`,
-    answer: cleanText(segment.text || '') || '请回放该证据并完成复述。',
-    hint: '先说定义差异，再说应用差异。',
-    startMs: segment.startMs,
-    endMs: segment.endMs,
-    difficulty: 'core',
-  };
+/**
+ * 2026-09-09 起没有兜底卡。此前 LLM 失败或某卡"证据落地"不通过时会换成
+ * "用一句话区分「…」和你之前学过的相关概念"这类模板卡——对学生是敷衍，对记忆是污染。
+ * 现在：模型的卡就是卡；落地只决定要不要给"回到原话"的跳转；整副没做出来就抛 GENERATION_FAILED。
+ */
+function isUsableCard(draft: FlashcardDraft | undefined): draft is FlashcardDraft {
+  const front = cleanText(draft?.question?.trim() || '');
+  const back = cleanText(draft?.answer?.trim() || '');
+  return Boolean(front && back && !isFillerOnly(front) && !isFillerOnly(back));
 }
 
 async function generateDeckWithLLM(
@@ -152,94 +141,54 @@ async function generateDeckWithLLM(
 }
 
 function buildCards(
-  tools: AppPluginTools,
-  fallbackSegments: TranscriptSegment[],
-  evidenceSegments: TranscriptSegment[],
+  transcript: TranscriptSegment[],
   llmOutput: FlashcardLLMOutput | null
 ): AppExecutionResult['cards'] {
-  const cards: AppExecutionResult['cards'] = [];
-  const overview =
-    cleanText(llmOutput?.overview?.trim() || '') ||
-    cleanText(tools.summarizeSegments(fallbackSegments.slice(0, 2), 180) || '') ||
-    '先做主动回忆，再看答案与证据。';
+  const drafts = (Array.isArray(llmOutput?.cards) ? llmOutput.cards : []).filter(isUsableCard).slice(0, TARGET_CARD_COUNT);
+  if (drafts.length < MIN_CARD_COUNT) throw new Error(GENERATION_FAILED);
 
+  const cards: AppExecutionResult['cards'] = [];
   cards.push({
     id: 'flashcards-overview',
     type: 'insight',
     title: cleanText(llmOutput?.deckTitle?.trim() || '') || '课堂闪卡组',
-    body: overview,
+    body: cleanText(llmOutput?.overview?.trim() || '') || '先做主动回忆，再看答案与证据。',
     priority: 'high',
   });
 
-  const draftCards =
-    Array.isArray(llmOutput?.cards) && llmOutput.cards.length > 0
-      ? llmOutput.cards.slice(0, TARGET_CARD_COUNT)
-      : fallbackSegments.map((segment) => fallbackDraft(segment, tools));
-
-  draftCards.forEach((draftCard, index) => {
-    const fallbackSegment =
-      fallbackSegments[index % Math.max(1, fallbackSegments.length)] ||
-      ({
-        id: `virtual-${index + 1}`,
-        text: tools.summarizeSegments(evidenceSegments, 120) || '请根据课堂内容完成复述。',
-        startMs: 0,
-        endMs: 8000,
-        confidence: 1,
-      } as TranscriptSegment);
-    const timelineEndMs = Math.max(...evidenceSegments.map((segment) => segment.endMs ?? segment.startMs ?? 0), 0);
-    const grounding = resolveGroundedEvidence(
-      `${draftCard?.question ?? ''} ${draftCard?.answer ?? ''}`,
-      evidenceSegments,
-      toTimestamp(draftCard?.startMs, -1, timelineEndMs),
-    );
-    const segment = grounding.segment ?? fallbackSegment;
+  const timelineEndMs = Math.max(...transcript.map((segment) => segment.endMs ?? segment.startMs ?? 0), 0);
+  drafts.forEach((draftCard, index) => {
+    const front = cleanText(draftCard.question!.trim());
+    const back = cleanText(draftCard.answer!.trim());
+    // 证据落地只决定"回到原话"跳到哪、以及要不要给——在整份转录里找，不再否决模型的卡
+    const grounding = resolveGroundedEvidence(`${front} ${back}`, transcript, toTimestamp(draftCard.startMs, -1, timelineEndMs));
+    const segment = grounding.supported || grounding.method === 'timestamp' ? grounding.segment : undefined;
     const taskId = `flashcard-task-${index + 1}`;
-    const base = fallbackDraft(segment, tools);
-    const front = cleanText(draftCard?.question?.trim() || '');
-    const back = cleanText(draftCard?.answer?.trim() || '');
-    const useFallback = !grounding.supported || !front || !back || isFillerOnly(front) || isFillerOnly(back);
-
-    const finalFront = useFallback ? cleanText(base.question || '') : front;
-    const finalBack = useFallback ? cleanText(base.answer || '') : back;
-    const finalHint = cleanText(draftCard?.hint?.trim() || '') || cleanText(base.hint || '');
-
-    // 引用范围以匹配到的真实 segment 为准。模型给出的时间只用于定位候选，不能覆盖证据。
-    const startMs = segment.startMs ?? 0;
-    const endMs = segment.endMs ?? startMs + 8000;
+    const startMs = segment?.startMs;
+    const endMs = segment ? (segment.endMs ?? segment.startMs + 8000) : undefined;
 
     cards.push({
       id: `flashcard-card-${index + 1}`,
       type: 'flashcard',
       title: `闪卡 ${index + 1}`,
-      body: finalFront || `请复述 ${formatTimestamp(startMs)} 的核心内容`,
+      body: front,
       priority: index < 3 ? 'high' : 'medium',
-      citations: [
-        {
-          startMs,
-          endMs,
-          snippet: cleanText(segment.text || '').slice(0, 120),
-        },
-      ],
+      ...(segment && typeof startMs === 'number' && typeof endMs === 'number'
+        ? { citations: [{ startMs, endMs, snippet: cleanText(segment.text || '').slice(0, 120) }] }
+        : {}),
       actions: [
-        {
-          id: `seek-flashcard-${index + 1}`,
-          label: `回放 ${formatTimestamp(startMs)}`,
-          kind: 'seek',
-          payload: { timestamp: startMs },
-        },
-        {
-          id: `mark-flashcard-${index + 1}`,
-          label: '标记掌握',
-          kind: 'mark_done',
-          payload: { taskId },
-        },
+        ...(segment && typeof startMs === 'number'
+          ? [{ id: `seek-flashcard-${index + 1}`, label: `回放 ${formatTimestamp(startMs)}`, kind: 'seek' as const, payload: { timestamp: startMs } }]
+          : []),
+        { id: `mark-flashcard-${index + 1}`, label: '标记掌握', kind: 'mark_done' as const, payload: { taskId } },
       ],
       meta: {
         cardKind: 'flashcard',
-        front: finalFront,
-        back: finalBack,
-        hint: finalHint,
-        difficulty: draftCard?.difficulty || base.difficulty || 'core',
+        front,
+        back,
+        hint: cleanText(draftCard.hint?.trim() || ''),
+        difficulty: draftCard.difficulty || 'core',
+        evidence: grounding.supported ? 'text' : grounding.method === 'timestamp' ? 'timestamp' : 'none',
       },
     });
   });
@@ -254,7 +203,7 @@ function buildTasks(cards: AppExecutionResult['cards']): AppExecutionResult['tas
     label: `完成闪卡 ${index + 1} 主动回忆`,
     reason: '先回忆再看答案，记忆保持更稳固。',
     estimatedMinutes: index < 3 ? 4 : 3,
-    relatedTimestamp: card.citations?.[0]?.startMs ?? 0,
+    relatedTimestamp: card.citations?.[0]?.startMs,
   }));
 }
 
@@ -285,21 +234,26 @@ export const flashcardsPlugin: AppPlugin = {
       minCharsPerSegment: 48,
     });
     const anchorContext = buildPromptAnchorContext(context.input.anchors, 12);
-    const evidenceSegments = pickEvidenceSegments(
-      context.input.transcript,
-      Math.min(TARGET_CARD_COUNT, Math.max(4, Math.ceil(context.input.transcript.length / 3)))
-    );
     const systemPrompt = context.runtimeControl?.systemPrompt || buildFlashcardsSystemPrompt();
     const model = context.runtimeControl?.modelId || context.model || DEFAULT_MODEL_ID;
 
+    // 一次重试：JSON 没解出来 / 卡片为空多数是瞬时或格式问题；两次都不行才诚实失败
     let llmOutput: FlashcardLLMOutput | null = null;
-    try {
-      llmOutput = await generateDeckWithLLM(context, model, promptContext.text, anchorContext, systemPrompt);
-    } catch {
-      llmOutput = null;
+    let attempts = 0;
+    while (attempts < 2 && !(Array.isArray(llmOutput?.cards) && llmOutput.cards.some(isUsableCard))) {
+      attempts += 1;
+      try {
+        llmOutput = await generateDeckWithLLM(context, model, promptContext.text, anchorContext, systemPrompt);
+        if (!Array.isArray(llmOutput?.cards) || !llmOutput.cards.some(isUsableCard)) {
+          console.warn('[flashcards-plugin] LLM returned no usable cards. attempt=', attempts, 'model=', model);
+        }
+      } catch (err) {
+        console.error('[flashcards-plugin] generateDeckWithLLM failed: attempt=', attempts, err instanceof Error ? err.message : err);
+        llmOutput = null;
+      }
     }
 
-    const cards = buildCards(tools, evidenceSegments, context.input.transcript, llmOutput);
+    const cards = buildCards(context.input.transcript, llmOutput);
     const deckCards = cards.filter((card) => card.meta?.cardKind === 'flashcard');
 
     return {
@@ -310,10 +264,11 @@ export const flashcardsPlugin: AppPlugin = {
         `intent=${context.goal.intent}`,
         `model=${model}`,
         `transcript_segments=${context.input.transcript.length}`,
-        `evidence_segments=${evidenceSegments.length}`,
+        `cards=${deckCards.length}`,
         `prompt_segments=${promptContext.usedSegments}/${promptContext.totalSegments}`,
         `prompt_truncated=${promptContext.truncated ? 'yes' : 'no'}`,
-        `llm=${llmOutput ? 'enabled' : 'fallback'}`,
+        `llm_attempts=${attempts}`,
+        `grounded=${deckCards.filter((card) => card.meta?.evidence === 'text').length}/${deckCards.length}`,
       ],
       cards,
       tasks: buildTasks(cards),

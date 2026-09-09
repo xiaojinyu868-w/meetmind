@@ -480,6 +480,10 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
           if (data?.error === 'MULTI_LESSON_CONTEXT_REQUIRED') {
             throw new Error(COPY.apps.matrix.executeNeedsMultipleLessons);
           }
+          if (data?.error === 'GENERATION_FAILED') {
+            // 模型这次没做出可用成品：进失败态（窗口体给"再试一次"），不造模板成品、不写记忆
+            throw new Error(COPY.apps.matrix.executeGenerationFailed);
+          }
           throw new Error(data?.error || '应用执行失败');
         }
 

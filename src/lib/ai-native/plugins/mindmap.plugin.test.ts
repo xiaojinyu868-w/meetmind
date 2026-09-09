@@ -8,7 +8,7 @@ const transcript: TranscriptSegment[] = [
 ];
 
 describe('groundMindmapNodes', () => {
-  it('removes unsupported leaves and anchors supported branches to evidence', () => {
+  it('只标注不删节点：落地到原话的叶子带时间点，落地不到的保留结构但没有跳转（2026-09-09 起）', () => {
     const result = groundMindmapNodes([
       {
         title: '市场均衡变化',
@@ -20,8 +20,11 @@ describe('groundMindmapNodes', () => {
     ], transcript);
 
     expect(result).toHaveLength(1);
-    expect(result[0].children).toHaveLength(1);
+    expect(result[0].children).toHaveLength(2);
     expect(result[0].children?.[0].title).toContain('供给增加');
     expect(result[0].children?.[0].startMs).toBe(0);
+    expect(result[0].children?.[1].startMs).toBeUndefined();
+    // 分支本身借第一个落地到的孩子的时间点
+    expect(result[0].startMs).toBe(0);
   });
 });

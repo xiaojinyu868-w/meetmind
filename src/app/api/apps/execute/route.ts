@@ -311,6 +311,15 @@ export async function POST(request: NextRequest) {
       // 插件判定材料撑不出可靠成品：同为预期内空态，200 + ok:false
       return NextResponse.json({ ok: false, error: 'CONTENT_NOT_READY' });
     }
+    if (message === 'APP_NOT_SUITABLE') {
+      // 没有插件认领（fallback.plugin 抛出）：与 readiness 判定同一条路，安静空态
+      return NextResponse.json({ ok: false, error: 'APP_NOT_SUITABLE' });
+    }
+    if (message === 'GENERATION_FAILED') {
+      // 模型两次都没做出可用成品：诚实失败（不再造模板题 / 模板卡），窗口给一次"再试一次"
+      log.warn('app generation failed');
+      return NextResponse.json({ ok: false, error: 'GENERATION_FAILED' });
+    }
     return NextResponse.json(
       { ok: false, error: message },
       { status: 500 }

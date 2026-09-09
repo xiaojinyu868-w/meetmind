@@ -46,15 +46,6 @@ function toTimestamp(value: unknown, fallback: number): number {
   return fallback;
 }
 
-function pickEvidenceSegments(transcript: TranscriptSegment[], count: number): TranscriptSegment[] {
-  if (transcript.length <= count) return transcript;
-  const picked: TranscriptSegment[] = [];
-  const step = (transcript.length - 1) / Math.max(1, count - 1);
-  for (let index = 0; index < count; index += 1) {
-    picked.push(transcript[Math.round(index * step)]);
-  }
-  return picked;
-}
 
 /** 将 LLM 输出的嵌套 JSON draft 标准化为 MindmapNode[] */
 function normalizeDraftNodes(drafts: MindmapNodeDraft[] | undefined): MindmapNode[] {
@@ -107,23 +98,26 @@ function treeDepth(nodes: MindmapNode[]): number {
 }
 
 /** 删除没有原文支撑的叶子；抽象父节点只有在自己或至少一个子节点有证据时保留。 */
+/**
+ * 给节点挂"回到原话"的时间点。2026-09-09 起只标注、不删节点：导图节点是模型的抽象
+ * （"核心概念 / 应用场景"），与原文的字面重叠天然很低，此前落地不到就删节点，长课会把模型
+ * 的结构删成空树再用抽样片段拼一棵假树。现在：落地到就给时间点，落地不到就没有跳转，结构照旧。
+ */
 export function groundMindmapNodes(
   nodes: MindmapNode[],
   transcript: TranscriptSegment[],
 ): MindmapNode[] {
-  return nodes.flatMap((node) => {
+  return nodes.map((node) => {
     const groundedChildren = groundMindmapNodes(node.children ?? [], transcript);
     const resolution = resolveGroundedEvidence(node.title, transcript, node.startMs);
-    if (!resolution.supported && groundedChildren.length === 0) return [];
-
     const firstGroundedChild = groundedChildren.find((child) => typeof child.startMs === 'number');
-    const evidence = resolution.supported ? resolution.segment : undefined;
-    return [{
+    const evidence = resolution.supported || resolution.method === 'timestamp' ? resolution.segment : undefined;
+    return {
       ...node,
       children: groundedChildren,
       startMs: evidence?.startMs ?? firstGroundedChild?.startMs,
       endMs: evidence?.endMs ?? firstGroundedChild?.endMs,
-    }];
+    };
   });
 }
 
@@ -242,54 +236,38 @@ export const mindmapPlugin: AppPlugin = {
     const model = context.runtimeControl?.modelId || context.model || DEFAULT_MODEL_ID;
 
     let llmOutput: MindmapLLMOutput | null = null;
-    try {
-      llmOutput = await generateMindMap(context, model, systemPrompt, promptContext.text, anchorContext);
-    } catch {
-      llmOutput = null;
-    }
-
     let rootTitle = '课堂知识结构';
     let treeChildren: MindmapNode[] = [];
     let markdownBody = '';
-
-    if (llmOutput?.markdown) {
-      const parsed = markdownToTree(llmOutput.markdown);
-      rootTitle = parsed.root;
-      treeChildren = parsed.children;
-      markdownBody = llmOutput.markdown;
-    } else if (llmOutput?.children) {
-      treeChildren = normalizeDraftNodes(llmOutput.children);
-      rootTitle = llmOutput.rootTitle?.trim() || rootTitle;
-      markdownBody = treeToMarkdown(rootTitle, treeChildren);
+    // 一次重试；两次都拿不到结构就诚实失败（不再用抽样片段拼一棵假树）
+    let attempts = 0;
+    while (attempts < 2 && treeChildren.length === 0) {
+      attempts += 1;
+      try {
+        llmOutput = await generateMindMap(context, model, systemPrompt, promptContext.text, anchorContext);
+      } catch (err) {
+        console.error('[mindmap-plugin] generateMindMap failed: attempt=', attempts, err instanceof Error ? err.message : err);
+        llmOutput = null;
+      }
+      if (llmOutput?.markdown) {
+        const parsed = markdownToTree(llmOutput.markdown);
+        rootTitle = parsed.root;
+        treeChildren = parsed.children;
+        markdownBody = llmOutput.markdown;
+      } else if (llmOutput?.children) {
+        treeChildren = normalizeDraftNodes(llmOutput.children);
+        rootTitle = llmOutput.rootTitle?.trim() || rootTitle;
+        markdownBody = treeToMarkdown(rootTitle, treeChildren);
+      }
     }
+    if (treeChildren.length === 0) throw new Error('GENERATION_FAILED');
 
     treeChildren = groundMindmapNodes(treeChildren, context.input.transcript);
-    if (treeChildren.length > 0) {
-      markdownBody = treeToMarkdown(rootTitle, treeChildren);
-    }
-
-    if (treeChildren.length === 0) {
-      const evidenceSegments = pickEvidenceSegments(context.input.transcript, 5);
-      treeChildren = evidenceSegments.map((segment) => ({
-        title: tools.summarizeSegments([segment], 32) || segment.text.slice(0, 32),
-        startMs: segment.startMs,
-        endMs: segment.endMs,
-        children: [
-          {
-            title: tools.summarizeSegments([segment], 80) || segment.text.slice(0, 80),
-          },
-        ],
-      }));
-      markdownBody = treeToMarkdown(rootTitle, treeChildren);
-    }
+    markdownBody = treeToMarkdown(rootTitle, treeChildren);
 
     const depth = treeDepth(treeChildren);
     const topLevelBranches = flattenBranches(treeChildren).filter((node) => node.depth === 0);
 
-    const evidenceSegments = pickEvidenceSegments(
-      context.input.transcript,
-      Math.max(3, topLevelBranches.length)
-    );
 
     const cards: AppExecutionResult['cards'] = [
       {
@@ -302,11 +280,12 @@ export const mindmapPlugin: AppPlugin = {
     ];
 
     topLevelBranches.forEach((branch, index) => {
-      const segment = context.input.transcript.find((item) => (
-        typeof branch.startMs === 'number' && branch.startMs >= item.startMs && branch.startMs <= item.endMs
-      )) ?? evidenceSegments[index % Math.max(1, evidenceSegments.length)] ?? evidenceSegments[0];
-      const startMs = branch.startMs ?? segment?.startMs ?? 0;
-      const endMs = branch.endMs ?? segment?.endMs ?? startMs + 8000;
+      // 只有落地到原话的分支才给引用与跳转；落地不到就没有（跳错比没有更伤信任）
+      const segment = typeof branch.startMs === 'number'
+        ? context.input.transcript.find((item) => branch.startMs! >= item.startMs && branch.startMs! <= item.endMs)
+        : undefined;
+      const startMs = segment ? (branch.startMs ?? segment.startMs) : undefined;
+      const endMs = segment ? (branch.endMs ?? segment.endMs ?? (startMs ?? 0) + 8000) : undefined;
 
       cards.push({
         id: `mindmap-branch-${index + 1}`,
@@ -316,21 +295,12 @@ export const mindmapPlugin: AppPlugin = {
           ? branch.children.map((child, childIndex) => `${childIndex + 1}. ${child.title}`).join('\n')
           : branch.title,
         priority: 'medium',
-        citations: [
-          {
-            startMs,
-            endMs,
-            snippet: segment?.text?.slice(0, 120) || '',
-          },
-        ],
-        actions: [
-          {
-            id: `seek-mindmap-${index + 1}`,
-            label: `回放 ${formatTimestamp(startMs)}`,
-            kind: 'seek',
-            payload: { timestamp: startMs },
-          },
-        ],
+        ...(segment && typeof startMs === 'number' && typeof endMs === 'number'
+          ? {
+            citations: [{ startMs, endMs, snippet: segment.text?.slice(0, 120) || '' }],
+            actions: [{ id: `seek-mindmap-${index + 1}`, label: `回放 ${formatTimestamp(startMs)}`, kind: 'seek', payload: { timestamp: startMs } }],
+          }
+          : {}),
         meta: {
           cardKind: 'mindmap',
           points: Array.isArray(branch.children) ? branch.children.map((child) => child.title) : [],
@@ -350,7 +320,8 @@ export const mindmapPlugin: AppPlugin = {
         `tree_depth=${depth}`,
         `prompt_segments=${promptContext.usedSegments}/${promptContext.totalSegments}`,
         `prompt_truncated=${promptContext.truncated ? 'yes' : 'no'}`,
-        `llm=${llmOutput ? (llmOutput.markdown ? 'markdown' : 'json') : 'fallback'}`,
+        `llm=${llmOutput?.markdown ? 'markdown' : 'json'}`,
+        `llm_attempts=${attempts}`,
       ],
       cards,
       tasks: topLevelBranches.slice(0, 6).map((branch, index) => ({

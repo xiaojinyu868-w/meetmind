@@ -8,6 +8,10 @@ import { resolveGroundedEvidence } from '../evidence-grounding';
 import { buildQuizSystemPrompt, buildQuizUserPrompt } from '../app-prompts';
 
 const TARGET_QUESTION_COUNT = 6;
+/** 少于这个数就当这次没做出来：宁可诚实失败让人重试，也不用模板题凑数 */
+const MIN_QUESTION_COUNT = 2;
+/** 路由把它翻成 200 + ok:false，窗口进"这次没做出来，再试一次"，不写任何记忆事件 */
+export const GENERATION_FAILED = 'GENERATION_FAILED';
 
 interface QuizDraft {
   stem?: string;
@@ -33,15 +37,6 @@ function formatTimestamp(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-function pickEvidenceSegments(transcript: TranscriptSegment[], count: number): TranscriptSegment[] {
-  if (transcript.length <= count) return transcript;
-  const picked: TranscriptSegment[] = [];
-  const step = (transcript.length - 1) / Math.max(1, count - 1);
-  for (let index = 0; index < count; index += 1) {
-    picked.push(transcript[Math.round(index * step)]);
-  }
-  return picked;
-}
 
 function toTimestamp(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.floor(value));
@@ -79,22 +74,13 @@ function inferQuestionType(options: string[], answer: string): string {
 }
 
 /**
- * 兜底题——只在 LLM 完全失败（返回 null / 空）时使用。
- * 关键：兜底题一律生成「简答题」（无选项），让学生回放原片段后口头复述。
- * 绝不再造 "该片段主要讨论了X / 对Y的否定 / 跳过了话题" 这类与内容无关的伪干扰项，
- * 那种选项一眼就是模板，伤害"这个 AI 真的懂我在学什么"的第一印象。
+ * 2026-09-09 起没有兜底题。此前 LLM 失败或某题"证据落地"不通过时会换成
+ * "回放 X:XX 附近的内容，用自己的话复述"这种模板题——对学生是敷衍，对记忆是污染
+ * （概念字段写进去的是"回放 7:16 附近的内容"）。现在：模型的题就是题；落地只决定
+ * 要不要给"回到原话"的跳转；整份没做出来就抛 GENERATION_FAILED，让人再试一次。
  */
-function fallbackDraft(segment: TranscriptSegment): QuizDraft {
-  const ts = formatTimestamp(segment.startMs);
-  return {
-    stem: `回放 ${ts} 附近的内容，用自己的话复述这一段讲了什么、为什么重要。`,
-    type: 'short',
-    options: [],
-    answer: segment.text.replace(/\s+/g, ' ').trim().slice(0, 160),
-    explanation: `参考原文：${segment.text.replace(/\s+/g, ' ').trim().slice(0, 160)}`,
-    startMs: segment.startMs,
-    endMs: segment.endMs,
-  };
+function isUsableDraft(draft: QuizDraft | undefined): draft is QuizDraft {
+  return Boolean(draft && typeof draft.stem === 'string' && draft.stem.trim().length >= 4 && typeof draft.answer === 'string' && draft.answer.trim().length > 0);
 }
 
 const JUDGE_OPTIONS = ['正确', '错误'];
@@ -165,9 +151,12 @@ async function generateQuizWithLLM(
 
 export function buildQuizCards(
   tools: AppPluginTools,
-  segments: TranscriptSegment[],
+  transcript: TranscriptSegment[],
   llmOutput: QuizLLMOutput | null
 ): AppExecutionResult['cards'] {
+  const drafts = (Array.isArray(llmOutput?.questions) ? llmOutput.questions : []).filter(isUsableDraft).slice(0, TARGET_QUESTION_COUNT);
+  if (drafts.length < MIN_QUESTION_COUNT) throw new Error(GENERATION_FAILED);
+
   const cards: AppExecutionResult['cards'] = [
     {
       id: 'quiz-overview',
@@ -178,37 +167,25 @@ export function buildQuizCards(
     },
   ];
 
-  const questionDrafts =
-    Array.isArray(llmOutput?.questions) && llmOutput.questions.length > 0
-      ? llmOutput.questions.slice(0, TARGET_QUESTION_COUNT)
-      : segments.map((segment) => fallbackDraft(segment));
-
-  questionDrafts.forEach((questionDraft, index) => {
-    const indexedSegment = segments[index % Math.max(1, segments.length)] || segments[0];
-    const candidateDraft = questionDraft?.stem?.trim() && questionDraft?.answer?.trim()
-      ? questionDraft
-      : fallbackDraft(indexedSegment);
-    const candidateStartMs = toTimestamp(candidateDraft.startMs, -1);
+  drafts.forEach((draft, index) => {
+    const stem = draft.stem!.trim();
+    const answer = draft.answer!.trim();
+    // 证据落地只决定"回到原话"跳到哪、以及要不要给这个跳转——不再否决模型的题。
+    // 在整份转录里找（此前只在抽样的几段里找，长课绝大多数题都会落地失败）
     const grounding = resolveGroundedEvidence(
-      `${candidateDraft.stem ?? ''} ${candidateDraft.answer ?? ''} ${candidateDraft.explanation ?? ''}`,
-      segments,
-      candidateStartMs,
+      `${stem} ${answer} ${draft.explanation ?? ''}`,
+      transcript,
+      toTimestamp(draft.startMs, -1),
     );
-    const segment = grounding.segment ?? indexedSegment;
-    // 时间戳命中不等于内容受支持。语义证据不足时，整题降级为基于真实片段的
-    // 主观复述题，不能保留模型题面再随便挂一个引用。
-    const draft = grounding.supported ? candidateDraft : fallbackDraft(segment);
-    const stem = draft.stem?.trim() || `请根据 ${formatTimestamp(segment.startMs)} 片段作答`;
-    const answer = (draft.answer || '').trim();
-    // 按题型决定选项：主观题保持空选项，绝不硬塞模板干扰项
+    const segment = grounding.supported || grounding.method === 'timestamp' ? grounding.segment : undefined;
     const { type: resolvedType, options: normalizedOptions } = resolveTypeAndOptions(
       draft.type,
       normalizeOptions(draft.options),
       answer
     );
-    const explanation = draft.explanation?.trim() || tools.summarizeSegments([segment], 120) || '请回放原片段核对关键概念。';
-    const startMs = segment?.startMs ?? 0;
-    const endMs = segment?.endMs ?? startMs + 8000;
+    const explanation = draft.explanation?.trim() || (segment ? tools.summarizeSegments([segment], 120) : '');
+    const startMs = segment?.startMs;
+    const endMs = segment ? (segment.endMs ?? segment.startMs + 8000) : undefined;
 
     cards.push({
       id: `quiz-card-${index + 1}`,
@@ -216,21 +193,13 @@ export function buildQuizCards(
       title: `测验 ${index + 1}`,
       body: stem,
       priority: index < 2 ? 'high' : 'medium',
-      citations: [
-        {
-          startMs,
-          endMs,
-          snippet: segment.text.slice(0, 120),
-        },
-      ],
-      actions: [
-        {
-          id: `seek-quiz-${index + 1}`,
-          label: `查看证据 ${formatTimestamp(startMs)}`,
-          kind: 'seek',
-          payload: { timestamp: startMs },
-        },
-      ],
+      // 落地不到原话就不给引用与跳转：跳错地方比没有跳转更伤信任
+      ...(segment && typeof startMs === 'number' && typeof endMs === 'number'
+        ? {
+          citations: [{ startMs, endMs, snippet: segment.text.slice(0, 120) }],
+          actions: [{ id: `seek-quiz-${index + 1}`, label: `查看证据 ${formatTimestamp(startMs)}`, kind: 'seek', payload: { timestamp: startMs } }],
+        }
+        : {}),
       meta: {
         cardKind: 'quiz',
         stem,
@@ -240,6 +209,7 @@ export function buildQuizCards(
         options: normalizedOptions,
         answer,
         explanation,
+        evidence: grounding.supported ? 'text' : grounding.method === 'timestamp' ? 'timestamp' : 'none',
       },
     });
   });
@@ -273,28 +243,29 @@ export const quizPlugin: AppPlugin = {
       minCharsPerSegment: 52,
     });
     const anchorContext = buildPromptAnchorContext(context.input.anchors, 12);
-    const evidenceSegments = pickEvidenceSegments(
-      context.input.transcript,
-      Math.min(TARGET_QUESTION_COUNT, Math.max(4, Math.ceil(context.input.transcript.length / 4)))
-    );
     const systemPrompt = context.runtimeControl?.systemPrompt || buildQuizSystemPrompt();
     const model = context.runtimeControl?.modelId || context.model || DEFAULT_MODEL_ID;
 
+    // 一次重试：JSON 没解出来 / 题目为空多数是瞬时或格式问题，第二次通常就好；两次都不行才诚实失败
     let llmOutput: QuizLLMOutput | null = null;
-    try {
-      llmOutput = await generateQuizWithLLM(context, model, promptContext.text, anchorContext, systemPrompt);
-      if (!llmOutput) {
-        console.warn('[quiz-plugin] LLM returned null (JSON parse failed). model=', model, 'transcript_chars=', promptContext.text.length);
-      } else if (!Array.isArray(llmOutput.questions) || llmOutput.questions.length === 0) {
-        console.warn('[quiz-plugin] LLM returned empty questions. model=', model, 'raw keys=', Object.keys(llmOutput));
-      } else {
+    let attempts = 0;
+    while (attempts < 2 && !(Array.isArray(llmOutput?.questions) && llmOutput.questions.some(isUsableDraft))) {
+      attempts += 1;
+      try {
+        llmOutput = await generateQuizWithLLM(context, model, promptContext.text, anchorContext, systemPrompt);
+        if (!llmOutput) {
+          console.warn('[quiz-plugin] LLM returned null (JSON parse failed). attempt=', attempts, 'model=', model, 'transcript_chars=', promptContext.text.length);
+        } else if (!Array.isArray(llmOutput.questions) || !llmOutput.questions.some(isUsableDraft)) {
+          console.warn('[quiz-plugin] LLM returned no usable questions. attempt=', attempts, 'model=', model, 'raw keys=', Object.keys(llmOutput));
+        }
+      } catch (err) {
+        console.error('[quiz-plugin] generateQuizWithLLM failed: attempt=', attempts, err instanceof Error ? err.message : err);
+        llmOutput = null;
       }
-    } catch (err) {
-      console.error('[quiz-plugin] generateQuizWithLLM failed:', err instanceof Error ? err.message : err);
-      llmOutput = null;
     }
 
-    const cards = buildQuizCards(tools, evidenceSegments, llmOutput);
+    // 少于 MIN_QUESTION_COUNT 道可用题 → GENERATION_FAILED（不造模板题）
+    const cards = buildQuizCards(tools, context.input.transcript, llmOutput);
 
     const questionCards = cards.filter((card) => card.meta?.cardKind === 'quiz');
 
@@ -306,10 +277,11 @@ export const quizPlugin: AppPlugin = {
         `intent=${context.goal.intent}`,
         `model=${model}`,
         `transcript_segments=${context.input.transcript.length}`,
-        `questions=${evidenceSegments.length}`,
+        `questions=${questionCards.length}`,
         `prompt_segments=${promptContext.usedSegments}/${promptContext.totalSegments}`,
         `prompt_truncated=${promptContext.truncated ? 'yes' : 'no'}`,
-        `llm=${llmOutput ? 'enabled' : 'fallback'}`,
+        `llm_attempts=${attempts}`,
+        `grounded=${questionCards.filter((card) => card.meta?.evidence === 'text').length}/${questionCards.length}`,
       ],
       cards,
       tasks: questionCards.map((card, index) => ({
@@ -317,7 +289,7 @@ export const quizPlugin: AppPlugin = {
         label: `完成测验 ${index + 1}`,
         reason: '测后回看证据，能快速定位理解偏差。',
         estimatedMinutes: 4,
-        relatedTimestamp: card.citations?.[0]?.startMs ?? evidenceSegments[index % evidenceSegments.length]?.startMs,
+        relatedTimestamp: card.citations?.[0]?.startMs,
       })),
       render: {
         mode: 'quiz',

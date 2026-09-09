@@ -95,38 +95,6 @@ function downgradeInvalidQuotes(
   };
 }
 
-function buildFallbackResult(
-  context: AppExecutionContext,
-  tools: AppPluginTools,
-  model: string,
-  traceExtras: string[],
-): AppExecutionResult {
-  return {
-    pluginId: 'explainer',
-    version: '0.2.0',
-    model,
-    trace: [
-      `intent=${context.goal.intent}`,
-      `model=${model}`,
-      `transcript_segments=${context.input.transcript.length}`,
-      ...traceExtras,
-      'llm=fallback',
-    ],
-    cards: [
-      {
-        id: 'explainer-fallback',
-        type: 'insight',
-        title: '板书精讲这次没做好',
-        body: '课堂内容仍然保留着，稍后可以再做一版。',
-        priority: 'medium',
-      },
-    ],
-    tasks: [],
-    raw: {
-      generatedAt: tools.now(),
-    },
-  };
-}
 
 export const explainerPlugin: AppPlugin = {
   manifest: {
@@ -176,7 +144,8 @@ export const explainerPlugin: AppPlugin = {
     }
 
     if (!llmOutput) {
-      return buildFallbackResult(context, tools, model, traceExtras);
+      // 不再返回"这次没做好"的假成品（它会被当成成功缓存、进路径的"做好了"）：诚实失败，窗口给"再试一次"
+      throw new Error('GENERATION_FAILED');
     }
 
     // 坏动作跳过记 trace，不崩（AmIWrite）；一页都留不住时 sanitize 给保底结构，
@@ -188,7 +157,8 @@ export const explainerPlugin: AppPlugin = {
       rawScript.pages.some((page) => page.segments.some((segment) => segmentActionCount(segment) > 0)) &&
       rawScript.pages.some((page) => page.segments.length > 0);
     if (!hasContent) {
-      return buildFallbackResult(context, tools, model, [...traceExtras, `dropped=${dropped}`]);
+      log.warn('explainer produced no usable board actions', { dropped });
+      throw new Error('GENERATION_FAILED');
     }
 
     // 唯一防线：老师原话必须逐字出自转录。失败的引用去掉「」降级为转述，不阻断产物。

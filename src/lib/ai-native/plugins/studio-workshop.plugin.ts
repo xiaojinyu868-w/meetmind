@@ -30,7 +30,8 @@ import type {
   AppPlugin,
   AppPluginTools,
 } from '../types';
-import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
+import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context'
+import { resolveGroundedEvidence } from '../evidence-grounding';
 
 import type { StudioMode, StudioOutput } from './studio-workshop.types';
 import {
@@ -166,25 +167,33 @@ export const studioWorkshopPlugin: AppPlugin = {
       `prompt_truncated=${promptContext.truncated ? 'yes' : 'no'}`,
     ];
 
+    // 2026-09-09 起没有兜底成品：模型两次都没给出可用输出就抛 GENERATION_FAILED（窗口给"再试一次"），
+    // 不再用抽样片段拼"证据模块 N"或把原文直接念成播客
     let output: StudioOutput | null = null;
     let podcastPlan: import('./studio-workshop.types').PodcastPlan | null = null;
     if (mode === 'podcast') {
-      try {
-        podcastPlan = await generatePodcastPlan(context, model, context.runtimeControl?.systemPrompt);
-        trace.push('llm=podcast_plan_enabled');
-      } catch {
-        podcastPlan = null;
-        trace.push('llm=podcast_plan_fallback');
+      for (let attempt = 1; attempt <= 2 && !podcastPlan; attempt += 1) {
+        try {
+          podcastPlan = await generatePodcastPlan(context, model, context.runtimeControl?.systemPrompt);
+        } catch (err) {
+          console.error('[studio-workshop] podcast plan failed: attempt=', attempt, err instanceof Error ? err.message : err);
+          podcastPlan = null;
+        }
+        trace.push(`podcast_plan_attempt=${attempt}:${podcastPlan ? 'ok' : 'failed'}`);
       }
+      if (!podcastPlan) throw new Error('GENERATION_FAILED');
       trace.push('podcast_pipeline=volc_direct');
     } else {
-      try {
-        output = await generateStudioOutput(context, model, mode, promptContext.text, anchorContext, context.runtimeControl?.systemPrompt);
-        trace.push('llm=enabled');
-      } catch {
-        output = null;
-        trace.push('llm=fallback');
+      for (let attempt = 1; attempt <= 2 && !(output && Array.isArray(output.cards) && output.cards.length > 0); attempt += 1) {
+        try {
+          output = await generateStudioOutput(context, model, mode, promptContext.text, anchorContext, context.runtimeControl?.systemPrompt);
+        } catch (err) {
+          console.error('[studio-workshop] generateStudioOutput failed: attempt=', attempt, err instanceof Error ? err.message : err);
+          output = null;
+        }
+        trace.push(`llm_attempt=${attempt}:${output && Array.isArray(output.cards) && output.cards.length > 0 ? 'ok' : 'failed'}`);
       }
+      if (!output || !Array.isArray(output.cards) || output.cards.length === 0) throw new Error('GENERATION_FAILED');
     }
 
     const fallbackSummary =
@@ -218,37 +227,32 @@ export const studioWorkshopPlugin: AppPlugin = {
 
     if (mode !== 'podcast') {
       (output?.cards || []).slice(0, 12).forEach((draft, index) => {
-        const fallback = evidenceSegments[index % Math.max(1, evidenceSegments.length)];
-        const startMs = toTimestamp(draft.startMs, fallback?.startMs || 0);
-        const endMs = toTimestamp(draft.endMs, fallback?.endMs || startMs + 8000);
         const bullets = toStringArray(draft.bullets, 10);
         const columns = toStringArray(draft.columns, 8);
         const rows = toMatrix(draft.rows, Math.max(1, columns.length || 3), 24);
         const dialogue = toDialogue(draft.dialogue);
+        // 引用只在落地到原话时给（整份转录里找；模型时间戳只是候选），不再按序号挂一段抽样片段
+        const grounding = resolveGroundedEvidence(
+          `${draft.title ?? ''} ${draft.body ?? ''} ${bullets.join(' ')}`,
+          context.input.transcript,
+          toTimestamp(draft.startMs, -1),
+        );
+        const segment = grounding.supported || grounding.method === 'timestamp' ? grounding.segment : undefined;
+        const startMs = segment?.startMs;
+        const endMs = segment ? (segment.endMs ?? segment.startMs + 8000) : undefined;
 
         cards.push({
           id: `studio-card-${index + 1}`,
           type: 'timeline',
           title: draft.title?.trim() || `输出模块 ${index + 1}`,
-          body: draft.body?.trim() || fallback?.text || '',
+          body: draft.body?.trim() || '',
           priority: index < 3 ? 'high' : 'medium',
-          citations: fallback
-            ? [
-                {
-                  startMs,
-                  endMs,
-                  snippet: fallback.text.slice(0, 120),
-                },
-              ]
-            : undefined,
-          actions: [
-            {
-              id: `seek-studio-${index + 1}`,
-              label: `回放 ${formatTimestamp(startMs)}`,
-              kind: 'seek',
-              payload: { timestamp: startMs },
-            },
-          ],
+          ...(segment && typeof startMs === 'number' && typeof endMs === 'number'
+            ? {
+              citations: [{ startMs, endMs, snippet: segment.text.slice(0, 120) }],
+              actions: [{ id: `seek-studio-${index + 1}`, label: `回放 ${formatTimestamp(startMs)}`, kind: 'seek' as const, payload: { timestamp: startMs } }],
+            }
+            : {}),
           meta: {
             cardKind: draft.cardKind || mode,
             bullets,
@@ -260,32 +264,6 @@ export const studioWorkshopPlugin: AppPlugin = {
       });
     }
 
-    if (cards.length === 1) {
-      evidenceSegments.slice(0, 3).forEach((segment, index) => {
-        cards.push({
-          id: `studio-fallback-${index + 1}`,
-          type: 'timeline',
-          title: `证据模块 ${index + 1}`,
-          body: segment.text,
-          priority: index === 0 ? 'high' : 'medium',
-          citations: [
-            {
-              startMs: segment.startMs,
-              endMs: segment.endMs,
-              snippet: segment.text.slice(0, 120),
-            },
-          ],
-          actions: [
-            {
-              id: `seek-fallback-${index + 1}`,
-              label: `回放 ${formatTimestamp(segment.startMs)}`,
-              kind: 'seek',
-              payload: { timestamp: segment.startMs },
-            },
-          ],
-        });
-      });
-    }
 
     let podcastResult: VolcPodcastResult | null = null;
     let podcastError = '';

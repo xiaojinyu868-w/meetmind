@@ -288,7 +288,7 @@ function WindowCard(props: WindowCardProps) {
         {/* 沉浸式内容区 — 无内边距，组件自己控制 */}
         <div className="flex-1 overflow-auto">
           <WindowErrorBoundary appName={app.name} onRetry={() => void execution.rerun()}>
-            <AppRenderSurface appKey={app.key} result={execution.result} transcript={transcript} onSeek={onSeek} />
+            <AppRenderSurface appKey={app.key} result={execution.result} transcript={transcript} taskState={execution.taskState} onSeek={onSeek} onRegenerate={() => void execution.rerun()} />
           </WindowErrorBoundary>
         </div>
       </section>

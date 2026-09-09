@@ -26,7 +26,7 @@ page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → r
 | `app-catalog.ts` | ~175 | 应用目录全集定义（含 learningAction / bestFor / timeLabel 与 supportedTiers / primaryTier）；单课不包含考试速查表 |
 | `app-catalog.test.ts` | — | 应用目录用户面文案护栏 |
 | `workshop-readiness.ts` | ~190 | 浏览器 / 服务端共用的内容证据门：安全 fallback、模型结果清洗、按 class / unit / exam 收口应用白名单；客观证据充足时模型只能推荐、不能撤销能力 |
-| `evidence-grounding.ts` | ~115 | 生成后证据校验：模型时间戳仅作候选，题面 / 条目 / 节点必须与真实原文语义匹配；匹配失败由各插件降级或剔除 |
+| `evidence-grounding.ts` | ~115 | 生成后证据落地：模型时间戳仅作候选，题面 / 条目 / 节点与整份原文做字面近似匹配。2026-09-09 起它只回答"回到原话跳到哪、要不要给跳转"，**不再否决模型产物**（此前长课里绝大多数题落地失败 → 被换成模板题） |
 | `context-builder.ts` | 83 | 从请求构建执行上下文 |
 | `registry.ts` | ~85 | 插件注册中心；区分运行故障与语义拒绝 / 产物失败（`CONTENT_NOT_READY`、`信息图出图失败*`、`播客出音频失败*` 透传） |
 | `registry.test.ts` | — | 插件运行故障兜底与内容拒绝透传契约 |
@@ -50,7 +50,7 @@ page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → r
 | `class-check.plugin.ts` | 264 | 随堂检验（智能版，基于知识点结构；视频内触发，不在 catalog） |
 | `cheatsheet.plugin.ts` | — | unit/exam 考试速查表；课堂、大纲、真题分源回锚 |
 | `explainer.plugin.ts` | ~240 | 板书精讲（BoardScript 板书脚本，render mode `'board'`）；Prompt / 引用校验 / DSL 清洗拆为 explainer-prompts.ts / explainer-quotes.ts / board-script.ts |
-| `fallback.plugin.ts` | 43 | 兜底 |
+| `fallback.plugin.ts` | ~30 | 没有插件认领时抛 APP_NOT_SUITABLE，不产出假成品 |
 | `index.ts` | — | 插件注册（9 个插件） |
 
 ## 新增插件步骤

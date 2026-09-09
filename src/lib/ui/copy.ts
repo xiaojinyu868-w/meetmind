@@ -716,6 +716,8 @@ export const COPY = {
       executeNotReady: '这段内容还不足以形成可靠的学习应用。',
       executeNotSuitable: '这个学习动作不适合当前内容，换一种方式更可靠。',
       executeNeedsMultipleLessons: '至少选择两节属于同一门课的课堂。',
+      /** 模型两次都没做出可用成品（不再用模板题凑数） */
+      executeGenerationFailed: '这次没做出来。再试一次，通常就好。',
       noContent: '先录下或放入一段课堂内容。',
       generateFailed: '这次没做好，稍后可以再试一次。',
       generated: (appName: string): string => `${appName}做好了`,
