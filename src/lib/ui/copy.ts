@@ -74,16 +74,18 @@ export const COPY = {
 
   collection: {
     askClassmate: '问同学',
-    emptyTitle: '想到什么，就留在这里。',
-    emptyBody: '不用分类，不用打标签。同学会在后台把它接回相关的课堂、目标和问题。',
-    /** 空态四张自解释入口卡（上传/链接/写一句/录一段），key 供组件映射图标与动作 */
+    /** 空态（2026-09-09 重做）：同学开口一句 + 输入框是主角 + 四种方式退成一行字；此前是大头像 + 标题 + 四张图标卡 */
+    emptySpeaker: '同学',
+    emptyOpening: '想到什么，就留在这里。不用分类，我会把它接回相关的课、目标和问题。',
+    /** 四种方式，作为输入框脚下一行可点的字（不是卡片）；key 供组件映射动作 */
     emptyEntries: [
-      { key: 'upload', label: '上传', hint: '文件、音频、视频、图片' },
-      { key: 'link', label: '链接', hint: '贴个网页或视频链接' },
-      { key: 'write', label: '写一句', hint: '想法、困惑、随手记' },
-      { key: 'voice', label: '录一段', hint: '语音直接留下来' },
+      { key: 'upload', label: '上传文件' },
+      { key: 'link', label: '贴个链接' },
+      { key: 'write', label: '写一句' },
+      { key: 'voice', label: '录一段' },
     ] as const,
-    emptyWechatHint: '也可以从微信直接发给我。',
+    emptyWechatHint: '也可以从微信直接发给我',
+    emptyPocketHint: '桌面口袋：任何应用里选中，⌘⇧M 收下',
     deleteMemoryWarning: '删除后，这条内容不会再进入同学的回答、后续情报和个人上下文。',
     permanentDeleteWarning: '彻底删除后，这条内容不会再进入同学的回答、后续情报和个人上下文。',
     today: '今天',

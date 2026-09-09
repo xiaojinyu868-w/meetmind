@@ -98,8 +98,10 @@ vi.mock('@/lib/services/learning-memory-distillation-service', () => ({
 import {
   appendLearningEvent,
   processLearningEvent,
+  readLearningContextState,
   triggerLearningEventProcessing,
 } from './learning-event-service';
+import type { LearningEventInput } from '@/types/learning-event';
 
 const USER_ID = 'user-1';
 
@@ -314,5 +316,61 @@ describe('triggerLearningEventProcessing', () => {
 
     const profile = fake.profileOf(USER_ID);
     expect(profile?.recentLearningActivities?.map((item) => item.title)).toEqual(['后续事件']);
+  });
+});
+
+describe('curation 事件（用户本人维护画像）', () => {
+  const curation = (payload: Record<string, unknown>): LearningEventInput => ({
+    appId: 'global-ask',
+    type: 'curation',
+    payload: { v: 1, ...payload } as LearningEventInput['payload'],
+  });
+
+  it('add：新增一条 source=user 的理解；confirm：同学猜的变成用户确认的；remove：忘掉', async () => {
+    seedUser({
+      stage: 'university',
+      memories: [{ id: 'm-ai', kind: 'challenge', title: '对偶问题', status: 'active', source: 'ai', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z' }],
+    });
+
+    const added = (await appendLearningEvent(USER_ID, curation({ op: 'add', memory: { kind: 'preference', title: '喜欢先看例子再看定义' } })))!;
+    await processLearningEvent(added);
+    let state = (await readLearningContextState(USER_ID))!;
+    expect(state.memories.map((m) => [m.title, m.source])).toEqual([['对偶问题', 'ai'], ['喜欢先看例子再看定义', 'user']]);
+
+    const confirmed = (await appendLearningEvent(USER_ID, curation({ op: 'confirm', memoryId: 'm-ai' })))!;
+    await processLearningEvent(confirmed);
+    state = (await readLearningContextState(USER_ID))!;
+    expect(state.memories.find((m) => m.id === 'm-ai')?.source).toBe('confirmed-ai');
+
+    const removed = (await appendLearningEvent(USER_ID, curation({ op: 'remove', memoryId: 'm-ai' })))!;
+    await processLearningEvent(removed);
+    state = (await readLearningContextState(USER_ID))!;
+    expect(state.memories.map((m) => m.title)).toEqual(['喜欢先看例子再看定义']);
+  });
+
+  it('update 改标题后不再算"同学猜的"；set-thread 写入 activeLearningThread，null 结束', async () => {
+    seedUser({
+      stage: 'university',
+      memories: [{ id: 'm-ai', kind: 'topic', title: '关注线性规划的建模', status: 'active', source: 'ai', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z' }],
+    });
+    const updated = (await appendLearningEvent(USER_ID, curation({ op: 'update', memoryId: 'm-ai', patch: { title: '线性规划的建模' } })))!;
+    await processLearningEvent(updated);
+    let state = (await readLearningContextState(USER_ID))!;
+    expect(state.memories[0]).toMatchObject({ title: '线性规划的建模', source: 'confirmed-ai' });
+
+    const thread = { id: 't1', title: '线性规划', intent: '搞懂建模', depth: 'deep', status: 'active', createdAt: '2026-09-09T00:00:00Z', updatedAt: '2026-09-09T00:00:00Z' };
+    await processLearningEvent((await appendLearningEvent(USER_ID, curation({ op: 'set-thread', thread })))!);
+    state = (await readLearningContextState(USER_ID))!;
+    expect(state.activeThread?.title).toBe('线性规划');
+
+    await processLearningEvent((await appendLearningEvent(USER_ID, curation({ op: 'set-thread', thread: null })))!);
+    state = (await readLearningContextState(USER_ID))!;
+    expect(state.activeThread).toBeUndefined();
+  });
+
+  it('载荷非法（缺 memory 的 add、超长标题）拒绝落库', async () => {
+    seedUser();
+    expect(await appendLearningEvent(USER_ID, curation({ op: 'add', memory: { kind: 'topic', title: 'x'.repeat(200) } }))).toBeNull();
+    expect(await appendLearningEvent(USER_ID, curation({ op: 'add', memory: { kind: 'nope', title: 'ok' } }))).toBeNull();
   });
 });

@@ -23,6 +23,7 @@ import {
   learningContextFromProfile,
   mergeLearningActivity,
   mergeLearningMemory,
+  updateLearningThread,
 } from '@/lib/utils/learning-context';
 import type { LearningEventInput } from '@/types/learning-event';
 import type { LearnerProfile, LearningContextState } from '@/types/user';
@@ -63,6 +64,40 @@ const AssessmentPayloadSchema = z.object({
   })).min(1).max(80),
 });
 
+const MemoryKindSchema = z.enum(['preference', 'strength', 'challenge', 'topic', 'progress']);
+const ThreadSchema = z.object({
+  id: z.string().min(1).max(120),
+  title: z.string().min(1).max(120),
+  intent: z.string().max(600),
+  outcome: z.string().max(600).optional(),
+  depth: z.enum(['quick', 'deep']),
+  status: z.enum(['active', 'paused', 'completed']),
+  conversationId: z.string().max(120).optional(),
+  sessionId: z.string().max(120).optional(),
+  lastSummary: z.string().max(600).optional(),
+  nextStep: z.string().max(300).optional(),
+  createdAt: z.string().max(40),
+  updatedAt: z.string().max(40),
+});
+/** 用户本人维护画像：只允许改自己那几个字段，标题上限与蒸馏产物一致 */
+const CurationPayloadSchema = z.object({
+  v: z.literal(1),
+  op: z.enum(['add', 'update', 'remove', 'confirm', 'set-thread']),
+  memory: z.object({
+    kind: MemoryKindSchema,
+    title: z.string().min(1).max(160),
+    detail: z.string().max(400).optional(),
+  }).optional(),
+  memoryId: z.string().min(1).max(160).optional(),
+  patch: z.object({
+    kind: MemoryKindSchema.optional(),
+    title: z.string().min(1).max(160).optional(),
+    detail: z.string().max(400).optional(),
+    status: z.enum(['active', 'paused']).optional(),
+  }).optional(),
+  thread: ThreadSchema.nullable().optional(),
+});
+
 const EventBaseShape = {
   appId: z.string().min(1).max(40),
   sourceId: z.string().min(1).max(160).optional(),
@@ -84,6 +119,11 @@ const EventInputSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('assessment'),
     payload: AssessmentPayloadSchema,
+    ...EventBaseShape,
+  }),
+  z.object({
+    type: z.literal('curation'),
+    payload: CurationPayloadSchema,
     ...EventBaseShape,
   }),
 ]);
@@ -181,7 +221,72 @@ function applyConversationEvent(state: LearningContextState, distilled: Array<{
   return next;
 }
 
-/** 处理单条事件：蒸馏（对话类）/ 直接合并（activity）后写回画像物化视图。 */
+type CurationPayload = z.infer<typeof CurationPayloadSchema>;
+
+/** 用户对自己画像的一次编辑（纯函数，便于回放与单测） */
+export function applyCurationEvent(
+  state: LearningContextState,
+  payload: CurationPayload,
+  eventId: string,
+  now: string,
+): LearningContextState {
+  switch (payload.op) {
+    case 'add': {
+      if (!payload.memory) return state;
+      return mergeLearningMemory(state, {
+        id: `memory-${eventId}`,
+        kind: payload.memory.kind,
+        title: payload.memory.title,
+        detail: payload.memory.detail,
+        status: 'active',
+        source: 'user',
+        sourceId: `learning-event:${eventId}`,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    case 'update': {
+      if (!payload.memoryId || !payload.patch) return state;
+      return {
+        ...state,
+        memories: state.memories.map((memory) => (
+          memory.id === payload.memoryId
+            // 用户改过的字，就不再是"同学猜的"
+            ? { ...memory, ...payload.patch, source: memory.source === 'ai' && payload.patch?.title ? 'confirmed-ai' as const : memory.source, updatedAt: now }
+            : memory
+        )),
+      };
+    }
+    case 'confirm': {
+      if (!payload.memoryId) return state;
+      return {
+        ...state,
+        memories: state.memories.map((memory) => (
+          memory.id === payload.memoryId && memory.source === 'ai'
+            ? { ...memory, source: 'confirmed-ai' as const, status: 'active' as const, updatedAt: now }
+            : memory
+        )),
+      };
+    }
+    case 'remove': {
+      if (!payload.memoryId) return state;
+      return { ...state, memories: state.memories.filter((memory) => memory.id !== payload.memoryId) };
+    }
+    case 'set-thread':
+      return updateLearningThread(state, payload.thread ?? undefined);
+    default:
+      return state;
+  }
+}
+
+/** 读当前画像物化视图（curation 后给客户端回传服务端真相） */
+export async function readLearningContextState(userId: string): Promise<LearningContextState | null> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { learnerProfileJson: true } });
+  if (!user) return null;
+  return learningContextFromProfile(readProfile(user.learnerProfileJson));
+}
+
+/** 处理单条事件：蒸馏（对话类）/ 直接合并（activity / curation）后写回画像物化视图。 */
 export async function processLearningEvent(event: LearningEvent): Promise<void> {
   const user = await prisma.user.findUnique({
     where: { id: event.userId },
@@ -219,6 +324,34 @@ export async function processLearningEvent(event: LearningEvent): Promise<void> 
 
   const profile = readProfile(user.learnerProfileJson);
   let state = learningContextFromProfile(profile);
+
+  if (event.type === 'curation') {
+    // 用户本人改画像：同一条串行队列，和蒸馏产物不互相覆盖；写回时连 activeLearningThread 一起落
+    let rawPayload: unknown;
+    try {
+      rawPayload = JSON.parse(event.payloadJson);
+    } catch {
+      rawPayload = null;
+    }
+    const payload = CurationPayloadSchema.safeParse(rawPayload);
+    if (!payload.success) {
+      log.warn('learning event curation payload invalid', { eventId: event.id });
+      return;
+    }
+    state = applyCurationEvent(state, payload.data, event.id, new Date().toISOString());
+    await prisma.user.update({
+      where: { id: event.userId },
+      data: {
+        learnerProfileJson: JSON.stringify({
+          ...profile,
+          memories: state.memories,
+          recentLearningActivities: state.recentActivities,
+          activeLearningThread: state.activeThread,
+        }),
+      },
+    });
+    return;
+  }
 
   if (event.type === 'activity') {
     let rawPayload: unknown;

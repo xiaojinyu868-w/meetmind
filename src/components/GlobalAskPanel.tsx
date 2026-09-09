@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import { Layers3, Plus, X } from 'lucide-react';
+import { Layers3, Plus, UserRound, X } from 'lucide-react';
 import { toast } from 'sonner';
 import useAuth from '@/lib/hooks/useAuth';
 import { cn } from '@/lib/utils';
@@ -38,6 +38,8 @@ import { GlobalAskWelcome } from '@/components/GlobalAskWelcome';
 import { buildGlobalAskStarters } from '@/components/global-ask-starters';
 import { buildAskDesk, isMaterialTitle } from '@/components/global-ask-desk';
 import { composeAskOpening } from '@/components/global-ask-opening';
+import { buildLearnerProfile } from '@/components/learner-profile-model';
+import { LearnerProfileRail } from '@/components/LearnerProfileRail';
 import { buildLocalLearnerContext } from '@/components/learner-context-local';
 import { GUEST_DEMO_LESSON_TITLE, resetDemoEntryConsumed } from '@/components/classroom/guest-demo-entry';
 import { isDemoLessonLoaded } from '@/components/classroom/DemoLessonLoader';
@@ -88,6 +90,8 @@ export function GlobalAskPanel({
   const [depth, setDepth] = React.useState<AskDepth>('quick');
   const [view, setView] = React.useState<'ask' | 'memory'>('ask');
   const [contextOpen, setContextOpen] = React.useState(false);
+  // 画像栏：宽屏常驻在右侧；窄屏 / 移动端收成顶栏一个「画像」按钮，点开是右侧抽屉
+  const [profileOpen, setProfileOpen] = React.useState(false);
   const [intentPlan, setIntentPlan] = React.useState<LearningIntentPlan | null>(null);
   const [activeIntent, setActiveIntent] = React.useState<LearningIntentPlan | null>(null);
   const [pendingQuery, setPendingQuery] = React.useState('');
@@ -373,7 +377,15 @@ export function GlobalAskPanel({
   }), [currentTranscript, effectiveDepth, learning.memories, learning.recentActivities, namedMaterialTitles]);
 
   // 书桌：同桌此刻在读什么、记得你什么。掌握轨迹 = 本机会话层结果 + 登录用户的服务端切片（换设备也在），面板打开时读
-  const { trail: masteryTrail } = useMasteryTrail({ enabled: open && showWelcome, appId: 'global-ask' });
+  const { trail: masteryTrail, fromAccount: masteryFromAccount } = useMasteryTrail({ enabled: open, appId: 'global-ask' });
+  // 「同学眼里的你」：小传 + 可维护的事实 + 台账——画像坐在提问旁边，而不是藏在设置里
+  const profileView = React.useMemo(() => buildLearnerProfile({
+    memories: learning.memories,
+    recentActivities: learning.recentActivities,
+    activeThread: learning.activeThread,
+    trail: masteryTrail,
+    knownSince: user?.createdAt,
+  }), [learning.activeThread, learning.memories, learning.recentActivities, masteryTrail, user?.createdAt]);
   const currentLesson = React.useMemo(() => {
     if (isDemoLessonLoaded(segments)) return { title: GUEST_DEMO_LESSON_TITLE, at: undefined };
     if (!sessionId) return { title: undefined, at: undefined };
@@ -405,6 +417,35 @@ export function GlobalAskPanel({
     onClose();
     window.location.assign('/app?guest=1&entry=demo');
   }, [onClose]);
+
+  const askFromProfile = React.useCallback((prompt: string) => {
+    setProfileOpen(false);
+    composer.setValue(prompt);
+    window.setTimeout(() => composer.textareaRef.current?.focus(), 0);
+  }, [composer]);
+
+  const renderProfileRail = (className?: string) => (
+    <LearnerProfileRail
+      className={className}
+      view={profileView}
+      isGuest={!user}
+      saving={learning.saving}
+      fromAccount={masteryFromAccount}
+      onAsk={askFromProfile}
+      onConfirmMemory={(id) => void learning.confirmMemory(id)}
+      onEditMemory={(id, title) => void learning.updateMemory(id, { title, status: 'active' })}
+      onForgetMemory={(id) => void learning.removeMemory(id)}
+      onResumeMemory={(id) => void learning.updateMemory(id, { status: 'active' })}
+      onAddMemory={(kind, title) => void learning.addMemory({ kind, title, source: 'user' })}
+      onCompleteThread={() => {
+        if (!learning.activeThread) return;
+        void learning.setActiveThread({ ...learning.activeThread, status: 'completed', updatedAt: new Date().toISOString() });
+        setActiveIntent(null);
+      }}
+      onOpenAll={() => { setProfileOpen(false); setView('memory'); }}
+      onStartDemo={user ? undefined : startDemoLesson}
+    />
+  );
 
   const handleDepthChange = React.useCallback((nextDepth: AskDepth) => {
     setDepth(nextDepth);
@@ -465,8 +506,10 @@ export function GlobalAskPanel({
   }
 
   return (
-    <div className="fixed inset-0 z-[80] flex bg-canvas/95 backdrop-blur-xl">
-      <div className={cn('relative flex min-w-0 flex-1 flex-col overflow-hidden bg-white', !isMobile && 'mx-auto my-3 max-w-[1060px] rounded-[28px] border border-divider shadow-float')}>
+    // 全屏布局（2026-09-09）：此前是 bg-canvas/95 毛玻璃罩 + 居中 1060px 圆角卡片，四周留着大片空白，像 demo。
+    // 现在侧栏右侧整块就是问同学：左边对话，右边常驻画像栏（≥1180px），窄屏收成顶栏按钮。
+    <div className={cn('fixed inset-0 z-[80] flex bg-white', !isMobile && 'left-[var(--sidebar-width,0px)]')}>
+      <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-white">
         <header className="flex items-center gap-3 border-b border-divider bg-paper px-4 py-3 sm:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <OctoAvatar mood="listening" size="sm" />
@@ -481,6 +524,9 @@ export function GlobalAskPanel({
           </div>
           <div className="flex items-center gap-1.5">
             <AdminAiInspectorLink controlKey="tutor:global" context={agentContext} query={inspectorQuery} compact={isMobile} />
+            <button type="button" onClick={() => setProfileOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-divider bg-white px-3 text-[11.5px] text-ink-secondary hover:border-pine/25 hover:text-pine min-[1180px]:hidden" aria-label={GLOBAL_ASK_COPY.profile.eyebrow} title={GLOBAL_ASK_COPY.profile.eyebrow}>
+              <UserRound size={13} /> <span className="hidden sm:inline">{GLOBAL_ASK_COPY.profile.toggle}</span>
+            </button>
             <button type="button" onClick={() => setContextOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-divider bg-white px-3 text-[11.5px] text-ink-secondary hover:border-pine/25 hover:text-pine" aria-label={GLOBAL_ASK_COPY.contextRailTitle} title={GLOBAL_ASK_COPY.contextRailTitle}>
               <Layers3 size={13} /> <span className="hidden sm:inline">{GLOBAL_ASK_COPY.contextAction}</span>
             </button>
@@ -554,7 +600,18 @@ export function GlobalAskPanel({
 
             {!showWelcome ? renderComposer(false) : null}
           </main>
+          {!isMobile ? renderProfileRail('hidden w-[340px] shrink-0 border-l border-divider min-[1180px]:flex') : null}
         </div>
+
+        {profileOpen ? (
+          <div className="absolute inset-0 z-20 flex justify-end min-[1180px]:hidden">
+            <button type="button" aria-label={GLOBAL_ASK_COPY.close} onClick={() => setProfileOpen(false)} className="flex-1 bg-ink/20 backdrop-blur-[2px]" />
+            <div className="relative flex h-full w-full max-w-[400px] flex-col border-l border-divider bg-paper shadow-float">
+              <button type="button" onClick={() => setProfileOpen(false)} className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full text-ink-muted hover:bg-paper-warm hover:text-ink" aria-label={GLOBAL_ASK_COPY.close}><X size={15} /></button>
+              {renderProfileRail('flex-1')}
+            </div>
+          </div>
+        ) : null}
 
         {contextOpen ? (
           <GlobalAskContextDrawer

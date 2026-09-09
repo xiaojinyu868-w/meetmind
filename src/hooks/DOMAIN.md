@@ -80,7 +80,7 @@ useAppLearningActivity 的桌面/移动应用活动由登录用户提交 /api/me
 | `useClassroomFlow.ts` | ~145 | 课中课堂脉络请求与稳定状态：只把上次成功请求后未消费的 segment 作为 `newSegments` 按字符预算顺序分批发送，失败不推进游标；成功结果按 sessionId 持久化，课后应用矩阵直接复用；保留上一轮有用理解并标记新内容，不用关键词替模型切主题 |
 | `usePersistedClassroomFlow.ts` | ~45 | 按当前 sessionId 读取录课中已保存的课堂脉络，并在切换课堂时取消旧读取结果；同时为本地试听脉络提供按 updatedAt 去重的持久化桥，供桌面与移动应用矩阵共享 |
 | `useLiveConcepts.ts` | ~100 | 录课中关键概念启发式抽取（订阅 captureEditorStore.segments，零 API），ClassroomRecordingView 消费 |
-| `useLearningContext.ts` | ~220 | 双层学习上下文状态：登录态合并写入 `learnerProfile`，游客写 IndexedDB；长期学习理解可由模型整理、用户纠正，客观最近学习现场独立保存，并通过页面事件同步多个消费组件 |
+| `useLearningContext.ts` | ~320 | 双层学习上下文状态：游客写 IndexedDB；登录用户的 memories / recentActivities 由服务端事件管道合并（客户端不整体 PATCH 回写）。**用户本人维护画像（2026-09-09）**：`addMemory` / `updateMemory` / `removeMemory` / `confirmMemory` / `setActiveThread` 先乐观改本地，再 POST `/api/memory/events` type=`curation`（服务端同一条串行队列合并，回传服务端真相替换本地）——此前登录用户在「我的上下文」里改 / 忘掉一条刷新就丢。失败只记 `error`，乐观状态留着等下次服务端刷新校正。页面事件同步多个消费组件 |
 | `useCourseContextPack.ts` | ~110 | 按学生选中的真实课堂懒加载转录、标记与摘要；至少两节有原文时构造 unit ContextPack，有学生确认的考试对象时升级为 exam tier 并注入考试名/日期/方式/大纲，不把空课堂或模型猜测伪装成考试材料 |
 | `useLessonDigest.ts` | ~150 | 课后课堂笔记：只展示与当前完整转录 requestKey 对应的模型结果；返回前保持整理态，禁止用前几句话截断拼临时标题后再覆盖。生成成功按 sessionId 持久化到 IndexedDB `lessonDigests` 表，挂载时先读缓存，内容签名（段数+末段 endMs+图片 id 集合）一致直接复用不打 LLM |
 | `useGlobalAskHistory.ts` | ~205 | 全局 Ask 的 IndexedDB 对话恢复/增量持久化 adapter；只恢复 `metadata.scope='global-ask'`，避免误接课堂复习对话；`authReady`（auth 初始化完成）前不恢复/不持久化，防止 anonymous→真实 userId 切换清空对话；恢复跳过 0 条消息的空壳对话回退到最近有内容的一条；登录态找不到时回退捞 anonymous 名下的旧对话并 `claimConversation` 迁移归属；恢复期间用户已发言则不覆盖；`restoredTitle` 仅真实恢复时设置 |

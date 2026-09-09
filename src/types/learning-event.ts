@@ -8,6 +8,8 @@
  * 约束：本文件纯类型，零运行时依赖（见 types/DOMAIN.md）。
  */
 
+import type { LearningMemoryKind, LearningThreadEntry } from './user';
+
 /** 事件类型注册表。新增类型必须先在这里登记，再在 learning-event-service 里实现处理。 */
 export type LearningEventType =
   /** 用户在互动中表现出的困惑（证据约束，由蒸馏模型最终判断是否形成长期理解） */
@@ -27,7 +29,13 @@ export type LearningEventType =
    * 逐项留史。这是应用矩阵回流到共享记忆的原始材料——物化成「掌握轨迹」（按概念聚合、保留
    * 时间序列而非覆盖）在读侧（应用消费记忆）一起设计；事件先全量留史，可回放重建。
    */
-  | 'assessment';
+  | 'assessment'
+  /**
+   * 用户本人维护画像（2026-09-09）：改 / 忘掉 / 添加 / 确认一条长期理解，设置或结束学习线索。
+   * 画像是用户自己的东西，编辑走事件而不是直接 PATCH 物化视图——同一条串行队列里合并，
+   * 不会和服务端蒸馏互相覆盖；事件留史，谁改过什么可回放。
+   */
+  | 'curation';
 
 /**
  * 对话类事件（confusion/mastery/error/preference/progress）的载荷。
@@ -88,7 +96,21 @@ export interface LearningAssessmentPayload {
 /** 应用窗口交给 hook 的草稿：只有 appKey + items，sessionId / lessonTitle / v 由 hook 补齐。 */
 export type LearningAssessmentDraft = Pick<LearningAssessmentPayload, 'appKey' | 'items'>;
 
-export type LearningEventPayload = LearningConversationPayload | LearningActivityPayload | LearningAssessmentPayload;
+/** curation 事件的载荷：用户对自己画像的一次编辑。 */
+export interface LearningCurationPayload {
+  v: 1;
+  op: 'add' | 'update' | 'remove' | 'confirm' | 'set-thread';
+  /** add：新增一条（source 固定为 user） */
+  memory?: { kind: LearningMemoryKind; title: string; detail?: string };
+  /** update / remove / confirm：目标条目 */
+  memoryId?: string;
+  /** update：改标题 / 类型 / 停用 */
+  patch?: { kind?: LearningMemoryKind; title?: string; detail?: string; status?: 'active' | 'paused' };
+  /** set-thread：null = 结束当前线索 */
+  thread?: LearningThreadEntry | null;
+}
+
+export type LearningEventPayload = LearningConversationPayload | LearningActivityPayload | LearningAssessmentPayload | LearningCurationPayload;
 
 /** Optional original evidence for the new Context adapter; never a mastery verdict. */
 export interface LearningObservationContent {

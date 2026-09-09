@@ -23,13 +23,16 @@ Context 开启后复用新服务的 owner 认证，包括 JWT_SECRET 配置检�
 ```jsonc
 {
   "appId": "global-ask",            // 来源应用：global-ask | classroom | wechat | teach...
-  "type": "confusion",              // confusion | mastery | error | preference | progress | activity | assessment
+  "type": "confusion",              // confusion | mastery | error | preference | progress | activity | assessment | curation
   "payload": {                      // 契约见 src/types/learning-event.ts，含版本字段 v
     "v": 1,
     "userText": "…",                // 对话类事件（confusion/mastery/error/preference/progress）
     "assistantText": "…"
     // activity 事件：{ v:1, kind, title, detail?, sessionId?, appKey? }
     // assessment 事件（2026-09-08，应用矩阵回流）：{ v:1, appKey, sessionId?, lessonTitle?, items:[{ concept, outcome, evidence?:{startMs,endMs?} }] }
+    // curation 事件（2026-09-09，用户本人维护画像）：{ v:1, op:'add'|'update'|'remove'|'confirm'|'set-thread', memory?:{kind,title,detail?}, memoryId?, patch?:{kind?,title?,detail?,status?}, thread?:LearningThreadEntry|null }
+    //   —— 与其他类型不同：不进 Context 双写（这是编辑操作不是学习现场）；路由同步等队列处理完，返回 { ok, eventId, memories, activeThread }（服务端真相，客户端据此替换乐观状态）
+    //   add 的 source 固定 user；update 改了标题的 ai 记忆变 confirmed-ai；confirm 只对 source=ai 生效
     //   outcome 沿用各应用词表：correct|wrong（测验）、got|missed（闪卡）、mastery|productive-struggle|aware-gap|blind-spot|uncovered（讲给同桌听）
     //   服务端只校验并留史、不改画像；掌握轨迹的物化与读侧（应用消费记忆）一起设计，见 docs/plans/2026-09-08-product-renewal-plan.md §2.3
   },

@@ -1599,6 +1599,39 @@ function StudentAppContent({
         ? COPY.collection.topBarReceivingFiles(activeSourceImportCount)
         : '';
 
+    // 收集输入栏：有内容时钉在底部；空态时坐在同学那句话正下方（CollectionEmptyState 渲染），不再两处打架
+    const collectionComposerBar = (
+      <CollectionComposerBar
+        quotedCount={quotedCollectionContextItems.length}
+        quotedPrimaryTypeLabel={quotedCollectionPrimaryItem ? getCollectionContextTypeLabel(quotedCollectionPrimaryItem.type) : '内容'}
+        quotedSummaryText={quotedCollectionSummaryText}
+        onClearQuoted={clearQuotedCollectionContext}
+        linkPreviewLabel={composerLinkPreview?.providerLabel || ''}
+        autoImportLink={composerCanAutoImportLink}
+        onOpenLiveRecorder={openLiveRecorder}
+        disableLiveRecorder={false}
+        composerRef={collectionComposerRef}
+        value={collectionComposerText}
+        onChangeValue={(value: string) => {
+          setSourceImportError('');
+          setCollectionComposerText(value);
+        }}
+        onPaste={handleCollectionComposerPaste}
+        placeholder={collectionComposerPlaceholder}
+        rows={composerRows}
+        sourceImporting={sourceImporting}
+        activeSourceImportCount={activeSourceImportCount}
+        composerVoiceStatus={composerVoiceStatus}
+        isComposerVoiceRecording={isComposerVoiceRecording}
+        composerVoiceInterimText={composerVoiceInterimText}
+        sourceImportError={sourceImportError}
+        onSubmit={handleCollectionComposerSubmit}
+        onToggleDictation={toggleComposerDictation}
+        disableDictation={showMobileRecorder || isRecording}
+        onUploadAll={() => handleSourceFileButtonClick('all')}
+      />
+    );
+
     return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-paper">
       {isMobile ? (
@@ -1631,7 +1664,7 @@ function StudentAppContent({
         className="relative z-10 flex-1 overflow-y-auto px-3 pt-3 lg:px-5 lg:pt-4"
         style={{ paddingBottom: '24px' }}
       >
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-2.5">
+        <div className={`mx-auto flex w-full max-w-3xl flex-col gap-2.5${collectionFeedItems.length === 0 && !showMobileRecorder ? ' min-h-full justify-center' : ''}`}>
           {collectionFeedItems.length > 0 ? (
             <div className="flex items-center justify-between gap-3 px-2 py-1">
               <div className="inline-flex items-center gap-1.5 text-[11px] font-medium text-ink-muted">
@@ -1668,6 +1701,7 @@ function StudentAppContent({
 
           {collectionFeedItems.length === 0 ? (
             <CollectionEmptyState
+              composer={showMobileRecorder ? undefined : collectionComposerBar}
               onUpload={() => handleSourceFileButtonClick('all')}
               onLink={() => focusCollectionComposer()}
               onWrite={() => focusCollectionComposer()}
@@ -1866,37 +1900,7 @@ function StudentAppContent({
             />
           </div>
         </div>
-      ) : (
-        <CollectionComposerBar
-          quotedCount={quotedCollectionContextItems.length}
-          quotedPrimaryTypeLabel={quotedCollectionPrimaryItem ? getCollectionContextTypeLabel(quotedCollectionPrimaryItem.type) : '内容'}
-          quotedSummaryText={quotedCollectionSummaryText}
-          onClearQuoted={clearQuotedCollectionContext}
-          linkPreviewLabel={composerLinkPreview?.providerLabel || ''}
-          autoImportLink={composerCanAutoImportLink}
-          onOpenLiveRecorder={openLiveRecorder}
-          disableLiveRecorder={false}
-          composerRef={collectionComposerRef}
-          value={collectionComposerText}
-          onChangeValue={(value: string) => {
-            setSourceImportError('');
-            setCollectionComposerText(value);
-          }}
-          onPaste={handleCollectionComposerPaste}
-          placeholder={collectionComposerPlaceholder}
-          rows={composerRows}
-          sourceImporting={sourceImporting}
-          activeSourceImportCount={activeSourceImportCount}
-          composerVoiceStatus={composerVoiceStatus}
-          isComposerVoiceRecording={isComposerVoiceRecording}
-          composerVoiceInterimText={composerVoiceInterimText}
-          sourceImportError={sourceImportError}
-          onSubmit={handleCollectionComposerSubmit}
-          onToggleDictation={toggleComposerDictation}
-          disableDictation={showMobileRecorder || isRecording}
-          onUploadAll={() => handleSourceFileButtonClick('all')}
-        />
-      )}
+      ) : collectionFeedItems.length === 0 ? null : collectionComposerBar}
 
     </div>
   );

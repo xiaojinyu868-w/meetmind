@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authService } from '@/lib/services/auth-service';
 import { recordLearningObservation } from '@/lib/services/learning-observation-service';
+import { appendLearningEvent, readLearningContextState, triggerLearningEventProcessing } from '@/lib/services/learning-event-service';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 import { createLogger } from '@/lib/logger';
 import type { LearningEventInput } from '@/types/learning-event';
@@ -37,6 +38,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json() as LearningEventInput;
+    if (body?.type === 'curation') {
+      // 用户本人改画像（2026-09-09）：只进事实表 + 同一条串行队列合并，不进 Context（那是学习现场，不是编辑操作）；
+      // 同步等处理完，把服务端真相（memories / activeThread）回给客户端，客户端据此替换乐观状态
+      const event = await appendLearningEvent(payload.sub, body);
+      if (!event) return NextResponse.json({ ok: false, error: '事件内容不完整' }, { status: 400 });
+      await triggerLearningEventProcessing(event);
+      const state = await readLearningContextState(payload.sub);
+      return NextResponse.json({ ok: true, eventId: event.id, memories: state?.memories ?? [], activeThread: state?.activeThread ?? null });
+    }
     // 双写（2026-09-09）：事实表始终落（掌握轨迹 / P0 画像的原料），Context 开启时同一份观察再进 ContextEvent → Hindsight
     const { eventId, receipt } = await recordLearningObservation(payload.sub, body);
     if (!eventId && !receipt) {

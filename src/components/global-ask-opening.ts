@@ -177,7 +177,13 @@ export function composeAskOpening(input: AskOpeningInput): AskOpening {
     text(when[1]);
     sentences += 1;
   }
-  if (sentences < 2 && challenge) {
+  // 「还没稳」与「之前卡住的」常是同一件事（检验事实 vs 蒸馏记忆）：字面互相包含就只说一次
+  const overlapsUnstable = (label: string) => unstable.some((item) => {
+    const a = item.label.replace(/\s+/g, '');
+    const b = label.replace(/\s+/g, '');
+    return a.includes(b) || b.includes(a);
+  });
+  if (sentences < 2 && challenge && !(sentences > 0 && overlapsUnstable(challenge.label))) {
     text(copy.stuckBefore[0]);
     link('concept', challenge.label, challenge.prompt);
     text(copy.stuckBefore[1]);

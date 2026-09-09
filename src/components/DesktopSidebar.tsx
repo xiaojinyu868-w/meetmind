@@ -12,7 +12,7 @@
  * 设计系统：v7 设计宪法：95% 克制 + 5% 仪式时刻情绪化（shadow-soft / shadow-card / shadow-ai-glow）
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -92,6 +92,11 @@ export function DesktopSidebar({
 }: DesktopSidebarProps) {
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
   const effectiveCollapsed = collapsed || focusMode;
+  // 侧栏实际宽度写进 CSS 变量：问同学等 fixed 定位的整页面板据此从侧栏右侧开始，而不是盖住侧栏
+  useEffect(() => {
+    document.documentElement.style.setProperty('--sidebar-width', `${effectiveCollapsed ? 52 : 168}px`);
+    return () => { document.documentElement.style.removeProperty('--sidebar-width'); };
+  }, [effectiveCollapsed]);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const { user, isAuthenticated, isCheckingAuth, logout } = useAuth();
   const { enabled: adminLensEnabled, toggle: toggleAdminLens } = useAdminLens();

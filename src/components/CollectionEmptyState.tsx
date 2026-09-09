@@ -1,79 +1,81 @@
 /**
- * CollectionEmptyState — 收集为空时的空态
+ * CollectionEmptyState — 收集为空时的第一屏（2026-09-09 重做）
  *
- * 心智：好的产品自然到不需要引导。一句问候 + 四张自解释入口卡
- * （上传 / 链接 / 写一句 / 录一段），每张卡直接触发底部输入栏的真实动作，
- * 用户看一眼就知道能做什么、点哪里。
+ * 此前：大头像 + 标题 + 副标题 + 四张图标卡（上传 / 链接 / 写一句 / 录一段）+ 一行微信提示，
+ * 输入框却孤零零钉在页面最底部——两套入口打架，中间一大片空白，像 demo 的 landing。
  *
- * 设计系统：v7 token（bg-card / border-divider / pine hover / shadow-soft）+ Octo 签名。
+ * 现在与问同学第一屏同一套语言：同学开口一句（"想到什么，就留在这里"），输入框是主角、坐在句子正下方
+ * （宿主把真实的 CollectionComposerBar 传进来，空态时它不再钉在底部），四种方式退成输入框脚下一行可点的字，
+ * 微信 / 桌面口袋是最轻的两行小字。没有卡片网格。
  */
 
 'use client';
 
-import { Link2, Mic, PenLine, Upload } from 'lucide-react';
+import type { ReactNode } from 'react';
+import Link from 'next/link';
+import { ArrowRight } from 'lucide-react';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { COPY } from '@/lib/ui/copy';
 
-// ==================== 类型 ====================
-
 export interface CollectionEmptyStateProps {
-  /** 上传卡：打开文件选择器（文件/音频/视频/图片） */
+  /** 真实的收集输入栏（宿主渲染，空态时坐在这里而不是页面底部） */
+  composer?: ReactNode;
+  /** 上传：打开文件选择器（文件/音频/视频/图片） */
   onUpload: () => void;
-  /** 链接卡：聚焦底部输入框（粘贴链接触发自动识别） */
+  /** 链接：聚焦输入框（粘贴链接触发自动识别） */
   onLink: () => void;
-  /** 写一句卡：聚焦底部输入框 */
+  /** 写一句：聚焦输入框 */
   onWrite: () => void;
-  /** 录一段卡：打开语音录制 */
+  /** 录一段：打开语音录制 */
   onVoice: () => void;
 }
 
-const ENTRY_ICONS = {
-  upload: Upload,
-  link: Link2,
-  write: PenLine,
-  voice: Mic,
-} as const;
-
-// ==================== 组件实现 ====================
-
-export function CollectionEmptyState({ onUpload, onLink, onWrite, onVoice }: CollectionEmptyStateProps) {
-  const entryActions = {
-    upload: onUpload,
-    link: onLink,
-    write: onWrite,
-    voice: onVoice,
-  } as const;
+export function CollectionEmptyState({ composer, onUpload, onLink, onWrite, onVoice }: CollectionEmptyStateProps) {
+  const entryActions = { upload: onUpload, link: onLink, write: onWrite, voice: onVoice } as const;
+  const copy = COPY.collection;
 
   return (
-    <div className="px-6" style={{ paddingTop: '12vh' }}>
-      <div className="mx-auto flex w-full max-w-2xl flex-col items-center text-center">
-        <OctoAvatar mood="listening" size="xl" aura={false} className="opacity-90" />
-        <h3 className="mt-4 text-xl font-semibold tracking-h text-ink">
-          {COPY.collection.emptyTitle}
-        </h3>
-        <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-secondary">
-          {COPY.collection.emptyBody}
+    <div className="flex w-full flex-col py-6 sm:py-10">
+      {/* 同学开口 */}
+      <div className="mx-auto flex w-full max-w-3xl items-start gap-3.5 px-3 lg:px-5">
+        <div className="mt-1 shrink-0">
+          <OctoAvatar mood="listening" size="sm" aura={false} />
+        </div>
+        <p className="text-[17px] leading-[1.75] tracking-[-0.005em] text-ink sm:text-[18px]">
+          <span className="mr-2 font-serif italic text-pine">{copy.emptySpeaker}</span>
+          {copy.emptyOpening}
         </p>
+      </div>
 
-        <div className="mt-7 grid w-full grid-cols-2 gap-3 sm:grid-cols-4">
-          {COPY.collection.emptyEntries.map((entry) => {
-            const Icon = ENTRY_ICONS[entry.key];
-            return (
+      {/* 输入框——主角（宿主传入真实输入栏） */}
+      {composer ? <div className="mt-3">{composer}</div> : null}
+
+      <div className="mx-auto w-full max-w-3xl px-3 lg:px-5">
+        {/* 四种方式：一行字 */}
+        <p className="flex flex-wrap items-baseline gap-x-1.5 px-1 text-[13px] leading-6 text-ink-secondary">
+          {copy.emptyEntries.map((entry, index) => (
+            <span key={entry.key} className="inline-flex items-baseline">
+              {index > 0 ? <span className="mr-1.5 text-ink-muted/60" aria-hidden>·</span> : null}
               <button
-                key={entry.key}
                 type="button"
                 onClick={entryActions[entry.key]}
-                className="flex flex-col items-start gap-2.5 rounded-2xl border border-divider bg-card px-4 py-5 text-left transition hover:border-pine/40 hover:bg-pine-fog hover:shadow-soft active:scale-[0.98]"
+                className="rounded px-0.5 underline decoration-transparent decoration-[1.5px] underline-offset-[5px] transition hover:text-pine hover:decoration-pine/60"
               >
-                <Icon size={18} className="text-ink-secondary" />
-                <span className="text-[13.5px] font-medium text-ink">{entry.label}</span>
-                <span className="text-[11.5px] leading-snug text-ink-muted">{entry.hint}</span>
+                {entry.label}
               </button>
-            );
-          })}
-        </div>
+            </span>
+          ))}
+        </p>
 
-        <p className="mt-6 text-xs text-ink-muted">{COPY.collection.emptyWechatHint}</p>
+        {/* 别处也能收：最轻的两行 */}
+        <div className="mt-8 flex flex-col gap-1.5 px-1 text-[12px] leading-5 text-ink-muted">
+          <Link href="/help" className="inline-flex w-fit items-center gap-1 transition hover:text-pine">
+            {copy.emptyWechatHint}<ArrowRight size={11} />
+          </Link>
+          <Link href="/#download" className="inline-flex w-fit items-center gap-1 transition hover:text-pine">
+            {copy.emptyPocketHint}<ArrowRight size={11} />
+          </Link>
+        </div>
       </div>
     </div>
   );

@@ -11,6 +11,7 @@ import type {
   LearningMemoryEntry,
   LearningThreadEntry,
 } from '@/types/user';
+import type { LearningCurationPayload } from '@/types/learning-event';
 import {
   createEmptyLearningContext,
   learningContextFromProfile,
@@ -70,6 +71,8 @@ export interface UseLearningContextReturn extends LearningContextState {
   addMemory: (draft: MemoryDraft) => Promise<void>;
   updateMemory: (id: string, patch: Partial<Pick<LearningMemoryEntry, 'kind' | 'title' | 'detail' | 'status'>>) => Promise<void>;
   removeMemory: (id: string) => Promise<void>;
+  /** 「同学猜的」这条对——source 变 confirmed-ai，之后在画像里不再带"对吗？" */
+  confirmMemory: (id: string) => Promise<void>;
   recordActivity: (draft: ActivityDraft) => Promise<void>;
   updateCoursePreference: (
     courseKey: string,
@@ -79,7 +82,7 @@ export interface UseLearningContextReturn extends LearningContextState {
 }
 
 export function useLearningContext(): UseLearningContextReturn {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, accessToken } = useAuth();
   const [state, setState] = useState<LearningContextState>(() => (
     learningContextFromProfile(user?.learnerProfile)
   ));
@@ -167,6 +170,39 @@ export function useLearningContext(): UseLearningContextReturn {
     }
   }, [isAuthenticated, ownerKey]);
 
+  /**
+   * 用户本人维护画像（2026-09-09）：登录用户的改 / 忘掉 / 添加 / 确认 / 线索走 curation 事件——
+   * 服务端在同一条串行队列里合并（不与蒸馏互相覆盖，事件留史），回传服务端真相替换本地乐观状态。
+   * 失败只记 error 字符串，乐观状态留着，下次服务端刷新会校正。
+   */
+  const sendCuration = useCallback(async (payload: Omit<LearningCurationPayload, 'v'>) => {
+    if (!isAuthenticated || !accessToken) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/memory/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ appId: 'my-context', type: 'curation', payload: { v: 1, ...payload } }),
+      });
+      if (!response.ok) throw new Error(`curation ${response.status}`);
+      const data = await response.json() as { ok?: boolean; memories?: LearningMemoryEntry[]; activeThread?: LearningThreadEntry | null };
+      if (!data.ok || !Array.isArray(data.memories)) return;
+      const next: LearningContextState = {
+        ...stateRef.current,
+        memories: data.memories,
+        activeThread: data.activeThread ?? undefined,
+      };
+      stateRef.current = next;
+      setState(next);
+      window.dispatchEvent(new CustomEvent(CONTEXT_EVENT, { detail: { ownerKey, state: next } }));
+    } catch (curationError) {
+      setError(curationError instanceof Error ? curationError.message : '这条修改暂时没有同步成功');
+    } finally {
+      setSaving(false);
+    }
+  }, [accessToken, isAuthenticated, ownerKey]);
+
   const addMemory = useCallback(async (draft: MemoryDraft) => {
     const now = new Date().toISOString();
     await persist(mergeLearningMemory(stateRef.current, {
@@ -180,7 +216,19 @@ export function useLearningContext(): UseLearningContextReturn {
       createdAt: now,
       updatedAt: now,
     }));
-  }, [persist]);
+    await sendCuration({ op: 'add', memory: { kind: draft.kind, title: draft.title, detail: draft.detail } });
+  }, [persist, sendCuration]);
+
+  const confirmMemory = useCallback(async (id: string) => {
+    const now = new Date().toISOString();
+    await persist({
+      ...stateRef.current,
+      memories: stateRef.current.memories.map((memory) => (
+        memory.id === id && memory.source === 'ai' ? { ...memory, source: 'confirmed-ai' as const, updatedAt: now } : memory
+      )),
+    });
+    await sendCuration({ op: 'confirm', memoryId: id });
+  }, [persist, sendCuration]);
 
   const updateMemory = useCallback(async (
     id: string,
@@ -195,14 +243,16 @@ export function useLearningContext(): UseLearningContextReturn {
       )),
     };
     await persist(next);
-  }, [persist]);
+    await sendCuration({ op: 'update', memoryId: id, patch });
+  }, [persist, sendCuration]);
 
   const removeMemory = useCallback(async (id: string) => {
     await persist({
       ...stateRef.current,
       memories: stateRef.current.memories.filter((memory) => memory.id !== id),
     });
-  }, [persist]);
+    await sendCuration({ op: 'remove', memoryId: id });
+  }, [persist, sendCuration]);
 
   const recordActivity = useCallback(async (draft: ActivityDraft) => {
     await persist(mergeLearningActivity(stateRef.current, {
@@ -264,7 +314,8 @@ export function useLearningContext(): UseLearningContextReturn {
 
   const setActiveThread = useCallback(async (thread?: LearningThreadEntry) => {
     await persist(updateLearningThread(stateRef.current, thread));
-  }, [persist]);
+    await sendCuration({ op: 'set-thread', thread: thread ?? null });
+  }, [persist, sendCuration]);
 
   return {
     ...state,
@@ -274,6 +325,7 @@ export function useLearningContext(): UseLearningContextReturn {
     addMemory,
     updateMemory,
     removeMemory,
+    confirmMemory,
     recordActivity,
     updateCoursePreference,
     setActiveThread,
