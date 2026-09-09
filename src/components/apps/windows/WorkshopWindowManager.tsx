@@ -122,8 +122,8 @@ interface WindowCardProps {
 function formatDataSource(dataSource: DataSourceType): string {
   if (dataSource === 'live') return '实时录音';
   if (dataSource === 'video') return '视频导入';
-  if (dataSource === 'demo') return '演示数据';
-  return '课堂数据';
+  if (dataSource === 'demo') return '示例课';
+  return '这节课';
 }
 
 function buildInfographicContentContext(summaryOverview: string | undefined, transcript: TranscriptSegment[]): string {
@@ -307,9 +307,7 @@ function WindowCard(props: WindowCardProps) {
         <header className="flex items-center gap-2 border-b border-divider bg-white px-4 py-2.5 select-none">
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-ink">{app.name}</p>
-            <p className="truncate text-xs text-ink-muted">
-              会话 {sessionId.slice(0, 6)}…{sessionId.slice(-4)} · {formatDataSource(dataSource)}
-            </p>
+            <p className="truncate text-xs text-ink-muted">{formatDataSource(dataSource)}</p>
           </div>
           <span className={`rounded-full border px-2 py-1 text-xs font-medium ${taskTone(execution.taskState)}`}>
             {taskLabel(execution.taskState)}

@@ -631,8 +631,8 @@ export function MindmapWindow({ result, transcript, onSeek, defaultViewMode = 'm
           </div>
         </div>
         <div className="text-center">
-          <p className="text-sm font-medium" style={{ color: PALETTE.textPrimary }}>正在构建思维导图</p>
-          <p className="mt-1 text-xs" style={{ color: PALETTE.textMuted }}>AI 正在分析课堂内容，梳理知识结构...</p>
+          <p className="text-sm font-medium" style={{ color: PALETTE.textPrimary }}>{APPS_COPY.mindmap.loadingTitle}</p>
+          <p className="mt-1 text-xs" style={{ color: PALETTE.textMuted }}>{APPS_COPY.mindmap.loadingBody}</p>
         </div>
       </div>
     );
@@ -648,8 +648,8 @@ export function MindmapWindow({ result, transcript, onSeek, defaultViewMode = 'm
           </svg>
         </div>
         <div className="text-center">
-          <p className="text-sm font-medium" style={{ color: PALETTE.textSecondary }}>暂未生成思维导图</p>
-          <p className="mt-1 text-xs" style={{ color: PALETTE.textMuted }}>请点击&ldquo;重新生成&rdquo;以获取课堂知识结构</p>
+          <p className="text-sm font-medium" style={{ color: PALETTE.textSecondary }}>{APPS_COPY.placeholder.emptyTitle(APPS_COPY.mindmap.appName)}</p>
+          <p className="mt-1 text-xs" style={{ color: PALETTE.textMuted }}>{APPS_COPY.placeholder.emptyBody(APPS_COPY.mindmap.appName)}</p>
         </div>
       </div>
     );

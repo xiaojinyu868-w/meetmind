@@ -125,7 +125,7 @@ export function useEchoActions(deps: UseEchoActionsDeps): UseEchoActionsReturn {
         });
         setManualEchoFeedback(feedback);
         setManualEchoDebugNote(
-          isGuestFastEntry ? '游客模式下不会发起回声请求' : isCheckingAuth ? '正在确认登录状态' : '当前未登录'
+          isGuestFastEntry ? '游客模式下不会发起今日发现请求' : isCheckingAuth ? '正在确认登录状态' : '当前未登录'
         );
         if (!isCheckingAuth) {
           toast.message(feedback.title);
@@ -144,8 +144,8 @@ export function useEchoActions(deps: UseEchoActionsDeps): UseEchoActionsReturn {
         setManualEchoDebugNote('');
         setManualEchoFeedback({
           tone: 'pending',
-          title: '正在生成今日回声',
-          body: '测试请求已发出，你可以继续收集。',
+          title: '正在整理今天的发现',
+          body: '请求已发出，你可以继续收集。',
         });
       }
 
@@ -163,11 +163,11 @@ export function useEchoActions(deps: UseEchoActionsDeps): UseEchoActionsReturn {
 
         const payload = await readJsonApiResponse<DailyEchoRefreshPayload>(
           response,
-          force ? '手动生成回声失败' : '刷新今日回声失败'
+          force ? '这次没整理出来' : '刷新今日发现失败'
         );
 
         if (!response.ok || !payload.success) {
-          throw new Error(payload.error || payload.reason || (force ? '手动生成回声失败' : '刷新今日回声失败'));
+          throw new Error(payload.error || payload.reason || (force ? '这次没整理出来' : '刷新今日发现失败'));
         }
 
         if (payload.echo) {
@@ -187,9 +187,9 @@ export function useEchoActions(deps: UseEchoActionsDeps): UseEchoActionsReturn {
                 payload.reason && !payload.skipped ? `质量提醒：${getEchoQualityWarningLabel(payload.reason)}` : '',
               ].filter(Boolean).join(' · ')
           : '';
-          setManualEchoDebugNote(note || (payload.skipped ? `本次未更新：${getEchoDebugReasonLabel(payload.reason)}` : '回声已刷新'));
+          setManualEchoDebugNote(note || (payload.skipped ? `本次未更新：${getEchoDebugReasonLabel(payload.reason)}` : '今天的发现已更新'));
           if (payload.echo && !payload.skipped) {
-            toast.success('回声已刷新');
+            toast.success('今天的发现已更新');
           }
         }
 

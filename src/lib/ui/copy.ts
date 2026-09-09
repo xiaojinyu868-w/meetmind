@@ -928,6 +928,9 @@ export const COPY = {
     viewTranscript: '看转录原文',
   },
   mobileJourney: {
+    markMoment: '记一下',
+    momentMarked: (time: string): string => `记下了 ${time}，课后在困惑点里等你`,
+    confusionMarked: '标下了，课后同桌先讲这段',
     playAudio: '播放原声',
     pauseAudio: '暂停原声',
     finishLesson: '结束这节课',

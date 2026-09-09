@@ -168,6 +168,9 @@ export const APPS_COPY = {
       textHint: '用嘴讲，同桌听得见；他跟不上时会开口问。',
     },
     mindmap: {
+      appName: '思维导图',
+      loadingTitle: '正在把这节课理成一张图',
+      loadingBody: '同学在读整节课，找主线和分支…',
       mobileGestureHint: '拖动查看 · 点 + 放大',
       desktopGestureHint: '滚轮缩放 · 拖拽平移',
     },

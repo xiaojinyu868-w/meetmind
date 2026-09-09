@@ -377,18 +377,6 @@ function LoginForm() {
               >
                 {COPY.login.accountTab}
               </button>
-              <button
-                disabled
-                className="text-base pb-1 border-b-2 transition-all font-medium cursor-not-allowed opacity-50"
-                style={{ 
-                  color: '#9CA3AF',
-                  borderColor: 'transparent',
-                }}
-                title="即将开放"
-              >
-                手机号登录
-                <span className="ml-1 text-xs text-ink-muted">(即将开放)</span>
-              </button>
             </div>
 
             {/* 邮箱登录方式切换 */}

@@ -202,11 +202,8 @@ export function ClassCheckOverlay({
     const accuracy = Math.round((correctCount / questions.length) * 100);
     const ringColor = accuracy >= 80 ? '#2D4F3E' : accuracy >= 60 ? '#B8842B' : '#B5483C';
     const ringBg = accuracy >= 80 ? '#E6EDE8' : accuracy >= 60 ? '#FBF1DC' : '#F6E6E2';
-    const dynamicEncouragement = encouragement || (
-      accuracy === 100 ? '完全掌握了，继续保持！'
-        : accuracy >= 60 ? '大部分理解了，有个别地方可以再巩固。'
-        : '这段内容有些难度，建议回放再听一遍。'
-    );
+    // 评语只用模型按这一轮题写的那句；没有就不说——固定的「完全掌握了 / 有些难度」像 AI 说的，其实是模板
+    const dynamicEncouragement = encouragement?.trim() || '';
     const wrongQuestions = questions.filter((q) => selected[q.id] !== normalizeAnswer(q.answer, q.options));
 
     return (
@@ -229,7 +226,7 @@ export function ClassCheckOverlay({
           {topic && (
             <p className="mb-1 text-[11px] font-semibold tracking-widest uppercase text-[#8E8B82]">{topic}</p>
           )}
-          <p className="text-[14px] leading-[1.7] text-[#5C5A55]">{dynamicEncouragement}</p>
+          {dynamicEncouragement ? <p className="text-[14px] leading-[1.7] text-[#5C5A55]">{dynamicEncouragement}</p> : null}
 
           {/* 错题简报 */}
           {wrongQuestions.length > 0 && (

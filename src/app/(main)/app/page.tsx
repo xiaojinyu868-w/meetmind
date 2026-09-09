@@ -2159,6 +2159,10 @@ function StudentAppContent({
           onOpenEcho={() => { /* MobileAppShell 内部 push echo screen */ }}
           onOpenSearch={() => setShowAISearch(true)}
           onOpenProfile={() => { window.location.href = '/settings'; }}
+          onMarkMoment={(timestampMs, mode) => {
+            if (mode === 'live') handleAnchorMark(timestampMs);
+            else handlePlaybackAnchorAdd(timestampMs);
+          }}
           onQuickAsk={(question) => {
             setMobileAIQuestion(question);
             setMobileAIDisplayQuestion('');
@@ -2426,7 +2430,7 @@ function StudentAppContent({
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted" onClick={() => setSourceImportError('搜索功能开发中')}>
+                      <button type="button" aria-label="搜索" className="flex h-10 w-10 items-center justify-center rounded-full text-ink-muted" onClick={() => setShowAISearch(true)}>
                         <Search size={16} strokeWidth={2} />
                       </button>
                       <div className="h-7 w-7 rounded-full bg-paper-warm ring-1 ring-divider flex items-center justify-center text-[10px] font-medium text-ink-muted">

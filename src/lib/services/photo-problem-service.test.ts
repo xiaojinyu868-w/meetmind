@@ -12,7 +12,7 @@ describe('parsePhotoProblemResponse', () => {
     });
     const problem = parsePhotoProblemResponse(raw);
     expect(problem).not.toBeNull();
-    expect(problem?.subject).toBe('数学');
+    expect(problem?.subject).toBe('其他');
     expect(problem?.statement).toContain('某商店');
     expect(problem?.figureDesc).toBeUndefined();
     expect(problem?.studentAttempt).toContain('涨价');
@@ -37,14 +37,14 @@ describe('parsePhotoProblemResponse', () => {
     expect(parsePhotoProblemResponse('这不是 JSON')).toBeNull();
   });
 
-  it('缺学科时兜底为数学；字段超长截断', () => {
+  it('缺学科时归为「其他」（不默认数学）；字段超长截断', () => {
     const raw = JSON.stringify({
       isProblem: true,
       statement: 'x'.repeat(2000),
       figureDesc: 'y'.repeat(1000),
     });
     const problem = parsePhotoProblemResponse(raw);
-    expect(problem?.subject).toBe('数学');
+    expect(problem?.subject).toBe('其他');
     expect(problem?.statement.length).toBeLessThanOrEqual(1200);
     expect(problem?.figureDesc?.length).toBeLessThanOrEqual(400);
   });

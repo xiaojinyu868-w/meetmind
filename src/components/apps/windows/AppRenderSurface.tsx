@@ -18,6 +18,28 @@ import { ExplainerWindow } from './ExplainerWindow';
 import type { AssessmentDraft } from './assessment-events';
 import type { NextStepCardProps } from './NextStepCard';
 
+/**
+ * "成品"里一件东西都没有——测验没题、闪卡没卡、导图没分支、幻灯没页。
+ * 新契约下服务端不会再返回这种结果（会抛 GENERATION_FAILED），这里兜的是旧缓存与异常返回。
+ */
+export function isEmptyAppResult(appKey: WorkshopAppKey, result: AppExecutionResult): boolean {
+  const payload = (result.render?.payload ?? {}) as Record<string, unknown>;
+  const count = (value: unknown) => (Array.isArray(value) ? value.length : 0);
+  switch (appKey) {
+    case 'quiz':
+      return count(payload.questions) === 0;
+    case 'flashcards':
+      return count(payload.cards) === 0 && typeof payload.message !== 'string';
+    case 'mindmap':
+      // MindmapWindow 接受 markdown / children / branches 三种形态之一
+      return !(typeof payload.markdown === 'string' && payload.markdown.trim())
+        && count(payload.children) === 0
+        && count(payload.branches) === 0;
+    default:
+      return false;
+  }
+}
+
 export interface AppRenderSurfaceProps {
   appKey: WorkshopAppKey;
   result: AppExecutionResult | null;
@@ -63,6 +85,12 @@ export function AppRenderSurface({
   if (!result && taskState?.status === 'error') {
     const app = getWorkshopAppByKey(appKey);
     return <AppWindowPlaceholder status="error" appName={app?.name ?? appKey} errorMessage={taskState.error} onRetry={onRegenerate} />;
+  }
+  // 有"成品"但里面一道题 / 一张卡 / 一个分支都没有（旧缓存或异常返回）：这不是"做好了"，
+  // 按失败处理并给"再试一次"——之前窗口体显示空态、顶栏却写着「做好了」，且没有按钮
+  if (result && isEmptyAppResult(appKey, result)) {
+    const app = getWorkshopAppByKey(appKey);
+    return <AppWindowPlaceholder status="error" appName={app?.name ?? appKey} errorMessage="GENERATION_FAILED" onRetry={onRegenerate} />;
   }
   if (appKey === 'audio-overview') {
     return <PodcastWindow result={result} transcript={transcript} taskState={taskState} onSeek={onSeek} onRegenerate={onRegenerate} />;

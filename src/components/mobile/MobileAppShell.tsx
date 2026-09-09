@@ -81,6 +81,11 @@ export interface MobileAppShellProps {
   onOpenSearch?: () => void;
   /** 课中快捷提问（suggestion chip 点击） */
   onQuickAsk?: (question: string) => void;
+  /**
+   * 标记一个时刻为困惑点，走与桌面同一条落库路径（anchorService + classroomDataService）。
+   * live = 录课中按当前录音时间标；playback = 复习时按分段起点标。不传则不渲染标记按钮。
+   */
+  onMarkMoment?: (timestampMs: number, mode: 'live' | 'playback') => void;
   /** 点击头像打开设置/菜单 */
   onOpenProfile?: () => void;
   /** Echo 列表（用于 echo screen 展示） */
@@ -752,7 +757,9 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
             </div>
             <div className="mt-1.5 flex gap-1.5">
               <button className="rounded-full bg-paper-warm px-2.5 py-1 text-[10.5px] font-medium text-ink-secondary active:scale-95" onClick={() => p.onQuickAsk?.('这段我没跟上，帮我补一下')}>我没跟上</button>
-              <button className="inline-flex items-center gap-1 rounded-full bg-vermilion-mist px-2.5 py-1 text-[10.5px] font-medium text-vermilion active:scale-95" onClick={() => toast.success(`已记下 ${fmtSec(elapsedSeconds)}，课后整理时会标注`)}><MapPin size={10} />记一下</button>
+              {p.onMarkMoment ? (
+                <button className="inline-flex items-center gap-1 rounded-full bg-vermilion-mist px-2.5 py-1 text-[10.5px] font-medium text-vermilion active:scale-95" onClick={() => { p.onMarkMoment?.(elapsedSeconds * 1000, 'live'); toast.success(COPY.mobileJourney.momentMarked(fmtSec(elapsedSeconds))); }}><MapPin size={10} />{COPY.mobileJourney.markMoment}</button>
+              ) : null}
             </div>
           </div>
           {/* AI 对话内容 */}
@@ -1094,7 +1101,7 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
                 onSeek={ms => p.onSeek(ms)}
                 getImageUrl={getImageUrl}
                 getOriginalTranscript={getOrig}
-                onMarkConfusion={() => { setSheetHeight('half'); toast.success('已标记，同桌会帮你讲这段'); }}
+                onMarkConfusion={p.onMarkMoment ? (section) => { p.onMarkMoment?.(section.startMs, 'playback'); setSheetHeight('half'); toast.success(COPY.mobileJourney.confusionMarked); } : undefined}
               />
             </div>
           ) : (
@@ -1200,8 +1207,9 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
   // 锚点与 segments 同源（都是 capture editor store 当前装载的那节课），不按 sessionId 再过滤——
   // 示例课的锚点带 DEMO_SESSION_ID 而会话键是 guest-demo，过滤会把"你标记了 2 处"整个滤掉
   const anchors = useCaptureEditorStore((s) => s.anchors);
+  const activeAnchorCount = anchors.filter((anchor) => !anchor.resolved).length;
   const recommendation = recommendWorkshopApp({
-    activeAnchorCount: 0,
+    activeAnchorCount,
     difficultyCount: 0,
     segmentCount: _p.segments.length,
   });
@@ -1211,7 +1219,7 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
     contextType: _p.demoMode
       ? 'demo'
       : reviewContext?.contentType || _p.selectedReviewItem?.type || 'review',
-    activeAnchorCount: 0,
+    activeAnchorCount,
   });
   const recommendedKey = resolveMobileWorkshopRecommendation(assessment, recommendation.key);
   // 不再替用户决定「能不能用」：所有应用始终可见可用，材料撑不住由插件执行后诚实空态。
