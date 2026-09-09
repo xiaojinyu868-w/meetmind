@@ -69,7 +69,8 @@ export function parsePhotoProblemResponse(raw: string): PhotoProblem | null {
   if (!statement) return null;
 
   return {
-    subject: clip(parsed.subject, 20) || '数学',
+    // 模型没判出学科就是「其他」——默认成「数学」会让下游按数学题的路子讲一道物理题
+    subject: clip(parsed.subject, 20) || '其他',
     statement,
     figureDesc: clip(parsed.figureDesc, MAX_FIELD_CHARS) || undefined,
     figureSpec: clip(parsed.figureSpec, MAX_SPEC_CHARS) || undefined,

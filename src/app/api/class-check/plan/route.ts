@@ -156,7 +156,8 @@ function normalizePlan(raw: PlanLLMOutput | null, segments: TranscriptSegment[])
     .sort((a, b) => a.startMs - b.startMs);
 
   return {
-    title: typeof raw.title === 'string' ? raw.title.trim() : '课堂学习',
+    // 模型没给标题就留空，不用「课堂学习」占位冒充理解结果
+    title: typeof raw.title === 'string' ? raw.title.trim() : '',
     summary: typeof raw.summary === 'string' ? raw.summary.trim() : '',
     checkpoints,
     highlights,
