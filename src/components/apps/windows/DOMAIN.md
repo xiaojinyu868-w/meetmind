@@ -18,7 +18,7 @@
 
 | 宿主 | 场景 | 2026-09-09 状态 |
 |------|------|-----------------|
-| `ReviewLearningWorkspace`（`src/components/`） | 复习页中栏（主路径） | 头部一行文字（← 所有学习方式 · 课名 · [全屏] · 再做一版）；**「全屏」**把同一棵组件树切到 `fixed inset-0`（Esc 退出，执行状态不丢）——板书 / 教室 / 速查表在 400px 中栏里只能缩成缩略图 |
+| `ReviewLearningWorkspace`（`src/components/`） | 复习页中栏（主路径） | 头部一行文字（← 所有学习方式 · 课名 · [全屏 / 退出全屏] · 再做一版）；**「全屏」**把同一棵组件树切到 `fixed inset-0`（Esc 退出，执行状态不丢）。**板书 / 讲给同桌听 / 速查表 / 导图在桌面（≥768px）默认就进全屏**（`STAGE_APPS`）——它们在 400px 中栏里只能缩成缩略图，全屏后才是完整产品；返回键永远回应用矩阵，不用点两次 |
 | `AppWindowShell` | 独立页 `/app/matrix/[appKey]` | 返回 / 再做一版退成文字（`app-window-shell-tone.ts`），闪卡 immersive 变体保留 |
 | `WorkshopWindowManager` | 课堂页浮窗 / 全屏 | 收起 / 关闭文字化，删掉「会话 7eeeed…」内部黑话副标题，硬编码中文收进 `APPS_COPY.shell` |
 | `MobileAppRunner`（`src/components/mobile/`） | 手机结果页 | 未动 |

@@ -47,6 +47,9 @@ function buildInfographicContentContext(summaryOverview: string | undefined, tra
     .slice(0, 1400);
 }
 
+/** 桌面上默认进全屏舞台的应用：中栏 400px 里只能缩成缩略图的"一张面" */
+const STAGE_APPS: ReadonlySet<string> = new Set(['explainer', 'teach-back', 'cheatsheet', 'mindmap']);
+
 export function ReviewLearningWorkspace({
   appKey,
   sessionId,
@@ -124,7 +127,14 @@ export function ReviewLearningWorkspace({
 
   // 全屏舞台：复习页中栏又窄又高，板书 / 教室 / 速查表这类"一张面"的应用在 400px 里只能缩成缩略图。
   // 这里给所有应用一个统一的「全屏」——同一棵组件树换到 fixed 覆盖层，执行状态与结果都不丢；Esc 退出。
-  const [fullscreen, setFullscreen] = useState(false);
+  // 「一张面」的应用（板书 / 讲给同桌听 / 速查表 / 导图）在中栏里根本看不清，桌面上默认就进全屏——
+  // 全屏后才是完整产品；退出全屏回到中栏仍可用。测验 / 闪卡 / 播客 / 信息图适合中栏，保持原样。
+  const [fullscreen, setFullscreen] = useState(() => (
+    STAGE_APPS.has(app.key) && typeof window !== 'undefined' && window.innerWidth >= 768
+  ));
+  useEffect(() => {
+    setFullscreen(STAGE_APPS.has(app.key) && window.innerWidth >= 768);
+  }, [app.key]);
   useEffect(() => {
     if (!fullscreen) return undefined;
     const onKey = (event: KeyboardEvent) => {
@@ -149,9 +159,10 @@ export function ReviewLearningWorkspace({
       {/* 头部：一行字。返回与动作都是文字，不做 pill；状态只在"正在做 / 没做好"时说一句，做好了就不说——
           此前这一条有 3 个描边胶囊 + 1 个状态 pill，比窗口里的内容还抢眼 */}
       <header className="flex shrink-0 items-center gap-3 border-b border-divider bg-white px-4 py-2.5">
-        <button type="button" onClick={fullscreen ? () => setFullscreen(false) : onBack} className={`${textAction} inline-flex items-center gap-1`}>
+        {/* 返回永远回应用矩阵（默认进全屏的应用不该要点两次才回得去）；退出全屏是右侧另一个文字动作 */}
+        <button type="button" onClick={onBack} className={`${textAction} inline-flex items-center gap-1`}>
           <ArrowLeft size={13} strokeWidth={1.8} aria-hidden />
-          <span className="hidden sm:inline">{fullscreen ? APPS_COPY.shell.exitFullscreen : COPY.apps.matrix.backToMatrix}</span>
+          <span className="hidden sm:inline">{COPY.apps.matrix.backToMatrix}</span>
         </button>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">
@@ -161,9 +172,9 @@ export function ReviewLearningWorkspace({
           </p>
           <p className="hidden truncate text-[12px] text-ink-muted sm:block">{COPY.apps.matrix.workspaceSubtitle(app.learningAction, app.bestFor)}</p>
         </div>
-        {!isImmersiveApp && !fullscreen ? (
-          <button type="button" onClick={() => setFullscreen(true)} className={`${textAction} hidden md:inline`}>
-            {APPS_COPY.shell.fullscreen}
+        {!isImmersiveApp ? (
+          <button type="button" onClick={() => setFullscreen((value) => !value)} className={`${textAction} hidden md:inline`}>
+            {fullscreen ? APPS_COPY.shell.exitFullscreen : APPS_COPY.shell.fullscreen}
           </button>
         ) : null}
         <button type="button" onClick={() => void execution.rerun()} disabled={running} className={`${textAction} inline-flex items-center gap-1`}>
