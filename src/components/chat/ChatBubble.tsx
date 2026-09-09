@@ -106,8 +106,9 @@ export const ChatBubble = React.memo(function ChatBubble({
   const isUser = role === 'user';
   return (
     <div className={cn('group/chat-bubble flex w-full', ROLE_ALIGN[role], className)}>
-      {/* 左侧 avatar（仅 assistant + 非 minimal 显示） */}
-      {!isUser && avatar && variant !== 'minimal' ? (
+      {/* 左侧 avatar（assistant 传了就显示；minimal 变体此前一律隐藏——2026-09-10 起传了也显示：
+          问同学的回答不再套卡片，但同学的脸要在，否则整页是无主的正文） */}
+      {!isUser && avatar ? (
         <div className="mr-2.5 mt-0.5 shrink-0">{avatar}</div>
       ) : null}
       <div

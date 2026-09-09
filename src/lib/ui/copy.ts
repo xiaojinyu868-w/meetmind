@@ -852,9 +852,10 @@ export const COPY = {
     loading: '同学正在查找真实的书、论文和外部资料…',
     /** 空状态（没有收集内容） */
     empty: '还没有收集内容。先去收一节课或一篇文章，同学会自动整理方向。',
-    /** 跨课程空态 */
-    crossCourseEmptyTitle: '先留下几条你真正关心的内容。',
-    crossCourseEmptyBody: '这里会先看见你正在形成的方向，再从外部找到真实可读的书、论文和不同观点。',
+    /** 跨课程空态（2026-09-10：同学开口，不再是一张巨大的空卡） */
+    crossCourseEmptySpeaker: '同学',
+    crossCourseEmptyOpening: '我还没读到你的课和收藏。留下几条你真正关心的内容，这里会先照见你正在形成的方向，再从外面找真实可读的书、论文和不同观点。',
+    crossCourseEmptyAction: '去收一条',
     /** 生成失败 */
     error: '没整理出来，再试一次',
     /** 重试按钮 */

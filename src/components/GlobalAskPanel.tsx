@@ -471,10 +471,11 @@ export function GlobalAskPanel({
       isDragging={fileUpload.isDragging}
       capabilities={{ file: true, mic: true }}
       onVoiceTranscript={(text) => composer.setValue([composer.value, text].filter(Boolean).join(' '))}
-      placeholder={embedded
+      placeholder={showWelcome
         ? (effectiveDepth === 'deep' ? GLOBAL_ASK_COPY.opening.placeholderDeep : GLOBAL_ASK_COPY.opening.placeholderQuick)
         : (effectiveDepth === 'deep' ? GLOBAL_ASK_COPY.composerDeep : GLOBAL_ASK_COPY.composerQuick)}
       statusLabel={intentBusy ? GLOBAL_ASK_COPY.preparingIntent : undefined}
+      // 第一屏与对话态都用 bare（宿主画外框）；embedded=false 的 paper 变体保留给别的宿主
       variant={embedded ? 'bare' : 'paper'}
       className={embedded ? '!px-0 !pb-1 !pt-0' : undefined}
     />
@@ -571,6 +572,9 @@ export function GlobalAskPanel({
               <ChatBubble
                 key={message.id}
                 role={message.role === 'user' ? 'user' : 'assistant'}
+                // 同学的回答不套卡片（minimal）：像第一屏那句话一样，是人在说话，不是系统在出卡；用户消息仍是墨色气泡
+                variant={message.role === 'assistant' ? 'minimal' : 'paper'}
+                fullWidth={message.role === 'assistant'}
                 avatar={message.role === 'assistant' ? <OctoAvatar mood={isStreaming ? 'thinking' : 'happy'} size="sm" /> : undefined}
                 messageId={message.id}
               >
@@ -598,7 +602,14 @@ export function GlobalAskPanel({
           {error ? <div className="rounded-xl border border-vermilion/15 bg-vermilion-fog px-4 py-3 text-[12.5px] text-vermilion">{pointsBlock ? describePointsBlock(pointsBlock) : GLOBAL_ASK_COPY.responseError}</div> : null}
             </ChatMessageList>
 
-            {!showWelcome ? renderComposer(false) : null}
+            {!showWelcome ? (
+              // 对话态的输入框与第一屏同一张卡（bare 变体 + 宿主画外框），不再是通用底座那条带内层边框的输入条
+              <div className="shrink-0 bg-white px-4 pb-4 pt-2 sm:px-6">
+                <div className="mx-auto w-full max-w-3xl rounded-[22px] border border-divider bg-card shadow-card transition-[box-shadow,border-color] duration-300 focus-within:border-pine/40 focus-within:shadow-[0_0_0_4px_rgba(47,107,85,0.08),0_16px_48px_rgba(32,49,42,0.10)]">
+                  <div className="px-4 pt-2.5 sm:px-5">{renderComposer(true)}</div>
+                </div>
+              </div>
+            ) : null}
           </main>
           {!isMobile ? renderProfileRail('hidden w-[340px] shrink-0 border-l border-divider min-[1180px]:flex') : null}
         </div>

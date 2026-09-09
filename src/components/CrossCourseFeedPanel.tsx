@@ -11,7 +11,8 @@ import { COPY } from '@/lib/ui/copy';
 import type { FeedItem } from '@/types';
 import type { SourceIngestItem, WorkspaceCaptureMessage, WorkspaceEchoMessage } from '@/types/page-types';
 import type { EchoData } from '@/components/EchoCard';
-import { Plus, RefreshCw } from 'lucide-react';
+import { ArrowRight, Plus, RefreshCw } from 'lucide-react';
+import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { useLearningContext } from '@/hooks/useLearningContext';
 
 interface CrossCourseFeedPanelProps {
@@ -222,13 +223,22 @@ export function CrossCourseFeedPanel({
       {/* 统一信息流：今日整理 + 内部关联 + 服务端外部发现 */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {showEmptyFeed && !canGenerate ? (
-          <div className="flex min-h-full flex-col justify-center rounded-[24px] border border-divider bg-card px-8 py-12 text-left">
-            <p className="max-w-[360px] text-[20px] font-semibold leading-tight tracking-[-0.02em] text-ink">
-              {COPY.feed.crossCourseEmptyTitle}
-            </p>
-            <p className="mt-3 max-w-[380px] text-[13.5px] leading-7 text-ink-secondary">
-              {COPY.feed.crossCourseEmptyBody}
-            </p>
+          /* 空态：同学开口一句 + 一个出口。此前是一张占满抽屉的空白大卡，中间两行字——像 demo */
+          <div className="flex min-h-full flex-col justify-center px-2 pb-16">
+            <div className="flex items-start gap-3.5">
+              <div className="mt-1 shrink-0"><OctoAvatar mood="listening" size="sm" aura={false} /></div>
+              <div className="min-w-0">
+                <p className="text-[16px] leading-[1.8] text-ink">
+                  <span className="mr-2 font-serif italic text-pine">{COPY.feed.crossCourseEmptySpeaker}</span>
+                  {COPY.feed.crossCourseEmptyOpening}
+                </p>
+                {onAddContext ? (
+                  <button type="button" onClick={onAddContext} className="mt-3 inline-flex items-center gap-1 text-[13.5px] font-medium text-pine underline-offset-4 hover:underline">
+                    {COPY.feed.crossCourseEmptyAction}<ArrowRight size={13} />
+                  </button>
+                ) : null}
+              </div>
+            </div>
           </div>
         ) : (
           <FeedStream

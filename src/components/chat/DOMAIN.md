@@ -14,7 +14,7 @@
 chat/
 ├── DOMAIN.md                       # 本文件
 ├── index.ts                        # barrel
-├── ChatBubble.tsx                  # 单条消息壳（avatar / actions / footer slot）
+├── ChatBubble.tsx                  # 单条消息壳（avatar / actions / footer slot）。minimal 变体传了 avatar 也显示（2026-09-10：问同学的回答不套卡片但同学的脸要在）
 ├── ChatMessageList.tsx             # 消息流容器（自动跟随 + jump-to-latest）
 ├── ChatComposer.tsx                # 输入条（mic / file / call / send / stop；micDisabledHint=语音占位：capabilities.mic=true 但不给 onVoiceTranscript 时渲染 disabled 麦克风 + tooltip）。variant：paper / glass / bare——bare（2026-09-09）给宿主自己画外框的场合（问同学第一屏的输入卡），内层不再套边框与底色；此前用 className 只能改外壳，内层输入面的边框改不掉，成了框里套框
 ├── ChatRenderer.tsx                # 流式 markdown 渲染（marker pipeline）
@@ -113,7 +113,7 @@ export function MyChatAdapter({ sessionId, authToken, ... }) {
 | `IntentDialog` | `components/intent/IntentDialog.tsx` | `goal` | `glass` | 沉浸式 octo blur 背景；marker=`intent-summary`；M11.4 bio 双 marker |
 | `TutorAgentPanel` | `components/tutor/TutorAgentPanel.tsx` | `review` / `in-class`（预留） | `paper` | 持久化到 `conversationService`；仅 `review` 提供时间戳跳转；M11 迁 |
 | `ClassroomCompanionPanel` | `components/classroom/ClassroomCompanionPanel.tsx` | `in-class` | `paper` | M14/M14.5 迁；Octo Buddy chip + inline app；不渲染时间戳回跳 |
-| `GlobalAskPanel` | `components/GlobalAskPanel.tsx` | `global` | `paper` | 统一以“问同学”承接问题；第一屏（`GlobalAskWelcome`）是同学开口的一两句真实事实 + 输入卡（composer `bare` 变体）+ 最多三行“可以从这里开始”，模式是输入卡脚下两个词，参考范围只在用户主动查看时以抽屉出现。没有真实歧义就自动开始，只有答案会改变学习路径时才逐题渲染动态选择；不能为了展示能力强迫用户填表 |
+| `GlobalAskPanel` | `components/GlobalAskPanel.tsx` | `global` | `paper`（消息列表）/ 回答用 `minimal` 气泡 | 统一以“问同学”承接问题；第一屏（`GlobalAskWelcome`）是同学开口的一两句真实事实 + 输入卡（composer `bare` 变体）+ 最多三行“可以从这里开始”，模式是输入卡脚下两个词；对话态回答不套卡片（minimal + Octo 头像），用户消息墨色气泡，底部输入框与第一屏同一张卡；参考范围只在用户主动查看时以抽屉出现。没有真实歧义就自动开始，只有答案会改变学习路径时才逐题渲染动态选择；不能为了展示能力强迫用户填表 |
 | `SharedAgentChat` | `app/share/[token]/SharedAgentChat.tsx` | `shared` | `paper` | M11.5 迁；shareToken 认证 + 隐私铁律 |
 | `WordExplainer` | `components/WordExplainer.tsx` | `word` | `minimal` | M13 迁；选词解释浮窗 |
 
