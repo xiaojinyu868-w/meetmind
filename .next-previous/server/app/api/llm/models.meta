@@ -1,8 +1,0 @@
-{
-  "headers": {
-    "cache-control": "public, max-age=60, s-maxage=300",
-    "content-type": "application/json",
-    "x-next-cache-tags": "_N_T_/layout,_N_T_/api/layout,_N_T_/api/llm/layout,_N_T_/api/llm/models/layout,_N_T_/api/llm/models/route,_N_T_/api/llm/models"
-  },
-  "status": 200
-}

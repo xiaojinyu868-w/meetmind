@@ -3,6 +3,10 @@ node_modules/
 
 # 构建产物
 .next/
+# 旁路部署目录（scripts/deploy.sh）：构建产物，不进版本库——此前 .next-previous 被 git add -A 误收了 1043 个文件
+.next-staging/
+.next-previous/
+.next-failed/
 out/
 dist/
 build/
