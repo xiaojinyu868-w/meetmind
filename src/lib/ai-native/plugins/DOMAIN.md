@@ -16,7 +16,7 @@
 | `flashcards.plugin.ts` | 闪卡。**2026-09-09 起没有兜底卡**：模型的卡就是卡，落地只决定跳转；填充词 / 空题面的卡剔除；一次重试，可用卡 <2 抛 `GENERATION_FAILED` |
 | `flashcards.plugin.test.ts` | 闪卡证据回锚测试：语义匹配优先、秒/毫秒归一、禁止按卡片序号轮转原文 |
 | `mindmap.plugin.ts` | 思维导图（节点 prompt 要求“地图标签”式短语而非解释句；无原文支持的叶子节点会被剔除，保留节点回写证据时间）。2026-09-09 起节点只标注时间点不删节点，空树一次重试后抛 `GENERATION_FAILED`，不再用抽样片段拼假树 |
-| `cheatsheet.plugin.ts` | 跨课 / 考试速查表：课堂、大纲、真题三类证据分别回锚；证据落地只决定条目要不要带引用，落地不到条目照留（2026-09 前直接丢条目，术语课整页 CONTENT_NOT_READY）；`strong` 只由明确强调或真题证据保留；正文保留有依据的 GFM / LaTeX / 紧凑 Mermaid（flowchart / pie / xychart-beta；小表格只用于对比，图中数值必须直接来自证据），不得为装饰滥用富文本；模型判断材料无学习价值或全部条目无法落回证据时返回 `CONTENT_NOT_READY`，禁止逐句包装原文制造假成品 |
+| `cheatsheet.plugin.ts` | 跨课 / 考试速查表。**2026-09-09 契约扩展（向后兼容）**：模型按「考试主题」组织 `topics[] → items[]`，每条带 `kind`（definition / formula / process / contrast / pitfall / exemplar）+ `term` + `latex`，`sections`（按 kind 分组）仍照常产出供旧缓存 / 分享预览 / Markdown 读；prompt 带 `buildCheatsheetMaterialHint` 按转录长度给条目数量的数字目标并禁止元说明条目；`maxTokens` 9000、不再 `responseFormat: json_object`（严格 JSON 模式把 LaTeX 反斜杠吃掉），改由 `latex-json-repair.ts` 在 parse 前后修复转义（`\\to`→tab、`\.in`、`\\"in` 等实测坏例）。原有规则：课堂、大纲、真题三类证据分别回锚；证据落地只决定条目要不要带引用，落地不到条目照留（2026-09 前直接丢条目，术语课整页 CONTENT_NOT_READY）；`strong` 只由明确强调或真题证据保留；正文保留有依据的 GFM / LaTeX / 紧凑 Mermaid（flowchart / pie / xychart-beta；小表格只用于对比，图中数值必须直接来自证据），不得为装饰滥用富文本；模型判断材料无学习价值或全部条目无法落回证据时返回 `CONTENT_NOT_READY`，禁止逐句包装原文制造假成品 |
 | `teach-back.plugin.ts` | 讲给同桌听（费曼检验）：从课堂证据选 3-5 个「应该能亲口讲出来」的目标点，`anchorText` 经 `resolveGroundedEvidence` 重新锚定，锚不住 `evidence=null` 不伪造时间戳；转录过短或选点为空抛 `CONTENT_NOT_READY`。讲述后的四象限核对不在此插件，走 `/api/apps/teach-back/evaluate`（`teach-back-eval-service.ts`：coverage × confidence 由 LLM 判断，quadrant 由服务端映射推导，不信 LLM 自报） |
 | `explainer.plugin.ts` | 板书精讲：一次 LLM 调用产出 BoardScript（讲稿 narration + 板书动作 DSL），render mode `'board'`；唯一防线是老师原话逐字校验，其余完全信任模型。2026-09-09 起 LLM 失败 / 无可用动作抛 `GENERATION_FAILED`，不再返回"这次没做好"的假成品 |
 | `board-script.ts` | BoardScript DSL 类型 + helper（`parseWriteRef` / `countPageWrites` / `segmentDisplayText` / `checkpointAnswerText` / `extractCues`）；v2 起 write 不携带坐标，标注按 write 序号引用（'w3'）；v3 段联合类型 NarrationSegment/CheckpointSegment、ref 动作、narration 内联 cue（[aN] 词级讲写对齐，charIndex 为剥 cue 后坐标系；兼容模型偷懒写法 [N]）；BoardAction 联合含 `BoardClearAction`（teach 新引擎 wb_clear 的画布映射：清板，渲染语义 = 最后一个 clear 之前的动作不渲染，见 board-lecture.ts flattenPage；legacy 词表/备课脚本不含它）；**checkpoint 答案同规则：`answerDisplay` + `answerCues`（指向 demoActions，解析念到哪示范写到哪），sanitize 一并剥除 hints/question.text 里的标记——不剥会被 TTS 逐字念出（2026-08-19 实测）** |
@@ -54,5 +54,6 @@
 
 - `studio-workshop.types.test.ts` — 44 tests，覆盖模式检测/时间戳/数组/对话解析
 - `flashcards.plugin.test.ts` — 覆盖模型时间戳不可信时，题面/答案仍能回到真正支持它的课堂片段
+- `latex-json-repair.test.ts`（`src/lib/ai-native/`）— LLM JSON 里 LaTeX 转义修复；`mindmap-tree.test.ts` — 节点标签 TeX → Unicode（`flattenInlineTex`，SVG 文字不能渲染 KaTeX；prompt `app-mindmap-v2` 同时要求模型直接写 Unicode）
 - `quiz.plugin.test.ts` / `cheatsheet.plugin.test.ts` / `mindmap.plugin.test.ts` — 覆盖错误时间戳、幻觉条目、虚假重点、跨课课内时间与大纲证据的处理（2026-09-09 起：题 / 卡 / 节点只标注证据强弱，不删不换；整份不可用才 GENERATION_FAILED）
 - `teach-back.plugin.test.ts` — 选点正规化：anchorText 锚定、锚不住不伪造时间戳、去重与上限

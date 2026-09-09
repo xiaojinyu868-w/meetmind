@@ -22,7 +22,7 @@ apps/
 ├── evidence/
 │   ├── EvidenceChip.tsx      # 证据标签芯片
 │   └── EvidencePopoverCard.tsx # 证据弹窗卡片
-└── windows/
+└── windows/                  # 应用窗口 + 公共壳。2026-09-09 公共设计语言（一个主角 / 少容器 / 控件退成文字 / 做好了不说话 / 回到原话最轻）与四个宿主对照表见 windows/DOMAIN.md 顶部
     ├── WorkshopWindowManager.tsx # 浮窗管理器 + ErrorBoundary
     ├── AppRenderSurface.tsx      # 统一应用渲染面（Workshop / 对话内联共用）
     ├── InfographicWindow.tsx     # 信息图浮窗
