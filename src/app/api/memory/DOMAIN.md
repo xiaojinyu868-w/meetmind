@@ -1,5 +1,13 @@
 # API: memory — 学习记忆事件入口（P0 事件化）
 
+Context 开启后复用新服务的 owner 认证，包括 JWT_SECRET 配置检查、账户有效性与拒绝第三方凭证；第三方仅使用 /api/context/v1，不能借此入口冒充内部应用。
+
+应用矩阵 useAppLearningActivity 也提交 activity 事件：保留应用摘要、课堂 sessionId 与 appKey。测验通过 observation 附加完整作答证据，其他应用当前摘要最多 240 字；不能把摘要当成未经压缩的学习现场。
+
+请求可附加 observation: `{ type, content, locator? }`。CONTEXT_ENABLED 开启时保存这份完整内容（最多 40000 字符）及定位，不走 240 字摘要截断；未提供时仍适配旧 payload。关闭时旧服务只消费 payload，忽略扩展。此扩展不能指定 userId/appId/space，身份及归属仍由服务决定。
+
+2026-09 Context 接入（9-9 改为双写）：本路由统一走 `learning-observation-service.recordLearningObservation`——`LearningEvent` 表始终写并触发旧画像蒸馏（掌握轨迹 / P0 画像的原料不因 Context 开启而断）；`CONTEXT_ENABLED=true` 时同一份观察再经教育观察适配器落入通用 ContextEvent，返回 202 `{ ok, eventId(ContextEvent), learningEventId, jobId, status, duplicate, backend: 'context' }`，后续由 `make context-worker` 投递上游。身份仍来自用户登录，服务另检查账户有效状态。开关默认关闭。历史旧数据不自动迁移。
+
 > 事件表（prisma `LearningEvent`）是学习者画像的唯一写入口。写入方只发事件；
 > 蒸馏与合并由服务端 `src/lib/services/learning-event-service.ts` 完成，
 > `learnerProfileJson` 是物化视图（仍保留 24 条上限）。事件全量留史，可回放重建。

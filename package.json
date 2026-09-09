@@ -41,6 +41,7 @@
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@fontsource/caveat": "^5.3.0",
     "@fontsource/zcool-kuaile": "^5.3.0",
+    "@modelcontextprotocol/sdk": "1.29.0",
     "@nivo/core": "^0.99.0",
     "@nivo/heatmap": "^0.99.0",
     "@openai/codex": "0.149.0",
@@ -127,6 +128,7 @@
     "zustand": "^4.5.0"
   },
   "devDependencies": {
+    "@next/env": "14.2.35",
     "@playwright/test": "^1.52.0",
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/node": "^20.0.0",

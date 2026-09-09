@@ -176,9 +176,10 @@ export async function POST(request: NextRequest) {
     if (isGovernedAppKey(appKey)) {
       context.runtimeControl = await buildControlledAppPrompt(appKey);
     }
-    // 「这个学习者」读槽（renewal plan §6）：登录用户问外部 context 系统，访客 / 未接入用请求方带来的本机切片。
-    // 任何失败都回落到空切片——多知道一点是加分项，不是执行前提
+    // 「这个学习者」读槽（renewal plan §6）：登录用户拿服务端事实半 + 共享 Context 按任务召回的理解半，
+    // 访客 / 未接入用请求方带来的本机切片。任何失败都回落到空切片——多知道一点是加分项，不是执行前提
     const learnerId = getUserIdFromRequest(request) || undefined;
+    const lessonTitle = typeof context.input.metadata?.title === 'string' ? context.input.metadata.title : '';
     context.learner = await resolveLearnerContext({
       request: {
         v: LEARNER_CONTEXT_VERSION,
@@ -187,10 +188,11 @@ export async function POST(request: NextRequest) {
         sessionId: context.input.sessionId,
         need: ['mastery', 'recent', 'challenges', 'topics', 'goals'],
         limit: 8,
+        task: [context.goal?.intent, lessonTitle].filter(Boolean).join('：').slice(0, 500) || undefined,
       },
       local: payload.learner,
     });
-    traceHints.push(`learner_context=${context.learner.source}:${context.learner.mastery.length}`);
+    traceHints.push(`learner_context=${context.learner.source}:${context.learner.mastery.length}${context.learner.understanding?.text ? '+memory' : ''}`);
     const readiness = await assessWorkshopReadiness({
       transcript: context.input.transcript,
       contextTitle: typeof context.input.metadata?.title === 'string' ? context.input.metadata.title : undefined,

@@ -19,10 +19,7 @@ import {
   composeLessonTitle,
   retitleCaptureIfUnlocked,
 } from '@/lib/services/lesson-title-service';
-import {
-  appendLearningEvent,
-  triggerLearningEventProcessing,
-} from '@/lib/services/learning-event-service';
+import { recordLearningObservation } from '@/lib/services/learning-observation-service';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('lesson-understanding');
@@ -184,9 +181,8 @@ export async function applyLessonUnderstanding(params: {
     result.highlightCount += 1;
   }
 
-  // 学习记忆观察器（P0 范例）：课后理解完成即追加 activity 事件并触发服务端合并。
-  // fire-and-forget：事件管道失败只记日志，绝不影响标题/摘要/精选的落库结果。
-  void appendLearningEvent(userId, {
+  // Wait only for the durable observation, never for model-based memory processing.
+  await recordLearningObservation(userId, {
     appId: 'classroom',
     type: 'activity',
     payload: {
@@ -201,7 +197,6 @@ export async function applyLessonUnderstanding(params: {
     idempotencyKey: `lesson-understanding:${captureId}`,
     occurredAt: params.occurredAt.toISOString(),
   })
-    .then((event) => { if (event) void triggerLearningEventProcessing(event); })
     .catch((error) => {
       log.warn('learning event append failed', {
         captureId,

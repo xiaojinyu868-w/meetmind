@@ -1,5 +1,15 @@
 # Tutor Agent Domain
 
+## 共享 Context 接入（2026-09，默认关闭）
+
+历史中较晚的明确偏好/目标更新应优先于冲突旧摘要；自述进展仍不同于测试证明。此规则追加在应用侧证据使用说明，不能把它当作已实现持久化 supersession。
+
+读取时将 personal 空间最近一条 active 经历作为 afterEventId，优先保留预算内的原文，避免相似旧记忆挤掉刚发生的更新。这是短期读后写衔接；不等于完整纠正覆盖。较大的原文仍可能只留下 source 句柄，当前 Tutor 不会自动调用 source 工具，相关改进需在应用接入阶段完成。
+
+`CONTEXT_ENABLED=true` 开启已登录 GlobalAsk 的写入/读取闭环。对话持久化后 `/api/memory/events` 把带角色的原文交给通用 Context 服务；下一轮 global 且个人上下文开启时，服务端按本轮问题检索并追加有来源的 JSON 证据。不会向 shared 会话注入个人 Context，也不会把原始观察当作掌握结论。旧记忆不自动迁移，用户在 `/context` 查看/控制新记录。后端与原文服务失败不阻断主对话。
+
+配置：`CONTEXT_HINDSIGHT_URL` / `CONTEXT_HINDSIGHT_API_KEY` 仅服务端使用，模型选择由 Hindsight 部署管理；应用投递需独立运行 `make context-worker`。真实模型效果与 TTFT 必须在配置可用后联调，离线测试不能替代。
+
 ## 当前实现（2026-07）
 
 Tutor 的唯一新主链路是 `POST /api/tutor/agent`，由 `buildTutorSystemPrompt` 按六种 mode 组装：`in-class / review / shared / goal / word / global`。所有 mode 都是纯文字对话，`tools = {}`；闪卡、测验、导图等结构化产物由前端 SkillChip 直接调用 `/api/apps/execute`，不再依赖 LLM tool call 或 `<open_app:KEY/>` marker。
@@ -208,6 +218,8 @@ make eval-tutor-real         # 真实调 streamText + tools（优先当前模型
 ---
 
 ## 下一步
+
+共享 Context 的 Hindsight 运行配置见 ops/hindsight/DOMAIN.md。其模型凭证、提取与检索进程独立配置；Tutor 只消费经授权和来源校验的 ContextBundle，继续使用本页的对话模型注册表。
 
 - [ ] M4.5: 扩 Tutor dataset 到 50 条真实/合成课堂问答
 - [ ] M5: UI 层把 tool-call/result 帧渲染成 Workshop 产物卡片

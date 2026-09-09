@@ -5,7 +5,8 @@
 RUNTIME_TARGETS := dev check build deploy test test-watch test-server test-all lint \
 	smoke smoke-intent smoke-review smoke-in-class smoke-shared smoke-all ttft \
 	eval eval-unit eval-asr eval-asr-real eval-tutor eval-tutor-real eval-teach \
-	eval-teach-real eval-guard eval-guard-update eval-ci db-push db-studio ledger
+	eval-teach-real eval-guard eval-guard-update eval-ci db-push db-studio ledger \
+	context-worker context-mcp context-example test-context smoke-context smoke-context-live
 
 # --- Node 24 运行时：先自动找，找不到才报错 ---
 # node_modules 里的原生模块（better-sqlite3 / sharp）按 Node 24 ABI 编译，换主版本会崩，
@@ -35,6 +36,56 @@ dev: ## 启动开发服务器
 .PHONY: check
 check: ## 类型检查（最常用，每次改完必跑）
 	npx tsc --noEmit
+
+.PHONY: context-worker context-mcp test-context
+context-worker: ## 运行共享 Context 可靠投递进程（需 Hindsight；整理复用上游 worker）
+	npx tsx src/lib/services/context/worker.ts
+
+context-mcp: ## 运行独立 Context MCP（仅 mmctx_ 受限凭证；stdout 保留给协议）
+	@npx tsx packages/context-mcp/main.ts
+
+.PHONY: context-example
+context-example: ## 独立应用读取 Context；显式提供事件 JSON 文件时先写入
+	@npx tsx examples/context-client/main.ts
+
+test-context: ## Context 权限、来源、重试与 HTTP 契约测试
+	npx vitest run src/lib/services/context --maxWorkers=1
+
+.PHONY: smoke-context
+smoke-context: ## 本机 Context HTTP+浏览器验收，临时合成账户在结束后清除
+	@npx tsx tests/smoke/smoke-context.ts
+
+.PHONY: smoke-context-live
+smoke-context-live: ## 本地应用 + 真实 Hindsight + Tutor + 浏览器验收；上游清理确认后删除合成账户
+	@npx tsx tests/smoke/smoke-context-live.ts
+
+.PHONY: cleanup-context-live
+cleanup-context-live: ## 恢复本工作区记录的合成验收账户清理，要求 CONTEXT_FIXTURE_ID；worker 必须运行
+	@npx tsx tests/smoke/context-live-cleanup.ts
+
+.PHONY: context-handoff
+context-handoff: ## 打包工作区 Context 增量、基线与散列；排除秘密/数据库/运行时，不 commit/push
+	@npx tsx scripts/context-handoff.ts
+
+.PHONY: context-effect
+context-effect: ## Hindsight 上游直连诊断；不代表 MeetMind 应用链路验收
+	@python3 tests/eval/context/continuous-journey.py
+
+# Hindsight runs independently from the Node application. Secrets stay in an ignored file.
+HINDSIGHT_ENV_FILE ?= .env.hindsight.local
+HINDSIGHT_COMPOSE = docker compose --env-file "$(HINDSIGHT_ENV_FILE)" -f ops/hindsight/compose.yaml
+.PHONY: hindsight-up hindsight-down hindsight-status hindsight-logs
+hindsight-up: ## 启动独立 Hindsight 0.9.2 + PostgreSQL（只监听本机）
+	@$(HINDSIGHT_COMPOSE) up -d --wait --wait-timeout 300
+
+hindsight-down: ## 停止独立 Hindsight；保留持久化记忆数据
+	@$(HINDSIGHT_COMPOSE) down
+
+hindsight-status: ## 查看 Hindsight 和数据库状态
+	@$(HINDSIGHT_COMPOSE) ps
+
+hindsight-logs: ## 查看 Hindsight 最近启动日志
+	@$(HINDSIGHT_COMPOSE) logs --tail 60 hindsight
 
 .PHONY: build
 build: ## 生产构建（多核 + 大堆 + build worker；类型与 lint 由 make check / CI 单独把关）

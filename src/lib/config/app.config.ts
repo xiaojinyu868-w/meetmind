@@ -388,18 +388,6 @@ export const DevConfig = {
   demoMode: process.env.DEMO_MODE === 'true',
 } as const;
 
-// ==================== 外部 context 系统（「这个学习者」读槽） ====================
-
-/**
- * renewal plan §6：LearnerContext 的远端供给方。url 为空 = 未接入，读槽只用请求方带来的本机切片。
- * 服务端 learner-context-service 是唯一消费方；接口形态（POST /v1/learner-context）待与 context 系统对齐。
- */
-export const ContextSystemConfig = {
-  url: process.env.CONTEXT_SYSTEM_URL?.trim() || '',
-  apiKey: process.env.CONTEXT_SYSTEM_API_KEY?.trim() || '',
-  timeoutMs: 1_500,
-} as const;
-
 // ==================== 统一导出 ====================
 
 export const AppConfig = {
@@ -409,7 +397,6 @@ export const AppConfig = {
   feature: FeatureConfig,
   ui: UIConfig,
   dev: DevConfig,
-  contextSystem: ContextSystemConfig,
 } as const;
 
 export default AppConfig;

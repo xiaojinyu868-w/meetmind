@@ -1,3 +1,4 @@
+import { sharedContextCopy } from './shared-context-copy';
 /**
  * copy.ts — 用户面可见文案的单一真相源。
  *
@@ -19,6 +20,7 @@
  */
 
 export const COPY = {
+  sharedContext: sharedContextCopy,
   identity: {
     productName: 'MeetMind',
     name: '同学',

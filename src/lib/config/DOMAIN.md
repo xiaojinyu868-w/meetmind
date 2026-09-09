@@ -1,5 +1,9 @@
 # Config — 统一配置中心
 
+Context 独立服务的 server-only 配置在 `context.ts`（不导出给浏览器）：`CONTEXT_ENABLED=true` 开启现有应用接入；`CONTEXT_HINDSIGHT_URL` / `CONTEXT_HINDSIGHT_API_KEY` 指向自有 Hindsight 服务，未配置时只保存原始事件并如实返回降级状态。通用模型选择仍交给既有注册表或上游配置，不新增默认模型。
+
+独立 MCP/示例从进程环境读取 MEETMIND_CONTEXT_URL 与 MEETMIND_CONTEXT_TOKEN（仅 mmctx_ 受限授权）；示例另支持 MEETMIND_CONTEXT_TASK 和显式写入文件 MEETMIND_CONTEXT_EVENT_PATH。它们不读取 MeetMind 模型密钥、不自动加载 .env。上游 Hindsight 的模型与 worker 环境由其部署单独管理。
+
 > 所有配置集中在 `app.config.ts`，通过环境变量覆盖。
 > 服务层、API 路由都通过 `import { config } from '@/lib/config'` 获取配置。
 
@@ -27,10 +31,11 @@ AppConfig {
 
 ## 环境变量约定
 
+共享 Context 的应用开关和上游地址位于 context.ts。Hindsight 自身的模型与数据库配置由独立运行环境管理，见 ops/hindsight/DOMAIN.md；应用只持有服务凭证，不从 Hindsight 导出模型密钥。该联调环境选择的百炼模型不改变 Tutor 模型注册表。
+
 - 所有环境变量在 `.env` 中定义
 - `app.config.ts` 统一读取，不要在其他地方直接 `process.env.XXX`
 - 新增配置项必须在 `app.config.ts` 中注册
-- `ContextSystemConfig`（2026-09-08）：外部 context 系统（`CONTEXT_SYSTEM_URL` / `CONTEXT_SYSTEM_API_KEY`），「这个学习者」读槽的远端供给方；url 为空 = 未接入，读槽只用本机切片。唯一消费方 `lib/services/learner-context-service.ts`
 
 ### 模型注册表（单一真相源，环境变量驱动）
 

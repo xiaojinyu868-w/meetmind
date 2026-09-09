@@ -258,14 +258,22 @@ context 系统在另一台服务器上开发，新版本即将合并。为了合
   同日晚已接第二批消费方：Tutor 六模式里除 shared 外全部（课中同桌 / 复习同桌 / 问同学 / goal / word）——system prompt 多一段
   「他此前真实做过的检验（跨课）」，客户端发送时现算切片；shared 态服务端强制抹掉。teach 两条线也已接：开课时随请求带切片存
   `TeachThread.learnerJson`，会话建立时拼「关于这位学生」。**读契约本侧的消费方至此齐了**（应用矩阵 / Tutor / teach）。
-- **供给方也不再只等外部（9-9 凌晨）**：`lib/services/learner-context-provider.ts` 是读契约的参考实现——从 LearningEvent 表的 assessment
-  事件 + 用户画像读时聚合（不物化画像，P0-1 的约束不变），`source: 'server'`；`resolveLearnerContext` 顺序 远端 → 服务端 → 本机 → 空，
-  登录用户换设备也记得。对外同形接口 `POST /api/context/v1/learner-context`（Bearer = MeetMind JWT）；写侧配置了 `CONTEXT_SYSTEM_URL` 就把
-  事件转发 `POST /v1/learning-events`。所以"接入外部 context 系统"现在是**配置切换 + 一次对拍**，不是开发任务：
-  对方提供同形接口 → 填 URL / API_KEY → 我们优先问它，它空 / 挂 → 回落服务端 → 本机。
-- **仍需与 context 系统那边对的**（本侧已按下面的默认做好，对方不同再改）：接口形态默认 HTTP `POST /v1/learner-context` + `POST /v1/learning-events`、
-  鉴权默认 Bearer API key、用户 id 默认本仓库 `User.id`（访客无 id，登录后由它合并）、状态迁移默认保留时间序列（本侧参考实现就是这么做的，
-  可直接对拍）、载荷格式默认本仓库 `LearningEvent`（`src/types/learning-event.ts`）。
+- **供给方也不再只等外部（9-9 凌晨）**：`lib/services/learner-context-provider.ts` 是读契约事实半的服务端供给方——从 LearningEvent 表的 assessment
+  事件 + 用户画像读时聚合（不物化画像，P0-1 的约束不变），`source: 'server'`，登录用户换设备也记得。对外同形接口
+  `POST /api/context/v1/learner-context`（Bearer = MeetMind JWT）。
+- **外部 context 系统已合入（9-9 上午）**：它就是 `origin/feat/context-m1-handoff` 交付的共享记忆底座——Hindsight 0.9.2（服务器 loopback
+  127.0.0.1:18888，独立容器）+ `src/lib/services/context/*`（Context v1 API / worker / 授权 / 暂停·忘记 / prepare）。不是 HTTP 远端，是同进程服务，
+  所以此前预留的 `CONTEXT_SYSTEM_URL` 通用远端客户端与事件转发已删除。归一后的形状：
+  - **写**：`/api/memory/events` 与课后理解统一走 `learning-observation-service`，**双写**——`LearningEvent`（事实：掌握轨迹 / P0 画像）+ `ContextEvent`
+    （原始经历 → worker → Hindsight 整理）；assessment 载荷也进 Context（`practice.assessment`，标注 self-report / answer-match 依据）。
+  - **读**：`LearnerContext` = 事实半（provider）+ 理解半 `understanding`（`context/learner-understanding` 按 `request.task` 向 Hindsight 召回，
+    来源链校验、暂停 / 忘记过滤、最新一条经历优先）。应用矿阵 / Tutor 六模式（除 shared）/ teach 开课三处消费方都带 task，一处格式化
+    （`formatLearnerContextForPrompt`）。
+  - **验证**：隔离 worktree + 副本库 + 真 Hindsight：`smoke-context-live` 10/10（真 Tutor、worker、测验 UI 写入、/context 页、纠正生效、
+    暂停 / 恢复 / 忘记清理）；探针：课堂观察 + assessment 双写 → worker 完成 → `resolveLearnerContext` 事实 2 条 + 理解 2 来源 →
+    `/api/apps/execute` trace `learner_context=server:2+memory`，出的题正是"分母该选哪一群人 / 羽毛球社团"——课堂那句话经 Hindsight 回到了测验里。
+- **仍开着的**：旧「我的上下文」迁到 `/context` 画像页（M1 步骤 4 的后半）、浏览器离线 outbox、SDK / MCP 发布与 OAuth（M1 步骤 6）；
+  生产 Hindsight 仍是 pg0 开发持久化，备份与外置 PostgreSQL 是部署方的事。
 
 ---
 

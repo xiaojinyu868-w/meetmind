@@ -78,6 +78,11 @@ make ledger         # 生成能力台账（交付里程碑 / 新增底座资产�
 
 # 数据库
 make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
+
+# 共享记忆（Hindsight）
+make context-worker # Context 可靠投递进程（生产由 PM2 单独跑：meetmind-context-worker）
+make test-context # Context 权限 / 来源 / 重试 / HTTP 契约测试
+make smoke-context-live # 真 Hindsight + Tutor + 浏览器全链路验收（SMOKE_BASE 指隔离服务，SMOKE_BROWSER=chromium；非生产库）
 ```
 
 ---
@@ -100,6 +105,7 @@ make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
 14. **AI 家教「上课」线（2026-08 起，迁移中双线并存：codex 底座 ↔ teach-engine）**：`/api/teach/*`（SSE 事件契约 + 历史课程 TeachThread）→ 薄壳路由按 `TeachThread.engine`（创建时按 `TEACH_ENGINE` 快照；null 旧线程 = codex）分发两套编排：codex 线 `src/lib/services/teach-codex/` 编排 codex app-server（每线程一进程，CODEX_HOME 隔离 data/teach-codex/）←MCP stdio→ `server/teach/teach-mcp-server.mjs`（内部回调进事件总线），模型经进程内 shim（Responses→Chat）调上游，`TEACH_PROVIDER` 一行切换（默认 gemini-commonstack），工具 schema 单一事实源 `teach-agent/tools.ts`（11 个，无 ask 阻塞）；engine 线见主线 16。前端 tool-call name 双词表（`teach-events.ts` boardEffectOf 双分支，legacy 分支永久保留供旧线程回放）→ `src/app/api/teach/DOMAIN.md` + `src/lib/services/teach-codex/DOMAIN.md`
 15. **「请一个分身」线（2026-08，nuwa skill × codex harness）**：`/api/fenshen/*`（SSE 事件契约与 teach 同构）→ `src/lib/services/fenshen/` 复用 teach-codex 通用件（进程封装/shim/provider 注册表）；蒸馏线程（workspace-write + Firecrawl 官方远端 MCP）跑原版 nuwa skill（`assets/fenshen/huashu-nuwa/` 原文，零改动）产人物 SKILL.md；对话线程（read-only、零 MCP）挂 skill  persona + 课后上下文物化文件（lesson/ learner/）；私有轨语料 `corpus-service.ts`（B站字幕捷径→ASR 兜底）；skill 永不对用户可见，确认走试听「像/不像」→ 重蒸馏；spike 事实源 `out/fenshen-spike/REPORT.md` → `src/app/api/fenshen/DOMAIN.md` + `src/lib/services/fenshen/DOMAIN.md`
 16. **teach 引擎迁移（2026-09，pi + vendor OpenMAIC，P1 已接线）**：主线 14 的 engine 侧——`src/lib/services/teach-engine/`（teach-engine-service 编排：每线程一个 pi Agent + StreamFn 桥 + 结构化动作直出边生成边执行；vendor 树豁免 500 行铁律）；`TEACH_ENGINE=codex|engine` 决定新建线程归属（TeachThread.engine 快照），事件契约与 codex 线一致（name 为新动作词表；v1 不发 image-ready）；与 codex 底座双线并存 → `src/lib/services/teach-engine/DOMAIN.md` + `docs/TEACH_TUTOR_ENGINE.md`
+17. **共享记忆底座（2026-09-09 合入，Hindsight 0.9.2）**：`src/lib/services/context/`（Context v1 API `/api/context/v1/*` / 可靠投递 worker `make context-worker` / 用户+空间独立 bank / 授权 mmctx_ / 暂停·忘记清理 / prepare 召回）；写侧 `learning-observation-service` **双写** `LearningEvent`（事实）+ `ContextEvent`（原始经历 → Hindsight）；读侧 `LearnerContext` = 事实半（`learner-context-provider`，掌握轨迹）+ 理解半（`context/learner-understanding`，有来源的跨应用记忆），应用矩阵 / Tutor / teach 一处格式化消费；`CONTEXT_ENABLED` 灰度，关掉只影响内部应用读写不删数据 → `src/lib/services/context/DOMAIN.md` + `docs/plans/CONTEXT_M1_DELIVERY.md` + `docs/plans/CONTEXT_SERVER_HANDOFF.md`
 
 ---
 
@@ -134,6 +140,7 @@ make db-push        # 同步 Prisma schema 到 SQLite + 生成 Client
 | **改用户面文案** | `src/lib/ui/copy.ts`（唯一真相源；营销页 Landing / Technology 按体积拆在 `copy-landing.ts`，口吻规则相同） |
 | **改状态管理 / 类型 / 配置 / 模型** | `src/stores/DOMAIN.md` / `src/types/DOMAIN.md` / `src/lib/config/DOMAIN.md` → `app.config.ts` → `llm-service.ts` |
 | **改设置项 / 用户偏好** | `src/app/DOMAIN.md` 设置页 → `src/lib/utils/DOMAIN.md` → 所有消费该偏好的 hooks/components |
+| **改共享学习记忆 / Context 服务 / 记忆开发者接入** | `docs/plans/LEARNING_MEMORY_V1_SPEC.md`（V1 目标）→ `docs/plans/CONTEXT_M1_DELIVERY.md`（已实现能力与限制）→ `src/lib/services/context/DOMAIN.md` + `src/app/api/context/DOMAIN.md`；UI 看 `src/components/context/DOMAIN.md`，接入包看 `packages/context-sdk/DOMAIN.md`；旧入口与迁移背景见 `src/app/api/memory/DOMAIN.md` + `docs/plans/LEARNING_MEMORY_P0_HANDOFF.md` |
 | **改设计 / 视觉** | `docs/DESIGN_SYSTEM.md` + `design-demo/v7/` showcase + `docs/PRODUCT_TASTE.md` |
 | **处理 bug** | `skills/debugging/SKILL.md` → 先诊断再动手 |
 

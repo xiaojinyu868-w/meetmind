@@ -52,10 +52,10 @@ export async function POST(request: NextRequest) {
   }
 
   const provider = resolveTeachProvider();
-  // 「这个学习者」读槽：开课时带来的本机切片（不合法当没有）；登录用户优先问外部 context 系统
+  // 「这个学习者」读槽：开课时带来的本机切片（不合法当没有）；登录用户拿服务端事实半 + 共享 Context 按课题召回的理解半
   const learnerId = getUserIdFromRequest(request) || undefined;
   const learner = await resolveLearnerContext({
-    request: { v: LEARNER_CONTEXT_VERSION, appId: 'teach', learnerId, need: ['mastery', 'challenges', 'topics', 'goals'], limit: 8 },
+    request: { v: LEARNER_CONTEXT_VERSION, appId: 'teach', learnerId, need: ['mastery', 'challenges', 'topics', 'goals'], limit: 8, task: `给这位学生上一课：${topic}` },
     local: body.learner,
   });
   const thread = await createThread({ topic, model: provider.model, engine, learner: isLearnerContextEmpty(learner) ? null : learner });

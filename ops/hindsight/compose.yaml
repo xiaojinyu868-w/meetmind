@@ -1,0 +1,44 @@
+name: meetmind-hindsight-dev
+
+services:
+  hindsight:
+    image: ghcr.io/vectorize-io/hindsight:0.9.2
+    ports:
+      - "127.0.0.1:${HINDSIGHT_PORT:-18888}:8888"
+    volumes:
+      - postgres:/home/hindsight/.pg0
+    environment:
+      HINDSIGHT_API_DATABASE_URL: pg0
+      HINDSIGHT_API_TENANT_EXTENSION: hindsight_api.extensions.builtin.tenant:ApiKeyTenantExtension
+      HINDSIGHT_API_TENANT_API_KEY: ${HINDSIGHT_SERVICE_KEY:?Set a dedicated service key}
+      HINDSIGHT_API_WORKER_ID: meetmind-context-dev-1
+      HINDSIGHT_API_WORKER_MAX_SLOTS: "4"
+      HINDSIGHT_API_LLM_MAX_CONCURRENT: "4"
+      HINDSIGHT_API_DB_POOL_MAX_SIZE: "20"
+      HINDSIGHT_API_LLM_PROVIDER: openai
+      HINDSIGHT_API_LLM_BASE_URL: https://dashscope.aliyuncs.com/compatible-mode/v1
+      HINDSIGHT_API_LLM_API_KEY: ${HINDSIGHT_DASHSCOPE_API_KEY:?Set the model credential}
+      HINDSIGHT_API_LLM_MODEL: ${HINDSIGHT_LLM_MODEL:-qwen-plus}
+      HINDSIGHT_API_LLM_EXTRA_BODY: '{"enable_thinking":false}'
+      HINDSIGHT_API_RETAIN_MAX_COMPLETION_TOKENS: "8192"
+      HINDSIGHT_API_EMBEDDINGS_PROVIDER: openai
+      HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL: https://dashscope.aliyuncs.com/compatible-mode/v1
+      HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY: ${HINDSIGHT_DASHSCOPE_API_KEY:?Set the model credential}
+      HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL: text-embedding-v4
+      HINDSIGHT_API_EMBEDDINGS_OPENAI_DIMENSIONS: "1024"
+      HINDSIGHT_API_EMBEDDINGS_OPENAI_BATCH_SIZE: "10"
+      HINDSIGHT_API_RERANKER_PROVIDER: alibaba
+      HINDSIGHT_API_RERANKER_ALIBABA_API_KEY: ${HINDSIGHT_DASHSCOPE_API_KEY:?Set the model credential}
+      HINDSIGHT_API_RERANKER_ALIBABA_MODEL: qwen3-rerank
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8888/health', timeout=5)"]
+      interval: 15s
+      timeout: 6s
+      start_period: 90s
+      retries: 10
+    restart: unless-stopped
+    mem_limit: 3g
+    cpus: 2
+
+volumes:
+  postgres:

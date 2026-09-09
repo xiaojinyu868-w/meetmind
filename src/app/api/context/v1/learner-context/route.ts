@@ -9,10 +9,10 @@ import { LEARNER_CONTEXT_VERSION } from '@/types/learner-context';
 /**
  * POST /api/context/v1/learner-context —— 「这个学习者」读契约的参考实现（renewal plan §6）。
  *
- * 与外部 context 系统约定的是同一个接口形状：body = LearnerContextRequest，200 = LearnerContext。
- * 这里由本仓库自己的存储供给（LearningEvent assessment 事件 + 用户画像），source = 'server'。
+ * body = LearnerContextRequest，200 = LearnerContext 的事实半（source = 'server'：LearningEvent assessment 事件 + 用户画像）。
+ * 理解半（Hindsight 召回）不在这个口——它按任务在服务端 resolveLearnerContext 里补，原文走 /api/context/v1/sources/:id。
  * 鉴权：Bearer = MeetMind JWT，learnerId 以 token 为准（body 里写别人的 id 不生效——个人上下文默认私有）。
- * 外部系统合并后可以：(a) 代理到这个口对拍；(b) 在 CONTEXT_SYSTEM_URL 提供同形接口，本仓库自动改问它。
+ * 与 /api/context/v1/[...path]（通用 Context v1：events / prepare / sources / jobs / grants）并存：静态段优先于 catch-all。
  */
 
 const log = createLogger('api-learner-context');

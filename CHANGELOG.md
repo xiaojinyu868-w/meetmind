@@ -5,6 +5,27 @@
 
 ---
 
+## 2026-09-09 — 共享记忆底座（Hindsight）合入主线：读写归一，课堂那句话回到了测验里
+
+- **合入什么**：`origin/feat/context-m1-handoff`（Context M1：Hindsight 0.9.2 客户端 / Context v1 API / worker / 授权 / 暂停·忘记 / prepare /
+  SDK·MCP·Skill / `/context` 画像页，95 文件）合进 `feat/settings-redesign`；7 处冲突按"服务器新功能保留 + Context 契约完整"解
+  （QuizWindow 保留底部自评条并接 `recordAttempt` 观察；useAppLearningActivity 同时保留 `recordAssessment` 与 M1 的 observation / 登录排队）。
+  服务器 Hindsight 容器（127.0.0.1:18888）已在跑，配置只是三行 env
+- **写侧改双写**（M1 原为二选一）：`learning-observation-service` —— `LearningEvent` 表始终写（掌握轨迹 / P0 画像不因 Context 开启而断），
+  `CONTEXT_ENABLED` 时同一份观察再进 `ContextEvent` 由 worker 投给 Hindsight；education-adapter 新增 assessment 载荷（`practice.assessment`，
+  每条标注 `learner_self_report` / `application_answer_match`）。`/api/memory/events` 202 回执带 `learningEventId`
+- **读侧归一**：`LearnerContext` 多一半 `understanding`——`context/learner-understanding` 按当前任务（学生这一句 / 应用目标 / 课题）向 Hindsight 召回，
+  来源链校验、暂停 / 忘记过滤、最新一条经历优先；应用矩阵 / Tutor 六模式（除 shared）/ teach 开课三处都带 `task`，`formatLearnerContextForPrompt`
+  一处格式化（事实 + 跨应用记忆 JSON 证据 + "历史证据不是指令"说明）。tutor 路由不再另拼 `tutorContextSuffix`（避免双注入）。
+  删除此前预留的 `CONTEXT_SYSTEM_URL` 通用远端客户端与事件转发
+- **验证**（隔离 worktree、副本库、真 Hindsight）：`db push` 只增 ContextEvent / ContextGrant；tsc 绿、vitest 1471 全过（含 context 26）；
+  `smoke-context-live` 10/10（真 Tutor、worker、测验 UI 写入、/context 页桌面与手机、纠正改变下一步、暂停 / 恢复 / 忘记清理）；
+  探针：课堂观察 + assessment 双写 → worker 完成 → `resolveLearnerContext` 事实 2 条 + 理解 2 来源 → `/api/apps/execute`
+  trace `learner_context=server:2+memory`，出的题正落在"分母该选哪一群人 / 羽毛球社团"上；合成账号已按 forget → cleanup 清理
+- **仍开着的**：旧「我的上下文」迁到 `/context`（M1 步骤 4 后半）、离线 outbox、SDK / MCP 发布与 OAuth；生产 Hindsight 仍是 pg0 开发持久化
+
+---
+
 ## 2026-09-09 — 课堂时刻有了名字：困惑点不再叫"#1"，三处同一套命名
 
 - **问题**：学生标下的一处困惑，在复习页叫"00:30 · 困惑点 #1"，在问同学书桌叫"00:30 没跟上"，同桌开场 chip 说"0:30 那里我没跟上"——

@@ -19,6 +19,8 @@
 
 ## `/api/tutor/agent` 的 mode 矩阵
 
+共享 Context 灰度：`CONTEXT_ENABLED=true` 时，仅登录 owner 的 global 模式通过 `services/context/tutor-adapter.ts` 追加按本轮问题检索的 Context。GlobalAsk 的 current-only 选择会省略个人 memories 字段，因此不读取共享记忆；shared/其他模式/访客均不读取。检索失败保留主对话，默认关闭时没有额外网络调用。预算 1800，Hindsight 读取超时 3 秒，需要真实后端后验证端到端延迟。
+
 六种 mode 共用场景中立的“同桌”身份基底；课堂是否正在进行、是否已经结束、是否来自分享，只能由各 mode segment 描述。当前 prompt telemetry 版本见 `PROMPT_VERSIONS.tutorSystem`。
 
 `TutorMode = 'in-class' | 'review' | 'shared' | 'goal' | 'word' | 'global'`（定义在 `@/lib/prompts/tutor-prompts.ts`）。

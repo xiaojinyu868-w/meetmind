@@ -7,13 +7,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { authService } from '@/lib/services/auth-service';
-import {
-  appendLearningEvent,
-  triggerLearningEventProcessing,
-} from '@/lib/services/learning-event-service';
+import { recordLearningObservation } from '@/lib/services/learning-observation-service';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 import { createLogger } from '@/lib/logger';
 import type { LearningEventInput } from '@/types/learning-event';
+import { getContextConfig } from '@/lib/config/context';
+import { ContextError } from '@/lib/services/context/validation';
+import { authenticateContext, requireOwner } from '@/lib/services/context/access';
 
 const log = createLogger('memory/events');
 
@@ -28,22 +28,28 @@ export async function POST(request: NextRequest) {
   if (rateLimit) return rateLimit;
 
   try {
-    const payload = getAuthPayload(request);
+    const enabled = getContextConfig().enabled;
+    const principal = enabled ? await authenticateContext(request.headers.get('Authorization')) : null;
+    if (principal) requireOwner(principal);
+    const payload = principal ? { sub: principal.userId } : getAuthPayload(request);
     if (!payload) {
       return NextResponse.json({ ok: false, error: '未授权' }, { status: 401 });
     }
 
     const body = await request.json() as LearningEventInput;
-    const event = await appendLearningEvent(payload.sub, body);
-    if (!event) {
+    // 双写（2026-09-09）：事实表始终落（掌握轨迹 / P0 画像的原料），Context 开启时同一份观察再进 ContextEvent → Hindsight
+    const { eventId, receipt } = await recordLearningObservation(payload.sub, body);
+    if (!eventId && !receipt) {
       return NextResponse.json({ ok: false, error: '事件内容不完整' }, { status: 400 });
     }
-
-    // 蒸馏合并收归服务端：异步处理，失败只记日志，事件仍在表内可回放
-    void triggerLearningEventProcessing(event);
-
-    return NextResponse.json({ ok: true, eventId: event.id });
+    if (receipt) {
+      // 202：本地可靠接收；receipt.status=completed 才是上游整理完成（GET /api/context/v1/jobs/:id）。
+      // eventId 沿用 Context 回执（ContextEvent id，M1 客户端据此查 jobs）；事实表那一行另给 learningEventId
+      return NextResponse.json({ ok: true, ...receipt, learningEventId: eventId, backend: 'context' }, { status: 202 });
+    }
+    return NextResponse.json({ ok: true, eventId });
   } catch (error) {
+    if (error instanceof ContextError) return NextResponse.json({ ok: false, error: error.code }, { status: error.status });
     log.error('append learning event failed', error);
     return NextResponse.json({ ok: false, error: '这次没有形成新的理解' }, { status: 500 });
   }

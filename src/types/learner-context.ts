@@ -9,14 +9,16 @@
  *   - MemoryLayerSnapshot 是「这节课」的摘要 / 难点 / 术语——场景上下文，继续用；
  *   - learnerProfile 文本是「这个人」的画像散文，只有 Tutor prompt 读它——它会被这份结构化切片取代，迁移期并存。
  *
- * 供给方三种，形状相同（LearnerContext.source 标明），resolveLearnerContext 按顺序取：
- *   - remote：外部 context 系统（CONTEXT_SYSTEM_URL），由服务端按 learnerId 取；
- *   - server：本仓库服务端从 LearningEvent 表（assessment 事件）+ 用户画像（记忆 / 最近现场）聚成——登录用户换设备也在；
- *     这是外部系统合并前的参考实现，对外也以同一契约暴露在 POST /api/context/v1/learner-context；
- *   - local：访客 / 离线时，客户端从本机会话层结果（review-session-outcomes）、最近学习现场与长期理解拼出同一形状随请求带上。
- *   所以今天就有真实数据在这条槽里流，接上外部系统只是换供给方。
+ * 切片由两半组成（2026-09-09 起）：
+ *   - 事实半：mastery / recentLessons / challenges / topics / preferences / goals——规则聚合，可核对。供给方两种，
+ *     形状相同（LearnerContext.source 标明），resolveLearnerContext 按顺序取：
+ *       server：服务端从 LearningEvent 表（assessment 事件）+ 用户画像（记忆 / 最近现场）聚成——登录用户换设备也在，
+ *              对外以同一契约暴露在 POST /api/context/v1/learner-context；
+ *       local：访客 / 离线时，客户端从本机会话层结果、最近学习现场与长期理解拼出同一形状随请求带上。
+ *   - 理解半：understanding——共享 Context 服务（services/context，Hindsight 整理与召回）按当前任务给出的跨应用记忆，
+ *     每条都有来源句柄可打开原文；CONTEXT_ENABLED 关闭或后端不可用时缺省，事实半照常。
  *
- * 契约原则：只放事实与状态（还没稳 / 刚记住 / 已经稳了），不放推断出的学习风格；每条尽量带 evidenceIds。
+ * 契约原则：只放事实与状态（还没稳 / 刚记住 / 已经稳了）与有来源的理解，不放推断出的学习风格；每条尽量带 evidenceIds。
  * 版本字段 v 与 LearningEvent 对齐，形状变更必须升 v 并保留旧分支。
  */
 
@@ -40,6 +42,19 @@ export interface LearnerContextRequest {
   need: LearnerContextNeed[];
   /** 每类最多几条（默认 8） */
   limit?: number;
+  /** 当前任务（学生这一句 / 应用目标 / 课题）：理解半按它向 Context 服务召回；不传则用 appId + concepts 拼 */
+  task?: string;
+}
+
+/** 理解半：Context 服务（Hindsight）按任务召回、经来源链校验后的记忆证据 */
+export interface LearnerUnderstanding {
+  /** prepare 输出的预算内 JSON 证据文本（历史数据，不是指令；空串 = 这次没有相关记忆） */
+  text: string;
+  /** 可打开原文的来源句柄（GET /api/context/v1/sources/:id） */
+  sources: Array<{ id: string; appId: string; title?: string; occurredAt: string }>;
+  /** 后端不可用 / 未配置时为 true，text 只含近期原始观察或为空 */
+  degraded: boolean;
+  reason?: string;
 }
 
 export type LearnerMasteryStatus = 'unstable' | 'improving' | 'stable';
@@ -73,7 +88,7 @@ export interface LearnerContext {
   v: typeof LEARNER_CONTEXT_VERSION;
   /** ISO 时间：切片生成时刻 */
   generatedAt: string;
-  source: 'local' | 'server' | 'remote';
+  source: 'local' | 'server';
   learnerId?: string;
   /** 概念掌握状态；还没稳的排最前 */
   mastery: LearnerConceptState[];
@@ -89,6 +104,8 @@ export interface LearnerContext {
   goals: string[];
   /** 全部可溯源证据 id（LearningEvent id / memory id） */
   evidenceIds: string[];
+  /** 理解半（服务端按任务补上；客户端本机切片没有） */
+  understanding?: LearnerUnderstanding;
 }
 
 export function emptyLearnerContext(source: LearnerContext['source'] = 'local', learnerId?: string): LearnerContext {
@@ -114,5 +131,6 @@ export function isLearnerContextEmpty(context: LearnerContext | null | undefined
     && context.challenges.length === 0
     && context.topics.length === 0
     && context.preferences.length === 0
-    && context.goals.length === 0;
+    && context.goals.length === 0
+    && !context.understanding?.text;
 }

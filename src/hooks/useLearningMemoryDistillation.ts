@@ -41,7 +41,7 @@ export function useLearningMemoryDistillation({
     input: DistillLearningMemoryRequest,
   ): Promise<void> => {
     try {
-      if (accessToken && userId) {
+      if (accessToken) {
         // 登录用户（P0 事件化）：只发事件，蒸馏与 merge 收归服务端
         // （learning-event-service），客户端不再走 merge→PATCH 整体回写。
         // type 标 'progress'：这是蒸馏前的原始互动回合，具体性质由蒸馏模型判定。
@@ -60,6 +60,10 @@ export function useLearningMemoryDistillation({
           }),
         });
         if (!response.ok) return;
+        const receipt = await response.json() as { backend?: string };
+        // Context 开启时是双写：共享记忆刷新事件照发，P0 画像蒸馏的服务端刷新也照排（事实表那一份仍在写）
+        if (receipt.backend === 'context') window.dispatchEvent(new Event('meetmind:context-updated'));
+        if (!userId) return;
         for (const delay of SERVER_REFRESH_DELAYS_MS) {
           setTimeout(() => {
             void refreshLearningContextFromServer(userId, accessToken);

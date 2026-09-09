@@ -670,17 +670,21 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    // 「这个学习者」读槽：分享态绝不注入（访问者的事实不该灌给分享者刻下的同学）；其余模式登录用户问外部
-    // context 系统，否则用客户端带来的本机切片；任何失败都只是没有这一段
+    // 「这个学习者」读槽：分享态绝不注入（访问者的事实不该灌给分享者刻下的同学）；其余模式登录用户拿服务端
+    // 事实半 + 共享 Context（Hindsight）按这一句召回的理解半，否则用客户端带来的本机切片；任何失败都只是没有这一段。
+    // 问同学 contextFocus='current'（客户端不带个人上下文）时不读理解半——学生明确只问眼前这份材料
+    const personalScope = mode !== 'global' || context.global?.memories !== undefined;
+    const latestUserText = extractMessageText([...messages].reverse().find((message) => message.role === 'user') ?? {});
     if (mode !== 'shared') {
       const learner = await resolveLearnerContext({
         request: {
           v: LEARNER_CONTEXT_VERSION,
           appId: `tutor:${mode}`,
-          learnerId: userId ?? undefined,
+          learnerId: personalScope ? (userId ?? undefined) : undefined,
           sessionId: sessionId || undefined,
           need: ['mastery', 'recent', 'challenges', 'topics', 'goals'],
           limit: 8,
+          task: latestUserText.slice(0, 2_000),
         },
         local: context.learner,
       });

@@ -1,5 +1,7 @@
 # Hooks — 客户端状态与交互逻辑
 
+应用活动同步：useAppLearningActivity 在已有登录 token 仍验证中的短窗口内缓存实际交互；认证完成且 token 仍一致才投递，失败/退出/切换账户丢弃。游客行为不在后来登录时自动上传。该缓存仅存在当前挂载内存，不承诺离线重载恢复。
+
 > 封装可复用的客户端逻辑。被 components 和 page.tsx 调用。
 
 ## 依赖规则
@@ -16,6 +18,16 @@ hooks → stores + types + lib/db + lib/utils
 ## 文件索引
 
 ### 顶层 hooks
+
+`useQuizNavigation.ts`：QuizWindow 的键盘、触屏与动画翻页，卸载清理定时器；不包含题目判断或记忆逻辑。
+
+`useSharedContext.ts`：共享 Context 管理页的 SDK 调用、分页、原始事件重试标识、授权/撤销和跨身份状态清除。`useLearningMemoryDistillation.ts` 登录判断只依赖 accessToken，修复 GlobalAsk 没传 userId 而误走访客蒸馏；收到新 Context 回执后不再拉旧画像。
+
+来源查看通过 useSharedContext.inspectSource 单独拉取，脱离当前列表分页；控制来源或切换用户时清空原文与检索状态。
+
+useAppLearningActivity 的桌面/移动应用活动由登录用户提交 /api/memory/events，服务端双写：`LearningEvent` 表始终落（掌握轨迹 / P0 画像），`CONTEXT_ENABLED` 时同一份观察再进 Context（Hindsight）。观察内容仍由应用决定，身份由服务端决定。
+
+测验的 recordInteraction 第二参数现在携带完整 observation，透传经 AppRenderSurface 的题面、实际选项、自评与答案暴露条件；这些原始证据不受旧摘要 240 字限制。其他应用未提供 observation 时仍是摘要。原 onLearningActivity 文本回调保持用于当前学习现场。
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
@@ -90,5 +102,7 @@ hooks → stores + types + lib/db + lib/utils
 | `useFeedStream.ts` | ~190 | 今日情报请求与缓存：按工作区上下文/目标签名缓存 6 小时，先恢复可用旧结果再后台刷新；收集或目标变化时自动失效，并过滤本机已标记不相关的卡片 |
 
 ## ⚠️ 超标文件
+
+`useSharedContext.ts`：共享 Context 页面状态。进入或显式切换空间时并行读取经历、授权和有来源的理解；画像与手工任务试读分开。身份/空间切换及刷新竞态通过 generation 隔离，暂停/忘记会重新检索。后台整理结果通过手动刷新获取。
 
 （无）

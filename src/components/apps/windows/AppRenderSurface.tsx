@@ -3,6 +3,7 @@
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import type { TranscriptSegment } from '@/types';
+import type { LearningObservationContent } from '@/types/learning-event';
 import type { AppTaskState } from '@/components/apps/hooks/useAppExecution';
 import { PodcastWindow } from './PodcastWindow';
 import { FlashcardsWindow } from './FlashcardsWindow';
@@ -29,7 +30,7 @@ export interface AppRenderSurfaceProps {
   onRegenerate?: () => void;
   onGenerateDraft?: () => Promise<AppExecutionResult | null>;
   onResultUpdate?: (next: AppExecutionResult) => void;
-  onLearningActivity?: (line: string) => void;
+  onLearningActivity?: (line: string, observation?: LearningObservationContent) => void;
   /** 结构化检验结果（测验 / 闪卡 / 讲给同桌听）→ 记忆事件；不传则只走 onLearningActivity 的人话通道 */
   onAssessment?: (draft: AssessmentDraft) => void;
   /** 完成态里同桌接着说的下一步（宿主按会话结果算好；不传则完成态到此为止） */
