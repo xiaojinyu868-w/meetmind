@@ -6,7 +6,7 @@ export const APP_PROMPT_VERSIONS = {
   flashcards: 'app-flashcards-v1',
   quiz: 'app-quiz-v1',
   mindmap: 'app-mindmap-v1',
-  cheatsheet: 'app-cheatsheet-v1',
+  cheatsheet: 'app-cheatsheet-v2',
   audioOverview: 'app-audio-overview-v1',
   teachBack: 'app-teach-back-v1',
 } as const;
@@ -31,6 +31,27 @@ export interface CheatsheetPromptContext extends StructuredAppPromptContext {
   lessonCount: number;
   sourceSummary: string;
   examScope?: string;
+  /** 材料体量 → 条目数目标（buildCheatsheetMaterialHint）；不传就只说“覆盖优先” */
+  materialHint?: CheatsheetMaterialHint;
+}
+
+export interface CheatsheetMaterialHint {
+  minutes: number;
+  chars: number;
+  /** 经验目标条数：约每 500 字一条，夹在 18–80 之间 */
+  targetItems: number;
+}
+
+/**
+ * 模型对“写多少条”只听具体数字。按材料体量给一个经验目标：
+ * 一节 60 分钟的课 ≈ 2 万字 ≈ 40 条；少于目标的 2/3 基本是漏了。
+ */
+export function buildCheatsheetMaterialHint(transcript: TranscriptSegment[]): CheatsheetMaterialHint {
+  const chars = transcript.reduce((sum, segment) => sum + (segment.text?.trim().length ?? 0), 0);
+  const spanMs = transcript.reduce((sum, segment) => sum + Math.max(0, (segment.endMs ?? 0) - (segment.startMs ?? 0)), 0);
+  const minutes = Math.max(1, Math.round(spanMs / 60_000));
+  const targetItems = Math.min(80, Math.max(18, Math.round(chars / 500)));
+  return { minutes, chars, targetItems };
 }
 
 export interface CheatsheetScopePromptInput {
@@ -143,7 +164,7 @@ ${context.transcriptContext}${buildTerminologyHintBlock(context.terminologyHint)
 }
 
 export function buildCheatsheetSystemPrompt(): string {
-  return '你是考试速查表内容编辑器，不是考题预测器。把多节课堂与明确考试范围压成可打印的高密度参考页；每条必须能被原始材料支持。没有大纲、真题或老师明确措辞时，禁止写“必考、高频、一定考”。只输出 JSON。';
+  return '你是考试速查表内容编辑器，不是考题预测器。把多节课堂与明确考试范围压成一张考前能带进考场的高密度参考页：按考试会考的主题组织，每条必须能被原始材料支持，能写多少写多少——材料撑得住的知识点一个都不要漏。没有大纲、真题或老师明确措辞时，禁止写“必考、高频、一定考”。只输出 JSON。';
 }
 
 export function buildCheatsheetUserPrompt(context: CheatsheetPromptContext): string {
@@ -154,52 +175,50 @@ ${context.sourceSummary}
 ${context.examScope ? `\n考试范围证据：\n${context.examScope}\n` : ''}
 应用场景：学生会打印或导出 PDF；可能在开卷考试中带入考场，也可能用于考前最后压缩。内容必须便于纸面扫读和快速定位。
 
-请生成考试速查表内容草案，分成 4-8 个语义区块，每区块 3-10 条目。页数、纸张和排版由前端根据用户约束处理。
-区块 key 从下列枚举中选（label 会在前端被映射成中文，但 key 必须是英文小写）：
-  - definition   核心定义（术语 → 一句话释义）
-  - formula      关键公式（含推导/条件，如有 LaTeX 写到 latex 字段）
-  - process      流程步骤（有顺序的方法/算法）
-  - contrast     关键对比（A vs B 的差异，一行一对）
-  - pitfall      易错点（选择题/判断题常踩的坑）
+请生成考试速查表内容草案。考试按主题考，所以速查表按主题组织：把这些课的内容归并成 4-10 个主题（topics，像“映射与函数 / 极限的定义 / 极限运算法则”这种能在一张纸上作为章节标题的名词短语，不按上课顺序、不按“第一节 / 第二节”分），每个主题 3-12 条（items）。页数、纸张和排版由前端根据用户约束处理。
+每条 item 都要标 kind——它是哪一类知识（前端据此用不同颜色的荧光笔标出）：
+  - definition   定义 / 关键术语（术语 → 一句话释义）
+  - formula      公式 / 结论（有 LaTeX 写到 latex 字段；纯文字结论也算）
+  - process      流程步骤（有顺序的方法 / 算法 / 判定步骤）
+  - contrast     对比（A vs B 的差异，一行一对或 2-5 行小表格）
+  - pitfall      易错点（选择题 / 判断题常踩的坑、老师说“注意”的地方）
   - exemplar     例题套路（只有课堂例题、练习或真题明确支持时才输出）
-
-并非所有课堂都包含全部六类——只输出真有内容的区块。
 
 最小输出契约：
 {
-  "title": "一句话标题（≤14 字，像'机器学习基础 · 考试速查'）",
-  "overview": "这张卡最适合的用法（一句话，≤40 字）",
-  "sections": [
+  "title": "一句话标题（≤14 字，像'高等数学 · 考试速查'）",
+  "overview": "这张纸最适合的用法（一句话，≤40 字）",
+  "topics": [
     {
-      "key": "definition",
+      "title": "映射与函数",
       "items": [
-        { "term": "术语", "body": "支持 Markdown 的紧凑解释", "emphasis": "normal", "sourceId": "课堂 sessionId", "startMs": 12000, "endMs": 21000 }
-      ]
-    },
-    {
-      "key": "formula",
-      "items": [
-        { "term": "公式名", "body": "描述/条件", "latex": "E = mc^2", "emphasis": "strong", "startMs": 60000, "endMs": 72000 }
+        { "kind": "definition", "term": "映射", "body": "支持 Markdown 的紧凑解释", "emphasis": "normal", "sourceId": "课堂 sessionId", "startMs": 12000, "endMs": 21000 },
+        { "kind": "formula", "term": "复合函数", "body": "描述 / 成立条件", "latex": "f \\\\circ g(x) = f(g(x))", "emphasis": "strong", "startMs": 60000, "endMs": 72000 },
+        { "kind": "pitfall", "term": "值域 ≠ 陪域", "body": "…", "emphasis": "normal", "startMs": 90000, "endMs": 96000 }
       ]
     }
   ]
 }
 
 质量要求：
+- 覆盖优先：先在心里把材料里出现过的每一个有考试价值的定义、公式、判定条件、步骤、对比、例题、老师提醒的坑全部列出来，再按主题归并——每一个都要成为一条，不能因为“篇幅”省略。宁可多写几条短的，不要合并成几条长的${context.materialHint ? `
+- 材料体量：约 ${context.materialHint.minutes} 分钟、${Math.round(context.materialHint.chars / 100) * 100} 字。这样的材料按经验能压出约 ${context.materialHint.targetItems} 条；少于 ${Math.round(context.materialHint.targetItems * 2 / 3)} 条基本是漏了，回头把漏掉的定义 / 条件 / 例题补上。目标条数不是配额——材料里真没有的不能编` : ''}
+- 不写元说明条目（“本节未涵盖…”“材料未提供…”“仅供参考”之类）：速查表上每一条都必须是能拿去考试的知识本身；材料里没有的直接不出现
 - 默认每条 item 的 body 必须极简——通常一句话、约 60 字内，没空写废话
 - body 用电报式短句：省略主语和“是 / 的 / 了”等虚词，可以用 →、⇒、vs、∴、≠ 等符号代替文字连接；单行能说完就不要换行，只有列表或小表格明显更快扫读时才用多行
-- body 支持 GFM Markdown：粗体、列表、引用、代码和表格；只有对比关系用 2-5 行小表格会明显更快时才使用表格
+- body 支持 GFM Markdown：粗体、列表、引用、代码和表格；行内数学用 $…$；换行写真正的换行（\\n），不要写 <br>；只有对比关系用 2-5 行小表格会明显更快时才使用表格
+- JSON 字符串里的 LaTeX 反斜杠只转义一次：写 "$X \\\\to Y$"、"latex": "\\\\frac{a}{b}"，不要写四个反斜杠
 - 流程 / 因果 / 层级或小规模数据对比只有在文字更难扫读时，才可在 body 中放一个 mermaid 代码块；仅限 flowchart / pie / xychart-beta，流程图最多 6 个节点，图中数值必须直接来自证据，禁止装饰性图表
 - 公式优先写入 latex 字段；body 只补变量含义、成立条件或易错边界，不重复抄公式
 - 富文本仍必须适合 2-4 栏纸面：禁止长段落、宽表格、超过 6 个节点的流程图、代码长清单
-- term 是短标签（2-8 字），便于扫读
+- term 是短标签（2-8 字），便于扫读；同一主题内 term 不重复
 - 跨课先去重，再保留定义的适用条件、公式变量、易混对比和可执行步骤；不要把每节课摘要简单拼接
 - emphasis 字段：只有老师明确“反复强调 / 划重点 / 一定考 / 这是必考点”，或真题/大纲直接支持的，标 "strong"；
-  其他常规要点标 "normal"。每个 section 内 strong 不超过 1/3，否则失去“标重点”的信号意义
+  其他常规要点标 "normal"。整张纸 strong 不超过 1/4，否则失去“标重点”的信号意义
 - 避免“嗯/呃/这个”等口头禅
 - 用 startMs/endMs 指向课堂证据（毫秒）
 - sourceId 必须从上面的课堂 / 大纲 / 真题来源中选择；引用大纲或真题时可省略时间
-- 全部输出都必须基于下面的课堂原文，不允许编造
+- 全部输出都必须基于下面的课堂原文，不允许编造；材料里没有的知识点不能为了凑满纸面而补
 
 课堂原文：
 ${context.transcriptContext}

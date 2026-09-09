@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TranscriptSegment } from '@/types';
-import { buildCheatsheetSections, isRejectedCheatsheetDraft } from './cheatsheet.plugin';
+import { buildCheatsheetSections, buildCheatsheetTopics, isRejectedCheatsheetDraft } from './cheatsheet.plugin';
 
 const transcript: TranscriptSegment[] = [
   { id: 's1', text: '机会成本是为了得到某个选择而放弃的最佳替代方案。', startMs: 0, endMs: 8_000, isFinal: true },
@@ -142,6 +142,48 @@ describe('buildCheatsheetSections evidence grounding', () => {
       sourceTitle: '考试大纲',
       sourceKind: 'syllabus',
     });
+  });
+});
+
+describe('buildCheatsheetTopics (v2 主题形态)', () => {
+  it('keeps topic order and per-item kind, and folds the same items into kind sections for legacy consumers', () => {
+    const { topics, sections } = buildCheatsheetTopics(transcript, {
+      topics: [
+        {
+          title: '成本概念',
+          items: [
+            { kind: 'definition', term: '机会成本', body: '放弃的最佳替代方案', startMs: 0 },
+            { kind: 'pitfall', term: '边际 ≠ 平均', body: '边际成本看增量', startMs: 9_000 },
+            { kind: 'formula', term: '边际成本', body: '增量之比', latex: 'MC = \\frac{\\Delta TC}{\\Delta Q}' },
+          ],
+        },
+        { title: '', items: [{ kind: 'definition', term: '无题主题', body: '应被丢弃' }] },
+        { title: '空主题', items: [] },
+      ],
+    });
+
+    expect(topics.map((topic) => topic.title)).toEqual(['成本概念']);
+    expect(topics[0].items.map((item) => item.kind)).toEqual(['definition', 'pitfall', 'formula']);
+    expect(topics[0].items[0].citation?.startMs).toBe(0);
+    // sections 按固定 kind 顺序归并，条目对象与 topics 里是同一批（id 一致）
+    expect(sections.map((section) => section.key)).toEqual(['definition', 'formula', 'pitfall']);
+    expect(sections.flatMap((section) => section.items.map((item) => item.id)).sort())
+      .toEqual(topics[0].items.map((item) => item.id).sort());
+  });
+
+  it('defaults an unknown kind to definition instead of dropping the item', () => {
+    const { topics } = buildCheatsheetTopics(transcript, {
+      topics: [{ title: '成本', items: [{ kind: 'whatever', term: '机会成本', body: '放弃的最佳替代方案' }] }],
+    });
+    expect(topics[0].items[0].kind).toBe('definition');
+  });
+
+  it('returns nothing for a v1-only draft so the plugin can fall back to sections', () => {
+    const { topics, sections } = buildCheatsheetTopics(transcript, {
+      sections: [{ key: 'definition', items: [{ term: '机会成本', body: '放弃的最佳替代方案' }] }],
+    });
+    expect(topics).toHaveLength(0);
+    expect(sections).toHaveLength(0);
   });
 });
 
