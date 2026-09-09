@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { sharedContextCopy } from '@/lib/ui/shared-context-copy';
 import { useSharedContext } from '@/hooks/useSharedContext';
@@ -21,6 +21,10 @@ export function SharedContextPanel() {
   const [appId, setAppId] = useState('');
   const [write, setWrite] = useState(false);
   const c = sharedContextCopy;
+  // useAuth 在服务端固定 isCheckingAuth=true、在访客的客户端首帧同步得出 false——两边首帧不一致会 hydration 报错（React #418）。
+  // 挂载前一律按"核对中"渲染，让服务端与客户端首帧一致；挂载后再按真实登录态切换
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   async function save(event: FormEvent) {
     event.preventDefault();
     if (await context.append(note.trim(), space)) setNote('');
@@ -34,7 +38,7 @@ export function SharedContextPanel() {
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{c.title}</h1>
         <p className="mt-4 leading-7 text-ink-secondary">{c.intro}</p>
       </header>
-      {context.isCheckingAuth ? <p role="status">{c.loading}</p> : !context.signedIn ?
+      {!mounted || context.isCheckingAuth ? <p role="status">{c.loading}</p> : !context.signedIn ?
         <Link className={button} href="/login">{c.login}</Link> : <>
           {context.error && <p role="alert" className="mb-5 rounded-xl border border-divider bg-card p-4 text-sm text-vermilion">{c.errors[context.error] ?? c.error}</p>}
           <div className="mb-7 flex items-center justify-between gap-4">
