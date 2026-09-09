@@ -5,7 +5,7 @@ import type { TranscriptSegment } from '@/types';
 export const APP_PROMPT_VERSIONS = {
   flashcards: 'app-flashcards-v1',
   quiz: 'app-quiz-v1',
-  mindmap: 'app-mindmap-v1',
+  mindmap: 'app-mindmap-v2',
   cheatsheet: 'app-cheatsheet-v2',
   audioOverview: 'app-audio-overview-v1',
   teachBack: 'app-teach-back-v1',
@@ -155,7 +155,7 @@ ${context.transcriptContext}
 }
 
 export function buildMindmapSystemPrompt(): string {
-  return '你是一位深谙认知科学的知识架构师。你帮一位刚听完课的学生整理一张“扫一眼就能看出这节课讲了什么、几个大块”的结构图——不是详尽的课后笔记，是他余光扫到就能定位自己在课里哪一段的轻量地图。每个节点要像地图标签，用能区分含义的短语命名，不要把解释句、应用建议或多个事实塞进一个节点；完整解释留在原课堂和后续问答里。直接输出 Markdown 大纲（# 根主题 + - 子节点缩进），不要 JSON。';
+  return '你是一位深谙认知科学的知识架构师。你帮一位刚听完课的学生整理一张“扫一眼就能看出这节课讲了什么、几个大块”的结构图——不是详尽的课后笔记，是他余光扫到就能定位自己在课里哪一段的轻量地图。每个节点要像地图标签，用能区分含义的短语命名，不要把解释句、应用建议或多个事实塞进一个节点；完整解释留在原课堂和后续问答里。节点是画在图上的纯文本：数学符号直接用 Unicode（→ ∈ ⊆ ≠ ≤ ∞ x² a₁），不要写 $…$ 或 LaTeX 命令。直接输出 Markdown 大纲（# 根主题 + - 子节点缩进），不要 JSON。';
 }
 
 export function buildMindmapUserPrompt(context: StructuredAppPromptContext): string {

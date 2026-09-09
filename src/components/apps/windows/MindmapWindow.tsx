@@ -24,7 +24,7 @@ import {
   compactVisualLabel,
   getFontSize,
   buildLayoutTree,
-  assignPositions,
+  assignPositionsBilateral,
   flattenLayout,
   boundingBox,
 } from './mindmap-layout';
@@ -113,6 +113,28 @@ function buildFullExpandedSet(treeChildren: MindmapNode[]): Set<string> {
   return set;
 }
 
+/** 只展开某一条主干（含它的整棵子树）：聚焦一支 */
+function buildBranchExpandedSet(treeChildren: MindmapNode[], branchIndex: number): Set<string> {
+  const set = new Set<string>(['root']);
+  const branch = treeChildren[branchIndex];
+  if (!branch) return set;
+  const branchId = `root-${branchIndex}`;
+  const walk = (nodes: MindmapNode[], parentId: string) => {
+    nodes.forEach((node, i) => {
+      const id = `${parentId}-${i}`;
+      if (Array.isArray(node.children) && node.children.length > 0) {
+        set.add(id);
+        walk(node.children, id);
+      }
+    });
+  };
+  if (Array.isArray(branch.children) && branch.children.length > 0) {
+    set.add(branchId);
+    walk(branch.children, branchId);
+  }
+  return set;
+}
+
 /* ================================================================== */
 /*  自绘 SVG 思维导图渲染器 —— v7：米白纸 + 文字坐在墨线上               */
 /* ================================================================== */
@@ -137,6 +159,8 @@ function CustomMindmapRenderer({
   // 第一性原理：用户打开就该看见整张图。默认整棵树展开。
   const [expandedSet, setExpandedSet] = useState<Set<string>>(() => buildFullExpandedSet(treeChildren));
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
+  /** 聚焦的一级主干下标；null = 看全图 */
+  const [focusedBranch, setFocusedBranch] = useState<number | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
   const isAnimatingRef = useRef(false);
 
@@ -173,7 +197,7 @@ function CustomMindmapRenderer({
       hasChildren: treeChildren.length > 0,
     };
 
-    assignPositions(rootNode, 0, 0);
+    assignPositionsBilateral(rootNode, 0, 0);
     const { nodes, edges } = flattenLayout(rootNode);
     const bb = boundingBox(nodes);
     return { nodes, edges, bb, rootNode };
@@ -232,10 +256,11 @@ function CustomMindmapRenderer({
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
-  // 拖拽平移
+  // 拖拽平移。注意：pointerdown 时不能立刻 setPointerCapture——捕获后 pointerup 落在容器上，
+  // 浏览器就把 click 派发给容器而不是节点文字，导致点主干聚焦 / 点圆点折叠全部失效。
+  // 只在真的拖起来（位移 > 3px）之后才捕获，既保住节点点击，又不会拖出容器就丢事件。
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = { startX: e.clientX, startY: e.clientY, originX: transform.x, originY: transform.y, moved: false };
   }, [transform.x, transform.y]);
 
@@ -244,15 +269,20 @@ function CustomMindmapRenderer({
     if (!drag) return;
     const dx = e.clientX - drag.startX;
     const dy = e.clientY - drag.startY;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true;
-    const nextX = drag.originX + dx;
-    const nextY = drag.originY + dy;
-    setTransform((t) => ({ ...t, x: nextX, y: nextY }));
+    if (!drag.moved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+      drag.moved = true;
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+    if (!drag.moved) return;
+    setTransform((t) => ({ ...t, x: drag.originX + dx, y: drag.originY + dy }));
   }, []);
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-    dragRef.current = null;
+    // 延后清空：让紧随其后的 click 还能读到 moved，拖完松手不误触聚焦
+    const drag = dragRef.current;
+    if (drag?.moved) setTimeout(() => { if (dragRef.current === drag) dragRef.current = null; }, 0);
+    else dragRef.current = null;
   }, []);
 
   const zoomBy = useCallback((factor: number) => {
@@ -268,27 +298,37 @@ function CustomMindmapRenderer({
 
   // 展开 / 收起全部
   const expandAll = useCallback(() => {
+    setFocusedBranch(null);
     setExpandedSet(buildFullExpandedSet(treeChildren));
     requestAnimationFrame(() => fitToView());
   }, [treeChildren, fitToView]);
 
   const collapseAll = useCallback(() => {
+    setFocusedBranch(null);
     setExpandedSet(new Set<string>(['root']));
     requestAnimationFrame(() => fitToView());
   }, [fitToView]);
 
-  // 文字基线 / 墨线 y
+  // 聚焦一支：点一级主干的文字 → 只展开这一支并铺满；再点同一支回到全图
+  const focusBranch = useCallback((branchIndex: number) => {
+    if (focusedBranch === branchIndex) {
+      expandAll();
+      return;
+    }
+    setFocusedBranch(branchIndex);
+    setExpandedSet(buildBranchExpandedSet(treeChildren, branchIndex));
+    requestAnimationFrame(() => fitToView());
+  }, [expandAll, fitToView, focusedBranch, treeChildren]);
+
+  // 文字基线 / 墨线 y；x 方向按生长侧镜像（左侧节点：折叠点在左、文字贴盒子右缘）
   const underlineY = (node: LayoutNode) => node.y + node.height - 7;
   const textBaselineY = (node: LayoutNode) => node.y + node.height - 12;
   const nodeTextWidth = (node: LayoutNode) => measureText(node.title, getFontSize(node.depth));
-
-  const ctrlBtn =
-    'flex h-8 w-8 items-center justify-center rounded-lg text-[15px] transition-colors';
-  const ctrlBtnStyle: React.CSSProperties = {
-    background: PALETTE.bgSurface,
-    border: `1px solid ${PALETTE.border}`,
-    color: PALETTE.textSecondary,
-  };
+  const textStartX = (node: LayoutNode) => (node.side === 'left' ? node.x + node.width - nodeTextWidth(node) : node.x);
+  const markerCx = (node: LayoutNode) => (node.side === 'left' ? textStartX(node) - 13 : node.x + nodeTextWidth(node) + 13);
+  /** 连线在节点上的接点：朝向父节点那一端 */
+  const edgeInX = (node: LayoutNode) => (node.side === 'left' ? node.x + node.width : node.x);
+  const edgeOutX = (node: LayoutNode) => (node.side === 'left' ? textStartX(node) - 6 : node.x + nodeTextWidth(node) + 6);
 
   return (
     <div
@@ -324,13 +364,14 @@ function CustomMindmapRenderer({
             const branchIdx = branchIndexOf(edge.to.id);
             const hue = getBranchHue(branchIdx);
             const fromRoot = edge.from.depth === 0;
+            const leftward = edge.to.side === 'left';
             const x1 = fromRoot
-              ? edge.from.x + edge.from.width
-              : edge.from.x + nodeTextWidth(edge.from) + 6;
+              ? (leftward ? edge.from.x : edge.from.x + edge.from.width)
+              : edgeOutX(edge.from);
             const y1 = fromRoot ? edge.from.y + edge.from.height / 2 : underlineY(edge.from);
-            const x2 = edge.to.x;
+            const x2 = edgeInX(edge.to);
             const y2 = underlineY(edge.to);
-            const cpOffset = Math.max(18, Math.min(LEVEL_GAP_X * 0.6, Math.abs(x2 - x1) * 0.5));
+            const cpOffset = Math.max(18, Math.min(LEVEL_GAP_X * 0.6, Math.abs(x2 - x1) * 0.5)) * (leftward ? -1 : 1);
             const d = `M ${x1} ${y1} C ${x1 + cpOffset} ${y1}, ${x2 - cpOffset} ${y2}, ${x2} ${y2}`;
             return (
               <path
@@ -384,12 +425,14 @@ function CustomMindmapRenderer({
               );
             }
 
+            const isTrunk = node.depth === 1;
+            const dimmed = focusedBranch !== null && branchIdx !== focusedBranch;
             return (
-              <g key={node.id}>
+              <g key={node.id} opacity={dimmed ? 0.35 : 1} style={{ transition: 'opacity 240ms ease' }}>
                 <title>{node.fullTitle}</title>
-                {/* 文字 */}
+                {/* 文字：一级主干可点 → 只看这一支 */}
                 <text
-                  x={node.x}
+                  x={textStartX(node)}
                   y={textBaselineY(node)}
                   fontSize={fontSize}
                   fontWeight={fontWeight}
@@ -397,16 +440,18 @@ function CustomMindmapRenderer({
                   fill={hue.text}
                   dominantBaseline="alphabetic"
                   textAnchor="start"
-                  style={{ userSelect: 'none' }}
+                  style={{ userSelect: 'none', cursor: isTrunk ? 'pointer' : undefined }}
+                  onMouseDown={isTrunk ? (e) => e.stopPropagation() : undefined}
+                  onClick={isTrunk ? (e) => { e.stopPropagation(); if (!dragRef.current?.moved) focusBranch(branchIdx); } : undefined}
                 >
                   {node.title}
                 </text>
 
                 {/* 墨线（文字下划线，朱批/松墨手感） */}
                 <line
-                  x1={node.x}
+                  x1={textStartX(node)}
                   y1={underlineY(node)}
-                  x2={node.x + tw}
+                  x2={textStartX(node) + tw}
                   y2={underlineY(node)}
                   stroke={hue.line}
                   strokeWidth={node.depth === 1 ? 2.4 : 1.8}
@@ -422,9 +467,9 @@ function CustomMindmapRenderer({
                     onClick={(e) => { e.stopPropagation(); if (!dragRef.current?.moved) toggleNode(node.id); }}
                   >
                     {/* 命中区域 */}
-                    <circle cx={node.x + tw + 13} cy={underlineY(node)} r={10} fill="transparent" />
+                    <circle cx={markerCx(node)} cy={underlineY(node)} r={10} fill="transparent" />
                     <circle
-                      cx={node.x + tw + 13}
+                      cx={markerCx(node)}
                       cy={underlineY(node)}
                       r={5}
                       fill={node.expanded ? PALETTE.bg : hue.marker}
@@ -433,7 +478,7 @@ function CustomMindmapRenderer({
                     />
                     {!node.expanded && (
                       <text
-                        x={node.x + tw + 13}
+                        x={markerCx(node)}
                         y={underlineY(node)}
                         fontSize={9}
                         fontWeight={700}
@@ -452,40 +497,38 @@ function CustomMindmapRenderer({
         </g>
       </svg>
 
-      {/* 右下角控制面板 */}
+      {/* 右下角：一行文字控件，不做玻璃盒 */}
       <div
-        className="absolute bottom-3 right-3 z-10 flex items-center gap-1 rounded-xl p-1"
-        style={{ background: `${PALETTE.bgSurface}f2`, border: `1px solid ${PALETTE.border}`, backdropFilter: 'blur(8px)', boxShadow: '0 4px 16px rgba(28,27,25,0.08)' }}
+        className="absolute bottom-3 right-3 z-10 flex items-center gap-3 rounded-full px-3 py-1.5 text-[12px]"
+        style={{ background: `${PALETTE.bgSurface}e6`, color: PALETTE.textSecondary }}
+        onPointerDown={(e) => e.stopPropagation()}
       >
-        <button type="button" onClick={() => zoomBy(0.8)} className={ctrlBtn} style={ctrlBtnStyle} title="缩小">−</button>
-        <button type="button" onClick={() => zoomBy(1.25)} className={ctrlBtn} style={ctrlBtnStyle} title="放大">+</button>
-        <button type="button" onClick={fitToView} className={ctrlBtn} style={ctrlBtnStyle} title="适应窗口">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9 3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5 5.25 5.25" /></svg>
-        </button>
-        <span className="mx-0.5 h-5 w-px" style={{ background: PALETTE.border }} />
-        <button type="button" onClick={expandAll} className="rounded-lg px-2 text-[12px] transition-colors" style={ctrlBtnStyle} title="全部展开">展开</button>
-        <button type="button" onClick={collapseAll} className="rounded-lg px-2 text-[12px] transition-colors" style={ctrlBtnStyle} title="只看主干">主干</button>
-        {onToggleFullscreen && !isFullscreen && (
+        <button type="button" onClick={() => zoomBy(0.8)} className="px-1 text-[15px] leading-none transition hover:text-ink" aria-label={APPS_COPY.mindmap.zoomOut}>−</button>
+        <span className="tabular-nums" style={{ color: PALETTE.textMuted }}>{Math.round(transform.scale * 100)}%</span>
+        <button type="button" onClick={() => zoomBy(1.25)} className="px-1 text-[15px] leading-none transition hover:text-ink" aria-label={APPS_COPY.mindmap.zoomIn}>+</button>
+        <span className="h-3.5 w-px" style={{ background: PALETTE.border }} aria-hidden />
+        <button type="button" onClick={fitToView} className="transition hover:text-ink">{APPS_COPY.mindmap.fit}</button>
+        {focusedBranch !== null ? (
+          <button type="button" onClick={expandAll} className="font-medium transition hover:text-ink" style={{ color: PALETTE.accent }}>{APPS_COPY.mindmap.showAll}</button>
+        ) : (
           <>
-            <span className="mx-0.5 h-5 w-px" style={{ background: PALETTE.border }} />
-            <button type="button" onClick={onToggleFullscreen} className={ctrlBtn} style={ctrlBtnStyle} title={isFullscreen ? '退出全屏' : '全屏查看'}>
-              {isFullscreen ? (
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M15 9h4.5M15 9V4.5M9 15v4.5M9 15H4.5m10.5 0h4.5m-4.5 0v4.5" /></svg>
-              ) : (
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15m11.25 5.25v-4.5m0 4.5h-4.5m4.5 0L15 15" /></svg>
-              )}
-            </button>
+            <button type="button" onClick={expandAll} className="transition hover:text-ink">{APPS_COPY.mindmap.expandAll}</button>
+            <button type="button" onClick={collapseAll} className="transition hover:text-ink">{APPS_COPY.mindmap.trunkOnly}</button>
           </>
         )}
+        {onToggleFullscreen && !isFullscreen ? (
+          <>
+            <span className="h-3.5 w-px" style={{ background: PALETTE.border }} aria-hidden />
+            <button type="button" onClick={onToggleFullscreen} className="transition hover:text-ink">{APPS_COPY.mindmap.fullscreen}</button>
+          </>
+        ) : null}
       </div>
 
-      {/* 底部提示 */}
-      <div className="pointer-events-none absolute bottom-3 left-3 z-10">
-        <p className="rounded-full px-3 py-1 text-[11px]" style={{ background: `${PALETTE.bgSurface}cc`, border: `1px solid ${PALETTE.border}`, color: PALETTE.textMuted }}>
-          <span className="sm:hidden">{APPS_COPY.mindmap.mobileGestureHint}</span>
-          <span className="hidden sm:inline">{APPS_COPY.mindmap.desktopGestureHint}</span>
-        </p>
-      </div>
+      {/* 左下提示：一行淡字 */}
+      <p className="pointer-events-none absolute bottom-4 left-4 z-10 text-[11px]" style={{ color: PALETTE.textMuted }}>
+        <span className="sm:hidden">{APPS_COPY.mindmap.mobileGestureHint}</span>
+        <span className="hidden sm:inline">{APPS_COPY.mindmap.desktopGestureHint}</span>
+      </p>
     </div>
   );
 }
@@ -530,7 +573,7 @@ function OutlineNode({
         tabIndex={hasChildren ? 0 : undefined}
       >
         {hasChildren ? (
-          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-all duration-200" style={{ background: expanded ? `${hue.line}1f` : 'transparent', color: hue.line }}>
+          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center transition-all duration-200" style={{ color: hue.line }}>
             <svg className="h-3 w-3 transition-transform duration-200" style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
@@ -642,54 +685,29 @@ export function MindmapWindow({ result, transcript, onSeek, defaultViewMode = 'm
 
   const toolbar = (
     <header className="flex items-center justify-between px-4 py-2.5" style={{ background: PALETTE.bgToolbar, borderBottom: `1px solid ${PALETTE.border}`, borderRadius: isFullscreen ? 0 : '12px 12px 0 0' }}>
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-0.5 rounded-lg p-0.5" style={{ background: PALETTE.bg, border: `1px solid ${PALETTE.border}` }}>
-          {(['mindmap', 'outline'] as const).map((mode) => {
-            const isActive = viewMode === mode;
-            const label = mode === 'mindmap' ? '导图' : '大纲';
-            const icon = mode === 'mindmap' ? (
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5" /></svg>
-            ) : (
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
-            );
-            return (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => {
-                  userSelectedViewRef.current = true;
-                  setViewMode(mode);
-                }}
-                className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-200"
-                style={{ background: isActive ? PALETTE.accent : 'transparent', color: isActive ? 'var(--mm-ink-inverse)' : PALETTE.textSecondary }}
-              >
-                {icon}{label}
-              </button>
-            );
-          })}
-        </div>
-        <div className="hidden items-center gap-2 text-xs sm:flex" style={{ color: PALETTE.textMuted }}>
-          <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: getBranchHue(0).line }} />{children.length} 个分支</span>
-          <span style={{ color: PALETTE.border }}>·</span>
-          <span>{totalNodes} 个节点</span>
-          <span style={{ color: PALETTE.border }}>·</span>
-          <span>{treeDepthValue} 层</span>
-        </div>
+      <div className="flex items-baseline gap-4 text-[13px]">
+        {(['mindmap', 'outline'] as const).map((mode) => {
+          const isActive = viewMode === mode;
+          return (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() => { userSelectedViewRef.current = true; setViewMode(mode); }}
+              className={`pb-0.5 transition-colors ${isActive ? 'border-b-[1.5px] border-pine font-medium text-ink' : 'border-b-[1.5px] border-transparent text-ink-muted hover:text-ink'}`}
+            >
+              {mode === 'mindmap' ? APPS_COPY.mindmap.viewMap : APPS_COPY.mindmap.viewOutline}
+            </button>
+          );
+        })}
+        <span className="hidden text-[12px] sm:inline" style={{ color: PALETTE.textMuted }}>{APPS_COPY.mindmap.stats(children.length, totalNodes, treeDepthValue)}</span>
       </div>
-      <div className="flex items-center gap-1.5">
-        <button type="button" onClick={isFullscreen ? () => setIsFullscreen(false) : enterFullscreen} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all duration-200" style={{ border: `1px solid ${PALETTE.border}`, background: 'transparent', color: PALETTE.textSecondary }} title={isFullscreen ? '退出全屏' : '全屏查看'}>
-          {isFullscreen ? (
-            <><svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M15 9h4.5M15 9V4.5M9 15v4.5M9 15H4.5m10.5 0h4.5m-4.5 0v4.5" /></svg>退出全屏</>
-          ) : (
-            <><svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15m11.25 5.25v-4.5m0 4.5h-4.5m4.5 0L15 15" /></svg>全屏</>
-          )}
+      <div className="flex items-center gap-4 text-[12.5px]" style={{ color: PALETTE.textSecondary }}>
+        <button type="button" onClick={isFullscreen ? () => setIsFullscreen(false) : enterFullscreen} className="transition hover:text-ink">
+          {isFullscreen ? APPS_COPY.mindmap.exitFullscreen : APPS_COPY.mindmap.fullscreen}
         </button>
-        <button type="button" onClick={handleCopyOutline} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all duration-200" style={{ border: `1px solid ${PALETTE.border}`, background: 'transparent', color: copyFeedback ? PALETTE.accent : PALETTE.textSecondary }} title="复制文本大纲到剪贴板">
-          {copyFeedback ? (
-            <><svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>已复制</>
-          ) : (
-            <><svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>复制</>
-          )}
+        <button type="button" onClick={handleCopyOutline} className="transition hover:text-ink" style={copyFeedback ? { color: PALETTE.accent } : undefined}>
+          {copyFeedback ? APPS_COPY.mindmap.copied : APPS_COPY.mindmap.copyOutline}
         </button>
       </div>
     </header>
@@ -707,12 +725,7 @@ export function MindmapWindow({ result, transcript, onSeek, defaultViewMode = 'm
     </CustomMindmapRenderer>
   ) : (
     <div className="min-h-0 flex-1 overflow-auto p-4 md:p-5" style={{ background: PALETTE.bg, borderRadius: isFullscreen ? 0 : '0 0 12px 12px', border: isFullscreen ? 'none' : `1px solid ${PALETTE.border}`, borderTop: 'none' }}>
-      <div className="mb-4 flex items-center gap-3 pb-3" style={{ borderBottom: `1px solid ${PALETTE.border}` }}>
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: `${PALETTE.accent}18` }}>
-          <svg className="h-4 w-4" style={{ color: PALETTE.accent }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5" /></svg>
-        </span>
-        <h2 className="text-lg font-semibold" style={{ color: PALETTE.textPrimary }}>{root}</h2>
-      </div>
+      <h2 className="mb-3 border-b pb-3 text-[17px] font-semibold tracking-[-0.01em]" style={{ color: PALETTE.textPrimary, borderColor: PALETTE.border }}>{root}</h2>
       <div className="space-y-0.5">
         {children.map((child, index) => (
           <OutlineNode key={`${child.title}-${index}`} node={child} depth={0} transcript={transcript} cards={result?.cards || []} onSeek={onSeek} />

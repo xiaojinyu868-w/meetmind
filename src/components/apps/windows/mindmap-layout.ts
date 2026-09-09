@@ -20,6 +20,8 @@ export interface LayoutNode {
   children: LayoutNode[];
   expanded: boolean;
   hasChildren: boolean;
+  /** 在根的哪一侧生长（双侧布局）；根本身无侧 */
+  side?: 'left' | 'right';
 }
 
 // ── Layout constants ───────────────────────────────────────────────
@@ -197,23 +199,60 @@ export function subtreeHeight(node: LayoutNode): number {
   return Math.max(node.height, sum);
 }
 
-/** 递归赋坐标 */
-export function assignPositions(node: LayoutNode, x: number, yCenter: number) {
+/** 递归赋坐标；side = 'left' 时子树往左生长（x 递减），节点 x 仍是盒子左边缘 */
+export function assignPositions(node: LayoutNode, x: number, yCenter: number, side: 'left' | 'right' = 'right') {
   node.x = x;
   node.y = yCenter - node.height / 2;
+  if (node.depth > 0) node.side = side;
 
   if (node.children.length === 0) return;
 
-  const childX = x + node.width + LEVEL_GAP_X;
   const totalH = node.children.reduce((s, c) => s + subtreeHeight(c), 0) + SIBLING_GAP_Y * (node.children.length - 1);
   let currentY = yCenter - totalH / 2;
 
   for (const child of node.children) {
     const sh = subtreeHeight(child);
     const childCenter = currentY + sh / 2;
-    assignPositions(child, childX, childCenter);
+    const childX = side === 'right' ? x + node.width + LEVEL_GAP_X : x - LEVEL_GAP_X - child.width;
+    assignPositions(child, childX, childCenter, side);
     currentY += sh + SIBLING_GAP_Y;
   }
+}
+
+/** 双侧布局的主干数门槛：少于这个数还是单侧更好读 */
+export const BILATERAL_MIN_BRANCHES = 4;
+
+/**
+ * 双侧布局：主干按子树高度贪心分到根的左右两侧（先右后左，保持阅读顺序），
+ * 整图高度约减半——屏幕是横的，单侧长树在全屏里只能缩到 70% 才装得下。
+ */
+export function assignPositionsBilateral(rootNode: LayoutNode, x: number, yCenter: number): void {
+  if (rootNode.children.length < BILATERAL_MIN_BRANCHES) {
+    assignPositions(rootNode, x, yCenter, 'right');
+    return;
+  }
+  rootNode.x = x;
+  rootNode.y = yCenter - rootNode.height / 2;
+  const right: LayoutNode[] = [];
+  const left: LayoutNode[] = [];
+  let rightH = 0;
+  let leftH = 0;
+  for (const child of rootNode.children) {
+    const h = subtreeHeight(child) + SIBLING_GAP_Y;
+    if (rightH <= leftH) { right.push(child); rightH += h; } else { left.push(child); leftH += h; }
+  }
+  const place = (group: LayoutNode[], side: 'left' | 'right') => {
+    const totalH = group.reduce((sum, c) => sum + subtreeHeight(c), 0) + SIBLING_GAP_Y * Math.max(0, group.length - 1);
+    let currentY = yCenter - totalH / 2;
+    for (const child of group) {
+      const sh = subtreeHeight(child);
+      const childX = side === 'right' ? x + rootNode.width + LEVEL_GAP_X : x - LEVEL_GAP_X - child.width;
+      assignPositions(child, childX, currentY + sh / 2, side);
+      currentY += sh + SIBLING_GAP_Y;
+    }
+  };
+  place(right, 'right');
+  place(left, 'left');
 }
 
 /** 收集所有节点 + 边 */
