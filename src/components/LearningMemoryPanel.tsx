@@ -4,30 +4,23 @@ import { useMemo, useState } from 'react';
 import {
   ArrowLeft,
   BookOpen,
-  Check,
   ChevronRight,
   Clock3,
-  Compass,
   FileText,
-  Lightbulb,
   MessageCircleMore,
-  MoreHorizontal,
-  Pause,
   PencilLine,
-  Play,
-  Sparkles,
   Sprout,
-  Target,
-  Trash2,
-  X,
 } from 'lucide-react';
-import { useLearningContext, type UseLearningContextReturn } from '@/hooks/useLearningContext';
+import { useLearningContext } from '@/hooks/useLearningContext';
 import { CourseContextSection } from '@/components/CourseContextSection';
 import { MasteryTrailSection } from '@/components/MasteryTrailSection';
 import { CourseCheatsheetWorkspace } from '@/components/CourseCheatsheetWorkspace';
+import { AddMemoryRow, MemoryRow } from '@/components/learner-profile-rows';
+import { buildLearnerProfile } from '@/components/learner-profile-model';
+import { useMasteryTrail } from '@/hooks/useMasteryTrail';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
-import { cn } from '@/lib/utils';
-import type { LearningActivityEntry, LearningMemoryEntry, LearningMemoryKind } from '@/types/user';
+import type { LearningActivityEntry } from '@/types/user';
 import type { CourseContextGroup } from '@/lib/utils/course-context';
 
 interface LearningMemoryPanelProps {
@@ -45,21 +38,6 @@ function formatDate(value: string, includeTime = false): string {
     : { month: 'numeric', day: 'numeric' }).format(date);
 }
 
-function memoryKindMeta(kind: LearningMemoryKind) {
-  switch (kind) {
-    case 'preference':
-      return { label: GLOBAL_ASK_COPY.memoryKindPreference, icon: Compass, tone: 'text-pine bg-pine-fog' };
-    case 'strength':
-      return { label: GLOBAL_ASK_COPY.memoryKindStrength, icon: Sprout, tone: 'text-pine bg-pine-fog' };
-    case 'challenge':
-      return { label: GLOBAL_ASK_COPY.memoryKindChallenge, icon: Lightbulb, tone: 'text-vermilion bg-vermilion-fog' };
-    case 'topic':
-      return { label: GLOBAL_ASK_COPY.memoryKindTopic, icon: Target, tone: 'text-ink-secondary bg-paper-warm' };
-    case 'progress':
-      return { label: GLOBAL_ASK_COPY.memoryKindProgress, icon: Sparkles, tone: 'text-pine bg-pine-fog' };
-  }
-}
-
 function activityMeta(kind: LearningActivityEntry['kind']) {
   switch (kind) {
     case 'conversation':
@@ -73,136 +51,18 @@ function activityMeta(kind: LearningActivityEntry['kind']) {
   }
 }
 
-function MemoryCard({
-  memory,
-  context,
-}: {
-  memory: LearningMemoryEntry;
-  context: Pick<UseLearningContextReturn, 'saving' | 'updateMemory' | 'removeMemory'>;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [draft, setDraft] = useState(memory.title);
-  const meta = memoryKindMeta(memory.kind);
-  const Icon = meta.icon;
-  const paused = memory.status === 'paused';
-
-  return (
-    <article className={cn(
-      'relative rounded-[22px] border bg-white px-4 py-4 sm:px-5 sm:py-5',
-      paused ? 'border-divider/70 opacity-70' : 'border-divider',
-    )}>
-      <div className="flex items-start gap-3">
-        <span className={cn('mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl', meta.tone)}>
-          <Icon size={15} strokeWidth={1.8} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <p className="pt-1 text-[11.5px] font-medium text-ink-secondary">{meta.label}</p>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setMenuOpen((open) => !open)}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted hover:bg-paper-warm hover:text-ink"
-                aria-label={GLOBAL_ASK_COPY.memoryMore}
-              >
-                <MoreHorizontal size={16} />
-              </button>
-              {menuOpen ? (
-                <div className="absolute right-0 top-9 z-10 w-36 overflow-hidden rounded-2xl border border-divider bg-white py-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      void context.updateMemory(memory.id, { status: paused ? 'active' : 'paused' });
-                    }}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[12px] text-ink-secondary hover:bg-paper-warm"
-                  >
-                    {paused ? <Play size={13} /> : <Pause size={13} />}
-                    {paused ? GLOBAL_ASK_COPY.memoryUseAgain : GLOBAL_ASK_COPY.memoryStopUsing}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      void context.removeMemory(memory.id);
-                    }}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[12px] text-vermilion hover:bg-vermilion-fog"
-                  >
-                    <Trash2 size={13} />{GLOBAL_ASK_COPY.memoryForget}
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          {editing ? (
-            <div className="mt-3">
-              <textarea
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                rows={3}
-                autoFocus
-                placeholder={GLOBAL_ASK_COPY.memoryCorrectionHint}
-                className="w-full resize-none rounded-2xl border border-pine/25 bg-canvas px-3.5 py-3 text-[14px] leading-6 text-ink outline-none focus:border-pine/45"
-              />
-              <div className="mt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => { setDraft(memory.title); setEditing(false); }}
-                  className="inline-flex items-center gap-1 rounded-full px-3 py-2 text-[11.5px] text-ink-muted hover:bg-paper-warm"
-                >
-                  <X size={12} />{GLOBAL_ASK_COPY.memoryCorrectionCancel}
-                </button>
-                <button
-                  type="button"
-                  disabled={!draft.trim() || context.saving}
-                  onClick={async () => {
-                    await context.updateMemory(memory.id, { title: draft.trim(), status: 'active' });
-                    setEditing(false);
-                  }}
-                  className="inline-flex items-center gap-1 rounded-full bg-pine px-3.5 py-2 text-[11.5px] font-medium text-white disabled:opacity-40"
-                >
-                  <Check size={12} />{GLOBAL_ASK_COPY.memoryCorrectionSave}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <p className={cn('mt-3 text-[15px] leading-7 sm:text-[15.5px]', paused ? 'text-ink-muted' : 'text-ink')}>
-                {memory.title}
-              </p>
-              {memory.detail ? <p className="mt-2 text-[12.5px] leading-6 text-ink-secondary">{memory.detail}</p> : null}
-            </>
-          )}
-
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-divider/70 pt-3">
-            <span className="text-[10.5px] text-ink-muted">
-              {paused
-                ? GLOBAL_ASK_COPY.memoryPaused
-                : memory.source === 'user'
-                  ? GLOBAL_ASK_COPY.memorySourceUser
-                  : GLOBAL_ASK_COPY.memorySourceAi}
-              {' · '}{formatDate(memory.updatedAt)}
-            </span>
-            {!editing ? (
-              <button
-                type="button"
-                onClick={() => { setDraft(memory.title); setEditing(true); }}
-                className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] text-ink-muted hover:bg-paper-warm hover:text-pine"
-              >
-                <PencilLine size={12} />{GLOBAL_ASK_COPY.memoryCorrection}
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </article>
-  );
-}
-
 export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, initialFocus }: LearningMemoryPanelProps) {
   const context = useLearningContext();
+  const { user } = useAuth();
+  // 总览与问同学右侧的画像栏是同一件东西（同学眼里的你）：同一份小传、同一套可维护的行
+  const { trail } = useMasteryTrail({ appId: 'my-context' });
+  const profileView = useMemo(() => buildLearnerProfile({
+    memories: context.memories,
+    recentActivities: context.recentActivities,
+    activeThread: context.activeThread,
+    trail,
+    knownSince: user?.createdAt,
+  }), [context.activeThread, context.memories, context.recentActivities, trail, user?.createdAt]);
   const [view, setView] = useState<'overview' | 'courses' | 'recent'>(() => initialFocus === 'cheatsheet' ? 'courses' : 'overview');
   const [showAllRecent, setShowAllRecent] = useState(false);
   const [focusCheatsheet, setFocusCheatsheet] = useState(initialFocus === 'cheatsheet');
@@ -260,7 +120,7 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
           {view === 'overview' ? <section>
             <div className="mb-5 flex items-end justify-between gap-4 px-1">
               <div className="min-w-0">
-                <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.12em] text-vermilion">{GLOBAL_ASK_COPY.memoryUnderstandingTab}</p>
+                <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.12em] text-pine">{GLOBAL_ASK_COPY.profile.eyebrow}</p>
                 <h1 className="mt-2 font-serif text-[27px] italic tracking-[-0.03em] text-ink sm:text-[31px]">{GLOBAL_ASK_COPY.memoryUnderstandingTitle}</h1>
               </div>
               {onTalkToMeetMind && memories.length === 0 ? (
@@ -274,15 +134,29 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
               ) : null}
             </div>
 
-            <div className="space-y-3">
-              {memories.length === 0 ? (
-                <div className="border-y border-divider px-1 py-7 text-[12.5px] leading-6 text-ink-muted sm:py-9">
-                  {GLOBAL_ASK_COPY.memoryEmpty}
-                </div>
-              ) : memories.map((memory) => (
-                <MemoryCard key={memory.id} memory={memory} context={context} />
+            {/* 小传：事实说成话（与画像栏同一份） */}
+            {profileView.bio.length > 0 ? (
+              <p className="px-1 text-[16px] leading-[1.85] text-ink">{profileView.bio.map((sentence, index) => <span key={index}>{sentence}</span>)}</p>
+            ) : (
+              <p className="px-1 text-[13.5px] leading-6 text-ink-muted">{GLOBAL_ASK_COPY.memoryEmpty}</p>
+            )}
+
+            {/* 记住的：一行一件，悬停出 改 / 忘掉；同学猜的带 对 / 不对；最后一行告诉同学一件事 */}
+            <p className="mt-8 px-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{GLOBAL_ASK_COPY.profile.sections.memories}</p>
+            <ul className="mt-1 px-1">
+              {profileView.memories.map((row) => (
+                <MemoryRow
+                  key={row.id}
+                  row={row}
+                  saving={context.saving}
+                  onConfirm={(id) => void context.confirmMemory(id)}
+                  onEdit={(id, title) => void context.updateMemory(id, { title, status: 'active' })}
+                  onForget={(id) => void context.removeMemory(id)}
+                  onResume={(id) => void context.updateMemory(id, { status: 'active' })}
+                />
               ))}
-            </div>
+              <AddMemoryRow saving={context.saving} onAdd={(kind, title) => void context.addMemory({ kind, title, source: 'user' })} />
+            </ul>
           </section> : null}
 
           {/* 掌握轨迹：测验 / 闪卡 / 讲给同桌听留下的事实按概念连成线——"曾经不稳 → 现在稳"在这里被看见 */}
