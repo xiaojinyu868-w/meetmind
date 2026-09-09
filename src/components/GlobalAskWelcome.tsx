@@ -39,7 +39,13 @@ function OpeningSentence({ parts, onChoose }: { parts: OpeningPart[]; onChoose: 
     <p className="text-[17px] leading-[1.75] tracking-[-0.005em] text-ink sm:text-[18px]">
       <span className="mr-2 font-serif italic text-pine">{GLOBAL_ASK_COPY.opening.speaker}</span>
       {parts.map((part, index) => {
-        if (part.kind === 'text' || !part.prompt) return <span key={index}>{part.text}</span>;
+        if (part.kind === 'text' || !part.prompt) {
+          // 贴着可点部分的短语（"你在 " / " 停过。"）不许单独换行——"停 / 过。"断成两行是排版事故
+          const prev = parts[index - 1];
+          const next = parts[index + 1];
+          const glued = part.text.trim().length <= 4 && ((prev && prev.kind !== 'text') || (next && next.kind !== 'text'));
+          return <span key={index} className={glued ? 'whitespace-nowrap' : undefined}>{part.text}</span>;
+        }
         if (part.kind === 'stamp') {
           return (
             <button
