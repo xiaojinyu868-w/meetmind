@@ -10,11 +10,19 @@ const {
   showShellWindowAt,
   toggleShellWindow,
   createTray,
+  setTrayExtras,
 } = require('./shell-window');
 const { retryPendingShots, uploadImageFile, readAccessToken } = require('./screenshot');
 const pocket = require('./pocket');
 const { toggleQuickPanel, hideQuickPanel, registerQuickPanelHotkey } = require('./quick-panel');
 const { startUpdateChecker } = require('./updater');
+const desktopLog = require('./log');
+const { ensureSettingsFile } = require('./settings');
+
+// Windows 的系统通知（toast）必须先声明 AppUserModelId，且要与 electron-builder 的 appId 一致
+if (process.platform === 'win32') {
+  app.setAppUserModelId('online.meetmind.capture');
+}
 
 // Web 版 MeetMind 地址：生产默认走 capture 站点，本地调试用 MEETMIND_URL 覆盖
 const MEETMIND_URL = process.env.MEETMIND_URL || 'https://capture.meetmind.online/app';
@@ -208,6 +216,8 @@ function startShapeHitTest(win) {
 }
 
 app.whenReady().then(() => {
+  desktopLog.init(app.getPath('userData'));
+  ensureSettingsFile();
   installApplicationMenu();
   createCompanionWindow();
   // 常驻主窗口：用户在壳内登录，截图上传复用这里的登录态
@@ -221,9 +231,16 @@ app.whenReady().then(() => {
     showShellWindow: () => showShellWindowAt(MEETMIND_URL),
     onCaptured: () => companionWindow?.webContents.send('pet:gulp'),
   };
-  pocket.registerPocketHotkey(pocketDeps);
-  // 全局热键 Cmd/Ctrl+Shift+K：随时唤起口袋窗
-  registerQuickPanelHotkey(MEETMIND_URL);
+  const captureHotkey = pocket.registerPocketHotkey(pocketDeps);
+  // 全局热键（默认 Cmd/Ctrl+Shift+K）：随时唤起口袋窗
+  const pocketHotkey = registerQuickPanelHotkey(MEETMIND_URL);
+  // 托盘菜单显示真正生效的热键（可能是 fallback），并给出设置文件 / 日志入口
+  setTrayExtras({
+    captureHotkey,
+    pocketHotkey,
+    onOpenPocket: () => toggleQuickPanel(MEETMIND_URL),
+    logDir: desktopLog.logDir,
+  });
   // 上次失败暂存的截图 / 文字剪藏，启动时补传一次（未登录则保留到下次）
   void retryPendingShots(pocketDeps);
   void pocket.flushPending(pocketDeps);

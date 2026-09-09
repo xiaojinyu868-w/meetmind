@@ -234,15 +234,29 @@ function createTray({ onToggle }) {
   }
 }
 
+let trayExtras = {};
+
+/** 主进程在热键注册完之后调用，菜单里显示的是真正生效的热键（可能是 fallback） */
+function setTrayExtras(extras) {
+  trayExtras = { ...trayExtras, ...extras };
+  if (tray && trayExtras.onToggle) rebuildTrayMenu(trayExtras.onToggle);
+}
+
 function rebuildTrayMenu(onToggle) {
   if (!tray) return;
+  trayExtras.onToggle = onToggle;
   const version = app.getVersion();
   const loginSettings = app.getLoginItemSettings();
+  const { describeAccelerator, ensureSettingsFile } = require('./settings');
+  const captureLabel = trayExtras.captureHotkey ? describeAccelerator(trayExtras.captureHotkey) : '未注册';
+  const pocketLabel = trayExtras.pocketHotkey ? describeAccelerator(trayExtras.pocketHotkey) : '未注册';
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: `MeetMind 桌面端 v${version}`, enabled: false },
-      { label: '截图热键：Ctrl/Cmd + Shift + M', enabled: false },
+      { label: `收下面前的东西：${captureLabel}`, enabled: false },
+      { label: `口袋：${pocketLabel}`, enabled: false },
       { type: 'separator' },
+      { label: '打开口袋', click: () => trayExtras.onOpenPocket?.() },
       { label: '显示 / 隐藏 MeetMind', click: onToggle },
       {
         label: '开机自动启动',
@@ -252,6 +266,9 @@ function rebuildTrayMenu(onToggle) {
           app.setLoginItemSettings({ openAtLogin: item.checked });
         },
       },
+      { type: 'separator' },
+      { label: '打开设置文件（热键 / 行为）', click: () => { void shell.openPath(ensureSettingsFile()); } },
+      { label: '打开日志文件夹', click: () => { const dir = trayExtras.logDir?.(); if (dir) void shell.openPath(dir); } },
       { type: 'separator' },
       {
         label: '退出',
@@ -271,4 +288,5 @@ module.exports = {
   showShellWindowAt,
   toggleShellWindow,
   createTray,
+  setTrayExtras,
 };

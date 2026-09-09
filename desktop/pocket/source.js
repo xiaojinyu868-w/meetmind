@@ -62,20 +62,55 @@ async function detectSourceDarwin(exec) {
   return source;
 }
 
+const WIN_BROWSERS = new Set(['chrome', 'msedge', 'brave', 'arc', 'firefox', 'opera', 'vivaldi', 'chromium']);
+
+/**
+ * Windows：前台窗口标题 + 进程名；是浏览器时再用 UI Automation 找地址栏（ControlType.Edit 里值像网址的那个）。
+ * 输出三行：process | title | url（url 可能为空）
+ */
+const WIN_SOURCE_SCRIPT = [
+  'Add-Type @"',
+  'using System; using System.Runtime.InteropServices; using System.Text;',
+  'public class FG { [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();',
+  '[DllImport("user32.dll")] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);',
+  '[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid); }',
+  '"@',
+  '$h=[FG]::GetForegroundWindow(); $sb=New-Object System.Text.StringBuilder 512; [void][FG]::GetWindowText($h,$sb,512)',
+  '$pid2=0; [void][FG]::GetWindowThreadProcessId($h,[ref]$pid2); $p=Get-Process -Id $pid2 -ErrorAction SilentlyContinue',
+  '$name = if ($p) { $p.ProcessName } else { "" }',
+  '$url = ""',
+  'if (@("chrome","msedge","brave","arc","firefox","opera","vivaldi","chromium") -contains $name.ToLower()) {',
+  '  try {',
+  '    Add-Type -AssemblyName UIAutomationClient; Add-Type -AssemblyName UIAutomationTypes',
+  '    $root = [System.Windows.Automation.AutomationElement]::FromHandle($h)',
+  '    $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)',
+  '    $edits = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond)',
+  '    foreach ($e in $edits) {',
+  '      $v = $e.GetCurrentPropertyValue([System.Windows.Automation.ValuePattern]::ValueProperty)',
+  '      if ($v -and ($v -match "^(https?://|[\\w.-]+\\.[a-z]{2,}(/|$))")) { $url = $v; break }',
+  '    }',
+  '  } catch {}',
+  '}',
+  'Write-Output $name; Write-Output $sb.ToString(); Write-Output $url',
+].join('\n');
+
 async function detectSourceWin32(exec) {
-  const script = [
-    'Add-Type @"',
-    'using System; using System.Runtime.InteropServices; using System.Text;',
-    'public class FG { [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();',
-    '[DllImport("user32.dll")] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);',
-    '[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid); }',
-    '"@',
-    '$h=[FG]::GetForegroundWindow(); $sb=New-Object System.Text.StringBuilder 512; [void][FG]::GetWindowText($h,$sb,512);',
-    '$pid2=0; [void][FG]::GetWindowThreadProcessId($h,[ref]$pid2); $p=Get-Process -Id $pid2 -ErrorAction SilentlyContinue;',
-    'Write-Output ("{0}|{1}" -f $p.ProcessName, $sb.ToString())',
-  ].join('\n');
-  const raw = await run(exec, 'powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { timeout: 3000, windowsHide: true });
-  return parseWindowsForeground(raw);
+  const raw = await run(exec, 'powershell', ['-NoProfile', '-NonInteractive', '-Command', WIN_SOURCE_SCRIPT], { timeout: 3500, windowsHide: true });
+  return parseWindowsSource(raw);
+}
+
+/** 三行输出 → 来源；地址栏里没带协议的补 https:// */
+function parseWindowsSource(raw) {
+  const lines = String(raw || '').replace(/\r/g, '').split('\n');
+  const app = (lines[0] || '').trim();
+  const windowTitle = (lines[1] || '').trim();
+  let url = (lines[2] || '').trim();
+  if (url && !/^https?:\/\//i.test(url)) url = `https://${url}`;
+  const source = {};
+  if (app) source.app = app;
+  if (windowTitle) source.windowTitle = windowTitle;
+  if (/^https?:\/\/\S+$/i.test(url)) source.url = url;
+  return source;
 }
 
 async function detectSourceLinux(exec) {
@@ -105,4 +140,4 @@ function mergeBookmark(source, bookmark) {
   return next;
 }
 
-module.exports = { detectSource, mergeBookmark, parseAppleScriptPair, parseWindowsForeground, BROWSER_URL_SCRIPTS };
+module.exports = { detectSource, mergeBookmark, parseAppleScriptPair, parseWindowsForeground, parseWindowsSource, BROWSER_URL_SCRIPTS, WIN_BROWSERS };

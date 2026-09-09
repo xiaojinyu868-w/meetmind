@@ -197,7 +197,7 @@ export function LandingPage() {
                 <Download size={18} aria-hidden="true" />
                 <strong>{copy.desktop.macAction}</strong>
                 <small>
-                  {copy.desktop.macNote} ·{' '}
+                  v{DESKTOP_DOWNLOAD.macVersion} · {copy.desktop.macNote} ·{' '}
                   <span
                     role="link"
                     tabIndex={0}
@@ -222,10 +222,10 @@ export function LandingPage() {
               <a className={styles.desktopCard} href={DESKTOP_DOWNLOAD.windows}>
                 <Download size={18} aria-hidden="true" />
                 <strong>{copy.desktop.windowsAction}</strong>
-                <small>{copy.desktop.windowsNote}</small>
+                <small>v{DESKTOP_DOWNLOAD.windowsVersion} · {copy.desktop.windowsNote}</small>
               </a>
             </div>
-            <span className={styles.desktopMeta}>{copy.desktop.hotkeyHint} · v{DESKTOP_DOWNLOAD.version}</span>
+            <span className={styles.desktopMeta}>{copy.desktop.hotkeyHint}</span>
             <Link href="/help" className={`${styles.desktopSubLink} ${styles.desktopGuide}`}>{copy.desktop.guideAction}</Link>
             <span className={styles.desktopUnsigned}>{copy.desktop.unsignedNote}</span>
           </div>

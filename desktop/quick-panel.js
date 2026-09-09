@@ -84,18 +84,26 @@ function hideQuickPanel() {
   if (panelWindow?.isVisible()) panelWindow.hide();
 }
 
-// 全局热键 Cmd/Ctrl+Shift+K：任何时候伸手就能问（K = 问 / quick ask）
+let activePocketHotkey = null;
+
+// 全局热键（默认 Cmd/Ctrl+Shift+K，被占用退到 Alt）：任何时候伸手就能打开口袋
 function registerQuickPanelHotkey(meetmindUrl) {
   try {
-    const { globalShortcut, app } = require('electron');
-    const ok = globalShortcut.register('CommandOrControl+Shift+K', () => {
-      toggleQuickPanel(meetmindUrl);
-    });
-    if (!ok) console.warn('[desktop] 全局热键 Cmd/Ctrl+Shift+K 注册失败（可能被占用）');
-    app.on('will-quit', () => globalShortcut.unregisterAll());
+    const { app } = require('electron');
+    const { loadSettings } = require('./settings');
+    const { registerWithFallback } = require('./pocket');
+    const settings = loadSettings();
+    activePocketHotkey = registerWithFallback(settings.hotkeyPocket, settings.hotkeyPocketFallback, () => toggleQuickPanel(meetmindUrl));
+    if (!activePocketHotkey) console.warn('[desktop] 口袋窗热键注册失败（主键与备选都被占用）');
+    app.on('will-quit', () => require('electron').globalShortcut.unregisterAll());
   } catch (err) {
-    console.warn('[desktop] 小窗热键注册异常', err);
+    console.warn('[desktop] 口袋窗热键注册异常', err);
   }
+  return activePocketHotkey;
+}
+
+function getActivePocketHotkey() {
+  return activePocketHotkey;
 }
 
 module.exports = {
@@ -103,4 +111,5 @@ module.exports = {
   toggleQuickPanel,
   hideQuickPanel,
   registerQuickPanelHotkey,
+  getActivePocketHotkey,
 };

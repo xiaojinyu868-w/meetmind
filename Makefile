@@ -67,6 +67,21 @@ smoke-pocket: ## 口袋闭环：合成账户 → /api/workspace/clip（ChatGPT �
 test-desktop: ## 桌面壳纯逻辑单测（口袋：选区读取 / 来源解析 / 离线队列；不需要 Electron）
 	@node --test ./desktop/pocket/pocket.test.js
 
+# Windows 安装包在 Linux 上出：NSIS 生成卸载器要在 wine 里跑一个 32 位 exe，EPEL 的 wine 只有 64 位，
+# 所以走 electron-builder 官方镜像（自带 32 位 wine）。产物 desktop-dist/MeetMind-win-setup.exe，未签名（SmartScreen 会拦一次）。
+# 缓存目录挂进去：Electron zip / nsis 工具只下一次。国内网络用 npmmirror。
+.PHONY: desktop-dist-win
+desktop-dist-win: ## 在 Linux 上出 Windows NSIS 安装包（docker + electronuserland/builder:22-wine）
+	docker run --rm -v "$(CURDIR)":/project -w /project \
+	  -v "$$HOME/.cache/electron":/root/.cache/electron -v "$$HOME/.cache/electron-builder":/root/.cache/electron-builder \
+	  -e ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ \
+	  -e ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ \
+	  electronuserland/builder:22-wine bash -lc "npx electron-builder --win"
+
+.PHONY: desktop-dist-linux
+desktop-dist-linux: ## 在 Linux 上出 AppImage（原生，不需要 wine）
+	ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ npx electron-builder --linux
+
 .PHONY: cleanup-context-live
 cleanup-context-live: ## 恢复本工作区记录的合成验收账户清理，要求 CONTEXT_FIXTURE_ID；worker 必须运行
 	@npx tsx tests/smoke/context-live-cleanup.ts

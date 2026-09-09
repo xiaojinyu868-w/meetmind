@@ -30,7 +30,9 @@ desktop/ → HTTP 调用 {origin}/api/workspace/upload-image + /api/workspace/ca
 | `pocket/clip-client.js` | `POST /api/workspace/clip`（网络 / 5xx 重试一次；401 / 422 / 400 不重试）、`DELETE captures` 撤销、`pending-clips.json` 离线队列（clientId 幂等，补传不落两条） |
 | `pocket/receipt.js` + `receipt.html` | 光标旁回执：不抢焦点（focusable:false + showInactive），1.6s 自隐，悬停停住，「撤销」→ DELETE；用系统通知只留给 401 / 失败 |
 | `pocket/region-select.js` + `region.html` | 框选截图：按显示器实际像素抓一帧 → 铺满该屏的窗口显示冻结画面（压暗）+ 十字光标 → 拖出矩形亮回原图 → 主进程按 scaleFactor 裁切；Esc / 右键 / 切走取消，双击 / Enter 整屏 |
-| `pocket/pocket.test.js` | node:test 纯逻辑单测（`make test-desktop`）：选区读取与剪贴板还原、来源解析、上传状态映射、离线队列 |
+| `pocket/pocket.test.js` | node:test 纯逻辑单测（`make test-desktop`）：选区读取与剪贴板还原、无权限模式、来源解析（mac / win）、上传状态映射、离线队列、热键人话写法 |
+| `settings.js` | `userData/settings.json`：热键（主 + 备选）、还原剪贴板、回执开关、无选区是否框选；首次启动写出默认值，托盘「打开设置文件」就是设置界面；`describeAccelerator` 把 accelerator 变成 ⌘⇧M / Ctrl+Shift+M |
+| `log.js` | 文件日志 `userData/logs/desktop.log`（1MB 滚动一份），零依赖；托盘「打开日志文件夹」——用户说"热键没反应"时发这个 |
 | `screenshot.js` | 上传两步链（`uploadOnce` 返回 capture 供撤销）、拖放图片文件上传、`pending-shots/` 暂存与启动补传、通知；旧的整屏热键处理器保留为 `captureOnce` 但不再注册 |
 | `quick-panel.js` | 口袋窗：无边框透明窗加载 Web 端 `/companion`（`PocketPanel`：今天的流 + 记 / 问 + 拖放 / 粘贴目标），失焦自动收起；与主窗口共用 `persist:meetmind` partition 共享登录态；全局热键 `Cmd/Ctrl+Shift+K` 随时唤起 |
 | `updater.js` | 自动更新检查：启动 20s 首查 + 每 4h 查 GitHub Releases 的 desktop-v* tag，新版本安静通知一次，点击打开对应平台安装包（零依赖，未签名包友好；macOS 有签名后可换 electron-updater） |
@@ -65,6 +67,11 @@ npm run desktop:dist:mac     # 产出 .dmg（arm64+x64）——必须在 macOS �
 npm run desktop:dist:win     # 产出 .exe（NSIS x64）——Windows 或装 wine 的 Linux
 npm run desktop:dist:linux   # 产出 .AppImage
 ```
+
+**Windows 包在这台 Linux 服务器上出**（2026-09 起，CI 因 billing lock 不可用）：`make desktop-dist-win`——electron-builder 官方
+`electronuserland/builder:22-wine` 镜像（NSIS 生成卸载器要在 wine 里跑一个 32 位 exe，EPEL 的 wine 只有 64 位，所以走 docker），
+产物 `desktop-dist/MeetMind-win-setup.exe`（≈80 MB）。拷到 `public/downloads/`（gitignored）即由站点自托管，landing 的 Windows 卡指向
+`/downloads/MeetMind-win-setup.exe`；`desktop-download.config.ts` 里 `windowsVersion` 同步。macOS 的 dmg 仍只能在 Mac 上出。
 
 **推荐走 CI**：`.github/workflows/desktop-release.yml`——手动 dispatch 或打
 `desktop-v*` tag，macos-latest 出 dmg、windows-latest 出 nsis，产物上 artifacts；
@@ -114,7 +121,12 @@ Release 发布后翻 true 即在 landing page 出现 macOS / Windows 下载卡�
 | `Ctrl/Cmd + Shift + K` | 口袋窗：今天收的东西一条流（按来源成组、可撤销、可回原处）+ 记 / 问 |
 | 拖到桌宠 / 口袋窗 | 文字 / HTML / 网址 / 图片文件 → 收 |
 
-macOS 第一次用 `⌘⇧M` 收文字会请求「辅助功能」权限（模拟复制需要）；拒绝也不影响截图与拖放。
+macOS 第一次用 `⌘⇧M` 收文字会请求「辅助功能」权限（模拟复制需要）；没给时退化为"剪贴板和上次热键时不同才算选区"（先复制再按热键），截图与拖放不受影响。
+热键被占用自动退到 `Alt` 版（托盘菜单显示真正生效的那个）；两个都被占会通知并提示改设置文件。
+
+**Windows 特有**：`Ctrl⇧M` 刚按下时手指还压着 Ctrl/Shift，直接 SendKeys 会叠成 Ctrl+Shift+C（Chrome 的开发者工具）——`selection.js` 先轮询
+`Control.ModifierKeys` 等松开再发；浏览器网址用 UI Automation 找地址栏（chrome / msedge / brave / arc / firefox / opera / vivaldi）；
+系统通知需要 `app.setAppUserModelId` 与 electron-builder 的 appId 一致（main.js）。
 
 ## v2 架构说明
 

@@ -7,6 +7,8 @@ out/
 dist/
 build/
 desktop-dist/
+# 桌面端安装包（self-hosted 下载，make desktop-dist-win 产物拷入；不进 git）
+public/downloads/
 
 # 环境变量（包含敏感信息）
 .env

@@ -60,6 +60,13 @@ function restoreClipboard(clipboard, snapshot) {
   }
 }
 
+/** 剪贴板内容指纹（文字 + HTML 长度 + 图片大小），用于"和上次热键时比有没有变" */
+function clipboardFingerprint(snapshot) {
+  const image = snapshot.image ? snapshot.image.toDataURL().length : 0;
+  if (!snapshot.text && !snapshot.html && !image) return '';
+  return `${snapshot.text.length}:${snapshot.text.slice(0, 64)}:${snapshot.html.length}:${image}`;
+}
+
 /** 两次快照是否是同一份内容（判定"复制生效了没有"） */
 function sameClipboard(a, b) {
   if (a.text !== b.text || a.html !== b.html) return false;
@@ -68,6 +75,17 @@ function sameClipboard(a, b) {
   return aImage === bImage;
 }
 
+/**
+ * Windows：热键刚按下时 Ctrl / Shift 还被手指压着，SendKeys 的 ^c 会叠成 Ctrl+Shift+C（Chrome 里是开发者工具）。
+ * 先轮询 Control.ModifierKeys 等修饰键全部松开（最多 600ms），再发一次 ^c。
+ */
+const WIN_COPY_SCRIPT = [
+  'Add-Type -AssemblyName System.Windows.Forms',
+  '$deadline = (Get-Date).AddMilliseconds(600)',
+  'while ([System.Windows.Forms.Control]::ModifierKeys -ne [System.Windows.Forms.Keys]::None -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 20 }',
+  '[System.Windows.Forms.SendKeys]::SendWait("^c")',
+].join('; ');
+
 /** 模拟一次"复制"。返回 false 表示本平台做不到（调用方退化为直接读剪贴板） */
 function simulateCopy(deps) {
   const run = deps.exec || execFile;
@@ -75,14 +93,16 @@ function simulateCopy(deps) {
     const done = (ok) => resolve(Boolean(ok));
     try {
       if (deps.platform === 'darwin') {
-        run('osascript', ['-e', 'tell application "System Events" to keystroke "c" using command down'],
-          { timeout: 1500 }, (err) => done(!err));
+        // System Events 合成的按键自带修饰位，物理 Shift 不会叠上去；留 80ms 让热键的 key-up 先过去
+        setTimeout(() => {
+          run('osascript', ['-e', 'tell application "System Events" to keystroke "c" using command down'],
+            { timeout: 1500 }, (err) => done(!err));
+        }, deps.copyDelayMs ?? 80);
         return;
       }
       if (deps.platform === 'win32') {
-        run('powershell', ['-NoProfile', '-NonInteractive', '-Command',
-          'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("^c")'],
-          { timeout: 2500, windowsHide: true }, (err) => done(!err));
+        run('powershell', ['-NoProfile', '-NonInteractive', '-Command', WIN_COPY_SCRIPT],
+          { timeout: 3000, windowsHide: true }, (err) => done(!err));
         return;
       }
       // Linux：xdotool 可选
@@ -105,6 +125,19 @@ async function readSelection(deps) {
   const sleep = deps.sleep || defaultSleep;
   const before = snapshotClipboard(clipboard);
 
+  // 不能模拟复制（macOS 没给「辅助功能」权限 / Linux 没 xdotool）：退化为"你复制好再按热键"。
+  // 只在剪贴板内容与上一次热键时不同的情况下当作选区——避免把三天前复制的东西当成"刚选中的"
+  if (deps.canSimulateCopy === false) {
+    const fingerprint = clipboardFingerprint(before);
+    const fresh = fingerprint && fingerprint !== deps.lastFingerprint;
+    deps.onFingerprint?.(fingerprint);
+    if (fresh && (before.text.trim() || before.html.trim())) {
+      return { kind: 'text', text: before.text, html: before.html, bookmark: before.bookmark, viaSimulatedCopy: false, fromExistingClipboard: true };
+    }
+    if (fresh && before.image) return { kind: 'image', image: before.image, viaSimulatedCopy: false, fromExistingClipboard: true };
+    return { kind: 'none', viaSimulatedCopy: false, needsPermission: true };
+  }
+
   // 先清空再模拟复制：这样"变化"就是"从空到有"，不会被上一次复制的同样内容骗过
   try { clipboard.clear(); } catch { /* 有些平台 clear 会抛，忽略 */ }
   const copied = await simulateCopy(deps);
@@ -121,8 +154,8 @@ async function readSelection(deps) {
   const gotText = Boolean(after.text.trim() || after.html.trim());
   const gotImage = Boolean(after.image);
 
-  // 还原用户的剪贴板（成功与否都还原）
-  restoreClipboard(clipboard, before);
+  // 还原用户的剪贴板（成功与否都还原；设置里可关——有人就想让选中的东西留在剪贴板里）
+  if (deps.restoreClipboard !== false) restoreClipboard(clipboard, before);
 
   if (gotText) {
     return { kind: 'text', text: after.text, html: after.html, bookmark: after.bookmark, viaSimulatedCopy: copied };
@@ -133,4 +166,4 @@ async function readSelection(deps) {
   return { kind: 'none', viaSimulatedCopy: copied };
 }
 
-module.exports = { readSelection, snapshotClipboard, restoreClipboard, sameClipboard, simulateCopy };
+module.exports = { readSelection, snapshotClipboard, restoreClipboard, sameClipboard, simulateCopy, clipboardFingerprint };

@@ -5,6 +5,21 @@
 
 ---
 
+## 2026-09-09 — 口袋 Windows 版 + 桌面壳产品化：设置 / 日志 / 备选热键 / 权限退化 / 自托管安装包
+
+- **打包漏洞**：`electron-builder.yml` 的 `files` 是白名单，`desktop/pocket/**` 没在里面——打出来的包会 `require('./pocket')` 失败。补上（并排除测试文件），
+  Linux `--dir` 冒烟确认 asar 456 KB 含 `pocket/` 全部文件
+- **Windows 安装包**：CI 因 billing lock 不可用、EPEL wine 只有 64 位（NSIS 生成卸载器要跑 32 位 exe）→ `make desktop-dist-win` 走 electron-builder 官方
+  `electronuserland/builder:22-wine` 镜像，产物 `MeetMind-win-setup.exe` 80.7 MB，拷到 `public/downloads/`（gitignored）由站点自托管；landing 的 Windows 卡
+  指向 `/downloads/MeetMind-win-setup.exe`，两个平台各显示自己的版本（Windows 1.4.0 / macOS 仍是 GitHub 上的 1.1.0，dmg 只能在 Mac 上打）
+- **Windows 正确性**：`Ctrl⇧M` 刚按下时手指还在 Ctrl/Shift 上，SendKeys `^c` 会叠成 Ctrl+Shift+C（Chrome 开发者工具）→ 先轮询 `Control.ModifierKeys` 等松开；
+  浏览器网址用 UI Automation 读地址栏（chrome / msedge / brave / arc / firefox / opera / vivaldi）；`app.setAppUserModelId` 让系统通知能弹
+- **成熟度**：`settings.json`（热键主 + 备选、还原剪贴板、回执、无选区是否框选；托盘「打开设置文件」）；`logs/desktop.log` 文件日志（托盘「打开日志文件夹」）；
+  热键被占自动退到 `Alt` 版并通知，托盘显示真正生效的热键；macOS 无「辅助功能」权限时弹一次系统授权、退化为"剪贴板和上次热键时不同才算选区"（先复制再按热键）；
+  `/help` 桌面段与 landing 文案改为口袋语义。`make test-desktop` 12 个纯逻辑测试
+
+---
+
 ## 2026-09-09 — 口袋：任何应用里选中，一个键，收下（桌面壳 v3 + `/api/workspace/clip`）
 
 - **形态**（`docs/plans/2026-09-09-pocket-capture.md`，对标 Raycast / Apple 快速备忘录 / Drafts / CleanShot / Yoink / Readwise）：

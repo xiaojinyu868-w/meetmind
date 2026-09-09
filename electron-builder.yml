@@ -28,6 +28,10 @@ files:
   - screenshot.js
   - quick-panel.js
   - updater.js
+  - settings.js
+  - log.js
+  - pocket/**
+  - '!pocket/*.test.js'
   - preload.js
   - panel-preload.js
   - companion.html

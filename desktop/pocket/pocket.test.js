@@ -6,8 +6,9 @@ const os = require('os');
 const path = require('path');
 
 const { readSelection, snapshotClipboard, restoreClipboard } = require('./selection');
-const { detectSource, mergeBookmark, parseAppleScriptPair, parseWindowsForeground } = require('./source');
+const { detectSource, mergeBookmark, parseAppleScriptPair, parseWindowsForeground, parseWindowsSource } = require('./source');
 const { postClip, stashPendingClip, flushPendingClips, readPending } = require('./clip-client');
+const { describeAccelerator } = require('../settings');
 
 /** 假剪贴板：Electron clipboard 的最小子集 */
 function fakeClipboard(initial = {}) {
@@ -124,4 +125,28 @@ test('clip-client：离线队列——失败进队，补传成功出队、网络
   const untouched = await flushPendingClips({ userDataDir: dir, origin: 'http://x', token: null, fetchImpl });
   assert.equal(untouched.left, 1);
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('readSelection：没有辅助功能权限时退化为"剪贴板变了才算"——同一内容第二次按热键不再收', async () => {
+  const clipboard = fakeClipboard({ text: '我刚复制的一段' });
+  let fingerprint = '';
+  const deps = { clipboard, platform: 'darwin', sleep: noSleep, canSimulateCopy: false, lastFingerprint: fingerprint, onFingerprint: (f) => { fingerprint = f; } };
+  const first = await readSelection(deps);
+  assert.equal(first.kind, 'text');
+  assert.equal(first.fromExistingClipboard, true);
+  const second = await readSelection({ ...deps, lastFingerprint: fingerprint });
+  assert.equal(second.kind, 'none');
+  assert.equal(second.needsPermission, true);
+});
+
+test('source：Windows 三行输出（进程 | 标题 | 地址栏）→ 来源；地址栏没协议补 https://', () => {
+  assert.deepEqual(parseWindowsSource('chrome\r\n贝叶斯 - Google Chrome\r\nchatgpt.com/c/abc\r\n'), { app: 'chrome', windowTitle: '贝叶斯 - Google Chrome', url: 'https://chatgpt.com/c/abc' });
+  assert.deepEqual(parseWindowsSource('WINWORD\n论文.docx - Word\n\n'), { app: 'WINWORD', windowTitle: '论文.docx - Word' });
+  assert.deepEqual(parseWindowsSource(''), {});
+});
+
+test('settings：accelerator 的人话写法按平台', () => {
+  assert.equal(describeAccelerator('CommandOrControl+Shift+M', 'darwin'), '⌘⇧M');
+  assert.equal(describeAccelerator('CommandOrControl+Shift+M', 'win32'), 'Ctrl+Shift+M');
+  assert.equal(describeAccelerator('CommandOrControl+Alt+K', 'win32'), 'Ctrl+Alt+K');
 });

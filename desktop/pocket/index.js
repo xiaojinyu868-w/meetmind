@@ -6,16 +6,49 @@
 //   拖到桌宠 / 口袋窗：文字 / HTML / 网址 → 收文字；图片文件走 screenshot.js 的 uploadImageFile
 //
 // 每次收下：光标旁回执（可撤销）+ 桌宠吞一口。未登录：打开主窗口。失败：文字进离线队列、图进 pending-shots。
-const { app, clipboard, globalShortcut } = require('electron');
+const { app, clipboard, globalShortcut, systemPreferences } = require('electron');
 const { readSelection } = require('./selection');
 const { detectSource, mergeBookmark } = require('./source');
 const { postClip, deleteCapture, stashPendingClip, flushPendingClips, newClientId } = require('./clip-client');
-const { showReceipt, registerReceiptIpc } = require('./receipt');
+const { showReceipt: showReceiptWindow, registerReceiptIpc } = require('./receipt');
 const { selectRegion } = require('./region-select');
 const { uploadOnce, stashPending, notify, readAccessToken } = require('../screenshot');
+const { loadSettings, describeAccelerator } = require('../settings');
+const { createLogger } = require('../log');
 
-const HOTKEY = 'CommandOrControl+Shift+M';
+const log = createLogger('pocket');
 let busy = false;
+/** 无法模拟复制时的"剪贴板变了没"指纹（见 selection.readSelection） */
+let lastFingerprint = '';
+let permissionHintShown = false;
+/** 实际注册成功的热键（可能是 fallback），托盘菜单展示用 */
+let activeCaptureHotkey = null;
+
+function showReceipt(payload) {
+  if (loadSettings().showReceipt === false) return;
+  showReceiptWindow(payload);
+}
+
+/**
+ * macOS：模拟复制要「辅助功能」权限。没有时第一次弹系统授权（prompt=true），并告诉用户当前退化成
+ * "复制好再按热键"。Windows / Linux 不需要。
+ */
+function canSimulateCopy() {
+  if (process.platform !== 'darwin') return process.platform === 'win32' ? true : undefined; // linux 交给 xdotool 探测
+  try {
+    const trusted = systemPreferences.isTrustedAccessibilityClient(false);
+    if (!trusted && !permissionHintShown) {
+      permissionHintShown = true;
+      systemPreferences.isTrustedAccessibilityClient(true); // 弹一次系统授权面板
+      notify({ title: 'MeetMind', body: '要收下选中的文字，需要在「系统设置 → 隐私与安全性 → 辅助功能」里允许 MeetMind；在此之前，先复制再按热键也能收' });
+      log.warn('accessibility not granted; falling back to clipboard-change mode');
+    }
+    return trusted;
+  } catch (err) {
+    log.warn('accessibility check failed', err);
+    return true;
+  }
+}
 
 function firstLine(text) {
   return String(text || '').split('\n').map((line) => line.trim()).find(Boolean) || '';
@@ -128,10 +161,20 @@ async function captureFromScreen(deps) {
       return;
     }
     // 选区与来源并行取：来源是热键那一刻的前台应用
+    const settings = loadSettings();
+    const simulate = canSimulateCopy();
     const [selection, detected] = await Promise.all([
-      readSelection({ clipboard, platform: process.platform }),
+      readSelection({
+        clipboard,
+        platform: process.platform,
+        canSimulateCopy: simulate,
+        restoreClipboard: settings.restoreClipboard !== false,
+        lastFingerprint,
+        onFingerprint: (fingerprint) => { lastFingerprint = fingerprint; },
+      }),
       detectSource({ platform: process.platform }),
     ]);
+    log.info('hotkey', { kind: selection.kind, viaSimulatedCopy: selection.viaSimulatedCopy, app: detected.app || '', hasUrl: Boolean(detected.url) });
     if (selection.kind === 'text') {
       const source = mergeBookmark(detected, selection.bookmark);
       await captureText(deps, { text: selection.text, html: selection.html, source });
@@ -144,7 +187,11 @@ async function captureFromScreen(deps) {
       });
       return;
     }
-    // 什么都没选：框选
+    // 什么都没选：框选（设置里可关）
+    if (settings.regionWhenNothingSelected === false) {
+      showReceipt({ kind: 'error', title: selection.needsPermission ? '先复制，再按热键' : '没选中东西', source: '' });
+      return;
+    }
     const picked = await selectRegion();
     if (!picked) return;
     await captureImage(deps, picked.png, {
@@ -152,7 +199,7 @@ async function captureFromScreen(deps) {
       source: detected,
     });
   } catch (err) {
-    console.error('[pocket] 收下失败', err);
+    log.error('capture failed', err);
     showReceipt({ kind: 'error', title: '没收进去，再试一次', source: '' });
   } finally {
     busy = false;
@@ -201,15 +248,38 @@ async function captureDropped(deps, dropped) {
   return captureText(deps, { text: text || url, html, source });
 }
 
+/** 注册热键；主键被占用（另一个应用先注册了）就退到 fallback；两个都不行就提示 */
+function registerWithFallback(primary, fallback, handler) {
+  for (const accelerator of [primary, fallback].filter(Boolean)) {
+    try {
+      if (globalShortcut.isRegistered(accelerator)) continue;
+      if (globalShortcut.register(accelerator, handler)) {
+        if (accelerator !== primary) log.warn('primary hotkey taken, using fallback', { primary, fallback: accelerator });
+        return accelerator;
+      }
+    } catch (err) {
+      log.warn('hotkey register threw', { accelerator, err });
+    }
+  }
+  return null;
+}
+
 function registerPocketHotkey(deps) {
   registerReceiptIpc();
-  try {
-    const ok = globalShortcut.register(HOTKEY, () => { void captureFromScreen(deps); });
-    if (!ok) console.warn(`[pocket] 全局热键 ${HOTKEY} 注册失败（可能被其他应用占用）`);
-  } catch (err) {
-    console.warn(`[pocket] 全局热键 ${HOTKEY} 注册异常`, err);
+  const settings = loadSettings();
+  activeCaptureHotkey = registerWithFallback(settings.hotkeyCapture, settings.hotkeyCaptureFallback, () => { void captureFromScreen(deps); });
+  if (!activeCaptureHotkey) {
+    log.error('no capture hotkey could be registered', { primary: settings.hotkeyCapture, fallback: settings.hotkeyCaptureFallback });
+    notify({ title: 'MeetMind', body: `热键 ${describeAccelerator(settings.hotkeyCapture)} 和 ${describeAccelerator(settings.hotkeyCaptureFallback)} 都被别的应用占用了；可在托盘「打开设置文件」里改一个` });
+  } else if (activeCaptureHotkey !== settings.hotkeyCapture) {
+    notify({ title: 'MeetMind', body: `${describeAccelerator(settings.hotkeyCapture)} 被别的应用占用，这次用 ${describeAccelerator(activeCaptureHotkey)} 收东西` });
   }
   app.on('will-quit', () => globalShortcut.unregisterAll());
+  return activeCaptureHotkey;
+}
+
+function getActiveCaptureHotkey() {
+  return activeCaptureHotkey;
 }
 
 /** 启动补传离线队列里的文字剪藏 */
@@ -220,8 +290,8 @@ async function flushPending(deps) {
     origin: originOf(deps.meetmindUrl),
     token,
   });
-  if (result.sent > 0) console.log(`[pocket] 补传 ${result.sent} 条离线剪藏`);
+  if (result.sent > 0) log.info('flushed pending clips', result);
   return result;
 }
 
-module.exports = { registerPocketHotkey, captureFromScreen, captureRegion, captureText, captureImage, captureDropped, flushPending };
+module.exports = { registerPocketHotkey, registerWithFallback, getActiveCaptureHotkey, captureFromScreen, captureRegion, captureText, captureImage, captureDropped, flushPending };
