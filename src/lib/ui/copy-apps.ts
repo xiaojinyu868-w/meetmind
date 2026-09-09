@@ -197,7 +197,10 @@ export const APPS_COPY = {
     },
     quiz: {
       appName: '课堂测验',
-      keyboardHint: '方向键切换题目',
+      /** 桌面端一行键盘提示，只在第一题作答前出现一次 */
+      keyboardHint: '按 1–4 选，回车确认',
+      questionNo: (index: number): string => `第 ${index} 题`,
+      explanationLabel: '解析',
       previous: '上一题',
       next: '下一题',
       jumpTo: (index: number): string => `跳到第 ${index} 题`,

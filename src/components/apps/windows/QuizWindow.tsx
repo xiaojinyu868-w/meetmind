@@ -1,6 +1,18 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+/**
+ * 课堂测验窗口 —— 一份好试卷，不是一叠卡片。
+ *
+ * 版式原则（2026-09-09 重做）：
+ * - 纸面就是窗口：白底、一根 2px 进度线、题号 + 题干 + 选项，没有卡片套卡片、没有 pill 计数
+ * - 选项是大而稳的可点面：整行可点、字母圈做状态锚点，选中 / 对 / 错三态只换颜色不弹跳
+ * - 一次只见一题；键盘 1–4 选、回车确认或下一题、←→ 翻题（useQuizNavigation）
+ * - 反馈就地出现（解析在题目下方生长），不弹层不打断节奏
+ * - 「回到课堂」退成页脚一行小字：这是测验，不是引用系统
+ * 逻辑（对错判定、自评、记忆观测、报告）全部沿用 quiz-window-model / assessment-events。
+ */
+
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuizNavigation } from '@/hooks/useQuizNavigation';
 import type { LearningObservationContent } from '@/types/learning-event';
 import { buildQuizAttemptObservation } from './quiz-observation';
@@ -21,6 +33,7 @@ import {
 } from './quiz-window-model';
 import { buildQuizAssessment, type AssessmentDraft } from './assessment-events';
 import { NextStepCard, type NextStepCardProps } from './NextStepCard';
+import { QuizReport } from './QuizReport';
 
 interface QuizWindowProps {
   result: AppExecutionResult | null;
@@ -33,8 +46,23 @@ interface QuizWindowProps {
   nextStep?: NextStepCardProps;
 }
 
-/* 测验保持安静平涂：用排版和状态区分，不用题目环境光。 */
-const QUIZ_SUCCESS = 'var(--mm-pine)';
+type OptionState = 'idle' | 'selected' | 'correct' | 'wrong' | 'dim';
+
+/** 三态只换颜色：选中 = 墨，对 = 松绿，错 = 朱红；其余在已交卷后退灰 */
+const OPTION_ROW: Record<OptionState, string> = {
+  idle: 'hover:bg-paper-warm',
+  selected: 'bg-paper-warm',
+  correct: 'bg-pine-fog',
+  wrong: 'bg-vermilion-fog',
+  dim: 'opacity-55',
+};
+const OPTION_LETTER: Record<OptionState, string> = {
+  idle: 'border-divider text-ink-muted group-hover:border-ink-muted',
+  selected: 'border-ink bg-ink text-white',
+  correct: 'border-pine bg-pine text-white',
+  wrong: 'border-vermilion bg-vermilion text-white',
+  dim: 'border-divider text-ink-muted',
+};
 
 export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onAssessment, nextStep }: QuizWindowProps) {
   const questions = useMemo(() => normalizeQuizQuestions(result), [result]);
@@ -50,17 +78,43 @@ export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onA
   const [showReport, setShowReport] = useState(false);
   const [startTime] = useState(() => Date.now());
   const seenReferences = useRef(new Set<string>());
+  const primaryRef = useRef<HTMLButtonElement | null>(null);
+
+  const current = activeQuestions[Math.min(index, activeQuestions.length - 1)];
+  const selectedOption = current ? selected[current.id] : undefined;
+  const isSubmitted = current ? Boolean(submitted[current.id]) : false;
+  const subjective = current ? isSubjectiveQuizQuestion(current) : false;
+
+  // 键盘：1–4 选选项（未交卷时），回车 = 底部主动作。←→ 由 useQuizNavigation 负责
+  useEffect(() => {
+    if (!current) return;
+    const keyDown = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable) return;
+      if (!subjective && !isSubmitted && /^[1-9]$/.test(event.key)) {
+        const option = current.options[Number(event.key) - 1];
+        if (option) {
+          event.preventDefault();
+          setSelected((prev) => ({ ...prev, [current.id]: option }));
+        }
+        return;
+      }
+      if (event.key === 'Enter' && primaryRef.current && !primaryRef.current.disabled) {
+        event.preventDefault();
+        primaryRef.current.click();
+      }
+    };
+    window.addEventListener('keydown', keyDown);
+    return () => window.removeEventListener('keydown', keyDown);
+  }, [current, isSubmitted, subjective]);
+
   if (!result) {
     return <AppWindowPlaceholder status="loading" appName={APPS_COPY.quiz.appName} transcript={transcript} />;
   }
-  if (questions.length === 0) {
+  if (questions.length === 0 || !current) {
     return <AppWindowPlaceholder status="empty" appName={APPS_COPY.quiz.appName} />;
   }
 
-  const current = activeQuestions[Math.min(index, activeQuestions.length - 1)];
-  const selectedOption = selected[current.id];
-  const isSubmitted = Boolean(submitted[current.id]);
-  const subjective = isSubjectiveQuizQuestion(current);
   const normalizedAnswer = normalizeQuizAnswer(current.answer, current.options);
   const isCorrect = isQuizAnswerCorrect(current, selectedOption);
 
@@ -82,7 +136,6 @@ export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onA
   const wrongQuestions = activeQuestions.filter(
     (question) => submitted[question.id] && !isQuizAnswerCorrect(question, selected[question.id]),
   );
-  const accuracy = finishedCount > 0 ? Math.round((correctCount / finishedCount) * 100) : 0;
   const firstUnfinishedIndex = activeQuestions.findIndex((question) => !submitted[question.id]);
   const selfRate = (correct: boolean) => {
     if (isSubmitted) return;
@@ -91,401 +144,243 @@ export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onA
     // 自评不是观测到的作答：observation 里标 learner_self_report，Context 侧不把它当独立答对
     recordAttempt(correct ? APPS_COPY.quiz.selfCorrect : APPS_COPY.quiz.selfWrong, correct ? 'correct' : 'incorrect');
   };
-  const progress = activeQuestions.length > 0 ? ((index + 1) / activeQuestions.length) * 100 : 0;
+  const resetRound = (ids: string[] | null) => {
+    setReviewQuestionIds(ids);
+    setIndex(0);
+    setSelected({});
+    setSubmitted({});
+    setRevealed({});
+    setShowReport(false);
+  };
+  const progress = activeQuestions.length > 0 ? (finishedCount / activeQuestions.length) * 100 : 0;
   const elapsedMinutes = Math.round((Date.now() - startTime) / 60000);
 
   const slideClass = slideDir === 'left'
-    ? 'translate-x-[-8%] opacity-0 scale-95'
+    ? 'translate-x-[-4%] opacity-0'
     : slideDir === 'right'
-      ? 'translate-x-[8%] opacity-0 scale-95'
-      : 'translate-x-0 opacity-100 scale-100';
+      ? 'translate-x-[4%] opacity-0'
+      : 'translate-x-0 opacity-100';
 
-  // 本轮回顾：呈现学习信号，不给学生贴 A-F 等级标签。
   if (showReport && allDone) {
     return (
-      <div className="flex h-full min-h-[420px] flex-col items-center justify-center bg-canvas p-6">
-        <div className="w-full max-w-md text-center">
-          <div className="mx-auto mb-5 h-1 w-12 rounded-full bg-pine" aria-hidden />
-          <h2 className="mb-2 text-2xl font-semibold tracking-[-0.03em] text-ink">{APPS_COPY.quiz.completeTitle}</h2>
-          <p className="mb-7 text-sm leading-relaxed text-ink-muted">
-            {APPS_COPY.quiz.completeMeta(activeQuestions.length, elapsedMinutes < 1 ? '<1' : String(elapsedMinutes))}
-          </p>
-
-          <div className="relative inline-flex items-center justify-center w-32 h-32 mb-6">
-            <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="42" fill="none" stroke="#E8E2D5" strokeWidth="6" />
-              <circle cx="50" cy="50" r="42" fill="none" stroke={QUIZ_SUCCESS}
-                strokeWidth="6" strokeLinecap="round"
-                strokeDasharray={`${accuracy * 2.64} 264`}
-                style={{ transition: 'stroke-dasharray 1s ease-out' }} />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-3xl font-semibold text-ink">{accuracy}%</span>
-              <span className="text-xs text-ink-muted">{APPS_COPY.quiz.recallRate}</span>
-            </div>
-          </div>
-
-          {/* Stats */}
-          <div className="mb-6 flex items-center justify-center gap-10">
-            <div className="text-center">
-              <div className="text-xl font-semibold text-ink">{correctCount}</div>
-              <div className="mt-1 text-xs text-ink-muted">{APPS_COPY.quiz.solidCount}</div>
-            </div>
-            <div className="h-8 w-px bg-divider" />
-            <div className="text-center">
-              <div className="text-xl font-semibold text-danger-500">{finishedCount - correctCount}</div>
-              <div className="mt-1 text-xs text-ink-muted">{APPS_COPY.quiz.revisitCount}</div>
-            </div>
-          </div>
-
-          {/* Wrong questions preview */}
-          {wrongQuestions.length > 0 && (
-            <div className="mb-6 max-h-[160px] overflow-y-auto px-1">
-              <p className="mb-3 text-xs font-medium tracking-wider text-ink-muted">{APPS_COPY.quiz.missedReview}</p>
-              <div className="space-y-1.5">
-                {wrongQuestions.map((question) => (
-                  <p key={question.id} className="truncate rounded-2xl border border-divider bg-white px-4 py-3 text-left text-sm text-ink-secondary">
-                    {question.stem.length > 52 ? `${question.stem.slice(0, 52)}…` : question.stem}
-                  </p>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex flex-col items-center gap-3">
-            {wrongQuestions.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  const missedIds = wrongQuestions.map((question) => question.id);
-                  setReviewQuestionIds(missedIds);
-                  setShowReport(false);
-                  setIndex(0);
-                  setSelected({});
-                  setSubmitted({});
-                  setRevealed({});
-                }}
-                className="rounded-full bg-ink px-8 py-2.5 text-sm font-medium text-white transition hover:opacity-85"
-              >
-                {APPS_COPY.quiz.reviewMissed(wrongQuestions.length)}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                setReviewQuestionIds(null);
-                setIndex(0);
-                setSelected({});
-                setSubmitted({});
-                setRevealed({});
-                setShowReport(false);
-              }}
-              className="rounded-full px-8 py-2.5 text-sm text-ink-muted transition-colors hover:text-ink"
-            >
-              {APPS_COPY.quiz.restart}
-            </button>
-          </div>
-          {nextStep ? <NextStepCard {...nextStep} /> : null}
-        </div>
-      </div>
+      <QuizReport
+        questions={activeQuestions}
+        selected={selected}
+        correctCount={correctCount}
+        elapsedMinutes={elapsedMinutes}
+        wrongQuestions={wrongQuestions}
+        onReviewMissed={() => resetRound(wrongQuestions.map((question) => question.id))}
+        onRestart={() => resetRound(null)}
+        nextStep={nextStep ? <NextStepCard {...nextStep} /> : null}
+      />
     );
   }
 
+  const optionStateOf = (option: string): OptionState => {
+    const active = selectedOption === option;
+    if (!isSubmitted) return active ? 'selected' : 'idle';
+    if (option === normalizedAnswer) return 'correct';
+    if (active) return 'wrong';
+    return 'dim';
+  };
+
+  const showKeyboardHint = index === 0 && !isSubmitted && !subjective && !reviewQuestionIds;
+
   return (
     <div
-      className="relative flex h-full min-h-[420px] select-none flex-col overflow-hidden bg-canvas"
+      className="relative flex h-full min-h-[420px] select-none flex-col overflow-hidden bg-white"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       data-testid="quiz-window"
     >
-      {/* Top: keyboard hint (desktop only) */}
-      <div className="relative flex-shrink-0 pt-3 pb-1 text-center hidden md:block">
-        <p className="text-[12px] tracking-wide text-ink-muted">
-          {APPS_COPY.quiz.keyboardHint}
-        </p>
+      {/* 顶端一根进度线：已完成占比，安静地长 */}
+      <div className="h-[2px] w-full bg-divider-light" aria-hidden>
+        <div className="h-full bg-pine transition-[width] duration-500 ease-out" style={{ width: `${progress}%` }} />
       </div>
 
-      {/* Question area */}
-      <div className="relative flex-1 flex items-start justify-center px-4 md:px-12 min-h-0 overflow-y-auto">
-        {/* Left arrow */}
-        <button
-          type="button"
-          onClick={goToPrev}
-          disabled={index <= 0}
-          className="group absolute left-3 top-1/3 z-10 hidden h-11 w-11 items-center justify-center rounded-full border border-divider bg-white transition-colors duration-200 hover:border-ink-muted disabled:pointer-events-none disabled:opacity-0 md:left-6 md:flex"
-          aria-label={APPS_COPY.quiz.previous}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-ink-muted transition-colors group-hover:text-ink" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-        </button>
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 md:px-10">
+        <div className={`mx-auto w-full max-w-[600px] pt-7 pb-6 transition-all duration-200 ease-out ${slideClass}`}>
+          {/* 题号行：第 N 题 · 状态 …… 共 M 题 */}
+          <div className="mb-4 flex items-baseline justify-between text-[12px] tabular-nums tracking-[0.04em] text-ink-muted">
+            <span>
+              {APPS_COPY.quiz.questionNo(index + 1)}
+              {isSubmitted ? (
+                <span className={`ml-3 ${isCorrect ? 'text-pine' : 'text-vermilion'}`}>{isCorrect ? APPS_COPY.quiz.correct : APPS_COPY.quiz.wrong}</span>
+              ) : null}
+            </span>
+            <span>{finishedCount > 0 ? APPS_COPY.quiz.answered(finishedCount, activeQuestions.length) : null}</span>
+          </div>
 
-        {/* Card container with slide animation */}
-        <div className={`w-full max-w-[420px] py-4 transition-all duration-200 ease-out ${slideClass}`}>
-          {/* Question card */}
-          <div className="rounded-3xl border border-divider bg-white p-6 md:p-7">
-            {/* Question number badge */}
-            <div className="flex items-center gap-2 mb-5">
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-divider bg-canvas px-3 py-1.5">
-                <span className="text-[12px] font-semibold tracking-wide text-ink-secondary">
-                  {index + 1} / {activeQuestions.length}
-                </span>
-              </div>
-              {isSubmitted && (
-                <div className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-medium ${
-                  isCorrect
-                    ? 'border-mint-200 bg-mint-50 text-ink-secondary'
-                    : 'border-danger-200 bg-danger-50 text-danger-700'
-                }`}>
-                  <div className={`h-1.5 w-1.5 rounded-full ${isCorrect ? 'bg-mint-500' : 'bg-danger-500'}`} />
-                  {isCorrect ? APPS_COPY.quiz.correct : APPS_COPY.quiz.wrong}
+          {/* 题干 */}
+          <h2 className="mb-6 text-[19px] font-semibold leading-[1.7] tracking-[-0.015em] text-ink md:text-[21px]">
+            {current.stem}
+          </h2>
+
+          {subjective ? (
+            <div className="space-y-3">
+              {!revealed[current.id] ? (
+                <p className="border-l-2 border-divider pl-4 text-[14px] leading-[1.75] text-ink-muted">
+                  {APPS_COPY.quiz.subjectivePrompt}
+                </p>
+              ) : (
+                <div className="border-t border-divider pt-4">
+                  <p className="mb-1.5 text-[12px] tracking-[0.04em] text-ink-muted">{APPS_COPY.quiz.referenceAnswer}</p>
+                  <p className="text-[15px] leading-[1.8] text-ink">{current.answer || APPS_COPY.quiz.referenceFallback}</p>
+                  {isSubmitted ? (
+                    <p className={`mt-3 text-[13px] font-medium ${selectedOption === QUIZ_SELF_CORRECT ? 'text-pine' : 'text-vermilion'}`}>
+                      {selectedOption === QUIZ_SELF_CORRECT ? APPS_COPY.quiz.selfCorrect : APPS_COPY.quiz.selfWrong}
+                    </p>
+                  ) : null}
                 </div>
               )}
             </div>
-
-            {/* Question stem */}
-            <h2 className="mb-6 text-[18px] font-semibold leading-[1.75] tracking-[-0.02em] text-ink md:text-[20px]">
-              {current.stem}
-            </h2>
-
-            {/* 简答 / 填空：无选项，先想后对照参考答案（不做花哨自评，仅一次轻量标记） */}
-            {subjective ? (
-              <div className="space-y-3">
-                {!revealed[current.id] ? (
-                  <p className="rounded-2xl border border-dashed border-divider bg-canvas px-4 py-4 text-[14px] leading-[1.7] text-ink-muted">
-                    {APPS_COPY.quiz.subjectivePrompt}
-                  </p>
-                ) : (
-                  <div className="rounded-2xl border border-mint-200 bg-mint-50 p-4">
-                    <p className="mb-1.5 text-[12px] font-medium tracking-wider text-ink-muted">{APPS_COPY.quiz.referenceAnswer}</p>
-                    <p className="text-[15px] leading-[1.75] text-ink">{current.answer || APPS_COPY.quiz.referenceFallback}</p>
-                    {isSubmitted ? (
-                      <p className={`mt-3 border-t border-mint-200 pt-3 text-[13px] font-medium ${selectedOption === QUIZ_SELF_CORRECT ? 'text-pine' : 'text-vermilion'}`}>
-                        {selectedOption === QUIZ_SELF_CORRECT ? APPS_COPY.quiz.selfCorrect : APPS_COPY.quiz.selfWrong}
-                      </p>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-            ) : (
-            <div className="space-y-2.5">
+          ) : (
+            <ol className="divide-y divide-divider-light border-y border-divider-light" aria-label={APPS_COPY.quiz.appName}>
               {current.options.map((option, optIdx) => {
-                const active = selectedOption === option;
-                const optionCorrect = isSubmitted && option === normalizedAnswer;
-                const optionWrong = isSubmitted && active && !isCorrect;
-                const optionLetter = String.fromCharCode(65 + optIdx);
-                const isDisabled = isSubmitted;
-
-                let optionStyle = 'border-divider bg-white hover:border-ink-muted hover:bg-canvas';
-                let letterStyle = 'bg-canvas text-ink-muted';
-
-                if (optionCorrect) {
-                  optionStyle = 'border-mint-200 bg-mint-50';
-                  letterStyle = 'bg-ink text-white';
-                } else if (optionWrong) {
-                  optionStyle = 'border-danger-200 bg-danger-50';
-                  letterStyle = 'bg-danger-500 text-white';
-                } else if (active && !isSubmitted) {
-                  optionStyle = 'border-ink bg-canvas';
-                  letterStyle = 'bg-ink text-white';
-                }
-
-                const inlineStyle: React.CSSProperties = {};
-                const inlineLetterStyle: React.CSSProperties = {};
-
+                const state = optionStateOf(option);
+                const letter = String.fromCharCode(65 + optIdx);
                 return (
-                  <button
-                    key={option}
-                    type="button"
-                    disabled={isDisabled}
-                    onClick={() => !isDisabled && setSelected((prev) => ({ ...prev, [current.id]: option }))}
-                    className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-left transition-all duration-200 active:scale-[0.98] ${optionStyle} ${isDisabled ? 'cursor-default' : 'cursor-pointer'}`}
-                    style={{ ...inlineStyle, border: inlineStyle.borderColor ? `1px solid ${inlineStyle.borderColor}` : undefined }}
-                  >
-                    <span
-                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-all duration-200 ${letterStyle}`}
-                      style={inlineLetterStyle}
+                  <li key={option}>
+                    <button
+                      type="button"
+                      disabled={isSubmitted}
+                      aria-pressed={state === 'selected'}
+                      onClick={() => !isSubmitted && setSelected((prev) => ({ ...prev, [current.id]: option }))}
+                      className={`group -mx-3 flex w-[calc(100%+1.5rem)] items-start gap-4 rounded-lg px-3 py-3.5 text-left transition-colors duration-200 ${OPTION_ROW[state]} ${isSubmitted ? 'cursor-default' : 'cursor-pointer active:bg-paper-deep'}`}
                     >
-                      {optionLetter}
-                    </span>
-                    <span className={`text-[15px] leading-[1.7] ${
-                      optionCorrect ? 'text-ink' : optionWrong ? 'text-danger-700' : 'text-ink-secondary'
-                    }`}>
-                      {stripQuizOptionPrefix(option)}
-                    </span>
-                    {/* Correct/wrong indicator */}
-                    {optionCorrect && (
-                      <svg className="ml-auto h-5 w-5 shrink-0 text-ink-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    )}
-                    {optionWrong && (
-                      <svg className="ml-auto h-5 w-5 shrink-0 text-danger-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    )}
-                  </button>
+                      <span
+                        className={`mt-[1px] flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[12px] font-semibold tabular-nums transition-colors duration-200 ${OPTION_LETTER[state]}`}
+                        aria-hidden
+                      >
+                        {state === 'correct' ? '✓' : state === 'wrong' ? '✕' : letter}
+                      </span>
+                      <span className={`pt-[3px] text-[15.5px] leading-[1.7] ${state === 'correct' ? 'text-ink' : state === 'wrong' ? 'text-vermilion-deep' : state === 'dim' ? 'text-ink-muted' : 'text-ink'}`}>
+                        {stripQuizOptionPrefix(option)}
+                      </span>
+                    </button>
+                  </li>
                 );
               })}
+            </ol>
+          )}
+
+          {/* 解析：交卷后在题目下方长出来，不套彩色盒子 */}
+          {isSubmitted && (current.explanation || (!subjective && !isCorrect)) ? (
+            <div className="mt-6 animate-slide-up">
+              <p className="mb-1.5 text-[12px] tracking-[0.04em] text-ink-muted">{APPS_COPY.quiz.explanationLabel}</p>
+              {!subjective && !isCorrect ? (
+                <p className="mb-1.5 text-[14px] font-medium text-vermilion">
+                  {APPS_COPY.quiz.correctAnswer(stripQuizOptionPrefix(normalizedAnswer))}
+                </p>
+              ) : null}
+              {current.explanation ? <p className="text-[14.5px] leading-[1.8] text-ink-secondary">{current.explanation}</p> : null}
             </div>
-            )}
-
-            {/* Explanation section (slide down after submit) */}
-            {isSubmitted && current.explanation && (
-              <div className={`mt-6 rounded-2xl border p-4 transition-all duration-300 ${
-                isCorrect ? 'border-mint-200 bg-mint-50' : 'border-divider bg-canvas'
-              }`}>
-                {!subjective && !isCorrect && (
-                  <p className="mb-2 text-sm font-medium text-danger-700">
-                    {APPS_COPY.quiz.correctAnswer(stripQuizOptionPrefix(normalizedAnswer))}
-                  </p>
-                )}
-                <p className="text-[14px] leading-[1.75] text-ink-secondary">{current.explanation}</p>
-              </div>
-            )}
-            {isSubmitted && current.evidence && (
-              <button
-                type="button"
-                disabled={!onSeek}
-                onClick={() => onSeek?.(current.evidence!.startMs)}
-                className="mt-4 text-[12px] text-ink-muted transition hover:text-ink disabled:cursor-default"
-              >
-                {onSeek
-                  ? APPS_COPY.quiz.returnToEvidenceAt(formatQuizEvidenceTime(current.evidence.startMs))
-                  : APPS_COPY.quiz.evidenceAt(formatQuizEvidenceTime(current.evidence.startMs))}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* 提交后只保留底部主动作，避免同屏出现两个“下一题”。 */}
-        {!isSubmitted && (
-          <button
-            type="button"
-            onClick={goToNext}
-            disabled={index >= activeQuestions.length - 1}
-            className="group absolute right-3 top-1/3 z-10 hidden h-11 w-11 items-center justify-center rounded-full border border-divider bg-white transition-colors duration-200 hover:border-ink-muted disabled:pointer-events-none disabled:opacity-0 md:right-6 md:flex"
-            aria-label={APPS_COPY.quiz.next}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-ink-muted transition-colors group-hover:text-ink" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </button>
-        )}
-      </div>
-
-      {/* Bottom controls */}
-      <div className="relative flex-shrink-0 px-4 pb-5 pt-2">
-        {/* Action button */}
-        <div className="flex items-center justify-center gap-3 mb-4">
-          {!isSubmitted && (!subjective || !revealed[current.id]) ? (
+          ) : null}
+          {isSubmitted && current.evidence ? (
             <button
               type="button"
-              className="rounded-full bg-ink px-8 py-2.5 text-sm font-medium text-white transition hover:opacity-85 active:scale-95 disabled:cursor-not-allowed disabled:bg-divider disabled:text-ink-muted"
-              disabled={subjective ? false : !selectedOption}
-              onClick={() => {
-                if (subjective) {
-                  setRevealed((prev) => ({ ...prev, [current.id]: true }));
-                } else {
-                  setSubmitted((prev) => ({ ...prev, [current.id]: true }));
-                  recordAttempt(selectedOption || '');
-                }
-              }}
+              disabled={!onSeek}
+              onClick={() => onSeek?.(current.evidence!.startMs)}
+              className="mt-5 text-[12px] text-ink-muted/80 transition hover:text-ink disabled:cursor-default"
             >
-              {subjective ? APPS_COPY.quiz.revealReference : APPS_COPY.quiz.confirmAnswer}
+              {onSeek
+                ? APPS_COPY.quiz.returnToEvidenceAt(formatQuizEvidenceTime(current.evidence.startMs))
+                : APPS_COPY.quiz.evidenceAt(formatQuizEvidenceTime(current.evidence.startMs))}
             </button>
-          ) : subjective && !isSubmitted ? (
-            // 填空 / 简答：对照参考后在同一位置自评——主动作始终在底部同一处，不用在卡片里找按钮
-            <div className="flex items-center gap-2">
-              <span className="text-[13px] text-ink-muted">{APPS_COPY.quiz.selfRate}</span>
+          ) : null}
+
+          {/* 主动作紧跟内容：选完就在手边，不用去窗口底部找 */}
+          <div className="mt-7 flex items-center gap-3">
+            {!isSubmitted && (!subjective || !revealed[current.id]) ? (
               <button
+                ref={primaryRef}
                 type="button"
-                onClick={() => selfRate(true)}
-                className="rounded-full bg-ink px-5 py-2 text-sm font-medium text-white transition hover:opacity-85 active:scale-95"
+                className="rounded-full bg-ink px-5 py-2 text-[13.5px] font-medium text-white transition hover:opacity-85 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-divider disabled:text-ink-muted"
+                disabled={subjective ? false : !selectedOption}
+                onClick={() => {
+                  if (subjective) {
+                    setRevealed((prev) => ({ ...prev, [current.id]: true }));
+                  } else {
+                    setSubmitted((prev) => ({ ...prev, [current.id]: true }));
+                    recordAttempt(selectedOption || '');
+                  }
+                }}
               >
-                {APPS_COPY.quiz.selfCorrect}
+                {subjective ? APPS_COPY.quiz.revealReference : APPS_COPY.quiz.confirmAnswer}
               </button>
+            ) : subjective && !isSubmitted ? (
+              <>
+                <span className="text-[12px] text-ink-muted">{APPS_COPY.quiz.selfRate}</span>
+                <button ref={primaryRef} type="button" onClick={() => selfRate(true)} className="rounded-full bg-ink px-4 py-2 text-[13px] font-medium text-white transition hover:opacity-85 active:scale-[0.98]">
+                  {APPS_COPY.quiz.selfCorrect}
+                </button>
+                <button type="button" onClick={() => selfRate(false)} className="rounded-full px-3 py-2 text-[13px] font-medium text-ink-secondary transition hover:text-vermilion">
+                  {APPS_COPY.quiz.selfWrong}
+                </button>
+              </>
+            ) : index < activeQuestions.length - 1 ? (
+              <button ref={primaryRef} type="button" onClick={goToNext} className="rounded-full bg-ink px-5 py-2 text-[13.5px] font-medium text-white transition hover:opacity-85 active:scale-[0.98]">
+                {APPS_COPY.quiz.nextQuestion} →
+              </button>
+            ) : allDone ? (
               <button
+                ref={primaryRef}
                 type="button"
-                onClick={() => selfRate(false)}
-                className="rounded-full border border-divider px-5 py-2 text-sm font-medium text-ink-secondary transition hover:border-vermilion/50 hover:text-vermilion active:scale-95"
+                onClick={() => {
+                  setShowReport(true);
+                  onLearningActivity?.(formatQuizCompleteActivity({ correct: correctCount, total: activeQuestions.length }));
+                  const assessment = buildQuizAssessment(activeQuestions, selected, submitted);
+                  if (assessment) onAssessment?.(assessment);
+                }}
+                className="rounded-full bg-pine px-5 py-2 text-[13.5px] font-medium text-white transition hover:opacity-90 active:scale-[0.98]"
               >
-                {APPS_COPY.quiz.selfWrong}
+                {APPS_COPY.quiz.viewResult}
               </button>
-            </div>
-          ) : isSubmitted ? (
-            <>
-              {index < activeQuestions.length - 1 ? (
-                <button
-                  type="button"
-                  onClick={goToNext}
-                  className="rounded-full bg-ink px-8 py-2.5 text-sm font-medium text-white transition hover:opacity-85 active:scale-95"
-                >
-                  {APPS_COPY.quiz.nextQuestion}
-                </button>
-              ) : allDone ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowReport(true);
-                    onLearningActivity?.(formatQuizCompleteActivity({ correct: correctCount, total: activeQuestions.length }));
-                    const assessment = buildQuizAssessment(activeQuestions, selected, submitted);
-                    if (assessment) onAssessment?.(assessment);
-                  }}
-                  className="rounded-full bg-ink px-8 py-2.5 text-sm font-medium text-white transition hover:opacity-85 active:scale-95"
-                >
-                  {APPS_COPY.quiz.viewResult}
-                </button>
-              ) : firstUnfinishedIndex >= 0 ? (
-                // 走到最后一题却还有跳过的：此前这里什么都不显示，学生看着"4 / 5 已完成"不知道差哪一题
-                <button
-                  type="button"
-                  onClick={() => navigateTo(firstUnfinishedIndex, 'right')}
-                  className="rounded-full border border-ink/15 bg-white px-6 py-2.5 text-sm font-medium text-ink transition hover:border-ink/40 active:scale-95"
-                >
-                  {APPS_COPY.quiz.backToUnfinished(activeQuestions.length - finishedCount, firstUnfinishedIndex + 1)}
-                </button>
-              ) : null}
-            </>
+            ) : firstUnfinishedIndex >= 0 ? (
+              // 走到最后一题却还有跳过的：告诉学生差几题、回到哪一题
+              <button ref={primaryRef} type="button" onClick={() => navigateTo(firstUnfinishedIndex, 'right')} className="text-[13px] font-medium text-ink transition hover:text-pine">
+                {APPS_COPY.quiz.backToUnfinished(activeQuestions.length - finishedCount, firstUnfinishedIndex + 1)}
+              </button>
+            ) : null}
+          </div>
+          {showKeyboardHint ? (
+            <p className="mt-2.5 hidden text-[11.5px] text-ink-muted/70 md:block">{APPS_COPY.quiz.keyboardHint}</p>
           ) : null}
         </div>
+      </div>
 
-        {/* Progress dots + bar */}
-        <div className="flex flex-col items-center gap-2 max-w-[420px] mx-auto">
-          {/* Mini dots */}
-          <div className="flex items-center justify-center gap-1.5 flex-wrap">
-            {activeQuestions.map((q, i) => {
-              const done = Boolean(submitted[q.id]);
-              const ok = done && isQuizAnswerCorrect(q, selected[q.id]);
+      {/* 底栏只剩定位：上一题 · 题点 · 进度数字 */}
+      <div className="flex-shrink-0 border-t border-divider-light px-6 pb-3.5 pt-3 md:px-10">
+        <div className="mx-auto flex w-full max-w-[600px] items-center gap-4">
+          <button
+            type="button"
+            onClick={goToPrev}
+            disabled={index <= 0}
+            className="text-[13px] text-ink-muted transition hover:text-ink disabled:invisible"
+          >
+            ← {APPS_COPY.quiz.previous}
+          </button>
+
+          <div className="flex flex-1 items-center justify-center gap-1.5" aria-hidden>
+            {activeQuestions.map((question, i) => {
+              const done = Boolean(submitted[question.id]);
+              const ok = done && isQuizAnswerCorrect(question, selected[question.id]);
               const isCurrent = i === index;
-              let dotColor = 'bg-divider';
-              if (done) dotColor = ok ? 'bg-ink' : 'bg-danger-500';
-              else if (isCurrent) dotColor = 'bg-ink-muted';
+              const dot = done ? (ok ? 'bg-pine' : 'bg-vermilion') : isCurrent ? 'bg-ink-muted' : 'bg-divider';
               return (
                 <button
-                  key={q.id}
+                  key={question.id}
                   type="button"
+                  tabIndex={-1}
                   onClick={() => { if (i !== index) navigateTo(i, i > index ? 'left' : 'right'); }}
-                  className={`h-2 rounded-full transition-all duration-300 ${dotColor} ${isCurrent ? 'w-6' : 'w-2'}`}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${dot} ${isCurrent ? 'w-5' : 'w-1.5'}`}
                   aria-label={APPS_COPY.quiz.jumpTo(i + 1)}
                 />
               );
             })}
           </div>
 
-          {/* Thin progress bar */}
-          <div className="w-full flex items-center gap-3">
-            <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-divider">
-              <div
-                className="h-full rounded-full bg-ink transition-all duration-500 ease-out"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <span className="whitespace-nowrap text-[12px] tabular-nums tracking-wide text-ink-muted">
-              {APPS_COPY.quiz.answered(finishedCount, activeQuestions.length)}
-            </span>
-          </div>
+          <span className="text-[12px] tabular-nums text-ink-muted">{index + 1} / {activeQuestions.length}</span>
         </div>
       </div>
     </div>
