@@ -32,7 +32,8 @@
 |-----|------|------|
 | `meetmind:cheatsheet:layout` | `cheatsheet-window-model.ts` `CHEATSHEET_LAYOUT_PREF_KEY` | 栏数 / 字号档 / 密度 / 高亮开关 / 装进一页 |
 | `meetmind:apps:hint-seen:<appKey>` | `keyboard-hints.ts` `KEYBOARD_HINT_PREF_PREFIX` | 该应用的快捷键提示已经说过一次 |
-| `meetmind:teach-back:voice` | `use-teach-back-panel.ts` `TEACH_BACK_VOICE_PREF_KEY` | 讲给同桌听评委席 出声 / 只看文字（`on` / `off`，默认出声） |
+| `meetmind:teach-back:voice` | `use-teach-back-panel.ts` `TEACH_BACK_VOICE_PREF_KEY` | 讲给同桌听 出声 开 / 关（`on` / `off`，默认开）：听众发言与复盘朗读是否出声 |
+| `meetmind:teach-back:live-feedback` | `use-teach-back-panel.ts` `TEACH_BACK_LIVE_FEEDBACK_PREF_KEY` | 讲给同桌听 实时反馈 开 / 关（`on` / `off`，默认开）：关 = 听众只听、只记，讲完了再按时间揭示 |
 
 ## 目录结构
 
@@ -74,15 +75,15 @@ src/components/apps/windows/
 ├── cheatsheet-paper-styles.ts  # 纸面静态 CSS（多栏 / 标题层级 / 三色荧光笔 .cs-hl / 公式块 / @media print）
 ├── cheatsheet-window-model.ts  # 纯函数：A4 逻辑页尺寸、偏好读写、topicsOf 正规化、栏容量、Markdown 导出
 ├── use-cheatsheet-layout.ts    # 实测分页 hook：量每个区块高度 → 按均衡栏高装栏 → 装进一页时等比缩放 → 单页不满时缩短纸高
-├── TeachBackWindow.tsx         # 讲给同桌听：入口即教室（场景 + 底部毛玻璃「走上讲台」面板，无清单页）→ **连续讲述（2026-09-10）**：走上讲台后麦克风常开（课堂录音同一条 /api/asr-stream 实时通道），能量 VAD + 句末事件判"这一段讲完了"→ 评委席一位开口（/api/apps/teach-back/turn SSE）→ 气泡流式 + TTS 出声 → 你一开口评委就停 → 「讲完了」走四象限核对（/api/apps/teach-back/evaluate：服务端重试 + 客户端首败自动重试 + 429 区分 + 分阶段等待文案）→ 结果卡（headline 朗读 + 四象限地图揭示 + 盲区朱批强调、[MM:SS] 跳回证据、盲区/已知缺口可「就这点再讲一次」单项重讲、**本场回合回看**（你讲了什么 / 谁说了什么）、完成写课后学习黑板）。**课名走 `contextTitle`**（2026-09-08 修复：此前接的是 AppRenderSurface 给信息图的 1400 字 `contentContext`，黑板抬头滚着整段转录、`metadata.title` 超接口 200 字上限 → respond / evaluate 全 400；接口 400 现在会 warn 出 zod issues）。详见下文「TeachBackWindow（讲给同桌听 · 连续讲述版）」
-├── TeachBackPodium.tsx         # 讲台（teach 阶段，2026-09-10）：状态一行（在听 / 你在讲 + rec 点 / 等你说完 + 呼吸点 / ×× 在说）· 出声 / 只看文字 → 波形（你在讲）或呼吸指示（停顿等待，没有倒计时数字）→ 实时转写（上一段淡一行 + 当前这段）→ 回到目标 · 讲完了；麦克风拿不到 / 断了 / 正在录课 / 转写连不上时同位置一行人话 + 重新上台 + 打字兜底（回车算一段）
-├── use-teach-back-panel.ts     # 连续讲述编排 hook：getUserMedia → 先挂采集链（ScriptProcessor 2048：PCM → DashScopeASRClient 排队 / RMS → 状态机）再连 ASR（连接期间校准噪声、不丢帧）→ 状态机 effects：turn-commit → POST turn（SSE 解析 → 气泡 / SentenceSplitter → TeachSpeechPlayer 按评委音色请求 /api/teach/tts）· interrupt → 中止请求 + stopAll + 气泡收成一行 · idle-nudge → check-in 回合 · turn-upgrade → 迟到的定稿替换已提交文本；与 session-store.isRecording 互斥；visibilitychange resume AudioContext；轨道 ended → mic-lost 一键重新上台；偏好 `meetmind:teach-back:voice`
-├── teach-back-turn-machine.ts  # 回合状态机（纯函数，Vitest 25 例）：calibrating → listening → speaking → pausing → settling → judging → judge-speaking；参数见 DEFAULT_TURN_PARAMS（校准 1s / 有效语音 ≥1.5s / 静音 ≥1.2s / 句末定稿捷径 0.5s / settle 0.7s / attack 200ms / 打断 attack 400ms×阈值 1.6 / 停顿 hangover 650ms / idle nudge 40s）
+├── TeachBackWindow.tsx         # 讲给同桌听 = 一间面试间（2026-09-10 表现层重做）：一个界面走完 开场 → 讲 → 讲完了，不换页。左 62% 你的话（开场是要讲的几点，开讲后转写从底部长出来往上流）+ 底部状态行 + 动作行；右 38% 听你讲的人（三位一人一行 + 反馈流，讲完了以后上面长出「复盘」）。容器 < 860px（复习页中栏 / 手机 / 小浮窗）→ 堆叠单栏（听众横条在上、转写、反馈在转写下面长、固定底栏）。只接线和排版：编排在 use-teach-back-panel，判断在 teach-back-turn-machine + teach-back-room-model；evaluate 契约、记忆事件不变。**课名走 `contextTitle`**（≤200 字）。详见下文「TeachBackWindow（讲给同桌听 · 面试间）」
+├── TeachBackTranscriptColumn.tsx # 面试间左栏：开场几点（素列表）→ 转写流（当前段 18px 墨色 / 讲过的 15px 次级色越早越淡；自动跟随，往上翻停下 + 「回到当前」；点右边一条反馈滚到那一段并高亮 2.4s）；`TeachBackStatusLine`（细波形 · 已讲 mm:ss · 一句状态词；停顿一枚呼吸点；麦克风故障同位置一行人话 + 重新开麦）；`TeachBackControls`（讲完了 / 开始讲 · 实时反馈 开/关 · 出声 开/关 · 麦克风不可用时的打字一小行）
+├── TeachBackListenersColumn.tsx  # 面试间右栏：`TeachBackListeners`（三行 / 手机横条：章鱼家族肖像 + 名字 + 人设 + 状态词 在听 · 想问 · 在说 · 记了 N 笔 · 说几句）、`TeachBackFeedbackStream`（最新在上，`mm:ss · 直言` + 一到三句逐字长，正在说的左侧 pine 竖线，被打断的收成一行灰字，可点回到那段转写）、`TeachBackReview`（复盘：三位各说各的，句子 + 细分割线）、`TeachBackEndActions`（再讲一次 / 只讲没讲清的 / 回到目标 + NextStepCard）
+├── teach-back-room-model.ts    # 面试间纯逻辑（Vitest 14 例）：反馈流排序 / 记下的揭示顺序 / 记了几笔 / 被打断折叠；听众状态词推导；复盘分配（直言 = 盲区 + 自知缺口 → 引导 = 最稳一点 + 下一步 → 追问 = 没讲到）；目标点 → 你的原话回合定位（字符二元组重合）；「只讲没讲清的」目标集；mm:ss；双栏阈值 860px
+├── use-teach-back-panel.ts     # 连续讲述编排 hook：getUserMedia → 先挂采集链（ScriptProcessor 2048：PCM → DashScopeASRClient 排队 / RMS → 状态机）再连 ASR（连接期间校准噪声、不丢帧）→ 状态机 effects：turn-commit → 记一段（会话内 startedAt / endedAt）+ POST turn（SSE → 反馈流条目 / SentenceSplitter → TeachSpeechPlayer 按听众音色请求 /api/teach/tts）· interrupt → 中止请求 + stopAll + 那条标 interrupted · idle-nudge → check-in 回合（实时反馈关着时跳过）· turn-upgrade → 迟到的定稿替换；**实时反馈关**：仍请求 turn 但条目 held（不上屏不出声、不占状态机、互不中止、讲完了也让它跑完），finish 后每 600ms 揭示一条；`speakAs` 复盘朗读按句固定音色；`speakingJudge` 此刻声音是谁的（肖像换表情）；与 session-store.isRecording 互斥；visibilitychange resume；轨道 ended → mic-lost 一键重新开麦（时钟 / 已讲的段 / 反馈流保留，回合号接着数）；偏好 `meetmind:teach-back:voice` / `:live-feedback`
+├── teach-back-turn-machine.ts  # 回合状态机（纯函数，Vitest 25 例，面试间重做未动）：calibrating → listening → speaking → pausing → settling → judging → judge-speaking；参数见 DEFAULT_TURN_PARAMS（校准 1s / 有效语音 ≥1.5s / 静音 ≥1.2s / 句末定稿捷径 0.5s / settle 0.7s / attack 200ms / 打断 attack 400ms×阈值 1.6 / 停顿 hangover 650ms / idle nudge 40s）
 ├── TeachBackSpeakPanel.tsx     # 【legacy，未挂载】半双工版讲课面板（分段录 → /api/asr/oneshot → 文本框 → 讲给同桌）；连续讲述版上线后保留供回退，随 use-teach-back-voice 一起
 ├── use-teach-back-voice.ts     # 【legacy，未挂载】半双工语音 hook（submitUserSegment → /api/apps/teach-back/respond → useTeachSpeech）
-├── TeachBackClassroom.tsx      # 像素小教室：黑板粉笔目标 + 前后两排 Octo 学生（窄屏自动减员防叠桌）；传 `judges`（评委席视图）后前排两位 + 后排中间成为评委：桌面名牌（直言 / 引导 / 追问）、你在讲时错峰点头（data-mood=speaking）、开口的那位抬头（surprised 精灵 + 上浮）+ 头顶气泡流式长出、被插话后气泡收成一行；评委席模式两排座位整体上移让位给讲台面板（data-panel）。状态全由 props 驱动，本组件不连语音、不做判断
-├── TeachBackQuadrantMap.tsx    # 结果揭示仪式：自信×有据四象限地图，目标棋子错峰落位，盲区朱批脉冲，没讲到的虚线单列
-├── teach-back-window-model.ts  # 目标正规化、四象限分组视图（盲区优先）、时间戳 helper
+├── teach-back-window-model.ts  # 目标正规化、四象限分组视图（供学习动态 / 记忆事件统计，画面已不画象限）、时间戳 helper
 ├── NextStepCard.tsx            # 完成态里同桌接着说的下一步（2026-09-08）：理由 + 一个 pine 按钮；判断来自 lesson-path-model.recommendNextStep（ReviewLearningWorkspace 按会话结果算好经 AppRenderSurface.nextStep 传入），点按经 onOpenApp 直接切到下一个应用——一步做完不再是终点
 ├── assessment-events.ts        # 应用交互 → 记忆事件载荷（纯函数，2026-09-08）：buildQuizAssessment（已提交题的 correct/wrong，主观题按自评）/ buildFlashcardsAssessment（got/missed）/ buildTeachBackAssessment（四象限 + uncovered）；各应用判定词表原样进事件，不在这里抹平成稳/不稳。窗口通过 `onAssessment` prop 交给 useAppLearningActivity.recordAssessment
 ├── PodcastPlayerBar.tsx        # 课堂播客播放条（2026-09-08，v7 皮肤）：墨色圆形播放键 + 松石绿进度 + 等宽时间 + 倍速胶囊，隐藏 <audio> 经 forwardRef 暴露给宿主做章节跳转 / 逐行高亮。取代此前播客窗口与「做好即弹」预览卡里的浏览器原生 <audio controls>——整套应用里唯一一块不属于产品的皮肤
@@ -201,16 +202,20 @@ quiz-observation.ts 为提交动作附加完整 practice.attempt 观察：保留
 - `AppWindowPlaceholder` 是六类应用整理中、空结果与失败状态的唯一展示；等待态使用“同学正在整理”，禁止重新出现“酿”等内部隐喻。窗口传入 `transcript` 时等待态会让这节课的原话掠过（`TranscriptDrift`）——不声称模型读到了哪句，只把材料本身可视化；不假装阶段进度。
 - `AppRenderSurface.isEmptyAppResult`：有"成品"但一道题 / 一张卡 / 一个分支都没有 → 按失败处理带「再试一次」，顶栏与窗口体不再一个说「做好了」一个说空。
 
-### TeachBackWindow（讲给同桌听 · 连续讲述版，2026-09-10）
+### TeachBackWindow（讲给同桌听 · 面试间，2026-09-10）
 
-用户的原话：「像豆包语音通话——不间断；我停下来之后它才反馈，不要我一直在讲它同时在下面给反馈」。所以这不是"录一段 → 停 → 等评估"的表单，是一场连续的口头讲述：
+**为什么换形态**：连续讲述版第一版把反馈画成像素教室里的章鱼评委 + 头顶气泡，讲完了跳到一张四象限看板。用户看过生产版后的原话：「我要的是模拟面试的效果：反馈不应该用一个新页面呈现，可以在旁边有一个轻量的反馈；支持实时反馈，也可以关掉实时反馈、说完了再反馈。不要看板——看板很 demo、很 AI。反馈应该是直接由我们的听众去听、去说。我们是 context 产品，向我展示能力上限。」所以底层（实时 ASR 通道、VAD + 句末回合状态机、`/api/apps/teach-back/turn` SSE、听众 prompt、TTS 音色、插话中止、录课互斥、`evaluate`）一行没动，表现层整个重做成**一间面试间**：一个界面，左边你的话是主角，右边是听你讲的人；反馈是人说的话，不是指标；核对结论也改写成三个人的话，没有象限、颜色标签、分数。
 
-- **状态 → 画面 → 声音**：`calibrating`（前 1s，讲台写「听一下周围的安静…」）→ `listening`（评委席安静呼吸，讲台「在听，你讲」）→ `speaking`（rec 点 + 波形 + 实时转写；评委错峰点头）→ `pausing`（静音过 650ms hangover，讲台一个呼吸点 +「等你说完」，**不出倒计时数字**）→ `settling`（回合已判定结束，等 ASR 把最后一句定稿 ≤700ms）→ `judging`（请求在飞，评委席仍安静）→ `judge-speaking`（那位抬头 + 气泡流式长出 + 按句 TTS，讲台「×× 在说」）→ 你一开口 → `speaking` + `interrupt`（中止请求、停播、气泡收成一行）。七个阶段折成画面里四种状态（`stageMoodOf`）。
-- **回合判定 = 能量 VAD + ASR 句末事件**（`teach-back-turn-machine.ts`，纯函数）：有效语音 ≥1.5s 且静音 ≥1.2s 结束回合；ASR 定稿已到且静音 ≥0.5s 提前结束；讲得太短（<1.5s）不算回合、带着已说的继续等；能量说你讲了但 ASR 一个字没认出来 → 不惊动评委。阈值 = max(0.012, 噪声地板×3)，评委发言中 ×1.6 且需连续 400ms 有声才算插话（扬声器回声要过 AEC，宁可晚 200ms 也别自己打断自己）；噪声地板校准取窗口 10 分位并钳在 0.02 以内，安静帧向下跟得快（校准时用户已在开讲也能几帧回落）。
-- **评委席 = 人设 + 上下文 + 判断权**（`src/lib/prompts/teach-back-panel-prompt.ts`，`/api/apps/teach-back/turn`）：三位——直言（一针见血）/ 引导（循循善诱）/ 追问（抓具体）。模型拿到课堂原文（≤9k 字）、目标点、本场至今记录（≤5k 字）、刚讲完的这段、最近谁开口过，自己决定谁说、说什么、还是 `none` 让他继续。没有模板反馈、没有兜底：模型沉默 / 请求失败 = 评委不开口。检查点：讲过一段后 40s 没人说话 → `check-in` 回合，评委问一句要不要先到这。
-- **声音**：三位评委三种 qwen3-tts 音色（Ethan / Serena / Chelsie，`teach-back-panel.ts` 名册）经 `/api/teach/tts` 的 `voice` / `instruct` 参数；文字先到、声音后到（TTS 单句 1.3~1.9s）；TTS 失败只静默回退到文字。「出声 / 只看文字」两个词 + 下划线，偏好记 `meetmind:teach-back:voice`。只看文字时评委说完立刻回到听讲；出声时等声音说完（`judge-speaking` 期间 ASR 文本不进回合缓冲——那多半是回声）。
-- **边界**：与正在录课的 Recorder 互斥（`isRecording` 为真不上台，上台后录课开始自动下台）；手机切后台 `AudioContext` 被挂起回前台 resume，轨道被系统收走 → 「麦克风断开了，点一下重新上台」；麦克风拿不到 / 实时转写连不上 → 打字兜底（回车算一段，同一条提交路径 `typed` 事件）。`evaluate` 契约与象限语义不变（评委发言以 `role: 'assistant'` 进 `teachingTurns`，`judgeId` 不传）。
-- **实测（2026-09-10 生产 3002，Playwright Chromium 假麦克风灌 TTS 合成的学生讲述，脚本与截图在 `/tmp/mm-teachback/`）**：点「走上讲台」→ 麦克风与 ASR 就绪 0.7s，校准完 1.3s；开口 → 画面切到「你在讲」≈0.5s；停下 → 回合提交 1.4~1.7s（1.2s 静音 + settle 等定稿 0.3~0.5s）；提交 → 评委首字 0.95~1.6s（qwen3.7-plus，thinking 关，~5k prompt tokens）；全文出完再 ~1.5s；插话 → 请求中止、气泡收起 ≈0.75s（含 400ms 打断 attack）；评委一段 45~70 字的话 TTS 读完约 10~13s（随时可插话）。dev 模式下 Next HMR 的 WS 握手会挂住并按 RFC 6455 串行阻塞同 host 的后续 WS 握手（ASR 连不上）——测试脚本用 initScript 不建 HMR WS，生产无此问题；dev 还会因按需编译让首个回合慢 3~8s，延迟数字只看生产。
+- **状态 → 画面 → 声音**：`opening`（左：这节课要讲的几点；右：三位听众 + 一行人设；左下「开始讲」+ 实时反馈 开/关 + 出声 开/关）→ 点开始讲 → 几点淡出，转写从底部长出来。`calibrating`（状态行「听一下周围」）→ `listening`「在听你讲」→ `speaking`（细波形动、当前段 18px 墨色）→ `pausing`（呼吸点 +「停了一下」）→ `settling` / `judging`（实时反馈开：「有人想问」，三位状态词 想问 + 反馈流顶上一条思考线）→ `judge-speaking`（「直言在说」；那位状态词 在说、肖像换 speaking；反馈流最上长出 `mm:ss · 直言` 一条，左侧 pine 竖线，逐字长；按句 TTS 出声）→ 你一开口 → `speaking` + 中止：声音停、那条收成一行灰字「（被你打断）」。`finished`（讲完了）：转写停止跟随、整场可滚；三位状态词「说几句」；右栏上面长出「复盘」，下面 再讲一次 / 只讲没讲清的 / 回到目标，反馈流留在最下。
+- **实时反馈 关**（`meetmind:teach-back:live-feedback=off`）：回合一结束仍请求 turn，但那条 `held`——不上屏、不出声、不占状态机（提交后立刻 `judge-close`，你接着讲不会中止它）；三位状态词变「记了 N 笔」（按人计数）；40s 检查点不做。讲完了 → 记下的话按时间每 600ms 揭示一条（`nextHeldToReveal`），还在流的等它说完再揭。prompt 没为此改动：那条话本来就是他当时想说的，讲完再读还是他的口吻。
+- **复盘 = evaluate 结果 → 三位各说各的**（`buildReviewBlocks`，纯函数）：直言「这 N 处没讲清、或讲错了：」→ 盲区在前、自知缺口在后，每条主句是 evaluate 的 `note`（基于证据的核对结论），目标点退成下面一行小字，可点回到你讲到它的那一段（`locateTurnForPoint`：目标点与每段原话的字符二元组重合 ≥3 个且 ≥30% 取最像的一段，找不到 = 不可点）；一处都没有 →「没抓到讲错的地方。」引导「讲得最稳的是「X」。」（讲透了优先，其次挣扎着讲通了；一句只夸一点）+「接下来先把「Y」说一遍。」（Y = 第一处没讲清 → 没讲到）；两句都没有 →「再讲一遍，我接着听。」追问「你没讲到：」+ 一条一行；都讲到了 →「要讲的都讲到了。」出声开着时三位按顺序各读自己那几句（`speakAs`，按句固定音色）。「只讲没讲清的」= 盲区 + 自知缺口 + 没讲到的目标 id 重进面试间。`evaluate` 契约、学习动态行、`buildTeachBackAssessment` 记忆事件都不变。
+- **听众肖像 = 章鱼家族**（`public/images/octo-buddy/judges/<代号>-<表情>.webp`，192px 透明底，每张 ≤11KB；代号 直言 `zhiyan` 方框黑眼镜 + 红领结 / 引导 `yindao` 圆金边眼镜 + 绿围巾 + 白茶杯 / 追问 `zhuiwen` 铅笔 + 本子）。两张表情：**在听 / 记了一笔 / 说几句 → `listening`**；**想问 / 在说 → `speaking`**（`portraitMoodOf`）。两张叠放，切换 120ms 交叉淡入，`prefers-reduced-motion` 瞬切；不裁圆（会切掉触手），放 paper-warm 圆角方底上；直接 `<img>`（不要 next/image 的模糊占位）。尺寸：听众行 48px（桌面）/ 32px（手机横条）；反馈流每条左侧 24px 用那位的 `speaking`；开场介绍行 `listening`；复盘朗读中正在说的那位 `speaking`（`speakingJudge`）。没有点头等装饰动画。
+- **回合判定 = 能量 VAD + ASR 句末事件**（`teach-back-turn-machine.ts`，纯函数，未动）：有效语音 ≥1.5s 且静音 ≥1.2s 结束回合；ASR 定稿已到且静音 ≥0.5s 提前结束；讲得太短（<1.5s）不算回合；能量说你讲了但 ASR 一个字没认出来 → 不惊动听众。阈值 = max(0.012, 噪声地板×3)，听众发言中 ×1.6 且需连续 400ms 有声才算插话；噪声地板校准取窗口 10 分位并钳在 0.02 以内。每段的 `startedAt / endedAt`（会话内毫秒）由 hook 在进入 speaking / 提交时记（状态机不带时间切片）。
+- **听众席 = 人设 + 上下文 + 判断权**（`src/lib/prompts/teach-back-panel-prompt.ts`，`/api/apps/teach-back/turn`，未动）：直言 / 引导 / 追问；模型拿到课堂原文（≤9k 字）、目标点、本场至今记录（≤5k 字）、刚讲完的这段、最近谁开口过，自己决定谁说、说什么、还是 `none`。没有模板反馈、没有兜底：模型沉默 / 请求失败 = 没人开口（讲的内容与这节课无关时基本都是沉默）。
+- **声音**：三种 qwen3-tts 音色（Ethan / Serena / Chelsie）经 `/api/teach/tts` 的 `voice` / `instruct`；文字先到、声音后到；TTS 失败静默回退到文字。出声关着时听众说完立刻回到听讲；开着时等声音说完。
+- **四个宿主**：复习页全屏舞台（主路径，双栏）；复习页中栏（非全屏，~400px）/ 浮窗 / 手机 → 堆叠单栏（`ResizeObserver` 量容器真实宽度，阈值 `TWO_COLUMN_MIN_WIDTH=860`，不是视口）。手机：听众横条 32px 三位 + 名字 + 状态词、转写 16/14、反馈 14、固定底栏 讲完了 / 实时反馈 / 出声。
+- **边界**：与录课互斥；手机切后台 resume / 轨道被收走 → 「麦克风断开了，点一下重新开麦」（时钟、已讲的段、反馈流保留）；麦克风拿不到 / 转写连不上 → 打字一小行（回车算一段）。
+- **实测（2026-09-10 dev 3103 → 生产 3002，Playwright Chromium 假麦克风灌 TTS 合成的三段学生讲述，脚本 `/tmp/mm-teachback/flow-v2.mjs`，截图 `/tmp/mm-teachback/v2/`）**：开始讲 → 「在听你讲」2.4s；停下 → 回合提交 + 「有人想问」≈1.5s；→ 听众首字 ≈1.1~2.8s；关掉实时反馈后再讲一段 → 提交后 ≈1.1s 那位「记了 1 笔」；讲完了 → 记下的话 0.6s 揭示；复盘 4.5~9s；点一条反馈 → 左边那段高亮。
 
 ## AppRenderSurface
 
@@ -270,6 +275,7 @@ quiz-observation.ts 为提交动作附加完整 practice.attempt 观察：保留
 - `podcast-window-model.test.ts` — 失败章节过滤 + splitPodcastSections（简介提取 / 轮次去重）
 - `mindmap-tree.test.ts`（`src/lib/ai-native/plugins/`）— flattenInlineTex：TeX → Unicode
 - `teach-back-turn-machine.test.ts` — 讲给同桌听回合状态机：校准（含被说话污染）、attack / hangover / 静音阈值、settling 与定稿捷径、评委发言中的插话与回声、迟到定稿升级、打字兜底、idle nudge
+- `teach-back-room-model.test.ts` — 面试间纯逻辑：反馈流排序 / 揭示顺序 / 记了几笔 / 被打断折叠、听众状态词、原话回合定位、复盘分配（直言 / 引导 / 追问 各自的空态与顺序）、只讲没讲清的、mm:ss
 - `teach-back-panel.test.ts`（`src/lib/ai-native/`）— 评委头行解析（裸代号 / 装饰 / 同行正文 / none）、流式解析器（无头行归属最近没开口的评委）、历史裁剪、SSE 事件解析
 
 ## 证据标签（EvidenceLabel）
