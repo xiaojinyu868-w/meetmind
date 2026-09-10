@@ -114,3 +114,4 @@ tests/eval/**/runs/*.jsonl
 __pycache__/
 *.pyc
 .next-attr
+.next-preview/
