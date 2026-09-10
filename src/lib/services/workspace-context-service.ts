@@ -36,6 +36,12 @@ import {
   syncWorkspaceCaptureEvidence,
   toLightweightEvidenceMetadata,
 } from '@/lib/services/workspace-evidence-service';
+import {
+  collapseDuplicateSessionCaptures,
+  findExistingCaptureForSession,
+  readCaptureSessionId,
+  resolveCaptureTitle,
+} from '@/lib/services/workspace-capture-guards';
 import type { SourceIngressChannel } from '@/types/page-types';
 
 import {
@@ -126,18 +132,30 @@ async function upsertWorkspaceCaptureBySourceKey(params: {
   metadataJson?: string | null;
   tutorContext?: string | null;
   occurredAt?: Date | null;
-}) {
+}, attempt = 0): Promise<Awaited<ReturnType<typeof prisma.workspaceCapture.create>>> {
   const existing = await prisma.workspaceCapture.findUnique({
     where: { sourceKey: params.sourceKey },
     select: {
       id: true,
       status: true,
+      title: true,
+      metadataJson: true,
       normalizedText: true,
       tutorContext: true,
     },
   });
 
-  const data = buildWorkspaceCaptureWriteData(params);
+  const data = buildWorkspaceCaptureWriteData({
+    ...params,
+    // 标题护栏：零信息标题不盖具体标题，用户手改永不被盖（迁移 / 检查点 / 原声回写都会带占位标题进来）
+    title: existing
+      ? resolveCaptureTitle({
+          incomingTitle: params.title,
+          existingTitle: existing.title,
+          existingMetadata: parseJsonObject(existing.metadataJson),
+        })
+      : params.title,
+  });
 
   if (existing) {
     // 音视频的转写全文在服务端可能被 enrich 管线补全过（数万字），而客户端
@@ -162,13 +180,24 @@ async function upsertWorkspaceCaptureBySourceKey(params: {
     });
   }
 
-  return prisma.workspaceCapture.create({
-    data: {
-      ...data,
-      sourceKey: params.sourceKey,
-      status: 'active',
-    },
-  });
+  try {
+    return await prisma.workspaceCapture.create({
+      data: {
+        ...data,
+        sourceKey: params.sourceKey,
+        status: 'active',
+      },
+    });
+  } catch (error) {
+    // findUnique → create 不是原子的：结束这节课时「带全量转录的写入」与「原声上传成功后回写 mediaUrl」
+    // 同 sourceKey 并发，后到的 create 撞唯一键（P2002）→ 之前直接 500，撞掉的恰好可能是带转录的那次，
+    // 服务端只剩一行 0 段的壳。现在撞键就按 update 再走一遍（第二次一定能查到 existing）。
+    const isUniqueViolation = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+    if (isUniqueViolation && attempt === 0) {
+      return upsertWorkspaceCaptureBySourceKey(params, attempt + 1);
+    }
+    throw error;
+  }
 }
 
 function buildWorkspaceCaptureLookupWhere(params: {
@@ -416,7 +445,31 @@ export const workspaceContextService = {
           select: { sourceKey: true, metadataJson: true },
         })
       : null;
-    const existingMetadata = parseJsonObject(duplicateByUrl?.metadataJson) || {};
+    // 同一节课的第二把钥匙（live:{uid}:{sid} / live:audio-xxx / local-session:{uid}:{sid}）：
+    // 按 metadata.sessionId 找到已有行并复用其 sourceKey，服务端一节课只留一行。
+    const duplicateBySession = !duplicateByUrl
+      && (input.contentType === 'audio' || input.contentType === 'video')
+      ? await findExistingCaptureForSession({
+          userId,
+          workspaceId: workspace.id,
+          sessionId: readCaptureSessionId(input.metadata || null),
+          sourceKey: input.sourceKey,
+        })
+      : null;
+    const targetSourceKey = duplicateByUrl?.sourceKey || duplicateBySession?.sourceKey || input.sourceKey;
+    // 部分更新不能把旧 metadata 冲掉：原声回写只带 mediaUrl、检查点心跳只带时长，
+    // 之前 evidenceAvailable / titleSource / audioUploaded 全靠"恰好又被算出来"才留住。
+    const existingBySourceKey = duplicateByUrl || duplicateBySession
+      ? null
+      : await prisma.workspaceCapture.findUnique({
+          where: { sourceKey: targetSourceKey },
+          select: { metadataJson: true },
+        });
+    const existingMetadata = {
+      ...(parseJsonObject(existingBySourceKey?.metadataJson) || {}),
+      ...(parseJsonObject(duplicateBySession?.metadataJson) || {}),
+      ...(parseJsonObject(duplicateByUrl?.metadataJson) || {}),
+    };
     const explicitProvenance = readSourceProvenance(input.metadata || null);
     const inferredProvenance = buildSourceProvenance({
       ingressChannel: explicitProvenance?.ingressChannel || inferIngressChannel(input.sourceType),
@@ -445,7 +498,7 @@ export const workspaceContextService = {
       workspaceId: workspace.id,
       userId,
       sourceType: input.sourceType,
-      sourceKey: duplicateByUrl?.sourceKey || input.sourceKey,
+      sourceKey: targetSourceKey,
       role: input.role,
       contentType: input.contentType,
       title: input.title,
@@ -988,9 +1041,24 @@ export const workspaceContextService = {
       );
     });
 
+    // 历史双行（live:audio-xxx + local-session:{uid}:{sid} 指同一节课）读时折叠成一行，不删数据
+    const keepIds = new Set(
+      collapseDuplicateSessionCaptures(
+        captures.map((item) => ({
+          id: item.id,
+          sourceType: item.sourceType,
+          contentType: item.contentType,
+          status: item.status,
+          metadata: parseJsonObject(item.metadataJson),
+          updatedAt: item.updatedAt,
+          createdAt: item.createdAt,
+        })),
+      ).map((item) => item.id),
+    );
+
     return {
       workspace,
-      captures: captures.map(toCaptureSummary),
+      captures: captures.filter((item) => keepIds.has(item.id)).map(toCaptureSummary),
       echoes: visibleEchoes.map(toEchoSummary),
     };
   },
