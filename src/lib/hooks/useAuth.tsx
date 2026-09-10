@@ -458,12 +458,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       
-      try {
-        const response = await fetch('/api/auth/me', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        
-        if (response.ok) {
+      // 只有服务端明确说"这个令牌不行"（401 / 403）才清 token；断网、请求被导航打断、部署瞬间的 5xx
+      // 都不是令牌的问题——此前 catch 里一律 setStoredToken(null)，用户断网时打开页面就被登出（2026-09-10 修）。
+      const fetchMe = () => fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
+      let response: Response | null = null;
+      for (let attempt = 0; attempt < 2 && !response; attempt += 1) {
+        try {
+          const candidate = await fetchMe();
+          // 5xx：服务端在重载 / 出错，等一下再试一次，不当作令牌失效
+          if (candidate.status >= 500 && attempt === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+            continue;
+          }
+          response = candidate;
+        } catch (error) {
+          if (attempt === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+            continue;
+          }
+          console.warn('初始化认证：网络不可用，保留令牌下次再试', error);
+        }
+      }
+
+      if (response?.ok) {
+        try {
           const data = await response.json();
           if (data.success && data.user) {
             setState({
@@ -476,17 +494,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setIsCheckingAuth(false);
             return;
           }
+        } catch (error) {
+          console.warn('初始化认证：响应无法解析，保留令牌', error);
         }
-        
-        // 令牌无效，尝试刷新
-        const refreshed = await refreshTokenInternal();
-        if (!refreshed) {
-          setStoredToken(null);
-        }
-      } catch (error) {
-        console.error('初始化认证失败:', error);
-        setStoredToken(null);
       }
+
+      if (response && (response.status === 401 || response.status === 403)) {
+        // 令牌无效或过期：先刷新；刷新也被明确拒绝才清掉
+        const refreshed = await refreshTokenInternal();
+        if (!refreshed) setStoredToken(null);
+      }
+      // 其余情况（断网 / 5xx / 非法响应）：token 留在本地，这一次以未登录态渲染，下次加载再试
       
       setIsCheckingAuth(false);
     };
