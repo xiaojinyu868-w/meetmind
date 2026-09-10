@@ -36,8 +36,6 @@ export const APPS_COPY = {
       nextTitle: '先做这一件',
       nextSwitch: '换一个',
       pathTitle: '这节课的学习路径',
-      /** WorkshopYellowPage / MobileLessonPath 仍在引用；应用入口页重做（并行分支）删掉引用后可一并删除 */
-      pathHint: '先暴露问题，再记牢，再讲出来，最后带走。顺序只是建议。',
       stepLabels: {
         quiz: '检验',
         flashcards: '记住',
