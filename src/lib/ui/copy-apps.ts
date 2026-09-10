@@ -185,8 +185,10 @@ export const APPS_COPY = {
       appName: '思维导图',
       loadingTitle: '正在把这节课理成一张图',
       loadingBody: '同学在读整节课，找主线和分支…',
-      mobileGestureHint: '拖动查看 · 点主干只看一支',
+      mobileGestureHint: '拖动查看 · 双指缩放 · 点主干只看一支',
       desktopGestureHint: '滚轮缩放 · 拖拽平移 · 点主干只看一支',
+      /** 键盘那句只在第一次进入出现一次（keyboard-hints） */
+      keyboardHint: '方向键在节点间移动 · 回车折叠 / 只看这一支 · 0 适应',
       /** 顶栏两个视图词（两个词 + 下划线，不是 pill） */
       viewMap: '导图',
       viewOutline: '大纲',
