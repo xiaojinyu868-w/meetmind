@@ -11,7 +11,7 @@
 - 中性：`paper` / `paper-warm` / `card` / `ink` / `ink-secondary` / `ink-muted` / `divider`
 - 双签名：`pine` / `pine-mist` / `pine-fog` · `vermilion` / `vermilion-mist` / `vermilion-fog`
 - 投影：`shadow-soft` / `shadow-card` / `shadow-float` / `shadow-modal` / `shadow-ai-glow`
-- 字体：`font-sans` (Inter) · `font-serif` (Instrument Serif italic) · `font-mono` (JetBrains Mono)
+- 字体：`font-sans` (Inter) · `font-mono` (JetBrains Mono)。**产品内不用 `font-serif` / Instrument Serif italic 作强调**（2026-09-10 起；`EmptyState` / `SectionHeader` / `CourseHero` 的 `emTitle` 是同字体 500 字重 + 朱批红）——衬线只留给分享页与营销页，理由见 `docs/DESIGN_SYSTEM.md`「字体」
 
 详见 `docs/DESIGN_SYSTEM.md`（设计系统 v7 文字真相源）+ `design-demo/v7/` 完整 showcase。
 

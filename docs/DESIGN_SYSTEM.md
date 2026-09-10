@@ -33,9 +33,11 @@
 
 | 字体 | Tailwind | 用途 |
 |------|---------|------|
-| **Inter** | `font-sans`（默认） | 正文 · 'palt' 紧排让中英混排立刻 +30% 高级感 |
-| **Instrument Serif** | `font-serif` 或 `.font-serif-italic` | 仪式字 · 标题里偶尔的 italic em |
+| **Inter** | `font-sans`（默认） | 正文与全部标题 · 'palt' 紧排让中英混排立刻 +30% 高级感 |
+| **Instrument Serif** | `.font-serif-italic` | **只在分享落地页 `/share/[token]` 与营销页（landing / technology）**——仪式时刻 #6 的装饰标题 |
 | **JetBrains Mono** | `font-mono` 或 `.font-mono-cite` | 引用资产化 · `[MM:SS]` / `[资料 N]` 专用 |
+
+**产品内不用衬线斜体（2026-09-10 起）**：此前「同学」（问同学开场 / 课堂同桌空态 / 今日情报空态 / 同学在想…）、我的上下文与会员弹窗的标题、录课头状态句、复习页步骤号、目标共建对话等十几处各自散用 `font-serif italic`，与其余全部 Inter 的界面打架（用户原话"跟其他地方完全不一致，非常别扭"）。规则：**同学的在场感由 Octo 头像承担，名字与句中关键词用正文同字体 500 字重 + 签名色；标题一律无衬线 semibold**。`ui/EmptyState / SectionHeader / CourseHero` 的 `emTitle` 也改为 500 字重朱批红。`.v7-em / .v7-em-pine` 工具类已删。
 
 板书精讲（v32 起为备课本讲义场景：淡米色纸底 + 细横格线）独立字体栈，不走上面三件套：**v32 起统一系统屏显栈**（`BOARD_FONT`：-apple-system / PingFang SC / Noto Sans CJK SC / Microsoft YaHei，见 `BoardWrite.tsx`；鸿雷板书 / Caveat / hanzi-writer 笔顺动画随手写体时代退役）；文字按生成流速逐 token 显现接力；公式（write role=formula）走 KaTeX 排版（katex.min.css，块完整后 400ms 淡入）。
 

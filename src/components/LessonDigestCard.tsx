@@ -176,7 +176,7 @@ export function LessonDigestCard({
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="font-serif text-[26px] leading-[1.15] tracking-[-0.02em] text-ink">
+        <h1 className="text-[22px] font-semibold leading-[1.25] tracking-[-0.02em] text-ink">
           {digest.title}
         </h1>
         {digest.overview.trim() ? (

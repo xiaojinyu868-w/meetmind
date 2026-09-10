@@ -351,8 +351,6 @@ export function IntentDialog({
     }
   }
 
-  const serifStyle = { fontFamily: '"Instrument Serif", "Inter", serif' } as const;
-
   return (
     <div
       className="fixed inset-0 z-[80] flex flex-col bg-paper"
@@ -378,7 +376,7 @@ export function IntentDialog({
           <OctoAvatar mood={assistantMood} size="sm" aura />
           <div>
             <p className="text-[15px] font-semibold tracking-[-0.01em] text-ink">{INTENT_COPY.title}</p>
-            <p className="text-[11.5px] italic text-ink-muted" style={serifStyle}>{INTENT_COPY.subtitle}</p>
+            <p className="text-[11.5px] text-ink-muted">{INTENT_COPY.subtitle}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -442,7 +440,6 @@ export function IntentDialog({
           <ChatThinkingStripBubble
             variant="paper"
             avatar={<OctoAvatar mood="thinking" size="sm" aura />}
-            label={<span style={serifStyle}>同学在想…</span>}
           />
         ) : null}
       </ChatMessageList>

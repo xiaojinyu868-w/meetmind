@@ -60,7 +60,7 @@ export function LessonEndRitualHost() {
       <div className="mm-notebook-veil absolute inset-0 bg-paper/70 backdrop-blur-[2px]" aria-hidden />
       <div className="mm-notebook-page relative w-[320px] rounded-[22px] border border-pine/15 bg-card px-7 py-7 shadow-[0_24px_70px_rgba(28,27,25,0.16)]">
         <span className="block h-1 w-10 rounded-full bg-pine" aria-hidden />
-        <p className="mt-5 font-serif text-[22px] italic leading-snug tracking-[-0.02em] text-ink">{COPY.stop.heard}</p>
+        <p className="mt-5 text-[20px] font-semibold leading-snug tracking-[-0.02em] text-ink">{COPY.stop.heard}</p>
         <p className="mt-2 text-[13px] leading-6 text-ink-secondary">{COPY.stop.summary(active.sentences, active.confusions)}</p>
       </div>
     </div>

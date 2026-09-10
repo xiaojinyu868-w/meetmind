@@ -28,10 +28,7 @@ export function IntentCompletionOverlay({ title, onDone, onContinue }: IntentCom
         style={{ animation: 'intentFadeUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both' }}
       >
         <OctoAvatar mood="happy" size="lg" aura />
-        <p
-          className="mt-5 text-[22px] text-ink"
-          style={{ fontFamily: '"Instrument Serif", "Inter", serif' }}
-        >
+        <p className="mt-5 text-[20px] font-semibold tracking-[-0.02em] text-ink">
           {INTENT_COPY.doneTitle}
         </p>
         <p className="mt-3 rounded-2xl bg-pine-mist/40 px-4 py-2.5 text-[14.5px] leading-6 text-pine">

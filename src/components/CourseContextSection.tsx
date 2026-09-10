@@ -320,7 +320,7 @@ export function CourseContextSection({
       <div className="mb-5 flex items-end justify-between gap-4 px-1">
         <div>
           <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.12em] text-vermilion">{GLOBAL_ASK_COPY.memoryCoursesTab}</p>
-          <h2 className="mt-2 font-serif text-[25px] italic tracking-[-0.025em] text-ink sm:text-[28px]">{GLOBAL_ASK_COPY.courseContextTitle}</h2>
+          <h2 className="mt-2 text-[22px] font-semibold tracking-[-0.02em] text-ink sm:text-[25px]">{GLOBAL_ASK_COPY.courseContextTitle}</h2>
         </div>
         {courses.length > 0 ? <span className="mb-1 text-[11px] tabular-nums text-ink-muted">{courses.length}</span> : null}
       </div>

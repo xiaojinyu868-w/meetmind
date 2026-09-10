@@ -18,7 +18,7 @@ import { OctoAvatar, type OctoMood } from "./octo-avatar"
  *     action={<Button size="lg">开始这节课</Button>}
  *   />
  *
- * - title 中可用 emTitle 替换关键词为 italic + 朱批红
+ * - title 中可用 emTitle 替换关键词为朱批红（同字体 500 字重；不再用衬线斜体——2026-09-10 产品内统一去掉）
  */
 export interface EmptyStateProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
   /** Octo 表情 */
@@ -27,7 +27,7 @@ export interface EmptyStateProps extends Omit<React.HTMLAttributes<HTMLDivElemen
   eyebrow?: string
   /** 主标题 */
   title?: React.ReactNode
-  /** 标题中要替换为 italic + 朱批红的部分（自动包裹 em） */
+  /** 标题中要替换为朱批红的部分（同字体 500 字重） */
   emTitle?: string
   /** 描述（可写多行） */
   description?: React.ReactNode
@@ -63,7 +63,7 @@ export const EmptyState = React.forwardRef<HTMLDivElement, EmptyStateProps>(
       return (
         <>
           {title.slice(0, idx)}
-          <span className="font-serif italic font-normal text-vermilion">
+          <span className="font-medium text-vermilion">
             {emTitle}
           </span>
           {title.slice(idx + emTitle.length)}

@@ -233,7 +233,7 @@ export function PaywallDialog() {
           {stage === 'success' ? (
             <>
               <OctoAvatar mood="love" size="lg" aura={false} />
-              <h2 className="mt-4 font-serif text-[26px] italic tracking-[-0.01em] text-ink">
+              <h2 className="mt-4 text-[22px] font-semibold tracking-[-0.02em] text-ink">
                 {grantedTier
                   ? COPY.membership.paywallSuccessTitle(grantedTier)
                   : COPY.points.paywallSuccessTitle}
@@ -246,7 +246,7 @@ export function PaywallDialog() {
             </>
           ) : stage === 'paying' ? (
             <>
-              <h2 className="font-serif text-[24px] italic tracking-[-0.01em] text-ink">
+              <h2 className="text-[20px] font-semibold tracking-[-0.02em] text-ink">
                 {COPY.points.paywallPayingTitle}
               </h2>
               <div className="mt-5 rounded-2xl border border-white/80 bg-white p-3 shadow-sm">
@@ -270,7 +270,7 @@ export function PaywallDialog() {
           ) : (
             <>
               <OctoAvatar mood="happy" size="lg" aura={false} />
-              <h2 className="v9-rise v9-d1 mt-4 font-serif text-[26px] italic tracking-[-0.01em] text-ink">
+              <h2 className="v9-rise v9-d1 mt-4 text-[22px] font-semibold tracking-[-0.02em] text-ink">
                 {activeTab === 'membership' ? COPY.membership.paywallTitle : COPY.points.paywallTitle}
               </h2>
               <p className="v9-rise v9-d2 mt-2 max-w-xs text-[13px] leading-6 text-ink-secondary">{subtitle}</p>

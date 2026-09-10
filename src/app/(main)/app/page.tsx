@@ -2467,7 +2467,7 @@ function StudentAppContent({
                 {/* 可滚动区域 */}
                 <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-20" style={{ WebkitOverflowScrolling: 'touch' }}>
                   {/* Hero 标题 */}
-                  <h1 className="font-serif text-[22px] leading-[1.15] tracking-[-0.02em] text-ink mb-2.5">今天学点什么？</h1>
+                  <h1 className="text-[20px] font-semibold leading-[1.2] tracking-[-0.02em] text-ink mb-2.5">今天学点什么？</h1>
 
                   {/* 采集三按钮 */}
                   <div className="grid grid-cols-3 gap-2 mb-3">

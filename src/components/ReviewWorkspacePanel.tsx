@@ -7,6 +7,7 @@ import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { useOctoMood } from '@/lib/hooks/useOctoMood';
 import { formatTime } from '@/lib/utils/page-utils';
+import { COPY } from '@/lib/ui/copy';
 import type { Anchor, Timeline, TranscriptSegment } from '@/types';
 import type { ReviewTab, WorkspaceTabConfig } from '@/types/page-types';
 
@@ -147,30 +148,19 @@ export function ReviewWorkspacePanel({
         )}
 
         {reviewTab === 'timeline' && !timelineForView && !sourceFullText && (
+          // 空态一句 + 一个动作；此前三处衬线斜体强调与硬编码中文（2026-09-10 收进 COPY.reviewTutor.noTimeline）
           <div className="flex h-full flex-col items-center justify-center px-6">
             <OctoAvatar mood={octoMoodEmpty === 'sleeping' ? 'sleeping' : 'thinking'} size="lg" aura className="mb-4" />
-            <p className="mb-1 text-[15px] font-semibold text-ink">
-              <span className="font-serif italic font-normal text-pine">这条内容</span>没有时间轴
-            </p>
-            <p className="text-center text-[12.5px] leading-relaxed text-ink-muted max-w-[18rem]">
-              {octoMoodEmpty === 'sleeping' ? (
-                <>
-                  夜深了，<span className="font-serif italic text-pine">你也休息一下</span>。<br />
-                  明天再回来看，同学还在。
-                </>
-              ) : (
-                <>
-                  音频和视频类的内容才会生成时间轴。<br />
-                  试试<span className="font-serif italic text-pine">「应用」</span>来和这条内容互动。
-                </>
-              )}
+            <p className="mb-1 text-[15px] font-semibold text-ink">{COPY.reviewTutor.noTimeline.title}</p>
+            <p className="max-w-[18rem] text-center text-[12.5px] leading-relaxed text-ink-muted">
+              {octoMoodEmpty === 'sleeping' ? COPY.reviewTutor.noTimeline.bodyNight : COPY.reviewTutor.noTimeline.body}
             </p>
             <button
               type="button"
               onClick={() => onReviewTabChange('apps')}
-              className="mt-5 rounded-lg bg-ink px-4 py-2 text-[13px] font-medium text-white shadow-soft transition-all hover:bg-pine-deep hover:shadow-card active:scale-[0.98]"
+              className="mm-press mt-5 rounded-full bg-ink px-4 py-2 text-[13px] font-medium text-white shadow-soft hover:opacity-85"
             >
-              打开应用
+              {COPY.reviewTutor.noTimeline.action}
             </button>
           </div>
         )}

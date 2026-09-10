@@ -45,7 +45,7 @@ export function ChatThinkingStripBubble({
       {avatar ? <div className="mr-2.5 mt-0.5 shrink-0">{avatar}</div> : null}
       <div className={cn('flex max-w-[88%] items-start gap-2.5', wrapper)}>
         <ThinkingStrip>
-          <span className="font-serif italic text-pine/85">
+          <span className="text-pine/85">
             {label ?? (state === 'tool' ? '翻看材料…' : '同学在想…')}
           </span>
         </ThinkingStrip>

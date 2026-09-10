@@ -5,7 +5,7 @@
  *   --cs-font（正文 px）· --cs-lh（行高）· --cs-item-gap / --cs-topic-gap（em）· --cs-scale（屏幕缩放）
  *
  * 排印判断：
- *   - 全部 Inter（'palt' 紧排）——这是一张产品里的纸，不是学术论文；Instrument Serif 只留给首页一句用法说明；
+ *   - 全部 Inter（'palt' 紧排）——这是一张产品里的纸，不是学术论文；首页那句用法说明也用 Inter 次级色（2026-09-10 去掉了最后一处衬线斜体）；
  *   - 字号层级只有四档（标题 / 主题 / 正文 / 页眉页脚），层级靠粗细与一道线，不靠颜色；
  *   - 颜色只来自荧光笔和朱红波浪线，正文永远是墨色——黑白打印照样成立；
  *   - 栏线 0.5px、booktabs 表格、居中公式：对齐学术 cheat sheet 的密排传统。
@@ -78,11 +78,8 @@ export const CHEATSHEET_PAPER_CSS = `
 }
 .cs-title-overview {
   margin: 3px 0 0;
-  font-family: var(--font-instrument-serif);
-  font-style: italic;
-  font-size: 1.12em;
+  font-size: 1.06em;
   color: var(--cs-ink-2);
-  letter-spacing: 0.005em;
 }
 .cs-title-legend {
   flex-shrink: 0;

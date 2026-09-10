@@ -13,7 +13,6 @@ import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { ChatBubble } from '@/components/chat';
 import { IntentOptionChips } from './IntentOptionChips';
 
-const SERIF_STYLE = { fontFamily: '"Instrument Serif", "Inter", serif' } as const;
 
 export interface OpeningQuizQuestion {
   question: string;
@@ -48,7 +47,7 @@ function AssistantTextBubble({
       footer={footer}
       className="animate-in fade-in slide-in-from-bottom-1 duration-300"
     >
-      <span className="text-[15.5px] leading-7" style={SERIF_STYLE}>{text}</span>
+      <span className="text-[15.5px] leading-7">{text}</span>
     </ChatBubble>
   );
 }
@@ -77,7 +76,7 @@ export function IntentOpeningFlow({
     <>
       <div className="flex flex-col items-center pb-2 pt-10 text-center">
         <OctoAvatar mood="listening" size="xl" aura />
-        <p className="mt-5 px-6 text-[20px] leading-[1.7] text-ink" style={SERIF_STYLE}>
+        <p className="mt-5 px-6 text-[19px] font-medium leading-[1.7] tracking-[-0.01em] text-ink">
           我是 Octo。
         </p>
         <p className="mt-2 max-w-md px-6 text-[13.5px] leading-6 text-ink-secondary">

@@ -877,7 +877,7 @@ function ProcessingScreen({ p }: { p: MobileAppShellProps }) {
 
       <div className="text-center px-8 mb-6">
         <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-pine mb-2">{COPY.mobileJourney.processingEyebrow}</p>
-        <h1 className="font-serif text-[24px] leading-[1.2] tracking-[-0.02em] text-ink mb-3">{COPY.mobileJourney.processingTitleLead}<em className="text-vermilion">{COPY.mobileJourney.processingTitleAccent}</em></h1>
+        <h1 className="text-[21px] font-semibold leading-[1.25] tracking-[-0.02em] text-ink mb-3">{COPY.mobileJourney.processingTitleLead}<span className="text-vermilion">{COPY.mobileJourney.processingTitleAccent}</span></h1>
         <p className="text-[12.5px] text-ink-muted mb-4">{statusText}</p>
         <div className="w-[260px] mx-auto">
           <div className="h-1.5 rounded-full bg-divider overflow-hidden">
@@ -1077,7 +1077,7 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
               <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-pine">
                 {[articleSourceLabel, articleStateLabel].filter(Boolean).join(' · ') || COPY.sourceReader.saved}
               </p>
-              <h1 className="mt-2 font-serif text-[25px] leading-[1.25] tracking-[-0.02em] text-ink">
+              <h1 className="mt-2 text-[21px] font-semibold leading-[1.3] tracking-[-0.02em] text-ink">
                 {selectedItem?.title || COPY.sourceReader.untitled}
               </h1>
               {selectedItem?.provenance?.author && (

@@ -26,7 +26,7 @@ export function MobileLearningCommandCenter({
     <section aria-label={COPY.mobileHome.commandCenterLabel}>
       <div className="rounded-[26px] border border-divider bg-card px-5 pb-5 pt-6 text-ink shadow-soft">
           <span className="block h-1 w-9 rounded-full bg-vermilion" aria-hidden />
-          <h1 className="mt-5 max-w-[19rem] font-serif text-[32px] font-medium leading-[1.08] tracking-[-0.035em] text-ink">
+          <h1 className="mt-5 max-w-[19rem] text-[28px] font-semibold leading-[1.15] tracking-[-0.03em] text-ink">
             {COPY.mobileHome.title}
           </h1>
 

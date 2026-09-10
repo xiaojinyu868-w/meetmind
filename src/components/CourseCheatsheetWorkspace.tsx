@@ -146,7 +146,7 @@ export function CourseCheatsheetWorkspace({ courses, initialCourseKeys = [], onB
             <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.12em] text-vermilion">
               {GLOBAL_ASK_COPY.courseCheatsheetScopeEyebrow}
             </p>
-            <h2 className="mt-2 font-serif text-[27px] italic tracking-[-0.03em] text-ink sm:text-[31px]">
+            <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.02em] text-ink sm:text-[27px]">
               {GLOBAL_ASK_COPY.courseAssessmentChooseScope}
             </h2>
             <p className="mt-2 max-w-2xl text-[12.5px] leading-6 text-ink-secondary">

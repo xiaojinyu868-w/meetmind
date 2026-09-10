@@ -229,7 +229,7 @@ export function CrossCourseFeedPanel({
               <div className="mt-1 shrink-0"><OctoAvatar mood="listening" size="sm" aura={false} /></div>
               <div className="min-w-0">
                 <p className="text-[16px] leading-[1.8] text-ink">
-                  <span className="mr-2 font-serif italic text-pine">{COPY.feed.crossCourseEmptySpeaker}</span>
+                  <span className="mr-2 font-medium text-pine">{COPY.feed.crossCourseEmptySpeaker}</span>
                   {COPY.feed.crossCourseEmptyOpening}
                 </p>
                 {onAddContext ? (

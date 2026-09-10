@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
  * MeetMind v7 · SectionHeader
  *
  * 大段落标题 · 编号 + 标题 + 副标题，专用于 design-system / settings / 长页面分节。
- * 自动用 v7 排版：tracking-display + Instrument Serif italic em + 双签名色 eyebrow。
+ * 自动用 v7 排版：tracking-display + 朱批红 em（同字体 500 字重，不用衬线斜体）+ 双签名色 eyebrow。
  *
  *   <SectionHeader
  *     num="01.1"
@@ -26,7 +26,7 @@ export interface SectionHeaderProps extends Omit<React.HTMLAttributes<HTMLElemen
   eyebrowTone?: 'pine' | 'vermilion' | 'mute'
   /** 主标题 */
   title?: React.ReactNode
-  /** 标题中要替换为 italic + 朱批红的部分 */
+  /** 标题中要替换为朱批红的部分（同字体 500 字重） */
   emTitle?: string
   /** 副标题描述 */
   description?: React.ReactNode
@@ -72,7 +72,7 @@ export const SectionHeader = React.forwardRef<HTMLElement, SectionHeaderProps>(
       return (
         <>
           {title.slice(0, idx)}
-          <span className="font-serif italic font-normal text-vermilion">
+          <span className="font-medium text-vermilion">
             {emTitle}
           </span>
           {title.slice(idx + emTitle.length)}

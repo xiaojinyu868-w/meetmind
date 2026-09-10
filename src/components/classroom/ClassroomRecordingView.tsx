@@ -290,11 +290,11 @@ function LiveTranscriptPanel({
                 ) : null}
                 <p className="truncate text-[12.5px] text-ink-secondary">
                   {hasDraftRow ? (
-                    <span className="font-serif italic text-pine/85">{COPY.recording.listeningSentence}</span>
+                    <span className="text-pine/85">{COPY.recording.listeningSentence}</span>
                   ) : stableSentenceCount > 0 ? (
                     <span className="tabular-nums">{COPY.recording.recordedSentences(stableSentenceCount)}</span>
                   ) : (
-                    <span className="font-serif italic">{COPY.recording.waitingTeacher}</span>
+                    <span>{COPY.recording.waitingTeacher}</span>
                   )}
                 </p>
               </div>

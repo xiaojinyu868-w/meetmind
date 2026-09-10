@@ -121,7 +121,7 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
             <div className="mb-5 flex items-end justify-between gap-4 px-1">
               <div className="min-w-0">
                 <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.12em] text-pine">{GLOBAL_ASK_COPY.profile.eyebrow}</p>
-                <h1 className="mt-2 font-serif text-[27px] italic tracking-[-0.03em] text-ink sm:text-[31px]">{GLOBAL_ASK_COPY.memoryUnderstandingTitle}</h1>
+                <h1 className="mt-2 text-[24px] font-semibold tracking-[-0.02em] text-ink sm:text-[27px]">{GLOBAL_ASK_COPY.memoryUnderstandingTitle}</h1>
               </div>
               {onTalkToMeetMind && memories.length === 0 ? (
                 <button
@@ -203,7 +203,7 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, 
             <div className="mb-5 flex items-end justify-between gap-4 px-1">
               <div>
                 <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.12em] text-pine">{GLOBAL_ASK_COPY.memoryRecentTab}</p>
-                <h2 className="mt-2 font-serif text-[25px] italic tracking-[-0.025em] text-ink sm:text-[28px]">{GLOBAL_ASK_COPY.recentTitle}</h2>
+                <h2 className="mt-2 text-[22px] font-semibold tracking-[-0.02em] text-ink sm:text-[25px]">{GLOBAL_ASK_COPY.recentTitle}</h2>
               </div>
               {recentActivities.length > 0 ? (
                 <span className="mb-1 text-[11px] tabular-nums text-ink-muted">{recentActivities.length}</span>

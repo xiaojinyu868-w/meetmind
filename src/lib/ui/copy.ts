@@ -657,6 +657,13 @@ export const COPY = {
       emptyBody: '听到没跟上的地方点一下「标记困惑」，下课后就从这里接着问。',
     },
     backToWholeLesson: '返回整节课对话',
+    /** 左证据栏「时间轴」tab 下非音视频内容的空态（此前硬编码在 ReviewWorkspacePanel，2026-09-10 收进来） */
+    noTimeline: {
+      title: '这条内容没有时间轴',
+      body: '音频和视频才有时间轴。试试「应用」，和这条内容互动。',
+      bodyNight: '夜深了，你也休息一下。明天再回来看，同学还在。',
+      action: '打开应用',
+    },
   },
 
   echoShare: {

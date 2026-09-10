@@ -77,7 +77,7 @@ const markdownComponents: Components = {
   ),
   em: ({ children }) => <em className="italic text-ink-secondary">{children}</em>,
   blockquote: ({ children }) => (
-    <blockquote className="my-2 border-l-2 border-pine/40 bg-pine-fog/40 pl-3 pr-2 py-1 text-[13px] font-serif italic text-ink-secondary rounded-r-md">
+    <blockquote className="my-2 border-l-2 border-pine/40 bg-pine-fog/40 pl-3 pr-2 py-1 text-[13px] text-ink-secondary rounded-r-md">
       {children}
     </blockquote>
   ),

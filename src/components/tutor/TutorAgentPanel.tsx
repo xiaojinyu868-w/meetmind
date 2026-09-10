@@ -591,7 +591,7 @@ export function TutorAgentPanel({
           <div className="flex flex-col items-center pt-6 text-center">
             <OctoAvatar mood="listening" size="lg" aura className="mb-4" />
             <div className="mx-auto max-w-[20rem] text-[15px] leading-[1.75] text-ink-secondary">
-              <span className="font-serif italic text-pine">{COPY.identity.name}</span>
+              <span className="font-medium text-pine">{COPY.identity.name}</span>
               {reviewOpening?.lead ?? COPY.tutor.emptyAfterName}
             </div>
             <div className="mt-4 grid w-full max-w-[20rem] gap-2">

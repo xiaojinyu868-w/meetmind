@@ -29,7 +29,7 @@ export interface CourseHeroProps extends Omit<React.HTMLAttributes<HTMLDivElemen
   eyebrow?: string
   /** 主标题 */
   title?: React.ReactNode
-  /** 标题中要替换为 italic + 朱批红的部分 */
+  /** 标题中要替换为朱批红的部分（同字体 500 字重） */
   emTitle?: string
   /** 元数据列表（点分隔），可包含 ReactNode */
   meta?: React.ReactNode[]
@@ -56,7 +56,7 @@ export const CourseHero = React.forwardRef<HTMLDivElement, CourseHeroProps>(
       return (
         <>
           {title.slice(0, idx)}
-          <span className="font-serif italic font-normal text-vermilion">
+          <span className="font-medium text-vermilion">
             {emTitle}
           </span>
           {title.slice(idx + emTitle.length)}

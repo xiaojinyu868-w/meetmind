@@ -1388,21 +1388,8 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
   color: var(--mm-pine);
 }
 
-/* serif italic em：Instrument Serif + italic + 朱批红装饰，用在 h1/h2 里点缀 */
-.v7-em {
-  font-family: var(--font-serif, 'Instrument Serif', serif);
-  font-style: italic;
-  font-weight: 400;
-  color: var(--mm-vermilion);
-}
-
-/* serif italic em pine 版（部分场景需要墨绿 italic，比如"AI 同学"） */
-.v7-em-pine {
-  font-family: var(--font-serif, 'Instrument Serif', serif);
-  font-style: italic;
-  font-weight: 400;
-  color: var(--mm-pine);
-}
+/* （.v7-em / .v7-em-pine 衬线斜体强调 2026-09-10 删除：产品内不再用 Instrument Serif italic 作「同学」或标题的强调，
+   名字与关键词用正文同字体 500 字重 + 签名色；衬线只留给分享页 .font-serif-italic 与营销页） */
 
 /* h1 大字：30px / 600 / -0.024em */
 .v7-h1 {

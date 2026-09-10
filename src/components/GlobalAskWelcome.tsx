@@ -37,7 +37,7 @@ interface GlobalAskWelcomeProps {
 function OpeningSentence({ parts, onChoose }: { parts: OpeningPart[]; onChoose: (prompt: string) => void }) {
   return (
     <p className="text-[17px] leading-[1.75] tracking-[-0.005em] text-ink sm:text-[18px]">
-      <span className="mr-2 font-serif italic text-pine">{GLOBAL_ASK_COPY.opening.speaker}</span>
+      <span className="mr-2 font-medium text-pine">{GLOBAL_ASK_COPY.opening.speaker}</span>
       {parts.map((part, index) => {
         if (part.kind === 'text' || !part.prompt) {
           // 贴着可点部分的短语（"你在 " / " 停过。"）不许单独换行——"停 / 过。"断成两行是排版事故
