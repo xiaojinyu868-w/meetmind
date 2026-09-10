@@ -18,11 +18,22 @@ export interface RecorderCallbackMeta {
   finalPassOnly?: boolean;
 }
 
+/** MediaRecorder 每个 timeslice 交出的一片原声（2026-09-10 录课不丢：外层按 seq 落 IndexedDB） */
+export interface RecorderAudioChunkMeta {
+  sessionId: string;
+  recordingId: string;
+  /** 本次录音内从 0 递增；同一 MediaRecorder 的分片按 seq 拼接即是合法容器 */
+  seq: number;
+  mimeType: string;
+}
+
 export interface RecorderProps {
   /** dynamic() 外壳不能接 React ref；首页按需加载时用普通 prop 传 imperative handle。 */
   recorderRef?: Ref<RecorderHandle>;
   onRecordingStart?: (sessionId: string, meta?: { isContinuation?: boolean }) => void;
   onRecordingStop?: (audioBlob?: Blob, meta?: RecorderCallbackMeta) => void;
+  /** 录音期间每片原声到达时回调（默认 1s 一片）；不回调 = 原声只在内存里，关页即丢 */
+  onAudioChunk?: (chunk: Blob, meta: RecorderAudioChunkMeta) => void;
   onTranscriptionError?: (message: string, meta?: RecorderCallbackMeta) => void;
   onTranscriptUpdate?: (segments: TranscriptSegment[], meta?: RecorderCallbackMeta) => void;
   onTranscriptTextUpdate?: (segmentId: string, text: string) => void;

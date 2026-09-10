@@ -10,9 +10,16 @@ import { useEchoStore } from '@/stores/echo-store';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import {
   saveAudioSession,
-  addTranscripts,
+  replaceSessionTranscripts,
+  assembleRecordingBlob,
+  deleteRecordingChunks,
+  setSessionSyncState,
   ANONYMOUS_USER_ID,
 } from '@/lib/db';
+import {
+  buildLiveCaptureSourceKey,
+  buildLiveRecordingCaptureInput,
+} from '@/lib/capture/live-recording-capture';
 import { classroomDataService } from '@/lib/services/classroom-data-service';
 import { memoryService } from '@/lib/services/memory-service';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
@@ -24,7 +31,6 @@ import { resolveLiveRecordingAppendOffset } from '@/lib/capture/live-recording';
 import {
   mergeWorkspaceCaptures,
   buildSourcePreviewText,
-  buildSupportReferenceSnippet,
   readJsonApiResponse,
 } from '@/lib/utils/page-utils';
 import { UIConfig } from '@/lib/config';
@@ -370,13 +376,18 @@ export function useRecordingLifecycle(
           : publishableSegments.length > 0
             ? 'completed'
             : undefined,
-      }).catch(err => console.error('Failed to save audio session to history:', err));
+      })
+        // 最终完整 blob 已落库：录课中的分片检查点（recordingChunks）完成使命，删掉
+        .then(() => deleteRecordingChunks(effectiveSessionId))
+        .catch(err => console.error('Failed to save audio session to history:', err));
 
       if (publishableSegments.length > 0) {
-        addTranscripts(effectiveSessionId, currentUserId, publishableSegments.map((seg) => ({
+        // 录课中检查点已经按快照写过这节课的转录段，结束时必须"替换"而不是追加，否则每段两份
+        replaceSessionTranscripts(effectiveSessionId, currentUserId, publishableSegments.map((seg) => ({
           text: seg.text,
           startMs: seg.startMs,
           endMs: seg.endMs,
+          speakerId: seg.speakerId,
           confidence: seg.confidence || 1.0,
           isFinal: true,
         }))).catch(err => console.error('Failed to persist transcript to IndexedDB:', err));
@@ -385,6 +396,9 @@ export function useRecordingLifecycle(
       const audioCaptureId = `audio-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const recordingId = meta?.recordingId || audioCaptureId;
       const recordingTitle = `录音 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+      // 服务端 capture 的钥匙：录课中检查点、结束、原声回写、忘记结束后的收尾都用同一把（见 live-recording-capture.ts）
+      const liveSourceKey = buildLiveCaptureSourceKey(currentUserId, effectiveSessionId);
+      const canSyncToServer = isAuthenticated && Boolean(user?.id) && Boolean(accessToken);
       const pendingBaseSegments = meta?.isContinuation ? [...segmentsRef.current] : [];
       const pendingBaseOffsetMs = meta?.isContinuation
         ? resolveLiveRecordingAppendOffset(pendingBaseSegments, sessionMediaDurationMs)
@@ -406,42 +420,29 @@ export function useRecordingLifecycle(
           sessionId: effectiveSessionId,
           durationMs: duration,
           reviewable: publishableSegments.length > 0,
+          // 与服务端 capture 同一把 sourceKey：列表刷新拉回同一节课时按它去重，不出双卡
+          sourceKey: liveSourceKey,
         },
       ]);
-      if (publishableSegments.length > 0) {
-        void persistCaptureToWorkspace({
-          sourceType: 'live-audio',
-          sourceKey: `live:${audioCaptureId}`,
-          role: 'primary',
-          contentType: 'audio',
+      if (publishableSegments.length > 0 && canSyncToServer) {
+        // 本地先标 pending：POST 失败时 sync-pending-recordings 会在进课堂 / 恢复联网时补传，不再静默丢
+        void setSessionSyncState(effectiveSessionId, 'pending').catch(() => undefined);
+        void persistCaptureToWorkspace(buildLiveRecordingCaptureInput({
+          userId: currentUserId,
+          sessionId: effectiveSessionId,
           title: recordingTitle,
-          previewText: buildSourcePreviewText(publishableSegments, 180),
-          normalizedText: buildSupportReferenceSnippet(publishableSegments, 2800),
-          tutorContext: buildSupportReferenceSnippet(publishableSegments, 2800),
+          segments: publishableSegments,
+          durationMs: duration,
+          state: 'completed',
+          startedAtMs: Date.now() - duration,
           mediaUrl: liveMediaUrl,
-          occurredAt: new Date().toISOString(),
-          metadata: {
-            from: 'live-recording',
-            sessionId: effectiveSessionId,
-            duration,
-            durationSec: Math.round(duration / 1000),
-            segmentCount: publishableSegments.length,
-            // 档位1（跨设备带走数据）：把完整转录段同步到服务端 capture metadata。
-            // 之前只存 segmentCount，换设备登录拿不到转录文字——课堂 tab 看到卡片却点不出内容。
-            // 现在塞 transcriptSegments（与视频导入/pending-audio 路径一致），登录回填即可重建。
-            // 上限 10000 段：与服务端证据表防呆上限一致。句级密度约 12 段/分钟，
-            // 10000 段 ≈ 13 小时课，实际不会触顶，只兜底异常数据。
-            transcriptSegments: publishableSegments.slice(0, 10000).map((s) => ({
-              id: s.id,
-              text: s.text,
-              startMs: s.startMs,
-              endMs: s.endMs,
-              speakerId: s.speakerId,
-              confidence: s.confidence,
-              isFinal: s.isFinal,
-            })),
-          },
-        }).then((captureId) => {
+        })).then((captureId) => {
+          if (!captureId) {
+            void setSessionSyncState(effectiveSessionId, 'failed', '结束时写入服务端失败').catch(() => undefined);
+            toast(COPY.recording.syncDeferred, { duration: 5000 });
+            return;
+          }
+          void setSessionSyncState(effectiveSessionId, 'synced').catch(() => undefined);
           // 课中「截取这一页」的关键帧：capture 就位后静默上传（失败本地仍在，retry 兜底）
           if (captureId && isAuthenticated && accessToken) {
             void uploadRecordingKeyframes({
@@ -472,27 +473,25 @@ export function useRecordingLifecycle(
       // 档位2（跨设备带走音频）：后台把 blob 上传到服务端持久化，拿到真实 URL，
       // 再把 capture.mediaUrl 从临时 blob: URL 换成真实 URL → 任何设备登录都能播放，
       // 后台也能看到/兜底转写。静默执行，失败不打扰（本地音频仍在）。
-      if (isAuthenticated && accessToken) {
+      if (canSyncToServer && accessToken) {
         void uploadRecordingAudio({
           blob,
           sessionId: effectiveSessionId,
           authToken: accessToken,
           onUploaded: (realMediaUrl) => {
-            void persistCaptureToWorkspace({
-              sourceType: 'live-audio',
-              sourceKey: `live:${audioCaptureId}`,
-              role: 'primary',
-              contentType: 'audio',
+            // upload-audio 已按 sessionId 把 mediaUrl 绑回 capture；这里再写一次是为了 capture 尚不存在
+            // （结束时 POST 失败）的情况——同一把 sourceKey、不带分段，服务端合并 metadata、不动已有证据
+            void persistCaptureToWorkspace(buildLiveRecordingCaptureInput({
+              userId: currentUserId,
+              sessionId: effectiveSessionId,
               title: recordingTitle,
+              segments: [],
+              durationMs: duration,
+              state: 'completed',
+              startedAtMs: Date.now() - duration,
               mediaUrl: realMediaUrl,
-              occurredAt: new Date().toISOString(),
-              metadata: {
-                from: 'live-recording',
-                sessionId: effectiveSessionId,
-                duration,
-                audioUploaded: true,
-              },
-            }).then((captureId) => {
+              audioUploaded: true,
+            })).then((captureId) => {
               // 关键帧上传的天然重试点：音频上传成功后 capture 必然已就位
               if (captureId) {
                 void uploadRecordingKeyframes({
@@ -541,22 +540,33 @@ export function useRecordingLifecycle(
         sessionId: effectiveSessionId,
         segments: finalSegments.length,
       });
-      saveAudioSession(null, effectiveSessionId, currentUserId, {
-        subject: UIConfig.defaultSubject,
-        // 同上：不传 topic，让已有的具体标题（如视频标题）保留
-        duration,
-        sourceType: 'recording',
-        transcriptionStatus: finalSegments.length > 0 ? 'completed' : 'failed',
-        transcriptionError: finalSegments.length > 0 ? undefined : '录音结束时没有拿到可转写音频',
-      }).catch((err) => console.error('[classroom-stop] fallback saveAudioSession failed:', err));
+      // 录课中的分片检查点是第二份原声：Recorder 没交出 blob 时先试着从分片拼回来，
+      // 拼回来就按正常录音落库（没文字的交给 retranscribeStuckSessions 兜底批量转写）
+      void assembleRecordingBlob(effectiveSessionId)
+        .catch(() => null)
+        .then((assembled) => saveAudioSession(assembled?.blob ?? null, effectiveSessionId, currentUserId, {
+          subject: UIConfig.defaultSubject,
+          // 同上：不传 topic，让已有的具体标题（如视频标题）保留
+          duration,
+          sourceType: 'recording',
+          mimeType: assembled?.mimeType,
+          transcriptionStatus: finalSegments.length > 0
+            ? 'completed'
+            : assembled
+              ? undefined
+              : 'failed',
+          transcriptionError: finalSegments.length > 0 || assembled ? undefined : '录音结束时没有拿到可转写音频',
+        }).then(() => (assembled ? deleteRecordingChunks(effectiveSessionId) : 0)))
+        .catch((err) => console.error('[classroom-stop] fallback saveAudioSession failed:', err));
       if (publishableSegments.length > 0) {
-        addTranscripts(effectiveSessionId, currentUserId, finalSegments.map((seg) => ({
+        replaceSessionTranscripts(effectiveSessionId, currentUserId, finalSegments.map((seg) => ({
           text: seg.text,
           startMs: seg.startMs,
           endMs: seg.endMs,
+          speakerId: seg.speakerId,
           confidence: seg.confidence || 1.0,
           isFinal: true,
-        }))).catch((err) => console.error('[classroom-stop] fallback addTranscripts failed:', err));
+        }))).catch((err) => console.error('[classroom-stop] fallback replaceSessionTranscripts failed:', err));
       }
     }
 
@@ -585,7 +595,7 @@ export function useRecordingLifecycle(
     } else {
       uiAct.setViewMode('record');
     }
-  }, [anchors, persistCaptureToWorkspace, sessionId, sessionMediaDurationMs, user]);
+  }, [accessToken, anchors, isAuthenticated, persistCaptureToWorkspace, sessionId, sessionMediaDurationMs, user]);
 
   return {
     persistCaptureToWorkspace,

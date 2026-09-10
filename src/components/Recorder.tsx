@@ -41,6 +41,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   recorderRef,
   onRecordingStart,
   onRecordingStop,
+  onAudioChunk,
   onTranscriptionError,
   onTranscriptUpdate,
   onTranscriptTextUpdate,
@@ -599,6 +600,18 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         recorder.ondataavailable = async (event) => {
           if (event.data.size > 0) {
             audioChunksRef.current.push(event.data);
+            // 录课不丢（2026-09-10）：每片原声同时交给外层落 IndexedDB。
+            // 之前分片只在内存 audioChunksRef 里，关页 / 崩溃 / 被系统回收 = 整节课原声消失。
+            try {
+              onAudioChunk?.(event.data, {
+                sessionId: sessionIdRef.current,
+                recordingId: recordingIdRef.current,
+                seq: audioChunksRef.current.length - 1,
+                mimeType: recorder.mimeType || mimeType || event.data.type || 'audio/webm',
+              });
+            } catch (chunkError) {
+              console.warn('[Recorder] onAudioChunk failed (recording continues):', chunkError);
+            }
           }
         };
       };
@@ -724,6 +737,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     effectiveTranscribeMode,
     getCallbackMeta,
     languageMode,
+    onAudioChunk,
     onRecordingStart,
     onTranscriptEnhanced,
     onTranscriptUpdate,

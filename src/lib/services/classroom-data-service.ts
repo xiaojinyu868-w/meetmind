@@ -314,7 +314,8 @@ async function persistSessionsToIndexedDb(sessions: ClassSession[]): Promise<voi
 
     await db.audioSessions.add({
       sessionId: session.id,
-      userId: 'anonymous',
+      // 录课开始写的占位行要带真实归属：之前恒为 'anonymous'，登录用户的课在本机也被记成访客
+      userId: session.createdBy || 'anonymous',
       mimeType: 'audio/webm',
       duration: session.duration,
       subject: session.subject,

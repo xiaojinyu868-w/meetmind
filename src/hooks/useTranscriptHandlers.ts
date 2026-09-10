@@ -15,6 +15,7 @@ import {
 import { classroomDataService } from '@/lib/services/classroom-data-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
 import { appendLiveRecordingSegments } from '@/lib/capture/live-recording';
+import { buildLiveRecordingCaptureInput } from '@/lib/capture/live-recording-capture';
 import {
   buildSourcePreviewText,
   buildSupportReferenceSnippet,
@@ -178,30 +179,17 @@ export function useTranscriptHandlers(
             : item
         )
       );
-      void persistCaptureToWorkspace({
-        sourceType: 'live-audio',
-        sourceKey: `live:${pendingAudio.itemId}`,
-        role: 'primary',
-        contentType: 'audio',
+      // 与结束 / 检查点 / 原声回写同一把 sourceKey（live:{uid}:{sid}），服务端一节课只有一行
+      void persistCaptureToWorkspace(buildLiveRecordingCaptureInput({
+        userId: currentUserId,
+        sessionId: pendingAudio.sessionId,
         title: pendingAudio.title,
-        previewText,
-        normalizedText,
-        tutorContext: normalizedText,
+        segments: appendedSegments,
+        durationMs: mergedDurationMs,
+        state: 'completed',
+        startedAtMs: Date.now() - mergedDurationMs,
         mediaUrl: pendingAudio.mediaUrl,
-        occurredAt: new Date().toISOString(),
-        metadata: {
-          from: 'live-recording',
-          sessionId: pendingAudio.sessionId,
-          duration: pendingAudio.durationMs,
-          durationSec: Math.round(pendingAudio.durationMs / 1000),
-          segmentCount: appendedSegments.length,
-          transcriptSegments: appendedSegments.slice(0, 10000).map((s) => ({
-            text: s.text,
-            startMs: s.startMs,
-            endMs: s.endMs,
-          })),
-        },
-      }).then((captureId) => {
+      })).then((captureId) => {
         // 完整原声定稿回来 = 这节课的文本最终版：课后理解（标题+摘要+精选）
         // 和关键帧上传都挂在这里——streaming 主链路在 stop 时文本是草稿，
         // 这两个动作必须等定稿（2026-07-28 审计发现的缺口）

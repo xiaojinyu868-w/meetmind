@@ -584,6 +584,23 @@ export const COPY = {
     silentAudioWarning: '一直收不到声音，文字不会生成。请检查麦克风或声音来源后重录。',
     finalizingTranscript: (count: number, enhancedCount = 0): string =>
       `实时文字已收下，正在用原声定稿 · ${count} 段${enhancedCount > 0 ? ` · 已优化 ${enhancedCount} 段` : ''}`,
+    /** 结束时写服务端失败：内容已在本机，联网 / 回到课堂时自动补传（sync-pending-recordings） */
+    syncDeferred: '这节课先存在这台设备上，联网后会自动同步到你的账号。',
+    /** 忘记结束的课（2026-09-10）：首页顶部一行安静的恢复条 + 两个文字动作 */
+    unfinished: {
+      line: (title: string, minutes: number): string =>
+        minutes > 0 ? `有一节课没结束：${title} · 已录 ${minutes} 分钟` : `有一节课没结束：${title}`,
+      /** 收好前半段，立刻开一段新的（原声无法无缝接续，两段各自成课） */
+      resume: '继续录',
+      finish: '就到这里',
+      finished: '这节课收好了',
+      /** 超过 6 小时没回来的课在下次打开时自动收尾 */
+      autoFinished: '有一节没结束的课已经替你收好了',
+      /** 课堂列表里没结束那张卡的状态字 */
+      cardStatus: '还没结束',
+    },
+    /** 另一台设备正在录这节课（服务端检查点回填）：列表状态字 */
+    remoteRecording: (minutes: number): string => (minutes > 0 ? `录制中 · 已 ${minutes} 分钟` : '录制中'),
   },
 
   mobileComposer: {
