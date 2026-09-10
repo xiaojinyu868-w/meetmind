@@ -38,6 +38,8 @@ import { useLearningContext } from '@/hooks/useLearningContext';
 import { MobileFirstLearningScreen } from './MobileFirstLearningScreen';
 import { selectDemoLiveSegments } from '@/components/classroom/DemoLessonLoader';
 import { GUEST_DEMO_LESSON_TITLE } from '@/components/classroom/guest-demo-entry';
+import { UnfinishedLessonBar } from '@/components/classroom/UnfinishedLessonBar';
+import type { UnfinishedLesson } from '@/hooks/useUnfinishedRecordings';
 import { useAdminLens } from '@/components/admin/AdminLensProvider';
 import {
   ClassroomFlowMatrixEntry,
@@ -51,6 +53,13 @@ export interface MobileAppShellProps {
   workspaceEchoes: Array<{ id: string; title: string; body: string; chips?: string[]; takeaway?: string; createdAt?: string }>;
   /** 返回 true 后才进入录课页，避免权限失败时出现假的 00:00 录课态。 */
   onStartRecording: () => Promise<boolean>;
+  /** 没结束的课（页面被关 / 锁屏被回收后留下的）：首页顶部一行恢复条（2026-09-10） */
+  unfinishedLessons?: UnfinishedLesson[];
+  unfinishedBusySessionId?: string | null;
+  /** 「就到这里」：收好这节课 */
+  onFinishUnfinished?: (sessionId: string) => void | Promise<void>;
+  /** 「继续录」：先收好前半段（resolve 后由壳自己走 onStartRecording 开新一段） */
+  onResumeUnfinished?: (sessionId: string) => Promise<void>;
   onOpenFilePicker: (mode: 'audio' | 'support' | 'all') => void;
   onOpenReview: (item: SourceIngestItem) => void;
   composerText: string;
@@ -255,6 +264,19 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
 
       {/* 可滚动区 */}
       <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-20 mm-mobile-scroll" style={{ WebkitOverflowScrolling: 'touch' }}>
+        {p.unfinishedLessons && p.unfinishedLessons.length > 0 ? (
+          <UnfinishedLessonBar
+            lessons={p.unfinishedLessons}
+            busySessionId={p.unfinishedBusySessionId}
+            onFinish={(id) => { void p.onFinishUnfinished?.(id); }}
+            onResume={(id) => {
+              // 先收好前半段，再按首页同一条路径开新录音并进录课页
+              void (p.onResumeUnfinished?.(id) ?? Promise.resolve())
+                .then(() => p.onStartRecording())
+                .then((started) => { if (started) push('recording'); });
+            }}
+          />
+        ) : null}
         <MobileLearningCommandCenter
           onStartRecording={() => {
             void p.onStartRecording().then((started) => {

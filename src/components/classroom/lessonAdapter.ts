@@ -18,6 +18,7 @@
  */
 
 import type { AudioSession } from '@/lib/db/schema';
+import { COPY } from '@/lib/ui/copy';
 import { GLOBAL_ASK_COPY } from '@/lib/ui/copy-global-ask';
 import { isPlaceholderLessonTitle } from '@/lib/learning/lesson-title-generic';
 import { resolvePendingAudioFailureStatus } from '@/lib/utils/page-utils';
@@ -38,6 +39,12 @@ export interface LessonExtras {
     summaryOverview?: string;
     transcriptPreview?: string;
   };
+  /**
+   * 这台设备的 Recorder 此刻正在录这一节（2026-09-10 起由 hook 传入）。
+   * status='recording' 的行只有它才是「正在录」；其余是页面被关后留下的「没结束」的课，
+   * 显示为整理中 + 「还没结束」，由列表顶部的恢复条承接，不再冒充活动条。
+   */
+  isActiveRecording?: boolean;
 }
 
 function compactTitle(value: string | undefined): string {
@@ -138,7 +145,13 @@ function isStaleTranscription(session: AudioSession): boolean {
 function deriveStatus(
   session: AudioSession,
   hasTranscript: boolean,
+  isActiveRecording: boolean,
 ): LessonStatus {
+  // 另一台设备正在录这一节（服务端检查点回填）：整理中 + 「录制中 · 已 N 分钟」，不是可复习的课
+  if (session.remoteRecordingState === 'recording') return 'processing';
+  // 本机页面被关后留下的「没结束」的课：不冒充活动条（那颗红点 + 停止按钮属于真在录的 Recorder），
+  // 显示为整理中 + 「还没结束」，由恢复条决定继续录还是就到这里
+  if (session.status === 'recording' && !isActiveRecording) return 'processing';
   // realtime 草稿可能仍在内存或旧数据里，但 pending 明确表示完整原声
   // 尚未定稿；此时不能提前开放复习和基于草稿生成标题。
   if (session.transcriptionStatus === 'pending') return 'processing';
@@ -154,7 +167,15 @@ function deriveStatus(
   return 'processing';
 }
 
-function deriveStatusText(session: AudioSession, status: LessonStatus): string | undefined {
+function deriveStatusText(session: AudioSession, status: LessonStatus, isActiveRecording: boolean): string | undefined {
+  if (status === 'processing') {
+    if (session.remoteRecordingState === 'recording') {
+      const minutes = Math.round(Math.max(session.lastCheckpointDurationMs || 0, session.duration || 0) / 60000);
+      return COPY.recording.remoteRecording(minutes);
+    }
+    if (session.status === 'recording' && !isActiveRecording) return COPY.recording.unfinished.cardStatus;
+    return undefined;
+  }
   if (status !== 'failed') return undefined;
   if (session.transcriptionStatus === 'failed') {
     return resolvePendingAudioFailureStatus(session.transcriptionError || '');
@@ -188,7 +209,8 @@ export function audioSessionToLesson(
     ? Math.max(1, Math.round(session.duration / 60000))
     : undefined;
 
-  const status = deriveStatus(session, extras.hasTranscript);
+  const isActiveRecording = extras.isActiveRecording ?? session.status === 'recording';
+  const status = deriveStatus(session, extras.hasTranscript, isActiveRecording);
 
   return {
     id: session.sessionId,
@@ -206,6 +228,6 @@ export function audioSessionToLesson(
     reviewed: false, // TODO: 接 preferences 表持久化
     linkedMaterials: extras.linkedMaterials,
     status,
-    statusText: deriveStatusText(session, status),
+    statusText: deriveStatusText(session, status, isActiveRecording),
   };
 }

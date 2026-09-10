@@ -37,6 +37,10 @@ import type {
 import type { CompanionMode } from './classroom';
 import { useClassroomLessons } from '@/hooks/useClassroomLessons';
 import { useClassroomCompanion } from '@/hooks/useClassroomCompanion';
+import { useUnfinishedRecordings } from '@/hooks/useUnfinishedRecordings';
+import { UnfinishedLessonBar } from '@/components/classroom/UnfinishedLessonBar';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { isPlaceholderLessonTitle } from '@/lib/learning/lesson-title-generic';
 import { announceLessonEnd } from '@/components/classroom/LessonEndRitual';
 import { useClassroomForesight } from '@/hooks/useClassroomForesight';
 import { useClassroomFlow } from '@/hooks/useClassroomFlow';
@@ -589,6 +593,36 @@ export function ClassroomView({
     onStartRecording();
   }, [onStartRecording, onStopRecording]);
 
+  // ── 没结束的课（页面被关 / 崩溃后留下的）：列表顶部一行恢复条，继续录 / 就到这里 ──
+  const { user, accessToken, isAuthenticated } = useAuth();
+  const {
+    unfinished: unfinishedLessons,
+    finish: finishUnfinished,
+    resume: resumeUnfinished,
+    busySessionId: unfinishedBusyId,
+  } = useUnfinishedRecordings({
+    userId: user?.id,
+    accessToken,
+    isAuthenticated,
+    activeRecordingSessionId: isRecording ? activeSessionId : null,
+    onStartRecording: handleStartRecording,
+  });
+  const unfinishedNotice = useMemo(
+    () => (unfinishedLessons.length > 0 ? (
+      <UnfinishedLessonBar
+        // 标题与列表卡片同一套推导（用户命名 → 转录首句 → 时间），恢复条和卡片说的是同一节课
+        lessons={unfinishedLessons.map((item) => {
+          const derived = lessons.find((lesson) => lesson.id === item.sessionId)?.title;
+          return { ...item, title: derived && !isPlaceholderLessonTitle(derived) ? derived : item.title };
+        })}
+        busySessionId={unfinishedBusyId}
+        onResume={(id) => { void resumeUnfinished(id); }}
+        onFinish={(id) => { void finishUnfinished(id); }}
+      />
+    ) : null),
+    [unfinishedLessons, unfinishedBusyId, resumeUnfinished, finishUnfinished, lessons],
+  );
+
   // 结课收尾仪式（合上笔记本）：只在真的有一节课可以合上时放——试听课或正在录的课。
   // 仪式本体挂在 page 根部（LessonEndRitualHost）：示例课结束的同一帧本组件就被复习布局替换
   const storeAnchors = useCaptureEditorStore((s) => s.anchors);
@@ -661,9 +695,10 @@ export function ClassroomView({
         onCaptureFrame={onCaptureFrame}
         onAddMaterial={onAddMaterial}
         onSearch={onSearch}
+        noticeSlot={unfinishedNotice}
       />
     ),
-    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, handleBackToList, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, classroomFlow, classroomFlowNewIds, isUnderstandingClassroomFlow, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, demoAudioMuted, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, onOpenApp, onRenameLesson, onQuickPhoto, onCaptureFrame, onAddMaterial, onSearch],
+    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, handleBackToList, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, classroomFlow, classroomFlowNewIds, isUnderstandingClassroomFlow, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, demoAudioMuted, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, onOpenApp, onRenameLesson, onQuickPhoto, onCaptureFrame, onAddMaterial, onSearch, unfinishedNotice],
   );
 
   const demoSuggestedPrompts = useMemo(

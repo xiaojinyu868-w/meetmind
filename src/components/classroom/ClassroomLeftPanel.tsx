@@ -125,6 +125,8 @@ export interface ClassroomLeftPanelProps {
   onAddMaterial?: () => void;
   /** 首页搜索课堂和资料 */
   onSearch?: () => void;
+  /** 列表顶部的通知位（「有一节课没结束」恢复条），空态时挂在 hero 的 recoverySlot */
+  noticeSlot?: React.ReactNode;
 }
 
 function groupLessons(lessons: Lesson[]): Array<{ label: string; items: Lesson[] }> {
@@ -311,6 +313,7 @@ function ListView({
   onRenameLesson,
   onAddMaterial,
   onSearch,
+  noticeSlot,
 }: {
   activeLesson: Lesson | null;
   activeSeconds: number;
@@ -326,6 +329,7 @@ function ListView({
   onRenameLesson?: (id: string, title: string) => void;
   onAddMaterial?: () => void;
   onSearch?: () => void;
+  noticeSlot?: React.ReactNode;
 }) {
   const isTrulyEmpty = !activeLesson && groups.length === 0;
   // 「接回学习现场」横幅（2026-09-10 移除）：桌面侧栏的「继续学习」卡说的是同一件事，首页顶部还给"开始一节课"；
@@ -343,6 +347,7 @@ function ListView({
         onChangeAudioSource={onChangeAudioSource}
         onAddMaterial={onAddMaterial}
         onSearch={onSearch}
+        recoverySlot={noticeSlot}
       />
     );
   }
@@ -356,6 +361,9 @@ function ListView({
 
       <div className="flex-1 overflow-y-auto px-8 pb-4 pt-3 lg:px-12">
         <div className="mx-auto w-full max-w-4xl">
+          {/* 0. 没结束的课 — 安静的恢复条（继续录 / 就到这里） */}
+          {noticeSlot}
+
           {/* 1. 正在录音的课 — 置顶活动条 */}
           {activeLesson && (
             <ActiveLessonPill
@@ -611,6 +619,7 @@ export function ClassroomLeftPanel({
   onCaptureFrame,
   onAddMaterial,
   onSearch,
+  noticeSlot,
 }: ClassroomLeftPanelProps) {
   const { activeLesson, restLessons } = useMemo(() => {
     let active: Lesson | null = null;
@@ -674,6 +683,7 @@ export function ClassroomLeftPanel({
             onAddMaterial={onAddMaterial}
             onSearch={onSearch}
             onRenameLesson={onRenameLesson}
+            noticeSlot={noticeSlot}
           />
         ) : (
           <ClassroomRecordingView

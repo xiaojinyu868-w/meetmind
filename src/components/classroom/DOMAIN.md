@@ -22,7 +22,8 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `ClassroomLayout.tsx` | ~270 | 左右分栏容器；同桌只在真实录课 / 示例课听课态可见，无课堂上下文时隐藏右栏、Octo Buddy 和移动端问同学入口；录课态右栏默认 340px，把宽度优先留给课堂脉络并保留拖拽放大；移动端「问同学」悬浮钮走 pine 主签名 |
-| `ClassroomLeftPanel.tsx` | ~680 | （2026-09-10 移除顶部「接回学习现场」横幅——桌面侧栏「继续学习」卡说的是同一件事；移动端仍由 MobileAppShell 挂 ContextRecoveryCard）视图管理器（list ↔ recording 淡入切换）+ 首页能力旅程（听懂现场 / 连起资料 / 练成结果）+ **ActiveLessonPill 置顶活动条** + StickyStartBar 底部主 CTA；零存量态把录音来源选择传给 Hero；试听课完成态透传课后引导动作 |
+| `UnfinishedLessonBar.tsx` | ~60 | 「有一节课没结束：《标题》· 已录 N 分钟」恢复条（2026-09-10 录课不丢）：一行字 + 两个文字动作（继续录 / 就到这里），白底 hairline + 左侧 3px pine 细柱（与 ActiveLessonPill 同一套语言，用 pine 不用朱砂——这不是「正在发生」是「等你决定」）；数据与动作来自 `hooks/useUnfinishedRecordings`，桌面挂在 ClassroomLeftPanel 的 `noticeSlot`（列表态活动条之上 / 空态 hero 的 recoverySlot），移动端由 MobileAppShell 首页挂 |
+| `ClassroomLeftPanel.tsx` | ~690 | （2026-09-10 移除顶部「接回学习现场」横幅——桌面侧栏「继续学习」卡说的是同一件事；移动端仍由 MobileAppShell 挂 ContextRecoveryCard；新增 `noticeSlot` 给恢复条）视图管理器（list ↔ recording 淡入切换）+ 首页能力旅程（听懂现场 / 连起资料 / 练成结果）+ **ActiveLessonPill 置顶活动条** + StickyStartBar 底部主 CTA；零存量态把录音来源选择传给 Hero；试听课完成态透传课后引导动作 |
 | `ClassroomHomeCommandCenter.tsx` | ~105 | 有历史课堂时的桌面首页续学控制台：只保留日期、续学主叙事、真实恢复现场、问课堂与放材料入口；不再重复解释能力，让最近课堂进入首屏 |
 | `ClassroomCompanionPanel.tsx` | ~590 | 右侧同桌面板（header/气泡/流式气泡/thinking/输入栏）；课中不写入自动寒暄消息，header + 轻量 Octo 在场信号承接第一次互动，问题快通道只在输入区保留一套，避免上下两组重复入口；管理员透镜读取与真实课中请求相同的转录、recentFocus、学习理解与最近问题；课后 starter 同样不做重功能卡；v7 按钮语义：InlineActionStrip 主 action / 发送钮 / 课后首 chip 走 pine，次 action 走 ghost 白边；AI 消息带 2px pine 左 rail 作为克制的“AI 在场”信号 |
 | `InlineAppCard.tsx` | ~150 | 对话内应用承载卡（真实应用 UI 复用 `apps/windows/AppRenderSurface`，不再手写一套窄版）；2026-09-10：四种内联应用同一张纸（quiz / flashcards 的深色 `--mm-immersive` 底删除），头部只有应用名（「已放进对话」副题与「同学」胶囊删） |
@@ -39,7 +40,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 | `DemoLessonLoader.ts` | ~50 | 试听课 loader：把 demo segments / anchors / timeline / audioUrl 写入课堂现场 |
 | `demo-classroom-flow.ts` | ~105 | 试听课课堂脉络：按真实音频秒数推进“正在讲 / 刚才经过 / 留到课后”，与实时转录同步生长 |
 | `guest-demo-entry.ts` | ~110 | 访客试听入口模型：显式 `entry=demo`、默认闪卡产物、静态首屏 flashcards result + 稳定识别器 |
-| `lessonAdapter.ts` | ~200 | `AudioSession + extras → Lesson` 纯函数适配器；课堂标题遵循“用户命名 → 重点 → 总结 → 转录 → 来源类型”的证据优先级，拒绝 URL / 时间 / 日期冒充标题；`transcriptionStatus=pending` 时忽略 realtime 草稿证据并保持 processing |
+| `lessonAdapter.ts` | ~230 | `AudioSession + extras → Lesson` 纯函数适配器；课堂标题遵循“用户命名 → 重点 → 总结 → 转录 → 来源类型”的证据优先级，拒绝 URL / 时间 / 日期冒充标题；`transcriptionStatus=pending` 时忽略 realtime 草稿证据并保持 processing。2026-09-10：`status='recording'` 只有 `extras.isActiveRecording`（当前 Recorder 在录）才是活动条，否则是「没结束」的课 → processing + statusText「还没结束」；`remoteRecordingState='recording'`（另一台设备正在录）→ processing + 「录制中 · 已 N 分钟」 |
 | `composeFirstHello.ts` | ~130 | 同桌第一句话的动态生成（6 个情境分支，纯函数可测） |
 | `index.ts` | — | Barrel export |
 
