@@ -323,8 +323,8 @@ export function TeachBackClassroom({ lessonTitle, targets, judges, mood = 'liste
           95% { transform: translateX(-50%) translateY(0) rotate(-0.6deg); }
         }
         /* 评委席模式：讲台面板占掉底部 ~200px，两排座位整体上移，名牌与气泡都露在面板之上 */
-        .tbc-stage[data-panel="true"] .tbc-student-back { bottom: 76%; }
-        .tbc-stage[data-panel="true"] .tbc-student-front { bottom: 46%; }
+        .tbc-stage[data-panel="true"] .tbc-student-back { bottom: 78%; }
+        .tbc-stage[data-panel="true"] .tbc-student-front { bottom: 51%; }
         .tbc-nameplate {
           position: absolute;
           bottom: 7px;
@@ -364,8 +364,8 @@ export function TeachBackClassroom({ lessonTitle, targets, judges, mood = 'liste
           .tbc-blackboard { max-height: 190px; }
           .tbc-student-back { bottom: 55%; }
           .tbc-student-front { bottom: 22%; }
-          .tbc-stage[data-panel="true"] .tbc-student-back { bottom: 78%; }
-          .tbc-stage[data-panel="true"] .tbc-student-front { bottom: 50%; }
+          .tbc-stage[data-panel="true"] .tbc-student-back { bottom: 80%; }
+          .tbc-stage[data-panel="true"] .tbc-student-front { bottom: 54%; }
           .tbc-student-0 { left: 14%; }
           .tbc-student-1 { left: 50%; }
           .tbc-student-2 { left: 86%; }

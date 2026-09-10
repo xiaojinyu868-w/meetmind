@@ -159,7 +159,7 @@ export function TeachBackPodium({
 
         {/* 实时转写：上一段淡一行，当前这段是主角 */}
         {live || liveText ? (
-          <div className="min-h-[44px] rounded-[12px] bg-paper px-3.5 py-2.5" data-testid="teach-back-live-transcript">
+          <div className="min-h-[68px] rounded-[12px] bg-paper px-3.5 py-2.5" data-testid="teach-back-live-transcript">
             {lastCommitted && !liveText ? (
               <p className="truncate text-[12px] leading-5 text-ink-muted">{lastCommitted}</p>
             ) : null}
