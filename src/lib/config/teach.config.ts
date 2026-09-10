@@ -120,6 +120,20 @@ export function resolveTeachTtsProvider(): TeachTtsProviderConfig {
   return factory();
 }
 
+/**
+ * /api/teach/tts 允许调用方按句指定的音色白名单（百炼 qwen3-tts 系列；2026-09-10 三种评委声音实测可用）。
+ * 不在名单里的 voice 回落 provider 默认音色——调用方传什么都不该让上游 4xx。
+ */
+export const TEACH_TTS_VOICE_ALLOWLIST: readonly string[] = ['Cherry', 'Serena', 'Ethan', 'Chelsie', 'Dylan', 'Jada', 'Sunny'];
+
+/** 按句覆盖音色 / 语气（讲给同桌听的三位评委各有声音）；返回一份新的 provider 配置 */
+export function resolveTeachTtsProviderFor(overrides: { voice?: string; instruct?: string } = {}): TeachTtsProviderConfig {
+  const base = resolveTeachTtsProvider();
+  const voice = overrides.voice && TEACH_TTS_VOICE_ALLOWLIST.includes(overrides.voice) ? overrides.voice : base.voice;
+  const instruct = typeof overrides.instruct === 'string' ? overrides.instruct.trim().slice(0, 80) : base.instruct;
+  return { ...base, voice, instruct };
+}
+
 export const TeachConfig = {
   /** 教学引擎选择：codex（现役 app-server 底座）/ engine（pi loop + vendor OpenMAIC，P1） */
   engine: env('TEACH_ENGINE') || 'codex',

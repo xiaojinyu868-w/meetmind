@@ -318,10 +318,17 @@ export interface TeachBackTarget {
   evidence: TeachBackEvidence | null;
 }
 
-/** 讲课会话的一轮发言（语音转写或打字），role=user 是学生本人在讲。 */
+/** 评委席的三位评委（2026-09 连续讲述版）：直言 / 引导 / 追问细节。id 是前后端契约，用户面名字在 copy-apps */
+export type TeachBackJudgeId = 'direct' | 'guide' | 'probe';
+
+/**
+ * 讲课会话的一轮发言（语音转写或打字），role=user 是学生本人在讲。
+ * judgeId 只在 role=assistant 且出自评委席时有值（旧数据 / 半双工同桌版没有），evaluate 契约不读它。
+ */
 export interface TeachBackTurn {
   role: 'user' | 'assistant';
   text: string;
+  judgeId?: TeachBackJudgeId;
 }
 
 export type TeachBackCoverage = 'explained' | 'partial' | 'missed';

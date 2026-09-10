@@ -93,8 +93,9 @@ async function synthesizeQwen(
 
 /**
  * 合成一句讲课文本 → wav 音频。未配置 key / 失败 → null（前端跳过该句）。
+ * provider 可由调用方传入（按句覆盖音色 / 语气，见 teach.config resolveTeachTtsProviderFor）；不传用默认。
  */
-export async function synthesizeTeachSentence(text: string): Promise<Buffer | null> {
+export async function synthesizeTeachSentence(text: string, providerOverride?: TeachTtsProviderConfig): Promise<Buffer | null> {
   const input = text.trim();
   if (!input || input.length > TEACH_TTS_MAX_TEXT) return null;
   const apiKey = (process.env.DASHSCOPE_API_KEY || '').trim();
@@ -102,7 +103,7 @@ export async function synthesizeTeachSentence(text: string): Promise<Buffer | nu
     log.warn('DASHSCOPE_API_KEY 未配置，讲课 TTS 不可用');
     return null;
   }
-  const provider = resolveTeachTtsProvider();
+  const provider = providerOverride ?? resolveTeachTtsProvider();
 
   await acquireSlot();
   try {

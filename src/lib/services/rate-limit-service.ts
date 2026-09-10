@@ -145,6 +145,14 @@ export const RATE_LIMITS = {
     perDay: 800,
     cost: 'high',
   },
+  // 讲给同桌听的评委回合：一场十分钟的连续讲述会有几十个回合（每停顿一次一回合），
+  // 单独成桶，不和 appsExecute（每小时 200）抢——否则讲到一半评委就被限流哑掉
+  teachBackTurn: {
+    perMinute: 40,
+    perHour: 400,
+    perDay: 1500,
+    cost: 'medium',
+  },
   // 随堂检验（plan + question）：一次课堂会拆成 1 次 plan + 多个 question，单独成桶避免被 default 污染
   classCheck: {
     perMinute: 80,

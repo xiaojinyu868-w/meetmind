@@ -1,14 +1,16 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { TeachConfig, resolveTeachTtsProvider } from '@/lib/config/teach.config';
+import { TeachConfig, resolveTeachTtsProviderFor } from '@/lib/config/teach.config';
 import { synthesizeTeachSentence, TEACH_TTS_MAX_TEXT } from '@/lib/services/teach-tts-service';
 
 /**
  * POST /api/teach/tts —— 讲课声音合成薄壳（按句调用）。
  *
- * { text } → wav 音频二进制流（Content-Type: audio/wav）；合成不可用 → 503
+ * { text, voice?, instruct? } → wav 音频二进制流（Content-Type: audio/wav）；合成不可用 → 503
  * （前端跳过该句继续讲课，不降级机器人音）。
+ * voice 只认 TEACH_TTS_VOICE_ALLOWLIST（2026-09-10 起，讲给同桌听的三位评委各有声音），
+ * 不在名单里回落默认音色；instruct 可按句覆盖语气（≤80 字）。
  * 两级缓存（key = text+provider+model+voice+instruct 哈希，对齐 /api/board/tts 模式）：
  * 进程内 LRU 64 条 + 磁盘 data/teach-tts-cache/ 200 条 FIFO。
  */
@@ -69,9 +71,13 @@ function diskCacheSet(key: string, value: Buffer): void {
 
 export async function POST(request: Request) {
   let text: unknown;
+  let voice: string | undefined;
+  let instruct: string | undefined;
   try {
-    const body = (await request.json()) as { text?: unknown };
+    const body = (await request.json()) as { text?: unknown; voice?: unknown; instruct?: unknown };
     text = body.text;
+    voice = typeof body.voice === 'string' ? body.voice : undefined;
+    instruct = typeof body.instruct === 'string' ? body.instruct : undefined;
   } catch {
     return Response.json({ error: '请求体必须是 JSON' }, { status: 400 });
   }
@@ -82,7 +88,7 @@ export async function POST(request: Request) {
     return Response.json({ error: `text 超过 ${TEACH_TTS_MAX_TEXT} 字上限` }, { status: 400 });
   }
 
-  const provider = resolveTeachTtsProvider();
+  const provider = resolveTeachTtsProviderFor({ voice, instruct });
   const cacheKey = createHash('sha256')
     .update(text)
     .update(provider.id)
@@ -99,7 +105,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const audio = await synthesizeTeachSentence(text);
+  const audio = await synthesizeTeachSentence(text, provider);
   if (!audio) {
     return Response.json({ error: 'TTS 不可用' }, { status: 503 });
   }

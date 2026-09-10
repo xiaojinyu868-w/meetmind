@@ -67,6 +67,8 @@ const PUBLIC_ROUTES = [
   '/api/apps/teach-back/evaluate',
   '/api/apps/teach-back/cover-check',
   '/api/apps/teach-back/respond',
+  // 连续讲述版评委回合（SSE）：与 respond / evaluate 同级别公开（证据由客户端携带，路由内 teachBackTurn 限流）
+  '/api/apps/teach-back/turn',
   '/api/class-check/plan',
   '/api/class-check/question',
   '/api/apps/infographic/generate-image',
