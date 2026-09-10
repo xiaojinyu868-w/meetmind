@@ -1,22 +1,29 @@
 'use client';
 
 /**
- * 讲给同桌听 · 像素小教室（纯视觉场景）
+ * 讲给同桌听 · 像素小教室（视觉场景）
  *
- * 2026-08 决策：实时语音通话下线（/api/tutor-call 已拆除），语音讲课模式移除，
- * 本组件不再连接 useOmniRealtimeCall，退化为纯视觉场景——
- * 黑板粉笔目标 + 前后两排 Octo 学生，供入口页与打字讲课做背景。
- * 讲课与核对走 TeachBackWindow 的文字模式（同一 /api/apps/teach-back/evaluate）。
+ * 2026-08 决策：实时语音通话下线（/api/tutor-call 已拆除），本组件不再连接 useOmniRealtimeCall，
+ * 退化为纯视觉场景——黑板粉笔目标 + 前后两排 Octo 学生。
+ * 2026-09-10 连续讲述版：传入 `judges` 后，前排两位 + 后排中间那位成为评委席（名牌 + 头顶气泡）：
+ * 听讲中安静微动、你在讲时偶尔点头、开口的那位抬头 + 气泡流式长出、被你插话后气泡收成一行。
+ * 状态都由 props 驱动，本组件不连语音、不做判断。
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import type { TeachBackTarget } from '@/lib/ai-native/types';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import type { TeachBackJudgeId, TeachBackTarget } from '@/lib/ai-native/types';
 import { OctoBuddySprite } from '@/components/classroom/OctoBuddy';
 import { APPS_COPY } from '@/lib/ui/copy-apps';
+import type { StageMood } from './teach-back-turn-machine';
+import type { TeachBackJudgeView } from './use-teach-back-panel';
 
 interface TeachBackClassroomProps {
   lessonTitle?: string;
   targets: TeachBackTarget[];
+  /** 评委席（连续讲述版）：给了就把三个座位变成评委 */
+  judges?: TeachBackJudgeView[];
+  /** 讲台状态：你在讲 → 评委偶尔点头；评委发言 → 那位抬头 */
+  mood?: StageMood;
 }
 
 const STUDENTS = [
@@ -27,7 +34,10 @@ const STUDENTS = [
   { id: 'front-right', row: 'front' as const, size: 'lg' as const, deskWidth: 155 },
 ];
 
-export function TeachBackClassroom({ lessonTitle, targets }: TeachBackClassroomProps) {
+/** 评委坐哪：直言前排左、引导前排右、追问后排中——窄屏保留的三个座位正好是这三位 */
+const JUDGE_SEATS: Record<TeachBackJudgeId, number> = { direct: 3, guide: 4, probe: 1 };
+
+export function TeachBackClassroom({ lessonTitle, targets, judges, mood = 'listening' }: TeachBackClassroomProps) {
   const [isNarrow, setIsNarrow] = useState(false);
 
   /* 窄屏只留三名学生：后中 + 前两，避免课桌叠课桌 */
@@ -44,9 +54,15 @@ export function TeachBackClassroom({ lessonTitle, targets }: TeachBackClassroomP
   );
 
   const chalkTargets = useMemo(() => targets.slice(0, 5), [targets]);
+  const judgeBySeat = useMemo(() => {
+    const map = new Map<number, TeachBackJudgeView>();
+    for (const judge of judges ?? []) map.set(JUDGE_SEATS[judge.id], judge);
+    return map;
+  }, [judges]);
+  const panelMode = Boolean(judges);
 
   return (
-    <div className="tbc-stage">
+    <div className="tbc-stage" data-mood={mood} data-panel={panelMode ? 'true' : undefined} data-testid="teach-back-classroom">
       {/* ── 后墙 + 黑板 + 墙面装饰 ── */}
       <div className="tbc-wall">
         <div className="tbc-clock" aria-hidden>
@@ -75,13 +91,37 @@ export function TeachBackClassroom({ lessonTitle, targets }: TeachBackClassroomP
       <div className="tbc-floor">
         {visibleStudentIndexes.map((index) => {
           const student = STUDENTS[index];
+          const judge = judgeBySeat.get(index);
+          const speaking = Boolean(judge?.speaking);
+          const showBubble = Boolean(judge?.bubble);
+          const collapsed = Boolean(judge && judge.collapsed && !judge.speaking);
           return (
-            <div key={student.id} className={`tbc-student tbc-student-${student.row} tbc-student-${index}`}>
-              {index === 3 ? (
+            <div
+              key={student.id}
+              className={`tbc-student tbc-student-${student.row} tbc-student-${index} ${judge ? 'tbc-judge' : ''} ${speaking ? 'tbc-judge-speaking' : ''}`}
+              style={judge ? ({ '--nod-delay': `${index * 1.3}s` } as CSSProperties) : undefined}
+              data-judge={judge?.id}
+              data-speaking={speaking ? 'true' : undefined}
+            >
+              {!panelMode && index === 3 ? (
                 <div className="tbc-bubble">{APPS_COPY.teachBack.classroomWaiting}</div>
               ) : null}
-              <OctoBuddySprite mood="idle" size={student.size} />
+              {judge && showBubble ? (
+                <div
+                  className={`tbc-bubble tbc-bubble-judge ${collapsed ? 'tbc-bubble-collapsed' : ''}`}
+                  data-testid={`teach-back-bubble-${judge.id}`}
+                  aria-live={speaking ? 'polite' : undefined}
+                >
+                  {judge.bubble}
+                </div>
+              ) : null}
+              <OctoBuddySprite mood={speaking ? 'surprised' : 'idle'} size={student.size} />
               <div className="tbc-desk" style={{ width: student.deskWidth }} />
+              {judge ? (
+                <span className="tbc-nameplate" title={APPS_COPY.teachBack.judges[judge.id].persona}>
+                  {APPS_COPY.teachBack.judges[judge.id].name}
+                </span>
+              ) : null}
             </div>
           );
         })}
@@ -263,11 +303,69 @@ export function TeachBackClassroom({ lessonTitle, targets }: TeachBackClassroomP
           from { opacity: 0; transform: translateX(-50%) translateY(6px); }
           to { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
+        /* ── 评委席 ── */
+        .tbc-judge {
+          transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        /* 你在讲：评委安静听，偶尔点一下头（每个座位错开） */
+        .tbc-stage[data-mood="speaking"] .tbc-judge:not(.tbc-judge-speaking) {
+          animation: tbcNod 5.6s ease-in-out infinite;
+          animation-delay: var(--nod-delay, 0s);
+        }
+        /* 开口的那位抬头 */
+        .tbc-judge-speaking {
+          transform: translateX(-50%) translateY(-5px) scale(1.05);
+          z-index: 6;
+        }
+        @keyframes tbcNod {
+          0%, 86%, 100% { transform: translateX(-50%) translateY(0) rotate(0deg); }
+          90% { transform: translateX(-50%) translateY(2px) rotate(1.4deg); }
+          95% { transform: translateX(-50%) translateY(0) rotate(-0.6deg); }
+        }
+        /* 评委席模式：讲台面板占掉底部 ~200px，两排座位整体上移，名牌与气泡都露在面板之上 */
+        .tbc-stage[data-panel="true"] .tbc-student-back { bottom: 76%; }
+        .tbc-stage[data-panel="true"] .tbc-student-front { bottom: 46%; }
+        .tbc-nameplate {
+          position: absolute;
+          bottom: 7px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 2;
+          font-family: var(--font-mono, 'JetBrains Mono', monospace);
+          font-size: 10px;
+          letter-spacing: 0.08em;
+          color: rgba(32, 49, 42, 0.62);
+          background: rgba(251, 250, 245, 0.85);
+          border: 1.5px solid rgba(122, 92, 62, 0.55);
+          padding: 1px 6px;
+          border-radius: 2px;
+        }
+        .tbc-bubble-judge {
+          max-width: min(300px, 78vw);
+          width: max-content;
+          font-weight: 500;
+          text-align: left;
+          white-space: pre-wrap;
+          word-break: break-word;
+          animation: tbcBubbleIn 200ms ease-out both;
+        }
+        .tbc-bubble-collapsed {
+          max-width: min(220px, 60vw);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          opacity: 0.66;
+          font-weight: 500;
+          padding: 5px 10px;
+          transition: opacity 200ms ease;
+        }
         @media (max-width: 640px) {
           .tbc-clock, .tbc-poster { display: none; }
           .tbc-blackboard { max-height: 190px; }
           .tbc-student-back { bottom: 55%; }
           .tbc-student-front { bottom: 22%; }
+          .tbc-stage[data-panel="true"] .tbc-student-back { bottom: 78%; }
+          .tbc-stage[data-panel="true"] .tbc-student-front { bottom: 50%; }
           .tbc-student-0 { left: 14%; }
           .tbc-student-1 { left: 50%; }
           .tbc-student-2 { left: 86%; }
@@ -281,6 +379,8 @@ export function TeachBackClassroom({ lessonTitle, targets }: TeachBackClassroomP
         }
         @media (prefers-reduced-motion: reduce) {
           .tbc-bubble { animation: none; }
+          .tbc-stage[data-mood="speaking"] .tbc-judge:not(.tbc-judge-speaking) { animation: none; }
+          .tbc-judge { transition: none; }
         }
       `}</style>
     </div>

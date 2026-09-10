@@ -153,7 +153,7 @@ export const APPS_COPY = {
       targetsSubtitle: '能讲出来的，才是真的懂。',
       evidenceLabel: '课堂依据',
       startVoice: '走上讲台',
-      voiceHint: '同桌安静听你讲，只在跟不上或你有没讲到的点时开口。',
+      voiceHint: '麦克风常开。你讲，台下三位听；你停下来，才会有人开口。',
       textTitle: '把这节课讲给同桌',
       speakPlaceholder: '讲一段，或打字补充……',
       submitSegment: '讲给同桌',
@@ -194,6 +194,38 @@ export const APPS_COPY = {
       evalFailed: '这次没能完成核对，你讲的内容还在，可以再试一次。',
       retryEval: '重新核对',
       textHint: '用嘴讲，同桌听得见；他跟不上时会开口问。',
+      /* ── 2026-09-10 连续讲述版：麦克风常开，台下是三位性格不同的评委 ── */
+      /** 评委名字与性格说明（名字同时是 prompt 里的称呼，见 teach-back-panel-prompt.ts） */
+      judges: {
+        direct: { name: '直言', persona: '一针见血，直接指出问题' },
+        guide: { name: '引导', persona: '循循善诱，帮你往前推一步' },
+        probe: { name: '追问', persona: '抓细节，要例子、要定义' },
+      },
+      /** 讲台状态行：听讲中 / 你在讲 / 停顿等待（呼吸点） / 评委在说 */
+      stageCalibrating: '听一下周围的安静…',
+      stageListening: '在听，你讲',
+      stageSpeaking: '你在讲',
+      stagePausing: '等你说完',
+      stageJudge: (name: string): string => `${name}在说`,
+      stageJudgeThinking: '台下有人想说',
+      micConnecting: '正在打开麦克风…',
+      micDenied: '没拿到麦克风权限。在浏览器地址栏允许后再上台，或者先打字讲。',
+      micLost: '麦克风断开了，点一下重新上台',
+      micBusy: '正在录课，先停下录音再上讲台。',
+      asrDown: '实时转写连不上，先打字讲吧。',
+      reconnectMic: '重新上台',
+      /** 出声 / 只看文字（两个词 + 下划线的开关；偏好记 meetmind:teach-back:voice） */
+      voiceOn: '出声',
+      voiceOff: '只看文字',
+      typeFallbackPlaceholder: '也可以打字讲，回车算一段',
+      liveTranscriptEmpty: '你说的话会实时出现在这里',
+      /** 结果页：本场每个回合 */
+      roundsTitle: '本场回合',
+      roundYou: '你',
+      /** 旧记录里没有评委 id 的同桌发言 */
+      roundDeskmate: '同桌',
+      roundsEmpty: '这一场没有留下讲述记录。',
+      roundCount: (count: number): string => `${count} 个回合`,
     },
     mindmap: {
       appName: '思维导图',

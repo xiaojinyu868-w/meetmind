@@ -13,8 +13,8 @@ import type { TranscriptSegment } from '@/types';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
 import { TeachBackClassroom } from '@/components/apps/windows/TeachBackClassroom';
 import { TeachBackQuadrantMap } from '@/components/apps/windows/TeachBackQuadrantMap';
-import { TeachBackSpeakPanel } from '@/components/apps/windows/TeachBackSpeakPanel';
-import { useTeachBackVoice } from '@/components/apps/windows/use-teach-back-voice';
+import { TeachBackPodium } from '@/components/apps/windows/TeachBackPodium';
+import { useTeachBackPanel } from '@/components/apps/windows/use-teach-back-panel';
 import { formatTeachBackCompleteActivity } from '@/components/review-learning-activity';
 import { buildTeachBackAssessment, type AssessmentDraft } from './assessment-events';
 import { NextStepCard, type NextStepCardProps } from './NextStepCard';
@@ -43,9 +43,10 @@ interface TeachBackWindowProps {
   nextStep?: NextStepCardProps;
 }
 
-// 2026-09：半双工语音版——学生用嘴分段讲（VoiceMicButton → /api/asr/oneshot，
-// 可打字补充），每段讲完调 /api/apps/teach-back/respond 让同桌决定是否开口，
-// 同桌的话经 useTeachSpeech（/api/teach/tts）出声；核对链路（/api/apps/teach-back/evaluate）不变。
+// 2026-09-10：连续讲述版——走上讲台后麦克风常开（课堂录音同一条实时 ASR 通道），
+// 能量 VAD + 句末事件判"这一段讲完了"→ 评委席（直言 / 引导 / 追问）一位开口（/api/apps/teach-back/turn SSE）
+// → 气泡流式 + TTS 出声（三种声音）→ 你一开口评委就停；编排在 use-teach-back-panel.ts，
+// 判定在 teach-back-turn-machine.ts。核对链路（/api/apps/teach-back/evaluate）与象限语义不变。
 type Phase = 'targets' | 'teach' | 'evaluating' | 'result';
 
 const GROUP_STYLES: Record<TeachBackQuadrantGroup, { dot: string; text: string }> = {
@@ -85,12 +86,42 @@ function EvidenceButton({ item, onSeek }: { item: TeachBackEvaluationItem; onSee
   );
 }
 
+/** 结果页：回看本场每个回合——你讲了什么 / 谁说了什么（细线列表，评委名字是小字眉题） */
+function RoundsReview({ turns }: { turns: TeachBackTurn[] }) {
+  const copy = APPS_COPY.teachBack;
+  const userTurns = turns.filter((turn) => turn.role === 'user').length;
+  return (
+    <section data-testid="teach-back-rounds">
+      <div className="flex items-baseline justify-between">
+        <p className="text-[13px] font-semibold text-ink">{copy.roundsTitle}</p>
+        <p className="text-[11px] text-ink-muted">{copy.roundCount(userTurns)}</p>
+      </div>
+      {turns.length === 0 ? (
+        <p className="mt-2 text-[12px] leading-5 text-ink-muted">{copy.roundsEmpty}</p>
+      ) : (
+        <div className="mt-2 divide-y divide-divider">
+          {turns.map((turn, index) => {
+            const speaker = turn.role === 'user'
+              ? copy.roundYou
+              : turn.judgeId ? copy.judges[turn.judgeId].name : copy.roundDeskmate;
+            return (
+              <div key={`${index}-${turn.text.slice(0, 12)}`} className={`py-2.5 ${turn.role === 'user' ? '' : 'pl-4'}`}>
+                <p className={`font-mono text-[10px] uppercase tracking-caps ${turn.role === 'user' ? 'text-ink-muted' : 'text-pine'}`}>{speaker}</p>
+                <p className={`mt-0.5 text-[13px] leading-6 ${turn.role === 'user' ? 'text-ink' : 'text-ink-secondary'}`}>{turn.text}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLearningActivity, onAssessment, nextStep }: TeachBackWindowProps) {
   // 接口 metadata.title 上限 200 字；课名再长也只取这么多
   const lessonTitle = contextTitle?.trim().slice(0, 200) || undefined;
   const targets = useMemo(() => normalizeTeachBackTargets(result), [result]);
   const [phase, setPhase] = useState<Phase>('targets');
-  const [typedText, setTypedText] = useState('');
   const [evaluation, setEvaluation] = useState<TeachBackEvaluation | null>(null);
   const [evalFailed, setEvalFailed] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
@@ -99,6 +130,8 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
   const [focusTargetIds, setFocusTargetIds] = useState<string[] | null>(null);
   /** 结果页：点象限格子后高亮的那一组（1.4s 后自动褪去） */
   const [activeGroup, setActiveGroup] = useState<TeachBackQuadrant | null>(null);
+  /** 结果页回看用：evaluate 时快照一份本场记录 */
+  const [roundsSnapshot, setRoundsSnapshot] = useState<TeachBackTurn[]>([]);
   const groupRefs = useRef<Partial<Record<TeachBackQuadrantGroup, HTMLElement | null>>>({});
   const turnsRef = useRef<TeachBackTurn[]>([]);
   const evalRequestRef = useRef(0);
@@ -110,19 +143,11 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
     () => (focusTargetIds ? targets.filter((target) => focusTargetIds.includes(target.id)) : targets),
     [targets, focusTargetIds],
   );
+  const metadata = useMemo(() => (lessonTitle ? { title: lessonTitle } : undefined), [lessonTitle]);
 
-  /* ── 半双工语音：分段讲述 → 同桌应答 → TTS 出声 ── */
+  /* ── 连续讲述：麦克风常开 → 回合 → 评委席 ── */
 
-  const voice = useTeachBackVoice({
-    turnsRef,
-    targets: activeTargets,
-    metadata: lessonTitle ? { title: lessonTitle } : undefined,
-  });
-  const silenceRef = useRef(voice.silence);
-  silenceRef.current = voice.silence;
-
-  /** 离开窗口（卸载）时同桌立刻闭嘴 */
-  useEffect(() => () => silenceRef.current(), []);
+  const panel = useTeachBackPanel({ turnsRef, targets: activeTargets, transcript, metadata });
 
   /* ── 评估等待：分阶段文案，让 10-40 秒的等待有进展感 ── */
 
@@ -139,7 +164,8 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
     if (phase !== 'evaluating') return;
     const requestId = ++evalRequestRef.current;
     setEvalFailed(false);
-    const turns = turnsRef.current;
+    // evaluate 契约只认 role / text（judgeId 是评委席自己的事）
+    const turns = turnsRef.current.map((turn) => ({ role: turn.role, text: turn.text }));
     const slimTranscript = transcript.map((segment) => ({
       id: segment.id,
       text: segment.text,
@@ -157,7 +183,7 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
             targets: activeTargets,
             teachingTurns: turns,
             transcript: slimTranscript,
-            metadata: lessonTitle ? { title: lessonTitle } : undefined,
+            metadata,
           }),
         });
         if (response.status === 429) {
@@ -184,17 +210,14 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
         setEvalFailed(true);
       }
     })();
-  }, [phase, evalAttempt, activeTargets, transcript, lessonTitle]);
+  }, [phase, evalAttempt, activeTargets, transcript, metadata]);
 
   /* ── 评估成功：写一次课后学习黑板（同时进客观学习动态流） ── */
 
   useEffect(() => {
     if (phase !== 'result' || !evaluation || activityWrittenRef.current) return;
     activityWrittenRef.current = true;
-    if (evaluation.headline) {
-      voice.feedDelta(evaluation.headline);
-      voice.feedBreak();
-    }
+    if (evaluation.headline) panel.speakLine(evaluation.headline);
     const view = buildTeachBackResultView(evaluation);
     onLearningActivity?.(formatTeachBackCompleteActivity({
       total: view.total,
@@ -207,9 +230,19 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
     }));
     const assessment = buildTeachBackAssessment(evaluation.items);
     if (assessment) onAssessment?.(assessment);
-  }, [phase, evaluation, onAssessment, onLearningActivity, voice]);
+  }, [phase, evaluation, onAssessment, onLearningActivity, panel]);
 
-  /* ── 核对：讲完进入 evaluating 阶段 ── */
+  /* ── 上台 / 核对 / 重讲 ── */
+
+  const enterStage = (focus: string[] | null) => {
+    turnsRef.current = [];
+    activityWrittenRef.current = false;
+    setEvaluation(null);
+    setFocusTargetIds(focus);
+    setPhase('teach');
+    // 同一个用户手势里拿麦克风权限（getUserMedia 是 start 里的第一个 await）
+    void panel.start();
+  };
 
   const startEvaluation = () => {
     autoRetriedRef.current = false;
@@ -218,25 +251,17 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
     setPhase('evaluating');
   };
 
-  /** 提交输入框里这一段给同桌（同步 push 进 turnsRef，evaluate 读得到） */
-  const submitPendingSegment = () => {
-    const text = typedText.trim();
-    if (!text) return;
-    voice.submitUserSegment(text);
-    setTypedText('');
-  };
-
   const handleFinish = () => {
-    submitPendingSegment();
+    panel.finish(); // 同步把没提交的尾巴记进 turnsRef，并停掉麦克风与声音
+    setRoundsSnapshot(turnsRef.current);
     startEvaluation();
   };
 
-  const handleRetry = () => {
-    voice.silence();
+  const handleBackToTargets = () => {
+    panel.stop();
     turnsRef.current = [];
     activityWrittenRef.current = false;
     setFocusTargetIds(null);
-    setTypedText('');
     setEvaluation(null);
     setEvalFailed(false);
     setPhase('targets');
@@ -252,26 +277,30 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
   }
 
   if (phase === 'teach') {
-    const hasUserTurn = turnsRef.current.some((turn) => turn.role === 'user');
+    const hasUserTurn = panel.turnCount > 0 || turnsRef.current.some((turn) => turn.role === 'user');
     return (
       <div className="relative h-full min-h-0">
         <TeachBackClassroom
           lessonTitle={lessonTitle}
           targets={activeTargets}
+          judges={panel.judges}
+          mood={panel.mood}
         />
-
-        {/* 半双工讲课：留在教室里，粉笔目标仍在黑板上；同桌在听，偶尔会开口 */}
-        <TeachBackSpeakPanel
-          speaking={voice.speaking}
-          deskmateLines={voice.deskmateLines}
-          pendingText={typedText}
-          onPendingTextChange={setTypedText}
-          onMicTranscript={(text) => setTypedText((prev) => prev + text)}
-          onMicStart={voice.silence}
-          onSubmitSegment={submitPendingSegment}
+        <TeachBackPodium
+          status={panel.status}
+          phase={panel.phase}
+          mood={panel.mood}
+          levels={panel.levels}
+          liveText={panel.liveText}
+          lastCommitted={panel.lastCommitted}
+          activeJudge={panel.activeJudge}
+          voiceEnabled={panel.voiceEnabled}
+          onVoiceEnabledChange={panel.setVoiceEnabled}
           onFinish={handleFinish}
-          onBack={() => setPhase('targets')}
-          finishDisabled={!hasUserTurn && !typedText.trim()}
+          finishDisabled={!hasUserTurn && !panel.liveText.trim()}
+          onBack={handleBackToTargets}
+          onRestart={() => { void panel.start(); }}
+          onSubmitTyped={panel.submitTyped}
         />
       </div>
     );
@@ -287,7 +316,7 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
       APPS_COPY.teachBack.evaluatingStage3,
     ][evalStage];
     return (
-      <div className="flex h-full min-h-0 flex-col items-center justify-center gap-4 bg-paper px-6">
+      <div className="flex h-full min-h-0 flex-col items-center justify-center gap-4 bg-paper px-6" data-testid="teach-back-evaluating">
         {evalFailed ? (
           <>
             <p className="max-w-[320px] text-center text-[13px] leading-6 text-ink-secondary">
@@ -306,7 +335,7 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
                 <RotateCcw size={13} strokeWidth={2} />
                 {APPS_COPY.teachBack.retryEval}
               </button>
-              <button type="button" onClick={handleRetry} className="text-[12px] text-ink-muted transition-colors hover:text-ink">
+              <button type="button" onClick={handleBackToTargets} className="text-[12px] text-ink-muted transition-colors hover:text-ink">
                 {APPS_COPY.teachBack.retry}
               </button>
             </div>
@@ -329,7 +358,7 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
       setActiveGroup(quadrant);
       window.setTimeout(() => setActiveGroup((current) => (current === quadrant ? null : current)), 1400);
     };
-    // 结果揭示：标题 → 一句话 → 象限地图 → 一组一张纸依次浮出（mm-stagger）
+    // 结果揭示：标题 → 一句话 → 象限地图 → 一组一张纸依次浮出（mm-stagger）→ 本场回合
     return (
       <div className="flex h-full min-h-0 flex-col bg-paper" data-testid="teach-back-result">
         <div className="mm-stagger min-h-0 flex-1 overflow-y-auto px-5 py-5">
@@ -371,16 +400,7 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
                         {group.key === 'blind-spot' || group.key === 'aware-gap' ? (
                           <button
                             type="button"
-                            onClick={() => {
-                              voice.silence();
-                              turnsRef.current = [];
-                              activityWrittenRef.current = false;
-                              setEvaluation(null);
-                              setFocusTargetIds([item.targetId]);
-                              setTypedText('');
-                              voice.unlockAudio();
-                              setPhase('teach');
-                            }}
+                            onClick={() => enterStage([item.targetId])}
                             className="mm-focus rounded text-[12px] font-medium text-pine underline decoration-pine/30 underline-offset-[3px] transition-colors hover:decoration-pine"
                           >
                             {APPS_COPY.teachBack.reteachPoint}
@@ -392,25 +412,17 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
                 </div>
               </section>
             ))}
+            <RoundsReview turns={roundsSnapshot} />
           </div>
           {nextStep ? <NextStepCard {...nextStep} /> : null}
         </div>
         <div className="flex flex-shrink-0 items-center justify-between border-t border-divider bg-card px-5 py-3">
-          <button type="button" onClick={handleRetry} className="mm-focus rounded text-[12px] text-ink-muted transition-colors hover:text-ink">
+          <button type="button" onClick={handleBackToTargets} className="mm-focus rounded text-[12px] text-ink-muted transition-colors hover:text-ink">
             {APPS_COPY.teachBack.backToTargets}
           </button>
           <button
             type="button"
-            onClick={() => {
-              voice.silence();
-              turnsRef.current = [];
-              activityWrittenRef.current = false;
-              setFocusTargetIds(null);
-              setEvaluation(null);
-              setTypedText('');
-              voice.unlockAudio();
-              setPhase('teach');
-            }}
+            onClick={() => enterStage(null)}
             className="mm-press mm-focus rounded-full bg-pine px-5 py-2.5 text-[13px] font-medium text-white"
           >
             {APPS_COPY.teachBack.retry}
@@ -438,13 +450,9 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
           </div>
           <button
             type="button"
-            onClick={() => {
-              turnsRef.current = [];
-              setTypedText('');
-              voice.unlockAudio();
-              setPhase('teach');
-            }}
+            onClick={() => enterStage(null)}
             className="mm-press mm-focus inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full bg-pine px-5 py-3 text-[14px] font-medium text-white hover:opacity-90"
+            data-testid="teach-back-start"
           >
             <Mic size={15} strokeWidth={2} />
             {APPS_COPY.teachBack.startVoice}
