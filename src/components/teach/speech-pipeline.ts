@@ -190,9 +190,10 @@ export class TeachSpeechPlayer {
     const generation = this.generation;
     this.setPlaying(true);
     try {
-      // 当前句：吃预取或现取；同时预取下一句
+      // 当前句：吃预取或现取；同时预取后两句（服务端串行闸会排队，但起跑更早，短句之间不留空）
       const blob = await this.ensurePrefetch(item.text);
       if (this.queue[0]) void this.ensurePrefetch(this.queue[0].text);
+      if (this.queue[1]) void this.ensurePrefetch(this.queue[1].text);
       if (generation !== this.generation || this.muted) return;
       this.prefetch.delete(item.text);
       // 声画联动闸门：句子开始播放（或合成失败被跳过）= 放行锚到这句的板书

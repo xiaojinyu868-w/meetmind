@@ -60,6 +60,17 @@ const REGISTRY: Record<string, () => TeachProviderConfig> = {
     upstreamParams: { reasoning_effort: 'low' },
     description: 'Gemini 3.7 Flash 经 OpenAI Next 中转（OpenAI 兼容协议，注入 reasoning_effort=low）',
   }),
+  'glm-flash-dashscope': () => ({
+    id: 'glm-flash-dashscope',
+    model: env('TEACH_LIVE_MODEL') || 'ZHIPU/GLM-5.3-Flash',
+    baseUrl: env('LLM_BASE_URL') || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    apiKeyEnv: 'DASHSCOPE_API_KEY',
+    // 2026-09-10 实测（百炼）：该模型「始终思考，不支持关闭」（enable_thinking=false → 400），
+    // 默认会先吐 1500+ reasoning tokens 才开口；reasoning_effort=low 把推理压到 0，
+    // TTFT 2.4s、正文 ~144 tok/s。live 引擎默认走它（用户拍板 2026-09-10）。
+    upstreamParams: { reasoning_effort: 'low' },
+    description: '百炼 GLM-5.3-Flash（live 舞台引擎默认；reasoning_effort=low 压 TTFT）',
+  }),
 };
 
 export type TeachProviderId = keyof typeof REGISTRY;
@@ -134,9 +145,20 @@ export function resolveTeachTtsProviderFor(overrides: { voice?: string; instruct
   return { ...base, voice, instruct };
 }
 
+/** live 舞台引擎的 provider（独立于 TEACH_PROVIDER：两条线对模型的要求不同——live 要的是低 TTFT + 会写 SVG） */
+export function resolveTeachLiveProvider(): TeachProviderConfig {
+  const wanted = (process.env.TEACH_LIVE_PROVIDER || '').trim();
+  const factory = REGISTRY[wanted] || REGISTRY['glm-flash-dashscope'];
+  return factory();
+}
+
 export const TeachConfig = {
-  /** 教学引擎选择：codex（现役 app-server 底座）/ engine（pi loop + vendor OpenMAIC，P1） */
+  /** 教学引擎选择：codex（现役 app-server 底座）/ engine（pi loop + vendor OpenMAIC，P1）/ live（标签流舞台引擎，2026-09） */
   engine: env('TEACH_ENGINE') || 'codex',
+  /** live 引擎单轮最大输出 tokens（一轮 = 几句话 + 一两张图，4096 够；SVG 多时上调） */
+  liveMaxOutputTokens: Number(env('TEACH_LIVE_MAX_OUTPUT_TOKENS') || 6000),
+  /** live 引擎温度：SVG 坐标与 LaTeX 要稳，低一点 */
+  liveTemperature: Number(env('TEACH_LIVE_TEMPERATURE') || 0.6),
   /** teach-engine 的 skill 目录（Agent Skills 标准 SKILL.md；目录不存在 = 无技能） */
   skillsDir: env('TEACH_SKILLS_DIR') || 'assets/teach-skills',
   /** teach-engine 人物人格 skill 的发现根（fenshen 蒸馏产物；目录布局契约见

@@ -13,9 +13,16 @@
  *   {type:'tool-result',id,result}  工具结果（BoardEnv digest：{ok,board,...}）
  *   {type:'turn-complete'}          一轮讲完
  *   {type:'interrupted'}            当前 turn 被打断
- *   {type:'image-ready',id,url}     插图回填完成（id = image tool-call 的 id）
+ *   {type:'image-ready',id,url}     插图回填完成（id = image tool-call 的 id；live 线 = image 块 id）
  *   {type:'error',message}          错误（人可读）
+ *
+ * live 舞台引擎（teach-live，2026-09）追加的四种块事件（见 src/types/teach-live.ts）：
+ *   {type:'block-open',id,kind,attrs} / {type:'block-delta',id,text} /
+ *   {type:'block-close',id,complete} / {type:'cue',name,args}
+ * 口播正文仍走 text-delta（归到当前打开的 say/ask 块），老消费方读转写不受影响。
  */
+
+import type { LiveEvent } from '@/types/teach-live';
 
 export type TeachStreamEvent =
   | { type: 'thread'; threadId: string }
@@ -25,7 +32,8 @@ export type TeachStreamEvent =
   | { type: 'turn-complete' }
   | { type: 'interrupted' }
   | { type: 'image-ready'; id: string; url: string }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | LiveEvent;
 
 /**
  * 事件日志行 = SSE 契约事件 + 学生消息记录（只落盘不广播，供回放恢复对话：

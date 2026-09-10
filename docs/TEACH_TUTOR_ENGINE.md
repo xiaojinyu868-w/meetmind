@@ -180,3 +180,44 @@ vendor 全量 22 类，v1 启用：
 - **已知代价**：teach-codex 编排层退役时 image-backfill 随之废弃（dashscope 生图服务保留作装饰性用途）；fenshen 线继续用 codex（进程隔离需求不变），teach-codex 通用件照常维护
 - **P3 交互形态重设计后置**：先吃 P1（引擎）+ P2（skill）收益，把课中体验修到可用；P3 启动前单独出设计稿过 Taste 评审
 - **P1 验收门槛**：旧 teach 场景回归 + `make check` + bench 数字对齐 `out/teach-harness-ab/`（input/轮 ≤ B 形态 2 倍、板书密度 ≥3 次/轮、解析器无截断）
+
+---
+
+## 12. 第三代引擎决策记录：live stage（2026-09-10）
+
+**决策：在 codex / engine 之外再开一条 `live` 线（`TeachThread.engine='live'`，前端 `/teach/live`），作为「AI 一对一上课表现上限」的探索主路；前两条线不拆，作为对照组并存，切流与退役留到 live 线 eval 达标后再议。**
+
+用户原话（目标）：AI 做一对一，真人老师 1/4 的价格、相近甚至某些方面更好的效果——更好的表现形式、更好的多模态生成、基于代码的流式生成，给学生更生动的表现；对现有形态（前端表现、交互、延迟）都不满意；不造轮子、看开源（含 OpenMAIC）但要比它们做得更好；模型用 GLM 5.3 Flash。
+
+### 12.1 重新审视了哪些前代决策
+
+| 前代决策 | 重新判断 | 结果 |
+|---|---|---|
+| §2.2「28 个动作是模型的输出词汇，不是工具」 | **保留并推到底**：不仅动作是输出，图形本身（SVG / LaTeX / 代码 / HTML）也是输出词汇 | 标签流协议：块正文是原生文本 |
+| §2.2 结构化 JSON 数组直出 | JSON 包装让 SVG 必须整个 action 闭合才能解析，无法逐笔上板；字符串转义放大 token；首 `say` 被包装稀释 TTFT | **换成标签流**（`<say>` `<svg>` … 交错），两态增量解析器 |
+| §2.3 vendor OpenMAIC 动作引擎 / choreography / playback（服务端执行动作、估时 pacing） | 服务端模拟板书状态与节奏是为「预排脚本」设计的；活对话里真正的时钟是**前端的 TTS 播放**。服务端 pacing 等于对着估时演戏 | **服务端不再执行动作、不做节奏**：只解析 + 扇出；节奏在前端 Director 按真实语音出声时刻放行（到达 / 演出两条时间轴）。vendor 树保留给 engine 线，live 线零依赖 |
+| §2.1 pi loop（compaction / 子 agent / skill read 工具） | 上课的一轮不需要工具 loop；skill 机制的价值在 P2 已被 prompt 直给取代大半 | live 线一轮 = 一次 streamText；历史用事件日志重建、重块压占位 |
+| 词表：wb_draw_text / latex / shape / table / code…（前端每种一个渲染器） | 让模型画 shape/table 的坐标是低效的；真正拉开与真人差距的是**代码驱动的表现形式** | 词表按表现形式重划：svg（自由图形，逐笔长）/ plot（声明式函数图，代码排版永不重叠）/ diagram（mermaid）/ anim（SVG+CSS/SMIL 动画）/ widget（沙箱交互件）/ image（异步生图）/ math / note / code |
+| 生图：teach-codex image-backfill 课后回填；§11「扩散生图降级为装饰性用途」 | 结论不变，但接法变了：块一闭合就开始生成（比 turn 收尾早半分钟），老师口播里顺口说「图稍后出现」照常往下讲 | `<image prompt>` + 占位卡 + image-ready 淡入 |
+| 前端：备课本画布 + 右侧对话栏（`/teach`） | 对话栏把「上课」做成了聊天；板不是主角；字幕与声音不同步 | 暗色舞台 + 一块暖白板占满中间；字幕跟声音；输入退成底部一行胶囊；按住说话即打断 |
+| 默认模型 Gemini 3.7 Flash 经 commonstack（TTFT 4–30s 抖动） | 实时课堂 TTFT 是体验的地板 | 百炼 GLM-5.3-Flash + `reasoning_effort=low`（该模型不可关思考，low 把推理压到 0）：TTFT 0.8–1.1s、~140 tok/s、无 400 |
+
+### 12.2 站在什么肩膀上
+
+- 复用本仓库：teach-codex 的 event-bus / thread-store / 事件日志（SSE 契约不破，只追加四种块事件）、`TeachSpeechPlayer`（按句 TTS、预取——本次改为预取两句）、`useVoiceInput`（流式 ASR）、`dashscope-image-service`、`ChatCodeBlock`（shiki）、learner 读槽。
+- 开源轮子：KaTeX（公式）、mermaid（图示）、react-markdown + remark-math（要点）、shiki（代码）、Web Animations API + `getTotalLength`（描画，零库）；OpenMAIC 留下的是思想（动作即输出、blocking 二分、pacing 锚到语音），不是代码。
+- 没拿的：Manim / Motion Canvas（重、不可流式）、GeoGebra（许可）、tldraw/Excalidraw（自由画板不是老师需要的）。
+
+### 12.3 实测（2026-09-10，dev 服务器 + 真模型 + 真 TTS + Playwright）
+
+- 一轮开场：input 2.5–2.7k tokens、output 1.1–2.4k、TTFT 0.78–1.05s、生成 8–18s，产出 3–8 张图（含 `into` 分步追加）+ 公式 + 要点，2–3 页。
+- 三个课题都用到了 ≥3 种表现形式：勾股定理（svg 分步 + math + note）、导数（svg + plot 割线 + anim 割线转切线 + math）、浮力（svg + note + math + anim + **widget 滑块拉货物吨数看船吃水**）。
+- 插话：「等一下，斜边是什么意思？」→ 老师闭嘴 → 针对回答并 `point` 回图里的 `tri#legs` / `tri#hyp` → 5.2s 生成完 → 自然衔回。
+- 首句出声：生产链路估算 ~3s（建课 50ms + ack 100ms + TTFT 0.9s + 首句 0.4s + TTS 1–1.5s）；dev 下首次命中多 4–6s 路由编译。
+
+### 12.4 已知缺口（下一步）
+
+1. 模型作图的坐标质量（重叠 / 越界）——考虑客户端布局辅助（自动避让标签）或让模型只给语义、代码排版（plot 已如此，几何 / 示意图待做 `<figure>` DSL）。
+2. 语音 barge-in（自由说话打断）与拍题进课堂。
+3. 课后沉淀：事件日志 → 复习材料回主线。
+4. eval：复用 `tests/eval/teach/` 结构给 live 线加「表现形式覆盖 / 首笔时刻 / 插话三拍」grader，达标后评估切流与前两线退役。

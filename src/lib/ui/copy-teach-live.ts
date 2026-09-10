@@ -1,0 +1,66 @@
+/**
+ * copy-teach-live —— AI 家教「上课」舞台（/teach/live）的用户面文案。
+ *
+ * 口吻同 copy.ts：安静、有根、不播报。这一屏 95% 的时间只有板和声音，文案越少越好；
+ * 出现的每一句都得像一位老师会说的话，不出现内部词（引擎 / 块 / 事件 / 协议）。
+ * 用法：`import { TEACH_LIVE_COPY } from '@/lib/ui/copy-teach-live'`。
+ */
+
+export const TEACH_LIVE_COPY = {
+  pageTitle: '上一节课',
+  entryEyebrow: '一对一 · 边说边画',
+  entryTitle: '今天想学什么？',
+  entryHint: '一个概念、一道题、一个一直没弄明白的问题。老师边说边画，你随时可以插话。',
+  entryPlaceholder: '比如：勾股定理为什么成立',
+  entryStart: '开始上课',
+  entryStarting: '老师来了…',
+  entrySuggestionsTitle: '也可以从这些开始',
+  entrySuggestions: [
+    '勾股定理为什么成立',
+    '导数到底是什么',
+    '为什么天空是蓝色的',
+    '二分查找怎么想出来的',
+    '光合作用在做什么',
+    '为什么船能浮起来',
+  ],
+  recentTitle: '上过的课',
+  recentEmpty: '还没有。上一节，这里就会有。',
+  resume: '接着上',
+  newLesson: '新的一课',
+  backToEntry: '换个课题',
+
+  statusThinking: '老师想了想…',
+  statusSpeaking: '老师在讲',
+  statusListening: '在听你说',
+  statusWaiting: '等你回答',
+  statusReconnecting: '正在重新连上老师…',
+  statusPaused: '课先停在这儿',
+
+  composerPlaceholder: '随时插话，或回答老师',
+  composerAnswerPlaceholder: '回答老师…',
+  composerSend: '说',
+  composerContinue: '继续讲',
+  composerMic: '按住说话',
+  composerMicRecording: '松开发送',
+  composerMicHint: '也可以直接打字',
+  interruptHint: '老师会停下来听你说',
+
+  pagesLabel: '这节课的板',
+  pageFollow: '回到老师那页',
+  transcriptToggle: '课堂记录',
+  transcriptTitle: '课堂记录',
+  transcriptEmpty: '老师还没开口。',
+  transcriptTeacher: '老师',
+  transcriptYou: '你',
+  mute: '关掉声音',
+  unmute: '打开声音',
+  askEyebrow: '老师问你',
+  animTitle: '动画',
+  widgetTitle: '动手试试',
+  replay: '再看一遍',
+  imageAltFallback: '插图',
+  imagePending: (alt: string): string => `老师在画「${alt}」，稍等一会儿`,
+  errorGeneric: '这一句老师没说出来，再说一次试试。',
+  errorCreate: '这节课没开起来，请稍后再试。',
+  boardEmpty: '老师开口了，板上马上有东西。',
+} as const;

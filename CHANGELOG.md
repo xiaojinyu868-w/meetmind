@@ -5,6 +5,19 @@
 
 ---
 
+## 2026-09-10 — AI 家教第三代引擎 live stage：边说边画、图一笔一笔长出来、会动、能拉
+
+用户原话：「真正的老师给人讲课的那个效果……AI 老师可以给多模态的输出，除了文字还有基于代码的表现方式例如 SVG、各种基于代码的动画，还可以调用生图模型……力求实时流式输出……真人老师 1/4 的价格、相近甚至更好的效果……现在的形态我非常不满意……用 GLM 5.3 Flash。」重新审视了 teach 线的前代决策（`docs/TEACH_TUTOR_ENGINE.md` §12），在 codex / engine 之外开第三条线，前两条不拆作对照。
+
+- **协议换成标签流**（`src/types/teach-live.ts`）：老师一轮输出是 `<say>` / `<scene>` / `<svg>` / `<plot>` / `<math>` / `<note>` / `<diagram>` / `<code>` / `<anim>` / `<widget>` / `<image>` / `<ask>` / `<point>` / `<highlight>` 交错的一条流，块正文是原生文本——一个 `<svg>` 里一个元素闭合就能上板，图是一笔一笔长出来的；`<svg into="fig">` 往已有的图上追加（先画三角形，讲到斜边再补斜边）。两态增量解析器 `live-markup-parser.ts`（10 例单测含分块不变性）。
+- **服务端只解析 + 扇出**（`src/lib/services/teach-live/`）：一轮一次 streamText，无工具 loop、无子进程、无板书模拟；复用 teach-codex 的事件总线与事件日志（SSE 契约只追加四种块事件，口播仍走 text-delta）；`<image>` 块一闭合即异步生图回填。路由三个写口按 `TeachThread.engine` 三线分发，`POST /threads` 接 `engine` 显式指定，`GET /threads?engine=live`。
+- **模型**：百炼 `ZHIPU/GLM-5.3-Flash`（不可关思考；`reasoning_effort=low` 实测把推理压到 0）TTFT 0.8–1.1s、~140 tok/s，一轮开场 input 2.6k / output 1.1–2.4k。`TEACH_LIVE_PROVIDER` 独立于 `TEACH_PROVIDER`。
+- **前端 `/teach/live`**（`src/components/teach-live/`）：暗色教室里一块亮着的暖白板，95% 时间只有板和声音。核心是**两条时间轴**——事件按模型速度到达进 reducer，Director 按语音真正出声的时刻放行揭示（句子后 320ms 落笔、连续块 650ms 错开、静音按估时）；`svg-draw.ts` 用 stroke-dashoffset 按路径长度描画 + 琥珀笔尖沿路径走；`plot-dsl.ts` 手写表达式求值把 `f(x)=6x^2 ; point(1,6,"A")` 排成永不重叠的坐标图；anim / widget 走 iframe 沙箱（样式与脚本不泄漏整页，widget postMessage 自报高度）；激光笔指到图里的 `#id`；字幕跟声音（合成中半透明）；按住麦克风老师即闭嘴、松开发送；打断 = 没演到的永远不演、空页撤掉。7 例管线单测（真解析器 + reducer + Director 假语音口走完一节课）。
+- **实测**（真模型 + 真 TTS + Playwright 录像）：勾股定理（svg 三步长出 + 公式 + 要点）、导数（svg + 割线 plot + 割线转切线 anim + 定义式）、浮力（svg + anim + **滑块拉货物吨数看船吃水的 widget**），插话「斜边是什么意思」老师闭嘴、指回图里的边回答、衔回。首句出声生产链路 ~3s。
+- 顺手：`TeachSpeechPlayer` 预取两句（短句之间不留空）；`.env.example` / 各 DOMAIN.md / AGENTS.md §3-18 与路由表同步。
+
+---
+
 ## 2026-09-10 — 录课不丢、结束即可见：一节课从开始录到出现在任何设备上
 
 用户原话：「录一节课，录到一半，如果忘记保存、忘记结束，这节课就直接没了。我经常录了一节课，去其他设备看，并没有这节课的记录。」沿源码追完整个生命周期 + 生产库只读查询 + Playwright 在生产 3002 上用合成账户实测（FINDINGS 与前后截图在 `/tmp/mm-sync/`）。真相：录课期间音频分片与实时字幕**只在内存**，「结束这节课」是唯一的持久化时刻；服务端写入一次性 fire-and-forget、失败只 console.error；另一设备只在页面加载那一刻拉一次列表，课堂 tab 点开跨设备的课**没有任何反应**。生产库 90 天 79 节课：只有 40 节在结束那一刻到了服务端，39 节靠下次页面加载的登录迁移才上去（中位 8.9 小时、p90 54 天），57 节在服务端是两行。七个原子提交：

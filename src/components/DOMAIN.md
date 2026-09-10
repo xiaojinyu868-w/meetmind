@@ -33,6 +33,8 @@ components/
 ├── settings/DOMAIN.md # 设置页组件（行原子 / 桌面锚点导航 / 账户与关于你两个 section）
 ├── context/DOMAIN.md  # /context 共享 Context 管理、任务试读、来源控制与受限应用授权
 ├── pocket/            # 口袋（/companion）：PocketPanel（流 + 记 / 问 + 拖放粘贴；壳内外同一页）、pocket-model（分组 / 时间口径 / 粘贴富文本判定，有测试）；文案 lib/ui/copy-pocket.ts
+├── teach/DOMAIN.md    # /teach（codex / engine 两线的前端）：备课本画布 + 对话栏 + 声画联动
+├── teach-live/DOMAIN.md # /teach/live 上课舞台（第三代 teach-live 引擎前端）：到达 / 演出两条时间轴（reducer + Director）、逐笔长出的 SVG、plot/anim/widget/image 渲染器、激光笔、按住说话；文案 lib/ui/copy-teach-live.ts
 ├── mobile/DOMAIN.md   # 移动端专用组件（18 个）
 ├── business/DOMAIN.md # 业务展示组件（6 个）
 ├── layout/DOMAIN.md   # 布局组件（3 个）

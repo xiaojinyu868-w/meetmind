@@ -8,6 +8,11 @@ import {
   preflightTeachEngine,
   TeachEngineError,
 } from '@/lib/services/teach-engine/teach-engine-service';
+import {
+  sendTeachLiveMessage,
+  preflightTeachLive,
+  TeachLiveError,
+} from '@/lib/services/teach-live/teach-live-service';
 import { getThread } from '@/lib/services/teach-codex/thread-store';
 
 /**
@@ -17,9 +22,9 @@ import { getThread } from '@/lib/services/teach-codex/thread-store';
  * 该轮所有事件经 GET .../stream 的 SSE 流出（本路由自身不流式）。
  * 老师正在讲时返回 409（先 interrupt 或等 turn-complete）。
  *
- * 引擎分发（P1-B）：按线程 TeachThread.engine 归属分发——engine='engine'
- * 走 teach-engine（pi loop），其余（codex / null 旧线程）走 codex 底座；
- * 错误码、409 语义、响应形状两侧完全一致，路由仍是薄壳。
+ * 引擎分发：按线程 TeachThread.engine 归属——'live' 走 teach-live（标签流舞台引擎），
+ * 'engine' 走 teach-engine（pi loop），其余（codex / null 旧线程）走 codex 底座；
+ * 错误码、409 语义、响应形状三侧完全一致，路由仍是薄壳。
  */
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
@@ -27,8 +32,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
   if (!row) {
     return Response.json({ error: '课程不存在', code: 'thread-not-found' }, { status: 404 });
   }
-  const useEngine = row.engine === 'engine';
-  const preflight = useEngine ? preflightTeachEngine() : preflightTeach();
+  const engine = row.engine === 'live' ? 'live' : row.engine === 'engine' ? 'engine' : 'codex';
+  const preflight =
+    engine === 'live' ? preflightTeachLive() : engine === 'engine' ? preflightTeachEngine() : preflightTeach();
   if (!preflight.ok) return Response.json({ error: preflight.error }, { status: 500 });
 
   let body: { text?: unknown };
@@ -43,11 +49,12 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
 
   try {
-    if (useEngine) await sendTeachEngineMessage(params.id, text);
+    if (engine === 'live') await sendTeachLiveMessage(params.id, text);
+    else if (engine === 'engine') await sendTeachEngineMessage(params.id, text);
     else await sendTeachMessage(params.id, text);
     return Response.json({ ok: true });
   } catch (cause) {
-    if (cause instanceof TeachServiceError || cause instanceof TeachEngineError) {
+    if (cause instanceof TeachServiceError || cause instanceof TeachEngineError || cause instanceof TeachLiveError) {
       return Response.json({ error: cause.message, code: cause.code }, { status: cause.status });
     }
     return Response.json({ error: 'failed' }, { status: 500 });

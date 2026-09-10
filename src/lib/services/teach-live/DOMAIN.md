@@ -1,0 +1,74 @@
+# teach-live —— AI 家教「上课」线第三代引擎（live stage：标签流 + 多模态板书）
+
+> 2026-09-10 起。与 codex 底座（`teach-codex/`）、pi + vendor OpenMAIC 引擎（`teach-engine/`）三线并存，
+> 路由按 `TeachThread.engine`（codex | engine | live）分发；前端是独立的 `/teach/live`（`src/components/teach-live/`）。
+> 决策记录：`docs/TEACH_TUTOR_ENGINE.md` §12。用户目标原话：真人老师 1/4 的价格、相近甚至更好的效果——
+> 效果来自「边说边画」的临场感 + 真人做不到的多模态（代码驱动的图形与动画流式长出来、函数图一秒画好、参数能拉、慢生图异步补位）。
+
+## 一句话架构
+
+```
+学生消息 ─► sendTeachLiveMessage ─► streamText（GLM-5.3-Flash，reasoning_effort=low）
+                                        │ 模型直出「标签流」（不是 JSON）
+                                        ▼
+                               LiveMarkupParser（增量，两态：顶层 / 块内原文）
+                                        │ block-open / block-delta / block-close / cue
+                                        ▼
+                     event-bus publish + thread-store 落盘（与前两条线同一 SSE、同一 jsonl）
+                                        │
+   image 块闭合 ─► live-image 异步生图 ─► image-ready（半分钟后回填）
+```
+
+服务端**不模拟板书、不做节奏**：板面状态由前端按事件重建，节奏由前端 Director 按语音演出。
+所以一轮 = 一次 streamText，无工具 loop、无子进程、无 MCP。每轮 input ≈ 2.5–3.7k tokens（system 2.3k + 压缩历史），
+output 1–2.4k tokens，TTFT 0.8–1.1s（百炼 GLM-5.3-Flash 实测 2026-09-10）。
+
+## 为什么是标签流（相对 teach-engine 的 JSON 动作数组）
+
+- 块正文是原生文本：SVG / LaTeX / Markdown / 代码 / HTML 不转义，`<svg>` 里一个元素闭合就能上板——「图一笔一笔长出来」靠这个；JSON 字符串里的 SVG 要等整个 action 闭合才能解析。
+- 首个 `<say>` 几个 token 就能开口；截断只丢最后半个块。
+- 模型对 XML 风格标签的遵从度极高（GLM-5.3-Flash 十几轮实测零协议违例；偶发 markdown 围栏由解析器吞掉）。
+
+协议全文与示例见 `src/types/teach-live.ts` 头注与 `src/lib/prompts/teach-live-prompt.ts`。
+
+## 文件
+
+| 文件 | 职责 |
+|---|---|
+| `teach-live-service.ts` | 编排：会话注册表（globalThis）、历史（内存 + 事件日志重建）、`runTurn`（streamText → parser → emit）、409 防并发、打断（abort → interrupted → 附文字续讲）、课名跟随首个 `<scene title>`、image 块闭合即生图。对外三件：`preflightTeachLive` / `sendTeachLiveMessage` / `interruptTeachLiveThread`（与前两线同形） |
+| `live-markup-parser.ts` | 增量解析器（零 IO）：顶层扫已知标签、块内原文模式只找自己的闭合标签；裸文本 = 隐式 say；半截标签只在「可能是已知标签前缀」时扣住；剥 markdown 围栏；丢游离闭合标签 |
+| `live-history.ts` | 事件日志 ⇄ 模型历史：块事件拼回标签；重块正文按 kind 限长压占位（svg 3000 保留——老师要 `into` 追加、要 point 到里面的 id；anim/widget 320）；相邻同角色合并；`trimHistory` 保留最近 16 条 |
+| `live-image.ts` | `<image prompt>` 异步生图（dashscope-image-service，落 `public/uploads/teach-live/`，sha1(thread:block) 命名）→ image-ready；inflight 去重 + 失败 10 分钟冷却；历史回放自愈 `scheduleMissingLiveImages` |
+| `__tests__/live-markup-parser.test.ts` | 解析器：结构 / 分块不变性（1–7 字符切片同构）/ 隐式 say / 前缀扣留 / 原文模式 / 截断 / 围栏 / 大小写 / 属性 |
+
+配套：`src/lib/prompts/teach-live-prompt.ts`（教学大脑：协议 + 视觉物理约束 + 节奏 + 一段示范）、
+`src/lib/config/teach.config.ts`（`glm-flash-dashscope` provider、`resolveTeachLiveProvider`、`TeachConfig.liveMaxOutputTokens/liveTemperature`）。
+
+## 事件契约（追加在 teach-codex/event-bus.ts 的联合类型上，老事件原样复用）
+
+```
+{type:'block-open', id, kind, attrs}     kind ∈ say|ask|note|math|svg|plot|diagram|code|anim|widget|image；attrs 键已小写（viewbox）
+{type:'block-delta', id, text}           非口播块的正文增量（口播正文走 text-delta，兼容老消费方读转写）
+{type:'block-close', id, complete}       complete=false = 截断 / 打断
+{type:'cue', name, args}                 scene|point|highlight|pause|erase
+text-delta / turn-complete / interrupted / error / image-ready   不变；student-message 只落盘
+```
+
+块 id 由服务端分配（`lb_<n>`，线程内跨轮唯一）；模型自己写的 `id="tri"` 留在 `attrs.id` 作为标签，
+`point at="tri#hyp"` / `svg into="tri"` 都按标签解析（前端：最近一块同名标签赢）。
+
+## 模型与延迟（实测 2026-09-10，百炼）
+
+- `ZHIPU/GLM-5.3-Flash`「始终思考不可关」（`enable_thinking=false` → 400）；默认会先吐 1500+ reasoning tokens。
+  `reasoning_effort=low` 把推理压到 0：TTFT 0.8–2.4s，正文 ~140 tok/s。这是 `glm-flash-dashscope` provider 的 `upstreamParams`。
+- 首句出声链路（生产）：建课 ~50ms + messages ack ~100ms + TTFT ~0.9s + 首句闭合 ~0.4s + TTS ~1–1.5s ≈ 3s。
+  dev 下首次命中会多出路由编译（tts 4–6s），不是链路问题。
+- 备选 provider 都在注册表：`glm-5.2-fast-preview` 可关思考 TTFT 0.5s（不在注册表，需要时加一行）。
+
+## 边界与已知问题
+
+- 单实例假设：会话注册表 / 事件总线进程内（与前两条线同构）。
+- 历史只保留最近 16 条消息；长课后模型不记得最早几页画了什么（板面本身不丢——前端从事件日志重建）。
+- 模型作图质量：坐标偶发重叠（prompt 已约束，svg 历史保留让 `into` 追加时知道旧元素位置）；SMIL 动画偶发让点离开曲线（prompt 已提示用 animateMotion）。
+- `<widget>` 在 `sandbox="allow-scripts"` 里跑模型写的 JS：无 same-origin、无网络；高度靠 postMessage 自报（≤560px）。
+- learner 读槽同前两线：开课时快照 `TeachThread.learnerJson` → prompt「关于这位学生」段。
