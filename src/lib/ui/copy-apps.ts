@@ -355,6 +355,12 @@ export const APPS_COPY = {
       openScript: '看逐字稿',
       copyScript: '复制',
       chapter: (index: number): string => `章节 ${index}`,
+      /** 章节没有逐句时间戳，按序号比例跳到那附近 */
+      chapterSeekHint: '跳到这一章附近',
+      /** 用户自己滚开后浮出的那一枚 */
+      backToCurrent: '回到当前',
+      /** 只在第一次进入出现一次（keyboard-hints） */
+      keyboardHint: '空格 播放 / 暂停 · ←→ 前后 5 秒 · 拖进度条看时间',
       audioGenerating: '正在准备音频',
       audioRetry: '音频没做好，点这里再试一次',
       audioGeneratingHint: '完成后这里会直接变成播放条。',
