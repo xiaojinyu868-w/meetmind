@@ -218,9 +218,11 @@ export const APPS_COPY = {
       answer: '参考答案',
       showHint: '看一点提示',
       recallFirst: '先在心里回答，再翻面看答案',
-      /** 桌面端一行键盘提示：翻面前 / 翻面后各一句，只在第一张出现 */
-      keyboardHint: '空格翻面 · ←→ 换牌',
-      keyboardHintFlipped: '1 再来一次 · 2 记住了',
+      /** 桌面端一行键盘提示：翻面前 / 翻面后各一句，只在第一次进入出现一次（keyboard-hints 记住） */
+      keyboardHint: '空格翻面 · ←→ 换牌 · Z 撤销上一张',
+      keyboardHintFlipped: '← 或 1 再来一次 · → 或 2 记住了 · Z 撤销',
+      undo: '撤销上一张',
+      undoHint: '收回上一张的打分，回到那张（Z）',
       /** 牌面左上角的小字：正面 / 背面 */
       frontLabel: '问',
       backLabel: '答',
