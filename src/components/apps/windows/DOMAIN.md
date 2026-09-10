@@ -12,6 +12,9 @@
 - **状态只在"正在做 / 没做好"时说话**：做好了就不说——产物在眼前，一枚「做好了」的绿点是噪音（AppWindowShell.StatusIndicator / WorkshopWindowManager.StatusWord / ReviewLearningWorkspace 三处同规则）。
 - **回到原话降为最轻的存在**：正文不放时间戳 chip；条目 hover 才出现一枚 `↩`（title 里才有 MM:SS），或页脚一行来源。引用数据仍留在产物里作质量门槛，只是不再露出。
 - **用户面字符串全部走 `APPS_COPY`**（`src/lib/ui/copy-apps.ts`）；公共壳的词在 `APPS_COPY.shell`（全屏 / 退出全屏 / 收起 / 关闭 / 返回 / 正在做…）。
+- **状态与过渡（2026-09-10 交互打磨）**：加载 → 成品 / 失败 → 再做一版四种状态由 `AppRenderSurface` 按相位重挂载并带 `mm-app-enter`（220ms），骨架 300ms 后才出（缓存命中不闪）；失败态只剩「{应用}刚才没做好」+「再试一次」，宿主头部与 toast 不再各说一遍。动效常量 / `useReducedMotion` / `useDelayedFlag` / `useCountUp` / `animateEnter` 在 `app-motion.ts`；`globals.css` 只追加了 `mm-app-enter / mm-pop-in / mm-draw / mm-stagger / mm-press / mm-focus` 与 reduced-motion 兜底。全屏 ⇄ 中栏切换用 Web Animations 重放进场而不重挂载（窗口内部状态不丢）。
+- **键盘**：每个窗口的快捷键在首次进入时以一行灰字说一次（`keyboard-hints.ts`，localStorage `meetmind:apps:hint-seen:<appKey>`，触屏设备不出）；映射是纯函数 `app-keys.ts`（`resolveQuizKey` / `resolvePlayerKey`）；回车 / 空格是每个应用最自然的那个动作（测验 = 确认 / 下一题，闪卡 = 翻面，播客 / 板书 = 播放暂停，导图 = 折叠 / 聚焦），焦点停在按钮上时空格让位；焦点环统一 `mm-focus`（pine），导图的环只在键盘导航时出现。
+- **触屏**：目标 ≥44px（选项行 ≥52px、走上讲台 ≥48px、折叠点命中区 44px）；滑动走 `swipe-model.ts`（阈值按宽度 22% 夹 64–140px、竖向意图取消、快甩过半程成立）+ `use-swipe.ts`（位移 >6px 才捕获指针，普通点击照常派发）；hover 底色只给有 hover 的设备（手机点过的行不留灰底）；悬停才出现的动作在触屏常显。
 - **验证靠真实数据截图**（Playwright 脚本与截图放 `/tmp/mm-apps/`，不进仓库），不只看代码。
 
 ### 四个宿主（同一棵 `AppRenderSurface`，不同壳）
@@ -20,14 +23,15 @@
 |------|------|-----------------|
 | `ReviewLearningWorkspace`（`src/components/`） | 复习页中栏（主路径） | 头部一行文字（← 所有学习方式 · 课名 · [全屏 / 退出全屏] · 再做一版）；**「全屏」**把同一棵组件树切到 `fixed inset-0`（Esc 退出，执行状态不丢）。**板书 / 讲给同桌听 / 速查表 / 导图在桌面（≥768px）默认就进全屏**（`STAGE_APPS`）——它们在 400px 中栏里只能缩成缩略图，全屏后才是完整产品；返回键永远回应用矩阵，不用点两次 |
 | `AppWindowShell` | 独立页 `/app/matrix/[appKey]` | 返回 / 再做一版退成文字（`app-window-shell-tone.ts`），闪卡 immersive 变体保留 |
-| `WorkshopWindowManager` | 课堂页浮窗 / 全屏 | 收起 / 关闭文字化，删掉「会话 7eeeed…」内部黑话副标题，硬编码中文收进 `APPS_COPY.shell` |
-| `MobileAppRunner`（`src/components/mobile/`） | 手机结果页 | 未动 |
+| `WorkshopWindowManager` | 课堂页浮窗 / 全屏 | 收起 / 关闭文字化，删掉「会话 7eeeed…」内部黑话副标题，硬编码中文收进 `APPS_COPY.shell`；2026-09-10：浮窗有 `shadow-float` 与 180ms 弹出，Esc 关最上面那个窗；全屏只剩一个壳（闪卡 / 测验只是去掉内边距，不再是深绿 header 盖米白正文） |
+| `MobileAppRunner`（`src/components/mobile/`） | 手机结果页 | 2026-09-10：加载 / 失败态不再自画一套，交给同一个 `AppWindowPlaceholder`；播客窄屏补内边距；讲课面板两个按钮不再被状态行挤成两行 |
 
 ### 偏好 key（localStorage）
 
 | key | 归属 | 内容 |
 |-----|------|------|
 | `meetmind:cheatsheet:layout` | `cheatsheet-window-model.ts` `CHEATSHEET_LAYOUT_PREF_KEY` | 栏数 / 字号档 / 密度 / 高亮开关 / 装进一页 |
+| `meetmind:apps:hint-seen:<appKey>` | `keyboard-hints.ts` `KEYBOARD_HINT_PREF_PREFIX` | 该应用的快捷键提示已经说过一次 |
 
 ## 目录结构
 
@@ -35,8 +39,20 @@
 src/components/apps/windows/
 ├── WorkshopWindowManager.tsx    # 窗口管理器（多窗口协调）
 ├── AppRenderSurface.tsx         # 统一应用渲染面（浮窗 / 对话内联 / 独立页共用）
-├── MindmapWindow.tsx            # 思维导图窗口（758 行，超预算——渲染 + 交互 + 大纲视图；下次改到时把 SVG 节点渲染提成模块）
+├── MindmapWindow.tsx            # 思维导图窗口（2026-09-10 减到 ~306 行：数据正规化 / 顶栏 / 大纲；画布交给 MindmapCanvas）
+├── MindmapCanvas.tsx            # 导图画布：SVG 渲染 + 手势（惯性平移 / 边界 / 光标锚缩放 / 双指）+ 键盘（↑↓ 兄弟、←→ 父子、回车折叠或聚焦、+ − 0）+ 悬停提亮根到节点路径 + 折叠展开过渡
+├── mindmap-gestures.ts          # 手势纯函数（有单测）：inertiaStep（0.94/帧）、clampPan（任何方向留 96px）、applyPinch（锚两指中点）、缩放锚点；信息图海报查看器复用
 ├── mindmap-layout.ts           # 思维导图布局引擎（含 2026-09-09 双侧布局 assignPositionsBilateral）
+├── app-motion.ts                # 动效底座（2026-09-10）：MOTION 常量 / useReducedMotion / useDelayedFlag（骨架 300ms 后才出）/ useCountUp（圆环与数字从 0 长到终值）/ animateEnter
+├── app-keys.ts                  # 快捷键映射纯函数（有单测）：resolveQuizKey（1–4 / 回车 / 空格）、resolvePlayerKey（空格 K 播放暂停、←→ J L 步进）
+├── keyboard-hints.ts            # 快捷键提示只出现一次（localStorage 记住；触屏不出）
+├── swipe-model.ts / use-swipe.ts # 滑动手势判定（阈值 / 取消 / 快甩，有单测）+ 指针捕获 hook（>6px 才捕获，点击照常派发）；测验与闪卡共用
+├── MathText.tsx                 # 牌面 / 短文本里的 $…$ 行内公式渲染
+├── QuizOptionMark.tsx           # 交卷揭示：勾 / 叉用 SVG 一笔画出（mm-draw 260ms），不是换字符
+├── flashcard-deck-model.ts      # 闪卡状态机纯函数（有单测）：applyScore / undoScore（Z 撤销）/ faceFontSize（长卡面 21 → 14px 自动缩字）
+├── podcast-player-model.ts      # 播放器纯函数（有单测）：scrub 落点 / 时间格式 / 步进 / shouldResumeFollow（用户上滚后当前句回到视口中段才恢复跟随）/ 章节比例定位
+├── InfographicPoster.tsx        # 海报查看器：光标锚缩放 / 双指 / 放大后可拖（留 96px 在视口）/ 双击切全图·原始 / + − 0 键盘 / 右下 − % +
+├── InfographicPanels.tsx        # 信息图的 WordToggle / PreparingState（与所选尺寸同比例的骨架）/ LayoutPreview（定制态即时版面示意，标明以成品为准）
 ├── InfographicWindow.tsx       # 信息图窗口（成品态 / 可读版 / 定制三态 + WordToggle）
 ├── infographic-window-data.ts  # 信息图数据处理
 ├── AppWindowShell.tsx          # 独立结果页统一外壳：返回 / 状态 / 再做一版 / headerActions，打印态隐藏
@@ -58,7 +74,7 @@ src/components/apps/windows/
 ├── cheatsheet-window-model.ts  # 纯函数：A4 逻辑页尺寸、偏好读写、topicsOf 正规化、栏容量、Markdown 导出
 ├── use-cheatsheet-layout.ts    # 实测分页 hook：量每个区块高度 → 按均衡栏高装栏 → 装进一页时等比缩放 → 单页不满时缩短纸高
 ├── TeachBackWindow.tsx         # 讲给同桌听：入口即教室（场景 + 底部毛玻璃「走上讲台」面板，无清单页）→ 半双工语音讲课（2026-09：分段讲，VoiceMicButton → /api/asr/oneshot 转写追加进可编辑文本框；每段经 /api/apps/teach-back/respond 让同桌（AI 学生）决定开口还是安静，开口的话经 useTeachSpeech → /api/teach/tts 出声）→ 四象限核对（/api/apps/teach-back/evaluate：服务端重试 + 客户端首败自动重试 + 429 区分 + 分阶段等待文案）→ 结果卡（headline 朗读 + 四象限地图揭示 + 盲区朱批强调、[MM:SS] 跳回证据、盲区/已知缺口可「就这点再讲一次」单项重讲、完成写课后学习黑板）。**课名走 `contextTitle`**（2026-09-08 修复：此前接的是 AppRenderSurface 给信息图的 1400 字 `contentContext`，黑板抬头滚着整段转录、`metadata.title` 超接口 200 字上限 → respond / evaluate 全 400，讲给同桌听在所有宿主里都核对不了；接口 400 现在会 warn 出 zod issues）
-├── TeachBackSpeakPanel.tsx     # 讲课面板（teach 阶段）：同桌气泡区（最近 2 条 + 说话指示点）+ 可编辑 textarea + VoiceMicButton + 回到目标 / 讲给同桌 / 讲完了
+├── TeachBackSpeakPanel.tsx     # 讲课面板（teach 阶段）：同桌气泡区（最近 2 条 + 说话指示点）+ 可编辑 textarea + VoiceMicButton + 回到目标 / 讲给同桌 / 讲完了。2026-09-10：麦克风旁一行说清「点一下开始讲，不用按住」/「录音中 0:12 · 点一下结束」/「正在把你说的转成文字…」（VoiceMicButton 可选 onStateChange）；按钮 ≥40px、走上讲台 ≥48px；同桌气泡与面板 220ms 浮出；结果标题 → 一句话 → 象限地图 → 一组一张纸 60ms 错峰浮出，象限格子可点滚到对应组并高亮 1.4s
 ├── use-teach-back-voice.ts     # 半双工语音 hook：submitUserSegment 同步 push turnsRef（与 evaluate 共享记录）+ 调 respond（requestId 丢弃过期响应）+ useTeachSpeech 出声；同桌不开口/请求失败一律静默
 ├── TeachBackClassroom.tsx      # 像素小教室（纯视觉场景）：黑板粉笔目标 + 前后两排 Octo 学生（窄屏自动减员防叠桌）；2026-08 起不再连语音、不做覆盖检测
 ├── TeachBackQuadrantMap.tsx    # 结果揭示仪式：自信×有据四象限地图，目标棋子错峰落位，盲区朱批脉冲，没讲到的虚线单列
@@ -84,7 +100,8 @@ src/components/apps/windows/
 
 ### MindmapWindow（思维导图）
 
-- 主文件：`MindmapWindow.tsx` — 渲染逻辑（导图 / 大纲双视图）
+- 主文件：`MindmapWindow.tsx` — 数据正规化 / 顶栏 / 大纲；画布（渲染 + 手势 + 键盘）在 `MindmapCanvas.tsx`（2026-09-10 提出，窗口回到预算内）
+- **2026-09-10 交互打磨**：松手按速度滑行并有边界（`mindmap-gestures`），Pointer Events 双指缩放锚两指中点，悬停提亮根到节点整条路径（其余 180ms 退淡），折叠 / 展开用 CSS transform 300ms 过渡 + 新节点 220ms 淡入（fadeIn 不带 fill-mode，否则终态盖住悬停退淡——实测踩过），画布可聚焦、方向键在节点间移动、回车 / 空格折叠或只看这一支；舞台宿主已全屏时不再叠自己的第二层全屏（`AppRenderSurface.hostFullscreen`）
 - 手机结果页和桌面三栏中的窄学习区先展示可读大纲，用户点“导图”后再探索；默认视图必须依据应用容器真实宽度而非浏览器宽度，避免宽屏下把中间窄栏误判成大画布。用户主动切换后不再被 ResizeObserver 抢回。结果页本身已是完整学习现场，禁止默认再 portal 一层全屏盖住返回栏；只有用户主动点“全屏”才进入沉浸层。画布使用 Pointer Events，触屏与鼠标共享拖动逻辑。
 - 布局引擎：`mindmap-layout.ts` — 树布局算法、v7 色板、位置计算
 - **2026-09-09 可读性重做**：
@@ -111,6 +128,8 @@ src/components/apps/windows/
 
 ### QuizWindow（课堂测验）
 
+**2026-09-10 交互打磨**：题间两段式切换（离场 150ms → 换题 → 进场 220ms，换轮同样重新进场、进度线过渡着归零）；交卷揭示先染红错的、正确项 90ms 后浮出、勾 / 叉用 `QuizOptionMark` 一笔画出；1–4 / 回车 / 空格一路不碰鼠标（`app-keys.resolveQuizKey`），快捷键提示只出现一次；选项行 `mm-press` 按下 0.98、hover 底色只给有 hover 的设备、整行 ≥52px；触屏左右滑走 `swipe-model` + `use-swipe`（`useQuizNavigation` 只剩键盘与分页）；「确认答案」按不了时 title 说「先选一个答案」；结束页圆环与三个数字从 0 长到终值（`useCountUp`），全卷题号与错题行可点回看那一题（只读 + 回到结果），三块内容 `mm-stagger` 依次浮出。
+
 **2026-09-09 重做成一份试卷**：顶部一条细进度线 + 小字 N/M；题号 + 题干大字号；选项是整行可点面（细线分隔，字母圈选中后实心），选中 / 正确 / 错误三态用 ink / pine / vermilion，动效克制（`animate-slide-up` 出解析）；「确认答案」紧跟选项后面而不是沉到底栏；底栏只剩上一题 / 下一题文字 + 进度点；**键盘 1–4 选、Enter 确认 / 下一题**（`primaryRef`）；解析用细线分隔的纯文字。结束页 `QuizReport`：答稳率圆环 + 计数 + 错题回看。
 
 翻页交互委托 hooks/useQuizNavigation.ts；组件保留题面、提交与自评。
@@ -127,6 +146,8 @@ quiz-observation.ts 为提交动作附加完整 practice.attempt 观察：保留
 
 ### FlashcardsWindow（闪卡）
 
+**2026-09-10 交互打磨**：打分只让顶牌飞出（记住 = 右 / pine，没记住 = 左 / vermilion，不翻回），牌堆原地不动、新顶牌从牌堆位置升起（`mm-card-rise`）；拖动跟手（阻尼 + 轻旋转，翻开的牌按进度染色预告结果），松手按 `swipe-model` 判定——成立飞出、不成立 320ms 回弹，竖向滑动让给页面；翻面到一半牌抬起 1.035 倍、投影层散开又收回（Web Animations）；正反两面放同一格 grid（牌高取较高者），长卡面按字数自动缩字（`flashcard-deck-model.faceFontSize` 21 → 14px），牌面走 `MathText`；键盘：空格翻、翻开后 1 / 2 或 ←→ 打分、没翻开 ←→ 换牌、**Z 撤销上一张**（`applyScore` / `undoScore`）；结束页圆环与数字从 0 长起，「只练没记住的」换轮重新进场。
+
 **2026-09-09 重做：牌是牌**。`FlashcardDeck` 一张纸质牌 + 后面两张探头的牌堆（translateY + scaleX），真实 3D 翻面（rotateY，背面顶部一道 pine 边）；**空格翻牌、1 / 2 = 没记住 / 记住、←→ 换牌**；触屏左右滑（未翻面 = 换牌，翻面后 = 打分）；右上角进度环（记住 / 没记住 / 总数）；顶栏只剩上一张 / 下一张文字；键盘提示只在第一张牌下出现一次。结束页 `FlashcardsSummary`：回忆率圆环 + 「没记住的再来一遍」。
 
 - 默认先主动回忆，提示需要用户主动展开；翻面后才允许标记“记得 / 没想起”，避免答案泄露和无效自评。
@@ -138,6 +159,8 @@ quiz-observation.ts 为提交动作附加完整 practice.attempt 观察：保留
 
 ### InfographicWindow（信息图）
 
+**2026-09-10 交互打磨**：成品是海报查看器 `InfographicPoster`（光标锚缩放、双指、放大后可拖且至少留 96px 在视口、双击切全图 / 原始、+ − 0 键盘、右下 − % + 与「看全图」，头部显示缩放百分比）；生成中是与所选尺寸同比例的骨架（shimmer）+ 一句话，海报落下来不重排；定制态右侧有即时版面示意（比例随尺寸、底色随风格、字是草案标题与要点，标明「以成品为准」）；「生成」按不了时 title 说图片服务不可用。WordToggle / PreparingState / LayoutPreview 提成 `InfographicPanels`，窗口回到 500 行预算内。
+
 - 主文件：`InfographicWindow.tsx` — 渲染逻辑（2026-09-09：成品态头部只有一行字，适应 / 原始 两词切换 + 保存 / 调整文字动作，去掉「做好了」徽章与图片描边；定制态从表单改成纸上三行字——尺寸 / 感觉 各一排词加下划线、补充要求一条横线，唯一饱和色是右下角「生成」；等待态呼吸细线）
 - 数据文件：`infographic-window-data.ts` — 场景预设/风格预设/数据转换
 - 信息图是结果型应用：进入后由 AI 直接生成并先展示完整成品，不把配置表单当作首屏。
@@ -147,6 +170,8 @@ quiz-observation.ts 为提交动作附加完整 practice.attempt 观察：保留
 - 首次没有 `AppExecutionResult` 时，“生成信息图”必须先调用 `onGenerateDraft` 走 `/api/apps/execute` 形成有课堂依据的智能草案，再请求图片；禁止直接拿截断原文拼一个通用 fallback 当正式生成结果。
 
 ### CheatsheetWindow（考试速查表，2026-09-09 重做为样板：一张真正的纸）
+
+**2026-09-10 交互打磨**：栏数 / 密度 / 字号 / 装进一页一变，纸面按版式 key 重新进场（220ms）；缩放与装进一页导致的纸尺寸变化走 `.cs-page` / `.cs-page-frame` 的 280ms 过渡；高亮开关像划上 / 擦掉（`.cs-hl` background-size 从左往右 240ms，屏幕上不改 padding）；工具条按钮 36px 高、`mm-press` / pine 焦点环、下划线 180ms 淡入淡出，版式面板 `mm-pop-in`；窄屏动作一行横向滚动；键盘 − / + 缩放、0 回到适合宽度（输入中或按着 ⌘ / Ctrl 不抢）。
 
 对标 HyperKnow 的速查表编辑器（4 栏密排 / 版式可调 / 自动荧光笔 / 缩放页面预览），目标是比它好看，像一张能带进考场的纸：
 
@@ -160,6 +185,8 @@ quiz-observation.ts 为提交动作附加完整 practice.attempt 观察：保留
 - 条目正文由 `CheatsheetRichText` 渲染 GFM / KaTeX / 紧凑 Mermaid；表格和图表避免跨栏断裂，打印隐藏图表工具栏并限制高度。富文本是为了压缩关系，不得把普通定义装饰成大图。
 
 ### PodcastWindow（课堂播客）
+
+**2026-09-10 交互打磨**：自绘 scrub（24px 命中区、拖时把手放大 + 头顶时间气泡、悬停显示落点，role=slider 带 aria-valuetext，条上 ←→ 5 秒 / Home / End）；窗口级 空格 / K 播放暂停、←→ / J L 前后 5 秒（`app-keys.resolvePlayerKey`，焦点在按钮上时空格让位）；逐字稿 wheel / touch 一动就停止跟随、底部浮出「回到当前」，当前句回到视口中段时恢复（`podcast-player-model.shouldResumeFollow`）；当前句指示条按 offsetTop / height 240ms 滑动；章节可点（按序号比例跳到那附近，title 说明不假装精确）；倍速 1 → 1.25 → 1.5 → 2，胶囊 ≥44px；快捷键提示只出现一次。
 
 - 播放条（`PodcastPlayerBar`）是唯一主角；下面依次是开场简介一段话（sections 里的 `studio-overview`）、章节目录（细线列表）、逐字稿（说话人字母圈 + 正在播的句子左侧一道朱批竖线、字变墨色，点任意一句按比例跳播）。不再折叠在 `<details>` 里——脚本就是边听边看的材料。
 - 插件把每一轮对话也塞进 `sections`（`studio-podcast-round-N`，正文与 `lines` 重复），`splitPodcastSections` 丢掉它们不进目录。
@@ -175,6 +202,8 @@ quiz-observation.ts 为提交动作附加完整 practice.attempt 观察：保留
 统一承接 `AppExecutionResult` → 具体应用 UI 的分发。`WorkshopWindowManager`、应用矩阵独立页、课堂/复习对话内联应用都必须复用这里，避免同一个 app 维护两套 UI。六类独立结果页（包括信息图）同时复用 `AppWindowShell`；不得为单个应用复制返回栏、标题或状态说明。可分享的场景成果必须通过 `headerActions` 把 `ShareArtifactAction` 放在结果标题旁，不能要求用户回到矩阵再找分享。
 
 ### ExplainerWindow（板书精讲）
+
+**2026-09-10 交互打磨**：控制条退成框下一行——墨色圆形播放键（与播客同款）+ 上一步 / 下一步 / 语速 / 板演 文字按钮 + 「第 N / M 步 · 第 P 页」，下面一根 2px 段进度线连续地长；`useBoardPlayer` 新增 `stepSegment`（下一步把本段动作一次性标记触发后进下一段 / 下一页，上一步撤掉本段与上一段重写重讲，页首从本页第一段重播；checkpoint 等待态禁用并 title 说明）；键盘 空格 / K 播放暂停、←→（J / L）上一步 / 下一步，板演中不抢键；课题交给播放器，与黑板、控制条作为一块居中（`BoardCanvas` 通过 `data-board-chrome` 读宿主非纸面高度，不再按写死的 84px 缩放）。
 
 - 渲染 `explainer` 插件产出的 BoardScript（render mode `'board'`）：`blackboard/BlackboardPlayer` 驱动——AmIWrite 架构（LLM 只产「讲稿 + 板书动作 DSL」，播放器按序执行；分页不擦除；坏动作跳过不崩）。
 - 窗口对 payload 再过一遍 `sanitizeBoardScript`（历史快照 / 分享链路防御），头部只放课题（2026-09-09 起不再显示「N 处老师原话已核对 / 已改为转述」——那是引用系统的内部事；`quoteStats` 仍保留在 payload 与 `demo-board` 页），文案走 `APPS_COPY.explainer`。在复习页中栏要看清板书请点宿主头部的「全屏」。
