@@ -13,6 +13,8 @@
  */
 
 import { db, addTranscripts } from '@/lib/db';
+import { readRecordingState } from '@/lib/capture/live-recording-capture';
+import { isPlaceholderLessonTitle } from '@/lib/learning/lesson-title-generic';
 import { createLogger } from '@/lib/logger';
 import type { WorkspaceCaptureMessage } from '@/types/page-types';
 
@@ -98,6 +100,9 @@ export interface BackfillCandidate {
   summary?: BackfillClassSummary;
   highlights: BackfillHighlight[];
   notes: BackfillNote[];
+  /** 服务端 metadata.recordingState：'recording' = 另一台设备正在录（录课中检查点写的） */
+  recordingState: 'recording' | 'completed';
+  checkpointAt?: string;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -276,7 +281,12 @@ export function extractBackfillCandidate(
       isFinal: true,
     });
   }
-  if (segments.length === 0 && !evidenceAvailable) return null;
+  // 现场录音（带 recordingState 的 capture）不论有没有证据都进候选：
+  //   - 另一台设备正在录：刚开始还没有一句字幕，也要进课堂列表显示「录制中」
+  //   - 录完但一句字幕都没有（原声还在等兜底转写）：状态要能从「录制中」翻成已结束，不能卡住
+  const recordingState = readRecordingState(meta);
+  const isLiveRecordingCapture = typeof meta.recordingState === 'string';
+  if (segments.length === 0 && !evidenceAvailable && !isLiveRecordingCapture) return null;
 
   const isVideo = capture.contentType === 'video';
   const rawSourceMode = optionalString(meta.sourceMode) || optionalString(meta.importSourceMode);
@@ -306,6 +316,8 @@ export function extractBackfillCandidate(
     summary: parseSummary(meta.classSummary),
     highlights: parseHighlights(meta.highlightTopics),
     notes: parseNotes(meta.notes),
+    recordingState,
+    checkpointAt: optionalString(meta.checkpointAt),
   };
 }
 
@@ -380,15 +392,47 @@ export async function backfillCapturesToIndexedDB(
   }
 
   for (const cand of candidates) {
-    if (!force && processedSessionIds.has(cand.sessionId)) {
-      result.skipped += 1;
-      continue;
-    }
+    const isRemoteRecording = cand.recordingState === 'recording';
     try {
-      let wroteAnything = false;
       const existing = await db.audioSessions.where('sessionId').equals(cand.sessionId).first();
+
+      // 录制状态刷新不受 page-lifetime 幂等保护：另一台设备从「录制中」到「已结束」要能在本机列表上翻过来。
+      // 本机 status='recording' 的行（自己正在录 / 没结束的课）是权威，不用服务端回填去动它。
+      if (existing?.id && existing.status !== 'recording') {
+        const nextRemoteState = isRemoteRecording ? 'recording' : (existing.remoteRecordingState ? 'completed' : undefined);
+        const remoteChanged = nextRemoteState !== existing.remoteRecordingState
+          || (isRemoteRecording && cand.durationMs > (existing.lastCheckpointDurationMs || 0));
+        // 服务端标题变了（课后理解改名 / 另一台设备手改）也同步过来：本机手改过的不动，占位不盖具体标题
+        const titleChanged = Boolean(cand.title)
+          && !cand.titleLocked
+          && !existing.topicLocked
+          && existing.topic !== cand.title
+          && !(isPlaceholderLessonTitle(cand.title) && existing.topic && !isPlaceholderLessonTitle(existing.topic));
+        if (remoteChanged || titleChanged) {
+          await db.audioSessions.update(existing.id, {
+            ...(remoteChanged
+              ? {
+                  remoteRecordingState: nextRemoteState,
+                  remoteCheckpointAt: cand.checkpointAt ? new Date(cand.checkpointAt) : new Date(),
+                  ...(isRemoteRecording
+                    ? { lastCheckpointDurationMs: cand.durationMs, duration: Math.max(existing.duration || 0, cand.durationMs) }
+                    : { transcriptionStatus: existing.transcriptionStatus || 'completed', duration: Math.max(existing.duration || 0, cand.durationMs) }),
+                }
+              : {}),
+            ...(titleChanged ? { topic: cand.title } : {}),
+            updatedAt: new Date(),
+          });
+        }
+      }
+
+      if (!force && processedSessionIds.has(cand.sessionId) && !isRemoteRecording) {
+        result.skipped += 1;
+        continue;
+      }
+      let wroteAnything = false;
       if (!existing) {
-        // 写占位 session（无 blob：音频仍在原设备，档位2 上云后才跨设备可播）
+        // 写占位 session（无 blob：音频仍在原设备，档位2 上云后才跨设备可播）。
+        // 另一台设备正在录：不标 transcriptionStatus（不是可复习的课），用 remoteRecordingState 显示「录制中」
         await db.audioSessions.add({
           sessionId: cand.sessionId,
           userId,
@@ -402,13 +446,21 @@ export async function backfillCapturesToIndexedDB(
           videoProvider: cand.videoProvider,
           thumbnailUrl: cand.thumbnailUrl,
           importSourceMode: cand.importSourceMode,
-          transcriptionStatus: 'completed',
+          transcriptionStatus: isRemoteRecording ? undefined : 'completed',
           transcriptionUpdatedAt: new Date(),
           status: 'completed',
+          ...(isRemoteRecording
+            ? {
+                remoteRecordingState: 'recording' as const,
+                remoteCheckpointAt: cand.checkpointAt ? new Date(cand.checkpointAt) : new Date(),
+                lastCheckpointDurationMs: cand.durationMs,
+              }
+            : {}),
           createdAt: new Date(cand.occurredAt),
           updatedAt: new Date(),
         });
-      } else if (existing.id && (
+        wroteAnything = true;
+      } else if (existing.id && existing.status !== 'recording' && (
         (!existing.mediaUrl && cand.mediaUrl)
         || (cand.sourceType !== 'recording' && existing.sourceType !== cand.sourceType)
         || (!cand.titleLocked && cand.title && existing.topic !== cand.title)

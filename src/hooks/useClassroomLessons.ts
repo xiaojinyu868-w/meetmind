@@ -19,9 +19,10 @@ import { useMemo, useEffect, useState, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, getPreference, setPreference, dedupeAudioSessions, repairMisflaggedVideoLinkRecordings, updateSessionStatus } from '@/lib/db';
 import { retranscribeStuckSessions } from '@/lib/services/retranscribe-stuck-sessions';
-import { retryPendingRecordingUploads } from '@/lib/services/retry-pending-recording-uploads';
+import { retryPendingRecordingUploads, syncPendingRecordings } from '@/lib/services/retry-pending-recording-uploads';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useEchoStore } from '@/stores/echo-store';
+import { useSessionStore } from '@/stores/session-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import { audioSessionToLesson } from '@/components/classroom/lessonAdapter';
 import type { Lesson } from '@/components/classroom/types';
@@ -41,12 +42,6 @@ let hasDedupedInThisSession = false;
  */
 let hasRepairedMisflaggedInThisSession = false;
 
-/**
- * 本次 page load 是否已经清理过孤立的 recording 态会话。
- * 这是一个 page-lifetime 幂等动作，只在第一次进课堂 tab 时跑。
- */
-let hasCleanedStaleRecordingsInThisSession = false;
-
 export interface UseClassroomLessonsResult {
   lessons: Lesson[];
   /** 把一节课标记为已复习（会自动持久化） */
@@ -62,7 +57,7 @@ export interface UseClassroomLessonsResult {
 }
 
 export function useClassroomLessons(): UseClassroomLessonsResult {
-  const { accessToken, isAuthenticated } = useAuth();
+  const { accessToken, isAuthenticated, user } = useAuth();
   // ── 0. 挂载时跑一次 dedupe（修复历史脏数据） ──
   // 背景：旧版本 saveAudioSession 走 add、加上 classroomDataService 录音开始时的
   // 空壳 add，历史数据里同一 sessionId 可能有 2-3 行。现在 saveAudioSession 已改为
@@ -88,10 +83,33 @@ export function useClassroomLessons(): UseClassroomLessonsResult {
   // ── 0d. 登录后静默补传曾因断网 / 退后台失败的本地原声 ──
   // 每次只顺序处理两条，避免进课堂时占满移动网络；成功后服务端按 sessionId
   // 自动绑定 Workspace capture，失败仍保留 Blob，后续页面生命周期可再试。
+  // 2026-09-10：同一时机再补传「结束时写服务端失败」的课（syncState failed / 卡住的 pending），
+  // 并在恢复联网、页面回前台时再各跑一次——不再依赖用户刷新页面时的全量登录迁移。
   useEffect(() => {
-    if (!isAuthenticated || !accessToken) return;
-    void retryPendingRecordingUploads(accessToken).catch(() => undefined);
-  }, [accessToken, isAuthenticated]);
+    if (!isAuthenticated || !accessToken || !user?.id) return;
+    const userId = user.id;
+    const runSweep = () => {
+      void retryPendingRecordingUploads(accessToken).catch(() => undefined);
+      void syncPendingRecordings(accessToken, userId)
+        .then((r) => {
+          if (r.attempted > 0) {
+            // eslint-disable-next-line no-console
+            console.info('[classroom] sync pending recordings:', r);
+          }
+        })
+        .catch(() => undefined);
+    };
+    runSweep();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') runSweep();
+    };
+    window.addEventListener('online', runSweep);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('online', runSweep);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [accessToken, isAuthenticated, user?.id]);
 
   // ── 0a. 挂载时修复"有录音 blob 但被错标为 video-link"的历史数据 ──
   // 背景（2026-04-20）：用户在"看 B 站视频 + 开系统内录"的场景下，录音
@@ -115,40 +133,11 @@ export function useClassroomLessons(): UseClassroomLessonsResult {
       });
   }, []);
 
-  // ── 0b. 挂载时清理"孤立的 recording"会话 ──
-  // 页面刚加载、没有任何 Recorder 挂着，但 IndexedDB 里如果有 status='recording'
-  // 的会话，一定是异常中断或旧版脏数据留下的"幽灵"——它会以红点脉动的
-  // ActiveLessonPill 霸占列表顶部，而且用户点它的停止按钮不会有反应。
-  //
-  // 页面加载时默认没有真在录音的 session（录音是用户主动触发的），
-  // 所以这里可以安全地把所有 recording 态强制降级为 completed。
-  //
-  // 边界：如果用户刷新页面的瞬间碰巧 Recorder 还没走到 setIsRecording(true)
-  // 那一步，也几乎不会命中这里（因为本 effect 是 mount once，Recorder 的写
-  // 入发生在随后的交互里）。
-  useEffect(() => {
-    if (hasCleanedStaleRecordingsInThisSession) return;
-    hasCleanedStaleRecordingsInThisSession = true;
-    (async () => {
-      try {
-        const stale = await db.audioSessions
-          .where('status')
-          .equals('recording')
-          .toArray();
-        if (stale.length === 0) return;
-        await Promise.all(
-          stale
-            .filter((s) => !!s.sessionId)
-            .map((s) => updateSessionStatus(s.sessionId, 'completed')),
-        );
-        // eslint-disable-next-line no-console
-        console.info('[classroom] cleaned stale recording sessions:', stale.length);
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn('[classroom] cleanup stale recordings failed:', err);
-      }
-    })();
-  }, []);
+  // ── 0b.（2026-09-10 移除）挂载时不再把 status='recording' 的会话一刀改成 completed ──
+  // 那些行是页面被关 / 崩溃 / 被系统回收后留下的「没结束」的课，录课中检查点已经把它们的
+  // 字幕与音频分片落在 IndexedDB 里。现在由 useUnfinishedRecordings 承接：列表顶部一行恢复条
+  // 「继续录 / 就到这里」，超过 6 小时没回来的自动收尾；lessonAdapter 只把当前 Recorder
+  // 正在录的那一节渲染成活动条，其余显示「还没结束」，不会再有幽灵红点。
 
   // ── 0c. 挂载时自愈"卡在正在整理却从没真正转写"的录音 ──
   // 真实用户 case（2026-06-03）：手机录 1.5h 会议，流式 ASR 被锁屏/切后台/网络抖动
@@ -289,6 +278,11 @@ export function useClassroomLessons(): UseClassroomLessonsResult {
   // 额外做一次 **按 sessionId 去重的 UI 兜底**：即使后台 dedupe 还没跑完、
   // 或者异步期间又来了新的重复行，这里也不会让用户看到重复卡片。
   // 保留第一条（sessions 已按 createdAt desc 排过，第一条就是最新那条）。
+  // 只有当前 Recorder 正在录的那一节才是「正在录」；其余 status='recording' 的行是没结束的课
+  const isRecordingNow = useSessionStore((s) => s.isRecording);
+  const recordingSessionId = useSessionStore((s) => s.sessionId);
+  const activeRecordingSessionId = isRecordingNow ? recordingSessionId : null;
+
   const lessons = useMemo(() => {
     const seen = new Set<string>();
     const uniqSessions = [] as typeof sessions;
@@ -310,6 +304,7 @@ export function useClassroomLessons(): UseClassroomLessonsResult {
           summaryOverview: summaryOverviewBySession.get(s.sessionId),
           transcriptPreview: transcriptEvidence?.preview,
         },
+        isActiveRecording: s.sessionId === activeRecordingSessionId,
       });
       // 覆盖 reviewed（adapter 默认给 false）
       lesson.reviewed = reviewedSet.has(s.sessionId);
@@ -318,7 +313,7 @@ export function useClassroomLessons(): UseClassroomLessonsResult {
       if (materials && materials > 0) lesson.linkedMaterials = materials;
       return lesson;
     });
-  }, [sessions, transcriptEvidenceBySession, highlightEvidenceBySession, summaryOverviewBySession, sessionIdsWithEcho, reviewedSet, materialsCountByDate]);
+  }, [sessions, transcriptEvidenceBySession, highlightEvidenceBySession, summaryOverviewBySession, sessionIdsWithEcho, reviewedSet, materialsCountByDate, activeRecordingSessionId]);
 
   return { lessons, markReviewed, cleanupStaleRecording };
 }

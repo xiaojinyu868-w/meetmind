@@ -42,6 +42,8 @@ import { useCollectionPulse } from '@/hooks/useCollectionPulse';
 import { useTutorLauncher } from '@/hooks/useTutorLauncher';
 import { useTranscriptIngest } from '@/hooks/useTranscriptIngest';
 import { useRecordingLifecycle } from '@/hooks/useRecordingLifecycle';
+import { useRecordingCheckpoint } from '@/hooks/useRecordingCheckpoint';
+import { useUnfinishedRecordings } from '@/hooks/useUnfinishedRecordings';
 import { useTranscriptHandlers } from '@/hooks/useTranscriptHandlers';
 import { useAudioMessagePlayback } from '@/hooks/useAudioMessagePlayback';
 import { useCollectionListActions } from '@/hooks/useCollectionListActions';
@@ -75,6 +77,7 @@ import {
   compactMultilineText,
   resolveSourceItemSourceKey,
   buildCollectionListItemFromSourceItem,
+  buildWorkspaceCaptureSourceItem,
   formatRelativeCollectionTime,
 } from '@/lib/utils/page-utils';
 import { useResponsive } from '@/hooks/useResponsive';
@@ -843,6 +846,22 @@ function StudentAppContent({
       pendingRecordedAudiosRef,
     },
   );
+
+  // ── Recording Checkpoint Hook（录课中持续落盘 + 服务端「录制中」检查点）──────
+  // 关页 / 崩溃 / 被系统回收时，音频分片与实时字幕已在 IndexedDB，另一台设备也已看到这节课在录。
+  const { handleAudioChunk } = useRecordingCheckpoint(
+    { isRecording, sessionId, userId: user?.id, accessToken, isAuthenticated },
+    { liveSegmentsRef },
+  );
+
+  // 移动端首页的「有一节课没结束」恢复条（桌面课堂 tab 由 ClassroomView 自己挂）；
+  // 「继续录」只负责收好前半段，开新一段由 MobileAppShell 走它自己的 onStartRecording
+  const mobileUnfinished = useUnfinishedRecordings({
+    userId: user?.id,
+    accessToken,
+    isAuthenticated,
+    activeRecordingSessionId: isRecording ? sessionId : null,
+  });
 
   const handleViewModeChange = useCallback(async (newMode: 'record' | 'review' | 'classroom') => {
     // 试听旅程出口：用户在示例课上下文里主动切课堂/收集 tab = 明确要离开试听。
@@ -1906,6 +1925,7 @@ function StudentAppContent({
               compactMode
               onRecordingStart={handleRecordingStart}
               onRecordingStop={handleRecordingStop}
+              onAudioChunk={handleAudioChunk}
               onTranscriptionError={handleRecordingTranscriptionError}
               onTranscriptUpdate={handleTranscriptUpdate}
               onTranscriptTextUpdate={handleTranscriptTextUpdate}
@@ -2142,6 +2162,10 @@ function StudentAppContent({
             }
             return recorder.startRecording();
           }}
+          unfinishedLessons={mobileUnfinished.unfinished}
+          unfinishedBusySessionId={mobileUnfinished.busySessionId}
+          onFinishUnfinished={mobileUnfinished.finish}
+          onResumeUnfinished={mobileUnfinished.resume}
           onOpenFilePicker={(mode) => handleSourceFileButtonClick(mode)}
           onOpenReview={(item) => openReviewFromCollection(item)}
           composerText={collectionComposerText}
@@ -2255,6 +2279,7 @@ function StudentAppContent({
               autoStartSignal={recorderAutoStartSignal}
               onRecordingStart={handleRecordingStart}
               onRecordingStop={handleRecordingStop}
+              onAudioChunk={handleAudioChunk}
               onTranscriptionError={handleRecordingTranscriptionError}
               onTranscriptUpdate={handleTranscriptUpdate}
               onTranscriptTextUpdate={handleTranscriptTextUpdate}
@@ -2374,10 +2399,25 @@ function StudentAppContent({
                   currentTime: 0,
                   showTranscriptBar: false,
                 });
+                if (ok) return;
 
-                if (!ok) {
-                  console.warn('[classroom] open lesson failed (incomplete data):', lessonId);
+                // 本机没有这节课的转录（另一台设备录的，列表只回填了壳）→ 走收集列表同一条懒拉 evidence 链路：
+                // 2026-07-16 列表轻量化后课堂 tab 一直缺这一步，点开跨设备的课什么都不发生（生产实测 before/09）
+                const fromSourceItems = sourceItemsRef.current.find(
+                  (item) => item.sessionId === lessonId && item.workspaceCaptureId,
+                );
+                const fromCaptures = fromSourceItems
+                  ? null
+                  : useEchoStore.getState().workspaceCaptures.find((capture) => (
+                    capture.metadata && typeof capture.metadata === 'object'
+                      && (capture.metadata as Record<string, unknown>).sessionId === lessonId
+                  ));
+                const reviewItem = fromSourceItems || (fromCaptures ? buildWorkspaceCaptureSourceItem(fromCaptures) : null);
+                if (reviewItem) {
+                  await openReviewFromCollection({ ...reviewItem, sessionId: lessonId, reviewable: true });
+                  return;
                 }
+                console.warn('[classroom] open lesson failed (incomplete data):', lessonId);
               }}
               onRenameLesson={(id, title) => {
                 // 用户手动改名 = 最高优先级的标题意图：本地加锁 + 服务端加锁，
@@ -2423,6 +2463,7 @@ function StudentAppContent({
               autoStartSignal={recorderAutoStartSignal}
               onRecordingStart={handleRecordingStart}
               onRecordingStop={handleRecordingStop}
+              onAudioChunk={handleAudioChunk}
               onTranscriptionError={handleRecordingTranscriptionError}
               onTranscriptUpdate={handleTranscriptUpdate}
               onTranscriptTextUpdate={handleTranscriptTextUpdate}

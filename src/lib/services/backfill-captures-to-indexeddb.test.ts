@@ -174,6 +174,30 @@ describe('extractBackfillCandidate', () => {
   });
 });
 
+describe('另一台设备正在录的课（录课中检查点）', () => {
+  it('recordingState=recording 且还没有一句字幕也进候选，标出录制中与检查点时刻', () => {
+    const c = cap({ metadata: { sessionId: 'sess-live', recordingState: 'recording', duration: 120_000, checkpointAt: '2026-09-10T07:07:00.000Z' } });
+    const r = extractBackfillCandidate(c);
+    expect(r).not.toBeNull();
+    expect(r!.recordingState).toBe('recording');
+    expect(r!.checkpointAt).toBe('2026-09-10T07:07:00.000Z');
+    expect(r!.segments).toHaveLength(0);
+    expect(r!.durationMs).toBe(120_000);
+  });
+
+  it('旧数据没有 recordingState 视为已完成；没证据没分段的旧 capture 仍不回填', () => {
+    expect(extractBackfillCandidate(cap({ metadata: { sessionId: 'sess-1', transcriptSegments: segs } }))!.recordingState).toBe('completed');
+    expect(extractBackfillCandidate(cap({ metadata: { sessionId: 'sess-empty' } }))).toBeNull();
+  });
+
+  it('现场录音录完但一句字幕都没有（原声等兜底转写）仍进候选，让「录制中」能翻成已结束', () => {
+    const r = extractBackfillCandidate(cap({ metadata: { sessionId: 'sess-quiet', recordingState: 'completed', duration: 9000 } }));
+    expect(r).not.toBeNull();
+    expect(r!.recordingState).toBe('completed');
+    expect(r!.segments).toHaveLength(0);
+  });
+});
+
 describe('pickBackfillable', () => {
   it('从混合 capture 中挑出可回填项', () => {
     const list = [

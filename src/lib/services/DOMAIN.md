@@ -82,14 +82,17 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 |------|------|------|
 | `workspace-service.ts` | 237 | 工作空间基础管理（创建/查询） |
 | `workspace-account-service.ts` | ~170 | 账号统一：默认工作区补齐 + 微信旧数据归属修复 + 本地历史迁移 |
-| `workspace-context-service.ts` | 838 | Capture 收集 + Ingest 处理 + 状态管理 |
+| `workspace-context-service.ts` | ~1040 | Capture 收集 + Ingest 处理 + 状态管理。**2026-09-10 写入护栏**：`upsertWorkspaceCaptureBySourceKey` 撞唯一键（P2002，结束时全量转录写入与原声回写同 sourceKey 并发）按 update 重试一次而不是 500；`upsertCaptureForUser` 按 `metadata.sessionId` 找同一节课的已有行复用其 sourceKey（live:{uid}:{sid} / live:audio-xxx / local-session:{uid}:{sid} 三把钥匙不再各占一行）、部分更新与已有 metadata 合并（原声回写 / 心跳不再冲掉 evidenceAvailable / titleSource）、零信息标题不盖具体标题；`getCurrentWorkspaceContext` 读时把历史双行按 sessionId 折叠成一行（不删数据） |
+| `workspace-capture-guards.ts` | ~150 | 上一行护栏的纯函数（可单测）：`findExistingCaptureForSession` / `resolveCaptureTitle` / `collapseDuplicateSessionCaptures` / `readCaptureSessionId` |
+| `recording-checkpoint-service.ts` | ~200 | **录课检查点（服务端）**：`parseRecordingCheckpointBody`（形状与上限）→ `upsertRecordingCheckpoint`（复用 upsertCaptureForUser 全部护栏，`recordingState='recording'`，不带正文——半节课不触发课后理解）；`finalizeStaleRecordingCaptures`：超过 6h 没再收到检查点的「录制中」在读列表时翻成 completed，并用已有分段尽力出一次标题 / 摘要（`/api/workspace/current` 调） |
+| `recording-recovery-service.ts` | ~190 | **没结束的课怎么收（客户端）**：分片拼回原声 + 检查点写下的转录 → `audioSessions` completed；有原声没文字先 `retranscribeStuckSessions(force)` 再往服务端写；登录用户同一把 sourceKey 写 capture → 上传原声 → 课后理解，失败标 `syncState=failed`；占位里什么都没有的直接删 |
 | `workspace-context-types.ts` | 161 | 类型定义 + 纯工具函数 + 微信 helper |
-| `backfill-captures-to-indexeddb.ts` | ~440 | 跨设备下行恢复：按 sessionId 将服务端课堂转录、说话人、困惑点、摘要、精选片段与个人笔记逐类补回 IndexedDB；不覆盖本机已有编辑，失败项可重试。`evidenceAvailable` 的 capture 绝不用列表截断的 normalizedText 造「单段兜底」（真实分段由 evidence 懒拉）；本地 ≤1 段的降级数据在拿到真实多段时自愈替换 |
+| `backfill-captures-to-indexeddb.ts` | ~600 | 跨设备下行恢复：按 sessionId 将服务端课堂转录、说话人、困惑点、摘要、精选片段与个人笔记逐类补回 IndexedDB；不覆盖本机已有编辑，失败项可重试。`evidenceAvailable` 的 capture 绝不用列表截断的 normalizedText 造「单段兜底」（真实分段由 evidence 懒拉）；本地 ≤1 段的降级数据在拿到真实多段时自愈替换。**2026-09-10**：带 `recordingState` 的现场录音 capture 不论有没有证据都进候选，`recordingState='recording'` 写成 `remoteRecordingState`（列表「录制中 · 已 N 分钟」）；已有行的远端录制态 / 时长 / 服务端标题（非用户锁、占位不盖具体）刷新不受 page-lifetime 幂等保护；本机 `status='recording'` 的行是权威不动 |
 | `workspace-evidence-service.ts` | ~340 | 课堂证据服务端正规化：转录分段落表，低频产物按 kind 存储；capture 列表仅返回轻量索引但保留板书 `capturedAtMs` 等课堂定位字段，兼容旧 metadata bundle。**单调递增护栏**：显式分段只许同等/更完整覆盖，normalizedText 兜底单段只许补空表——客户端 500 段快照/摘要片段回刷不会毁掉服务端全量证据 |
 | `workspace-evidence-client.ts` | ~120 | 用户首次在新设备打开课堂时懒拉完整证据，合并并发请求并复用 backfill 管线写回 IndexedDB |
 | `upload-recording-audio.ts` | ~90 | 登录态录音后台持久化：把本地 Blob 上传为跨设备 mediaUrl，并回写 IndexedDB / Workspace capture |
 | `workspace-audio-sync-service.ts` | ~70 | 服务端按 userId + sessionId 把已上传原声绑定回正确 Workspace capture，不依赖前端保留 sourceKey |
-| `retry-pending-recording-uploads.ts` | ~90 | 进入课堂时静默补传仍只有本地 Blob 的已完成录音；每次顺序处理少量，成功去重、失败保留后续重试 |
+| `retry-pending-recording-uploads.ts` | ~190 | 进入课堂时静默补传仍只有本地 Blob 的已完成录音；每次顺序处理少量，成功去重、失败保留后续重试。**`syncPendingRecordings`（2026-09-10）**：结束时写服务端 capture 失败（`syncState=failed`）或卡在 pending >60s 的课，按本地转录重新写（同一把 sourceKey 幂等，每轮 ≤3 节）；进课堂 / 恢复联网 / 回前台各跑一次 |
 | `workspace-echo-service.ts` | ~1300 | 每日回响生成（AI 洞察/金句/推荐）；CommonStack 新 schema 不返回 title，标题从模型自己的 takeaway / echo 首句取，取不出留空由质量门按 too-short 拒（不再写「今日回声」占位）；质量门只拦系统口吻泄漏与重复，不再用「主要讲了 / 总结来看」正则否决真回声 |
 | `workspace-search-service.ts` | 175 | 全局 AI 检索（流式带引用） |
 | `commonstack-echo-service.ts` | 273 | Echo LLM 调用（System Prompt 在此） |

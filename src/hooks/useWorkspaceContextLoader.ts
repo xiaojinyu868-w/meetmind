@@ -29,6 +29,10 @@ import { backfillCapturesToIndexedDB } from '@/lib/services/backfill-captures-to
 import { silentBackfillLessonTitles } from '@/lib/services/lesson-title-client';
 import type { WorkspaceCaptureMessage, WorkspaceEchoMessage, SupportReferenceItem } from '@/types/page-types';
 
+/** 定时刷新间隔 / 焦点触发的最小间隔（另一台设备结束的课在这个尺度内出现） */
+export const WORKSPACE_REFRESH_INTERVAL_MS = 60_000;
+export const WORKSPACE_REFRESH_MIN_GAP_MS = 20_000;
+
 // ── Deps interface ──
 
 interface UseWorkspaceContextLoaderDeps {
@@ -65,19 +69,27 @@ export function useWorkspaceContextLoader(
 
   const { workspaceContextRequestKeyRef } = refs;
 
-  // ── Effect 1: 工作区加载 ──
+  // ── Effect 1: 工作区加载 + 刷新 ──
+  //
+  // 2026-09-10 之前只在 (userId, wechatToken) 变化时拉一次：另一台设备结束了一节课，这边不刷新页面永远看不到
+  //（生产实测 90s 内不出现）。现在首次加载后，页面回到前台 / 窗口获得焦点（≥20s 一次）和每 60s 定时
+  // 各刷一次；拉回的 captures 走同一条合并 + 回填链路（幂等，按 id / sourceKey 去重，回填不覆盖本机编辑）。
   useEffect(() => {
     if (!isAuthenticated || !user?.id || !accessToken) return;
 
     const requestKey = `${user.id}:${wechatCaptureToken || ''}`;
-    if (workspaceContextRequestKeyRef.current === requestKey) return;
+    const isInitialLoad = workspaceContextRequestKeyRef.current !== requestKey;
 
     // 静默回填历史零信息标题（每次工作区加载最多 10 条，宁缺毋滥）
-    silentBackfillLessonTitles(accessToken);
+    if (isInitialLoad) silentBackfillLessonTitles(accessToken);
 
     let cancelled = false;
+    let inFlight = false;
+    let lastLoadedAt = 0;
 
-    (async () => {
+    const loadWorkspace = async () => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
       try {
         const response = await fetch('/api/workspace/current?includeArchived=1', {
           headers: {
@@ -168,15 +180,41 @@ export function useWorkspaceContextLoader(
         }
 
         workspaceContextRequestKeyRef.current = requestKey;
+        lastLoadedAt = Date.now();
       } catch (error) {
         if (cancelled) return;
         const message = error instanceof Error ? error.message : String(error);
         console.error('[workspace.current]', message);
+      } finally {
+        inFlight = false;
       }
-    })();
+    };
+
+    const refreshIfDue = (minGapMs: number) => {
+      if (document.visibilityState === 'hidden') return;
+      if (Date.now() - lastLoadedAt < minGapMs) return;
+      void loadWorkspace();
+    };
+
+    if (isInitialLoad) {
+      void loadWorkspace();
+    } else {
+      lastLoadedAt = Date.now();
+    }
+
+    const onVisible = () => refreshIfDue(WORKSPACE_REFRESH_MIN_GAP_MS);
+    const onFocus = () => refreshIfDue(WORKSPACE_REFRESH_MIN_GAP_MS);
+    const timer = window.setInterval(() => refreshIfDue(WORKSPACE_REFRESH_INTERVAL_MS - 1000), WORKSPACE_REFRESH_INTERVAL_MS);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onFocus);
 
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onFocus);
     };
   }, [accessToken, isAuthenticated, user?.id, wechatCaptureToken]);
 
