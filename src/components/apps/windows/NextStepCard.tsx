@@ -22,7 +22,7 @@ export interface NextStepCardProps {
 export function NextStepCard({ action, appName, reason, onOpen }: NextStepCardProps) {
   return (
     <div
-      className="mx-auto mt-6 flex w-full max-w-[440px] items-center gap-4 rounded-[18px] border border-pine/20 bg-pine-fog/60 px-4 py-3.5 text-left"
+      className="mm-app-enter mx-auto mt-6 flex w-full max-w-[440px] items-center gap-4 rounded-[18px] border border-pine/20 bg-pine-fog/60 px-4 py-3.5 text-left"
       data-testid="next-step-card"
     >
       <div className="min-w-0 flex-1">
@@ -33,7 +33,7 @@ export function NextStepCard({ action, appName, reason, onOpen }: NextStepCardPr
       <button
         type="button"
         onClick={onOpen}
-        className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-pine px-4 py-2 text-[12.5px] font-semibold text-white transition hover:bg-pine-deep active:scale-[0.98]"
+        className="mm-press mm-focus inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-full bg-pine px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-pine-deep"
       >
         {APPS_COPY.path.nextInWindowAction(action)}
         <ArrowRight size={13} strokeWidth={2} />

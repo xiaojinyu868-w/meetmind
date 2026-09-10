@@ -908,15 +908,41 @@
   }
 }
 
+/* 按下有反馈：卡片与按钮 scale，120ms 回弹 */
+.card:active,
+.contextAppCard:active {
+  transform: translateY(0) scale(0.995);
+  transition-duration: 80ms;
+}
+.primaryAction:active:not(:disabled),
+.secondaryAction:active:not(:disabled),
+.ghostAction:active:not(:disabled),
+.contextAppAction:active {
+  transform: scale(0.97);
+}
+.primaryAction,
+.secondaryAction,
+.ghostAction,
+.contextAppAction {
+  transition-property: opacity, border-color, background-color, color, transform;
+  transition-duration: 150ms;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .readinessPulse,
   .pulseIndicator,
-  .statusrunning .statusDotCore {
+  .statusrunning .statusDotCore,
+  .outcomeText {
     animation: none;
   }
 
   .card:hover,
-  .contextAppCard:hover {
+  .contextAppCard:hover,
+  .card:active,
+  .contextAppCard:active,
+  .primaryAction:active:not(:disabled),
+  .secondaryAction:active:not(:disabled),
+  .ghostAction:active:not(:disabled) {
     transform: none;
   }
 }
@@ -1100,10 +1126,13 @@
   background: var(--mm-pine);
 }
 .outcomeText {
+  display: inline-block;
   color: var(--mm-pine);
   font-family: 'JetBrains Mono', 'Roboto Mono', ui-monospace, monospace;
   font-weight: 700;
   letter-spacing: 0.02em;
+  /* 完成一轮回到路径：结果行 260ms 浮出（关键帧在 globals.css，模块内不重复定义） */
+  animation: mm-rise-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 /* 还可以这样学 */

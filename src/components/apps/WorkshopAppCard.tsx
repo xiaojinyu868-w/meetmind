@@ -126,10 +126,11 @@ export function WorkshopAppCard({
   const tid = (base: string) => (featured ? `workshop-featured-${base}` : `workshop-${base}`);
   const openLabel = app.key === 'infographic' ? COPY.apps.matrix.openImage : COPY.apps.matrix.open;
 
+  // 结果行（"5 题对 3"）随会话结果变化时重新浮出（key 变 → 重挂载 → outcomeText 的进场动画）
   const statusNode = status === 'running' && progressLabel
     ? progressLabel
     : outcomeLine && status === 'success'
-      ? <span className={styles.outcomeText}>{outcomeLine}</span>
+      ? <span key={outcomeLine} className={styles.outcomeText}>{outcomeLine}</span>
       : statusLabel(status);
 
   const actions = (

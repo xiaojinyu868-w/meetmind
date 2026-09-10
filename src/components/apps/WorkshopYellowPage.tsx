@@ -1090,13 +1090,15 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           <div className={styles.sectionHeading}>
             <h3 id="workshop-recommended-title" className={styles.sectionTitle}>{APPS_COPY.path.nextTitle}</h3>
           </div>
-          {renderAppCard(recommendedApp, { variant: 'featured' })}
+          <div key={recommendedApp.key} className="mm-app-enter">
+            {renderAppCard(recommendedApp, { variant: 'featured' })}
+          </div>
         </section>
       ) : null}
 
       {/* 走完了：四步都有结果 */}
       {pathCompleted ? (
-        <section className={styles.wrapCard} aria-labelledby="workshop-wrap-title" data-testid="workshop-path-complete">
+        <section className={`${styles.wrapCard} mm-app-enter`} aria-labelledby="workshop-wrap-title" data-testid="workshop-path-complete">
           <span className={styles.wrapCheck} aria-hidden><Check size={18} strokeWidth={2.4} /></span>
           <div>
             <h3 id="workshop-wrap-title" className={styles.wrapTitle}>{APPS_COPY.path.wrap.title}</h3>
