@@ -10,6 +10,7 @@
 | `render-state-machine.ts` | 三段式转写渲染状态机（M2 T2.6）。把 ASR 流式输出分 interim（灰斜体抖动）/ stable（已稳定未 commit）/ final（commit 锚定时间戳）三层，消除"锁定瞬间跳变"。纯逻辑，React hook 另封装 | `TranscriptSegment` / 状态机 reducer |
 | `post-edit.ts` | ASR LLM 后校对（M5 T5.2；2026-08 单遍化后接管文本纠错）。只对低置信片段调 `DeepSeek-V4-Flash` 复核（按节分批：单批 ≤10 条且 ≤6000 字符，最多 5 批），高置信纠正才接受，单批失败静默降级该批原文、不阻塞定稿。`ASR_POST_EDIT_ENABLED` 默认开（`=false` 可关），目前挂在 `/api/transcribe-fast` 精转链路。Prompt 固定版本 `PROMPT_VERSIONS.asrPostEdit` | `postEditSegments` / `PostEditSegment` |
 | `audio-constraints.ts` | 浏览器音频采集约束（M5 T2.11/T5.6）。AEC on / NS on / AGC 可配，中心化供 Recorder 与 OmniRealtimeCall 复用，是 `getUserMedia` 约束的**唯一真相源**，env 可覆盖。不引入 vad-web（服务端已有 VAD） | `AudioConstraintOptions` / `buildAudioConstraints` |
+| `pcm.ts` | 浏览器采集帧（Float32）→ 16kHz / 16bit PCM 的纯函数（最近邻重采样 + 量化，与 useVoiceInput / Recorder 就地实现同算法）+ 帧时长换算；2026-09-10 为「讲给同桌听」常开麦克风抽出，供复用 | `floatToPcm16` / `quantizeSample` / `frameDurationMs` |
 | `ws-url.ts` | ASR WebSocket URL 候选构建。根据页面协议推导 `ws/wss`，唯一路径 `/api/asr-stream`（腾讯 `/api/asr-stream-speaker` 实验链路 2026-08 已拆除），wss 时追加 `:8443` 直连候选 | `buildAsrWebSocketCandidates` |
 | `session-isolation.ts` | 异步定稿的课堂隔离判定。旧课结果可以回写自己的持久化数据，但只有显式 sessionId 与当前课堂严格一致时才能覆盖 editor/ref；缺失标识也拒绝 | `shouldApplyTranscriptToActiveSession` |
 | `diarization-service.ts` | 课后说话人整理（2026-08 起**不再自动触发**：realtime 单遍即定稿、课堂≈单说话人）。服务保留供将来的手动「重新精转」：基于已有 segments 调 `/api/asr/diarize` 补标签；过滤 `-1`，且至少两位发言者各自满足时长 / 文本证据、整段语音足够长才展示匿名标签 | `runDiarizationForSession` / `shouldRunPostBatchDiarization` / `assessDiarizationEvidence` |
