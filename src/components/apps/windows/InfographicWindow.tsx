@@ -316,6 +316,7 @@ export function InfographicWindow({
       <section className="h-full bg-canvas" data-testid="infographic-window">
         <AppWindowPlaceholder
           status="error"
+          appKey="infographic"
           appName={APPS_COPY.infographic.appName}
           errorMessage={APPS_COPY.infographic.generateFailed}
           onRetry={() => void generateFromCurrentContext()}
@@ -349,8 +350,7 @@ export function InfographicWindow({
 
           <article className="overflow-hidden rounded-[28px] border border-pine/20 bg-paper shadow-soft">
             <div className="border-b border-pine/15 bg-pine px-5 py-5 text-white">
-              <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-white/65">MeetMind · {APPS_COPY.infographic.appName}</p>
-              <h2 className="mt-3 font-serif text-[26px] leading-[1.16] tracking-[-0.02em]">
+              <h2 className="text-[24px] font-semibold leading-[1.2] tracking-[-0.02em]">
                 {previewDraft.title || APPS_COPY.infographic.appName}
               </h2>
               {previewDraft.subtitle ? (
@@ -384,95 +384,67 @@ export function InfographicWindow({
     );
   }
 
+  // 定制 = 进入态（2026-09-10 重做）：与其他应用同一套三层版式——
+  //   ① 一张海报比例的框是主角（比例随尺寸、底色随风格，改一个词框立刻变，所以不需要标签）
+  //   ② 一句话 ③ 框下面两排词 + 一行淡字的补充要求 + 唯一的动作「生成」
+  // 此前是标题 + 副题 + 「尺寸 / 视觉感觉 / 还想强调什么」三行「标签：控件」+ 右侧示意图 + 「版面示意 · 以成品为准」——一张表单。
+  const notice = taskState?.status === 'error'
+    ? APPS_COPY.infographic.generateFailed
+    : !imageEnabled ? APPS_COPY.infographic.serviceUnavailable : null;
   return (
     <section
-      className="h-full overflow-auto bg-canvas px-4 py-6 sm:px-6"
+      className="flex h-full min-h-[420px] flex-col items-center justify-center gap-6 overflow-auto bg-canvas px-6 py-10"
       data-testid="infographic-window"
     >
-      {/* 定制：不是表单，是纸上的三行字——每行左边一个词，右边几个可选的词，选中的加下划线；
-          补充要求是一条可以写字的横线。页面唯一饱和的东西是右下角那一个动作。 */}
-      <div className="mx-auto max-w-xl pt-2">
-        <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-ink">
+      <LayoutPreview
+        orientation={orientation}
+        styleClassName={currentStyle.previewClassName}
+        title={previewDraft.title || APPS_COPY.infographic.appName}
+        points={previewDraft.keyPoints || []}
+      />
+      <div className="text-center">
+        <p className="text-[15px] font-medium tracking-[-0.01em] text-ink">
           {result ? APPS_COPY.infographic.adjustTitle : APPS_COPY.infographic.createTitle}
-        </h2>
-        <p className="mt-1 text-[12px] leading-6 text-ink-muted">
-          {result ? APPS_COPY.infographic.adjustHint : APPS_COPY.infographic.createHint}
         </p>
-
-        {taskState?.status === 'error' ? (
-          <p className="mt-4 border-l-2 border-vermilion pl-3 text-[12px] leading-6 text-vermilion">
-            {APPS_COPY.infographic.generateFailed}
-          </p>
-        ) : null}
-
-        {!imageEnabled ? (
-          <div className="mt-4 border-l-2 border-divider pl-3">
-            <p className="text-[13px] font-medium text-ink">{APPS_COPY.infographic.serviceUnavailable}</p>
-            <p className="mt-0.5 text-[12px] leading-6 text-ink-muted">{APPS_COPY.infographic.serviceUnavailableBody}</p>
-          </div>
-        ) : null}
-
-        <div className="mt-7 flex flex-col gap-6 md:flex-row md:items-start">
-        <dl className="min-w-0 flex-1 divide-y divide-divider">
-          <div className="grid grid-cols-[64px_1fr] items-baseline gap-4 py-3.5">
-            <dt className="text-[12px] text-ink-muted">{APPS_COPY.infographic.orientation}</dt>
-            <dd>
-              <WordToggle
-                value={orientation}
-                onChange={setOrientation}
-                options={ORIENTATIONS.map((option) => ({ value: option.value, label: option.label }))}
-              />
-            </dd>
-          </div>
-          <div className="grid grid-cols-[64px_1fr] items-baseline gap-4 py-3.5">
-            <dt className="text-[12px] text-ink-muted">{APPS_COPY.infographic.style}</dt>
-            <dd>
-              <WordToggle
-                value={stylePreset}
-                onChange={setStylePreset}
-                options={STYLE_PRESETS.map((item) => ({ value: item.key, label: item.label }))}
-              />
-            </dd>
-          </div>
-          <div className="grid grid-cols-[64px_1fr] items-start gap-4 py-3.5">
-            <dt className="pt-1.5 text-[12px] text-ink-muted">{APPS_COPY.infographic.custom}</dt>
-            <dd>
-              <textarea
-                value={customDesc}
-                onChange={(event) => setCustomDesc(event.target.value)}
-                placeholder={APPS_COPY.infographic.customPlaceholder}
-                rows={2}
-                className="w-full resize-none border-b border-divider bg-transparent px-0 py-1.5 text-[13px] leading-6 text-ink outline-none transition placeholder:text-ink-faint focus:border-ink"
-              />
-            </dd>
-          </div>
-        </dl>
-        <div className="shrink-0 md:w-[220px]">
-          <LayoutPreview
-            orientation={orientation}
-            styleClassName={currentStyle.previewClassName}
-            title={previewDraft.title || APPS_COPY.infographic.appName}
-            points={previewDraft.keyPoints || []}
-          />
-        </div>
-        </div>
-
-        <div className="mt-6 flex justify-end">
-          <button
-            type="button"
-            onClick={() => {
-              setCustomizeMode(false);
-              void generateFromCurrentContext();
-            }}
-            disabled={!imageEnabled || generating}
-            title={!imageEnabled ? APPS_COPY.infographic.serviceUnavailable : undefined}
-            className="mm-press mm-focus inline-flex items-center gap-2 rounded-full bg-pine px-5 py-2.5 text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <ImageIcon size={ICON_SM} strokeWidth={ICON_STROKE} />
-            {result ? APPS_COPY.infographic.regenerate : APPS_COPY.infographic.generate}
-          </button>
-        </div>
+        {notice ? <p className="mt-1.5 text-[12px] text-vermilion">{notice}</p> : null}
       </div>
+      <div className="flex flex-col items-center gap-2.5">
+        <WordToggle
+          label={APPS_COPY.infographic.orientation}
+          className="justify-center"
+          value={orientation}
+          onChange={setOrientation}
+          options={ORIENTATIONS.map((option) => ({ value: option.value, label: option.label }))}
+        />
+        <WordToggle
+          label={APPS_COPY.infographic.style}
+          className="justify-center"
+          value={stylePreset}
+          onChange={setStylePreset}
+          options={STYLE_PRESETS.map((item) => ({ value: item.key, label: item.label }))}
+        />
+      </div>
+      <input
+        type="text"
+        value={customDesc}
+        onChange={(event) => setCustomDesc(event.target.value)}
+        placeholder={APPS_COPY.infographic.customPlaceholder}
+        aria-label={APPS_COPY.infographic.customPlaceholder}
+        className="w-full max-w-[300px] border-b border-divider bg-transparent px-0 py-1.5 text-center text-[13px] leading-6 text-ink outline-none transition placeholder:text-ink-faint focus:border-ink"
+      />
+      <button
+        type="button"
+        onClick={() => {
+          setCustomizeMode(false);
+          void generateFromCurrentContext();
+        }}
+        disabled={!imageEnabled || generating}
+        title={!imageEnabled ? APPS_COPY.infographic.serviceUnavailable : undefined}
+        className="mm-press mm-focus inline-flex items-center gap-2 rounded-full bg-pine px-6 py-2.5 text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <ImageIcon size={ICON_SM} strokeWidth={ICON_STROKE} />
+        {result ? APPS_COPY.infographic.regenerate : APPS_COPY.infographic.generate}
+      </button>
     </section>
   );
 }

@@ -70,10 +70,10 @@ export function ExplainerWindow({ result, transcript }: ExplainerWindowProps) {
   const payload = useMemo(() => normalizeExplainerPayload(result), [result]);
 
   if (!result) {
-    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.explainer.appName} transcript={transcript} />;
+    return <AppWindowPlaceholder status="loading" appKey="explainer" appName={APPS_COPY.explainer.appName} transcript={transcript} />;
   }
   if (!payload) {
-    return <AppWindowPlaceholder status="empty" appName={APPS_COPY.explainer.appName} />;
+    return <AppWindowPlaceholder status="empty" appKey="explainer" appName={APPS_COPY.explainer.appName} />;
   }
 
   // 窗口本身是纸面（和闪卡 / 测验 / 导图同一皮肤），黑板只是墙上那一块（BlackboardPlayer 的深色框）。

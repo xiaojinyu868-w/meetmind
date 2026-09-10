@@ -249,7 +249,7 @@ export const GLOBAL_ASK_COPY = {
     courseContextChooseLessonsHint: '先选同一单元或同一考试范围；最近四节已替你选好。',
     courseContextSelectAll: '全选',
     courseContextBeginCheatsheet: (count: number): string => `用这 ${count} 节课整理`,
-    courseContextCheatsheetLoading: '正在把这几节课压成一份纸面速查表',
+    // 等待句走 APPS_COPY.entry.sentence.cheatsheet（进入态一句话，2026-09-10）
     courseContextCheatsheetNotReady: '所选内容里还没有足够稳定的学科知识，暂时做不出可靠的考试速查表。课堂原文已经保留，可以返回课程后换一组范围。',
     courseContextRecording: '录音',
     courseContextUpload: '上传',

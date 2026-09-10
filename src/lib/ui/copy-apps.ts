@@ -6,7 +6,6 @@
  */
 
 export const APPS_COPY = {
-    inlineSource: '已放进对话',
     /**
      * 应用窗口公共壳（复习页中栏宿主 / 浮窗 / 独立页）。
      * 口吻：动作全是两个字的动词，退成文字，不做 pill；状态只在"正在做 / 没做好"时说话，做好了就不说。
@@ -99,11 +98,29 @@ export const APPS_COPY = {
       cardSummary: (moments: number, keeps: number): string => `${moments} 个课堂节点 · ${keeps} 个课后保留点`,
       reviewSummary: (moments: number, keeps: number): string => `上课时形成的 ${moments} 个推进节点和 ${keeps} 个保留点都在这里。`,
     },
+    /**
+     * 应用进入态（2026-09-10）：点开后、成品出来前的那一屏。形状说明是什么，这里只剩一句话（≤14 字）。
+     * 口吻：同学在做一件具体的事，不解释流程、不数秒；等久了换一句诚实的话。
+     */
+    entry: {
+      sentence: {
+        quiz: '在听这节课，出几道题',
+        flashcards: '在听这节课，做几张卡',
+        mindmap: '把这节课理成一张图',
+        'audio-overview': '把这节课录成一段播客',
+        explainer: '把这节课写到板上',
+        infographic: '把这节课做成一张图',
+        cheatsheet: '把这几节课压成一页',
+        'teach-back': '挑出这节课要讲的几点',
+      } as Record<string, string>,
+      generic: '在听这节课',
+      slow: '内容有点多，再等一会儿',
+      verySlow: '还在做，再给一点时间',
+      /** 空态唯一的动作（播客 idle 等） */
+      start: '开始',
+    },
     placeholder: {
       defaultAppName: '应用内容',
-      workingElapsed: (seconds: number): string => `同学正在整理 · ${seconds.toString().padStart(2, '0')}s`,
-      emptyTitle: (appName: string): string => `还没有${appName}`,
-      emptyBody: (appName: string): string => `回到应用目录开始整理${appName}，完成后会直接出现在这里。`,
       remake: '再做一版',
       back: '返回应用',
       failedTitle: (appName: string): string => `${appName}刚才没做好`,
@@ -114,26 +131,22 @@ export const APPS_COPY = {
     infographic: {
       appName: '课堂信息图',
       preparing: '正在把这节课变成一张图',
-      preparingHint: '完成后会直接显示成品。',
       finished: '做好了',
       fit: '看全图',
       full: '看细节',
       zoomIn: '放大',
       zoomOut: '缩小',
-      /** 定制态右侧的版面示意 */
-      layoutPreview: '版面示意 · 以成品为准',
       save: '保存图片',
       adjust: '调整',
+      /** 定制态（进入态）：一张海报比例的框是主角，下面两排词，一句话，一个动作 */
       createTitle: '把这节课变成一张图',
-      createHint: '选尺寸和感觉，其他交给同学。',
-      adjustTitle: '想换一种呈现？',
-      adjustHint: '只改你在意的部分，其余交给同学。',
+      adjustTitle: '换一种呈现',
+      /** 两排词的无障碍名（屏幕上不出现标签，框本身随选择变） */
       orientation: '尺寸',
       style: '视觉感觉',
-      custom: '还想强调什么',
-      customPlaceholder: '例如：突出 3 个结论，适合手机查看',
-      generate: '生成信息图',
-      regenerate: '按这个方向重做',
+      customPlaceholder: '还想强调什么…',
+      generate: '生成',
+      regenerate: '重做',
       serviceUnavailable: '图片服务暂时不可用',
       serviceUnavailableBody: '课堂内容和草案已经保留，稍后再试即可。',
       downloaded: '图片已保存',
@@ -241,8 +254,6 @@ export const APPS_COPY = {
     },
     mindmap: {
       appName: '思维导图',
-      loadingTitle: '正在把这节课理成一张图',
-      loadingBody: '同学在读整节课，找主线和分支…',
       mobileGestureHint: '拖动查看 · 双指缩放 · 点主干只看一支',
       desktopGestureHint: '滚轮缩放 · 拖拽平移 · 点主干只看一支',
       /** 键盘那句只在第一次进入出现一次（keyboard-hints） */
@@ -409,7 +420,6 @@ export const APPS_COPY = {
       pause: '暂停',
       seek: '进度',
       rate: (rate: number): string => `播放速度 ${rate}x`,
-      emptyBody: '开始整理后，会直接得到一版可以播放的课堂播客。',
       scriptCopied: '脚本已复制',
       copyFailed: '复制失败，请手动选择脚本内容',
       /** 逐字稿说话人兜底名（模型给的是音色 id 时） */
@@ -445,7 +455,7 @@ export const APPS_COPY = {
       appName: '考试速查表',
       /** 工具条标题后缀：《课名》· 速查表 */
       paperLabel: '速查表',
-      emptyBody: '当前内容还不足以整理成可靠的速查表。继续记录后再回来看看。',
+      emptyBody: '内容还不够，多录几节再来',
       focus: '重点',
       /** 工具条 */
       generatedAt: (when: string): string => `${when} 生成`,

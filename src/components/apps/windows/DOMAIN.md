@@ -17,14 +17,24 @@
 - **触屏**：目标 ≥44px（选项行 ≥52px、走上讲台 ≥48px、折叠点命中区 44px）；滑动走 `swipe-model.ts`（阈值按宽度 22% 夹 64–140px、竖向意图取消、快甩过半程成立）+ `use-swipe.ts`（位移 >6px 才捕获指针，普通点击照常派发）；hover 底色只给有 hover 的设备（手机点过的行不留灰底）；悬停才出现的动作在触屏常显。
 - **验证靠真实数据截图**（Playwright 脚本与截图放 `/tmp/mm-apps/`，不进仓库），不只看代码。
 
+### 进入态版式（2026-09-10，八个应用一套）
+
+点开应用后、成品出来前的那一屏（等待 / 空 / 失败，以及信息图的定制态）只有三层，成品落下来时形状变成真东西、位置不跳：
+
+1. **产物的形状**（`AppEntrySilhouette`）：一叠牌 = 闪卡、一张有题号的纸 = 测验、几个节点 = 导图、一条波形 = 播客、一块留白的板 = 板书、一张海报比例的框 = 信息图、一张三栏密线的纸 = 速查表、一个气泡 + 三位听众 = 讲给同桌听。线稿 1.5px 墨色 28% + 纸白，等待时内容线轮流呼吸、一处签名色慢慢明灭——这就是"正在做"的状态点。
+2. **一句话 ≤14 字**（`APPS_COPY.entry.sentence[appKey]`，如「在听这节课，出几道题」）；等过 30s / 60s 换一句诚实的话，但不数秒。
+3. **一个槽位**：等待态放这节课的原话掠过（`TranscriptDrift`）；空态 / 失败态放唯一的动作（「开始」/「再试一次」）。
+
+为什么：此前是章鱼 + 「在听这节课，给你课堂测验」+ 「同学正在整理 · 01s」计数条 + 光晕，八个应用长得一样、要看字才知道点开了什么；空态是虚线框 + 标题 + 说明句 + 黑白两个按钮（用户原话"每一个应用的进入页面都挺难看"）。**闪卡的深色房间（`--mm-immersive`）一并删除**：它让等待态变成黑底黑字（"闪卡的进入页面完全是黑色的"），成品出来后又与其他三个宿主的纸底不一致；牌本身的纸感与投影已经足够。宿主头部只剩一行（返回 · 应用名 · 动作），第二行的说明句 / 数据源标签 / 分类标签全删；状态词只在"成品在眼前、正在重做"时跟在应用名后（`hasResult`），没有成品时正文的进入态自己会说。信息图定制态同一版式：框是主角，尺寸 / 感觉两排词直接坐在框下（无标签），补一句要求是一行淡字，唯一动作「生成」。
+
 ### 四个宿主（同一棵 `AppRenderSurface`，不同壳）
 
 | 宿主 | 场景 | 2026-09-09 状态 |
 |------|------|-----------------|
-| `ReviewLearningWorkspace`（`src/components/`） | 复习页中栏（主路径） | 头部一行文字（← 所有学习方式 · 课名 · [全屏 / 退出全屏] · 再做一版）；**「全屏」**把同一棵组件树切到 `fixed inset-0`（Esc 退出，执行状态不丢）。**板书 / 讲给同桌听 / 速查表 / 导图在桌面（≥768px）默认就进全屏**（`STAGE_APPS`）——它们在 400px 中栏里只能缩成缩略图，全屏后才是完整产品；返回键永远回应用矩阵，不用点两次 |
-| `AppWindowShell` | 独立页 `/app/matrix/[appKey]` | 返回 / 再做一版退成文字（`app-window-shell-tone.ts`），闪卡 immersive 变体保留 |
-| `WorkshopWindowManager` | 课堂页浮窗 / 全屏 | 收起 / 关闭文字化，删掉「会话 7eeeed…」内部黑话副标题，硬编码中文收进 `APPS_COPY.shell`；2026-09-10：浮窗有 `shadow-float` 与 180ms 弹出，Esc 关最上面那个窗；全屏只剩一个壳（闪卡 / 测验只是去掉内边距，不再是深绿 header 盖米白正文） |
-| `MobileAppRunner`（`src/components/mobile/`） | 手机结果页 | 2026-09-10：加载 / 失败态不再自画一套，交给同一个 `AppWindowPlaceholder`；播客窄屏补内边距；讲课面板两个按钮不再被状态行挤成两行 |
+| `ReviewLearningWorkspace`（`src/components/`） | 复习页中栏（主路径） | 头部一行文字（← 所有学习方式 · 应用名 · [全屏 / 退出全屏] · 再做一版；2026-09-10 删掉第二行「检验理解 · 想做题测一测…」说明句与闪卡深色房间）；**「全屏」**把同一棵组件树切到 `fixed inset-0`（Esc 退出，执行状态不丢）。**板书 / 讲给同桌听 / 速查表 / 导图在桌面（≥768px）默认就进全屏**（`STAGE_APPS`）——它们在 400px 中栏里只能缩成缩略图，全屏后才是完整产品；返回键永远回应用矩阵，不用点两次 |
+| `AppWindowShell` | 独立页 `/app/matrix/[appKey]` | 返回 / 再做一版退成文字（`app-window-shell-tone.ts`）；所有应用同一张纸（闪卡 immersive 变体 2026-09-10 移除）；头部一行，状态点只在 `hasResult` 时出现 |
+| `WorkshopWindowManager` | 课堂页浮窗 / 全屏 | 收起 / 关闭文字化，删掉「会话 7eeeed…」与「示例课 / 实时录音」两代副标题，硬编码中文收进 `APPS_COPY.shell`；2026-09-10：浮窗有 `shadow-float` 与 180ms 弹出，Esc 关最上面那个窗；全屏只剩一个壳（闪卡 / 测验只是去掉内边距 `EDGE_TO_EDGE_APPS`） |
+| `MobileAppRunner`（`src/components/mobile/`） | 手机结果页 | 2026-09-10：加载 / 失败态不再自画一套，交给同一个 `AppWindowPlaceholder`；顶栏只剩应用名（「记住核心」这类分类标签删）；播客窄屏补内边距 |
 
 ### 偏好 key（localStorage）
 
@@ -54,11 +64,12 @@ src/components/apps/windows/
 ├── flashcard-deck-model.ts      # 闪卡状态机纯函数（有单测）：applyScore / undoScore（Z 撤销）/ faceFontSize（长卡面 21 → 14px 自动缩字）
 ├── podcast-player-model.ts      # 播放器纯函数（有单测）：scrub 落点 / 时间格式 / 步进 / shouldResumeFollow（用户上滚后当前句回到视口中段才恢复跟随）/ 章节比例定位
 ├── InfographicPoster.tsx        # 海报查看器：光标锚缩放 / 双指 / 放大后可拖（留 96px 在视口）/ 双击切全图·原始 / + − 0 键盘 / 右下 − % +
-├── InfographicPanels.tsx        # 信息图的 WordToggle / PreparingState（与所选尺寸同比例的骨架）/ LayoutPreview（定制态即时版面示意，标明以成品为准）
+├── InfographicPanels.tsx        # 信息图的 WordToggle（label 只给读屏）/ PreparingState（同一张海报比例的框在原位变骨架 + 一句话）/ LayoutPreview（定制态的主角：比例随尺寸、底色随风格）
 ├── InfographicWindow.tsx       # 信息图窗口（成品态 / 可读版 / 定制三态 + WordToggle）
 ├── infographic-window-data.ts  # 信息图数据处理
 ├── AppWindowShell.tsx          # 独立结果页统一外壳：返回 / 状态 / 再做一版 / headerActions，打印态隐藏
-├── app-window-shell-tone.ts    # 独立应用页色调：中性纸面（动作退成文字）+ 闪卡 immersive 变体
+├── app-window-shell-tone.ts    # 独立应用页色调：所有应用同一张纸（闪卡 immersive 变体 2026-09-10 移除，理由见文件头注）
+├── AppEntrySilhouette.tsx      # 进入态的主角：八个应用各自产物的形状（SVG 线稿，live 时内容线呼吸 + 签名色明灭；tone=vermilion 给失败态）
 ├── FlashcardsWindow.tsx        # 闪卡：牌堆 + 翻面 + 记住 / 没记住 + 进度环 + 键盘 / 滑动手势
 ├── FlashcardDeck.tsx           # 一张牌：3D 翻面（rotateY）+ 后面两张牌探头的牌堆效果，正反两面纸感
 ├── FlashcardsSummary.tsx       # 闪卡结束页：回忆率圆环 + 记住 / 没记住计数 + 没记住的再来一遍
@@ -91,7 +102,7 @@ src/components/apps/windows/
 ├── podcast-window-model.ts     # 播客前端纯 helper：过滤 provider/HTTP 原始失败章节；splitPodcastSections 把 studio-overview 提成简介、丢掉与 lines 重复的「第 N 轮」章节
 ├── ExplainerWindow.tsx         # 板书精讲：BoardScript → blackboard/BlackboardPlayer（v31 白纸讲义画布实时书写），抬头只放课题（2026-09-09 起不再显示「N 处老师原话已核对」，quoteStats 仍在 payload 里）。2026-09-08：窗口本身改纸面（与闪卡 / 测验 / 导图同皮肤），黑板只是墙上那一块——BlackboardPlayer 的深色框只包住 16:9 纸面 + 控制条并垂直居中，纸面按宿主（`data-board-host`）宽 / 可用高双约束缩放（BoardCanvas）；无宿主（TeachBoard / 独立页）沿用铺满宽度的 16:9 盒子
 ├── blackboard/                 # 讲义播放器：board-model（纯函数网格/时间轴/bounds）+ BoardCanvas（v32 备课本/分栏总装）+ BoardFlow（双栏流式内容区）+ BoardFormula（KaTeX 块级公式）+ board-lecture（字阶/调色板/分栏纯函数）+ BoardWrite（token 接力显现，v32 起屏显字体）+ RoughStroke（roughjs 圈点勾画）+ useBoardPlayer（状态机 + Clock 抽象）+ BlackboardPlayer（控制条）。v32：BoardCaption（字幕）删除，鸿雷/Caveat/hanzi-writer 随手写体退役
-├── AppWindowPlaceholder.tsx    # 所有应用共用的整理中 / 空结果 / 失败状态（错误码 → 人话映射 describeAppExecutionError）
+├── AppWindowPlaceholder.tsx    # 所有应用共用的进入态（等待 / 空 / 失败同一套三层版式：形状 + 一句话 + 一个槽位；错误码与浏览器网络错误原文 → 人话 describeAppExecutionError；appKey 缺省时按 appName 反查目录）
 ├── TranscriptDrift.tsx         # 等待态的"有根"部分：这节课真实转录行按时间顺序掠过（≤24 句均匀取样，[MM:SS] 朱批戳，尊重 reduced-motion）
 ├── EvidenceLabel.tsx           # 证据标签组件
 └── index.ts                    # barrel 导出
@@ -160,13 +171,13 @@ quiz-observation.ts 为提交动作附加完整 practice.attempt 观察：保留
 - 插件 citation 必须经 `flashcards-window-model.ts` 保留到卡片背面；在复习工作区有 seek 能力时可一键回到课堂原声。
 - 3D 翻面时不可见卡面必须同步退出无障碍树，隐藏答案面的证据按钮也不能获得焦点，避免读屏提前泄题。
 - 卡片整面仍可点击，但“想好后翻面”必须是真实可聚焦按钮，不能要求学生先猜出隐藏手势或只靠空格键。
-- 长时间练习使用米白画布 + 白纸卡片，答案面用极淡松墨绿区分；松墨绿 / 朱批红只表达掌握状态。不用整页纯黑、彩虹渐变、emoji 和装饰性光晕——长时间主动回忆的页面要安静，装饰会和"掌握状态"这一层语义抢注意力（taste 原则见 `docs/PRODUCT_TASTE.md`）。
+- 长时间练习使用米白画布 + 白纸卡片，答案面用极淡松墨绿区分；松墨绿 / 朱批红只表达掌握状态。不用整页纯黑、彩虹渐变、emoji 和装饰性光晕——长时间主动回忆的页面要安静，装饰会和"掌握状态"这一层语义抢注意力（taste 原则见 `docs/PRODUCT_TASTE.md`）。**四个宿主里闪卡都是纸底**：此前复习页 / 独立页 / inline 卡给闪卡开了深色 `--mm-immersive` 房间，等待态在里面是黑底黑字，2026-09-10 一并删除。
 
 ### InfographicWindow（信息图）
 
 **2026-09-10 交互打磨**：成品是海报查看器 `InfographicPoster`（光标锚缩放、双指、放大后可拖且至少留 96px 在视口、双击切全图 / 原始、+ − 0 键盘、右下 − % + 与「看全图」，头部显示缩放百分比）；生成中是与所选尺寸同比例的骨架（shimmer）+ 一句话，海报落下来不重排；定制态右侧有即时版面示意（比例随尺寸、底色随风格、字是草案标题与要点，标明「以成品为准」）；「生成」按不了时 title 说图片服务不可用。WordToggle / PreparingState / LayoutPreview 提成 `InfographicPanels`，窗口回到 500 行预算内。
 
-- 主文件：`InfographicWindow.tsx` — 渲染逻辑（2026-09-09：成品态头部只有一行字，适应 / 原始 两词切换 + 保存 / 调整文字动作，去掉「做好了」徽章与图片描边；定制态从表单改成纸上三行字——尺寸 / 感觉 各一排词加下划线、补充要求一条横线，唯一饱和色是右下角「生成」；等待态呼吸细线）
+- 主文件：`InfographicWindow.tsx` — 渲染逻辑（2026-09-09：成品态头部只有一行字，适应 / 原始 两词切换 + 保存 / 调整文字动作，去掉「做好了」徽章与图片描边；2026-09-10 定制态改成进入态版式——海报比例的框是主角，尺寸 / 感觉两排词坐在框下（无「尺寸：」「视觉感觉：」标签，框随选择即时变），补一句要求是一行居中淡字，唯一饱和色是「生成」；此前是标题 + 副题 + 三行「标签：控件」+ 右侧示意 + 「版面示意 · 以成品为准」）
 - 数据文件：`infographic-window-data.ts` — 场景预设/风格预设/数据转换
 - 信息图是结果型应用：进入后由 AI 直接生成并先展示完整成品，不把配置表单当作首屏。
 - 只有用户主动点“调整”后，才展开尺寸、视觉感觉与一句补充要求；其余版式、语言和信息密度继续由模型判断。
@@ -199,7 +210,7 @@ quiz-observation.ts 为提交动作附加完整 practice.attempt 观察：保留
 - 试听卡（WorkshopYellowPage 缓存有 audioUrl 时直接弹的播放器）有「看逐字稿」入口进完整窗口——此前缓存有音频时用户永远到不了这个窗口。
 - 失败产物中若混入“播客音频未生成 / 403 Forbidden / 建连失败”等技术章节，必须在 `podcast-window-model.ts` 过滤；前端只保留可重试状态、脚本和真实课堂证据。
 - 播客只有真实音频，或至少真实脚本 / 章节存在时，才写入“最近学习现场”；禁止把 provider 调用结束当作用户已经得到可播放成品。
-- `AppWindowPlaceholder` 是六类应用整理中、空结果与失败状态的唯一展示；等待态使用“同学正在整理”，禁止重新出现“酿”等内部隐喻。窗口传入 `transcript` 时等待态会让这节课的原话掠过（`TranscriptDrift`）——不声称模型读到了哪句，只把材料本身可视化；不假装阶段进度。
+- `AppWindowPlaceholder` 是八类应用等待、空结果与失败状态的唯一展示（版式见顶部「进入态版式」）；一句话走 `APPS_COPY.entry`，禁止重新出现“酿”等内部隐喻与秒数计数器。窗口传入 `transcript` 时等待态会让这节课的原话掠过（`TranscriptDrift`）——不声称模型读到了哪句，只把材料本身可视化；不假装阶段进度。
 - `AppRenderSurface.isEmptyAppResult`：有"成品"但一道题 / 一张卡 / 一个分支都没有 → 按失败处理带「再试一次」，顶栏与窗口体不再一个说「做好了」一个说空。
 
 ### TeachBackWindow（讲给同桌听 · 面试间，2026-09-10）
@@ -254,7 +265,7 @@ quiz-observation.ts 为提交动作附加完整 practice.attempt 观察：保留
 
 ## 排版约定
 
-- 应用窗口默认使用 `canvas/card/ink/divider` 平涂体系；闪卡这类长时间主动回忆页面允许使用低亮度沉浸背景以降低白底眩光，但不要把这种深色舞台扩散到普通文档 / 报告类应用。
+- 应用窗口一律使用 `canvas/card/ink/divider` 平涂体系；不再给任何单个应用开深色沉浸背景（2026-09-10 前闪卡有过，实测在等待态变成黑底黑字）——白底眩光由 `data-theme=dark` 统一解决。
 - 报告类应用优先复用疏朗文档排版：大标题、长正文 1.75+ 行高、主内容和建议区分栏。
 - 用户可见应用名称必须避开 `COPY.bannedWords`；`app-catalog.test.ts` 也会额外守住目录里的 `AI / 生图 / 智能生成` 等技术词。
 - 独立应用页和 `AppWindowShell` 不展示内部 sessionId 或模型选择；动作文案使用“再做一版 / 没做好”，做好了不说（见顶部公共设计语言）。返回链接必须保留游客身份等入口参数，不能把体验中的用户送去登录页；手机顶栏隐藏长副标题和重复按钮文字，只保留可访问名称。

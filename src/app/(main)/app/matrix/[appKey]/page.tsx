@@ -387,6 +387,7 @@ export default function AppMatrixWindowPage() {
       <AppWindowShell
         app={app}
         taskState={execution.taskState}
+        hasResult={execution.hasResult}
         onRegenerate={() => void execution.rerun()}
         showPrimaryAction={false}
         backHref={backHref}
@@ -417,6 +418,7 @@ export default function AppMatrixWindowPage() {
     <AppWindowShell
       app={app}
       taskState={execution.taskState}
+      hasResult={execution.hasResult}
       onRegenerate={() => {
         void execution.rerun();
       }}

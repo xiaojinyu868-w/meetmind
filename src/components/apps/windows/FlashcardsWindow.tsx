@@ -205,7 +205,7 @@ export function FlashcardsWindow({ result, transcript, onSeek, onLearningActivit
   });
 
   if (!result) {
-    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.flashcards.appName} transcript={transcript} />;
+    return <AppWindowPlaceholder status="loading" appKey="flashcards" appName={APPS_COPY.flashcards.appName} transcript={transcript} />;
   }
   if (fallbackMessage) {
     return (
@@ -215,7 +215,7 @@ export function FlashcardsWindow({ result, transcript, onSeek, onLearningActivit
     );
   }
   if (cards.length === 0) {
-    return <AppWindowPlaceholder status="empty" appName={APPS_COPY.flashcards.appName} />;
+    return <AppWindowPlaceholder status="empty" appKey="flashcards" appName={APPS_COPY.flashcards.appName} />;
   }
 
   const current = activeCards[Math.min(index, activeCards.length - 1)];

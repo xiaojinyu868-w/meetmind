@@ -272,11 +272,12 @@ export function CourseCheatsheetWorkspace({ courses, initialCourseKeys = [], onB
       </div>
     );
   } else if (context.loading) {
-    content = <AppWindowPlaceholder status="loading" appName={app.name} loadingLabel={GLOBAL_ASK_COPY.courseContextCheatsheetLoading} />;
+    content = <AppWindowPlaceholder status="loading" appKey="cheatsheet" appName={app.name} />;
   } else if (!context.pack) {
     content = (
       <AppWindowPlaceholder
         status="empty"
+        appKey="cheatsheet"
         appName={app.name}
         description={GLOBAL_ASK_COPY.courseContextCheatsheetNeedsTranscript(context.availableLessonCount)}
         onBack={onBack}
@@ -284,7 +285,7 @@ export function CourseCheatsheetWorkspace({ courses, initialCourseKeys = [], onB
       />
     );
   } else if (!execution.result && execution.taskState.status === 'running') {
-    content = <AppWindowPlaceholder status="loading" appName={app.name} loadingLabel={GLOBAL_ASK_COPY.courseContextCheatsheetLoading} />;
+    content = <AppWindowPlaceholder status="loading" appKey="cheatsheet" appName={app.name} />;
   } else if (!execution.result && execution.taskState.status === 'error') {
     const errorMessage = execution.taskState.error === COPY.apps.matrix.executeNotReady
       ? GLOBAL_ASK_COPY.courseContextCheatsheetNotReady
@@ -292,6 +293,7 @@ export function CourseCheatsheetWorkspace({ courses, initialCourseKeys = [], onB
     content = (
       <AppWindowPlaceholder
         status="error"
+        appKey="cheatsheet"
         appName={app.name}
         errorMessage={errorMessage}
         onRetry={() => void execution.rerun()}
@@ -316,6 +318,7 @@ export function CourseCheatsheetWorkspace({ courses, initialCourseKeys = [], onB
     <AppWindowShell
       app={app}
       taskState={started ? execution.taskState : IDLE_SCOPE_STATE}
+      hasResult={started && Boolean(execution.result)}
       onRegenerate={() => void execution.rerun()}
       showPrimaryAction={started && Boolean(execution.result)}
       onBack={onBack}

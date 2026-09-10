@@ -123,10 +123,7 @@
   --mm-marker-green: rgba(118, 196, 156, 0.44);
   --mm-marker-red: rgba(228, 138, 120, 0.44);
 
-  /* ===== 沉浸深色表面 ===== */
-  /* 闪卡沉浸 / inline quiz & flashcards / 暗色应用壳的统一底色。
-     与暗色模式 --mm-paper 同值同温（深棕墨黑，不用纯黑），三处表面只引用、不复制数值。 */
-  --mm-immersive: #14110D;
+  /* （--mm-immersive 深色沉浸表面 2026-09-10 移除：闪卡 / inline 应用全部回到纸底，眩光由 data-theme=dark 统一解决） */
 
   /* ===== 功能语义色（v7 · 都从签名色派生） ===== */
   --mm-success: #2F6B55;
@@ -1913,3 +1910,24 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 /* 横向滚动的一行控件（速查表窄屏工具条）：不显示滚动条 */
 .mm-no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .mm-no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* ── 应用进入态（AppEntrySilhouette，2026-09-10）──
+   产物形状里的"内容线"轮流呼吸（像正在被写上），签名色 accent 慢慢明灭——这就是"正在做"的状态点，
+   替代了秒数计数器。只在 data-live 时动；reduced-motion 全部静止。 */
+@keyframes mm-entry-breathe {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 1; }
+}
+@keyframes mm-entry-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+.mm-entry-silhouette .mm-entry-line { animation: mm-entry-breathe 2.6s ease-in-out infinite; }
+.mm-entry-silhouette .mm-entry-line:nth-of-type(2) { animation-delay: 0.35s; }
+.mm-entry-silhouette .mm-entry-line:nth-of-type(3) { animation-delay: 0.7s; }
+.mm-entry-silhouette .mm-entry-line:nth-of-type(4) { animation-delay: 1.05s; }
+.mm-entry-silhouette .mm-entry-line:nth-of-type(n+5) { animation-delay: 1.4s; }
+.mm-entry-silhouette[data-live] .mm-entry-accent { animation: mm-entry-pulse 2.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .mm-entry-silhouette .mm-entry-line, .mm-entry-silhouette .mm-entry-accent { animation: none !important; }
+}

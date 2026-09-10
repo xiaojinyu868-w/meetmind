@@ -217,6 +217,7 @@ export function PodcastWindow({ result, transcript, taskState, onRegenerate }: P
       return (
         <AppWindowPlaceholder
           status="error"
+          appKey="audio-overview"
           appName={APPS_COPY.podcast.appName}
           errorMessage={taskState.error}
           onRetry={onRegenerate}
@@ -224,16 +225,18 @@ export function PodcastWindow({ result, transcript, taskState, onRegenerate }: P
       );
     }
     if (taskState?.status === 'idle') {
+      // 还没开始：一条波形的轮廓 + 「把这节课录成一段播客」+ 唯一的动作「开始」
       return (
         <AppWindowPlaceholder
           status="empty"
+          appKey="audio-overview"
           appName={APPS_COPY.podcast.appName}
-          description={APPS_COPY.podcast.emptyBody}
+          actionLabel={APPS_COPY.entry.start}
           onRetry={onRegenerate}
         />
       );
     }
-    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.podcast.appName} transcript={transcript} />;
+    return <AppWindowPlaceholder status="loading" appKey="audio-overview" appName={APPS_COPY.podcast.appName} transcript={transcript} />;
   }
 
   const seekToLine = (lineIndex: number) => {

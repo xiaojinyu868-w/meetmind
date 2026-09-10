@@ -103,7 +103,7 @@ components/
 | `WorkspaceCaptureList.tsx` | ~900 | 工作空间 capture 列表 |
 | `DesktopVideoReviewLayout.tsx` | ~647 | 桌面端课后复习三栏布局：左=视频/音频证据 + 时间轴，中=转录/困惑点/学习工作区，右=同桌；接入可拖拽三栏并持有课后学习黑板。音频态默认让中间学习区最宽，视频态仍以可观看的原件为第一权重；矩阵和具体应用自带标题，不再叠加重复的“学习工作区”栏头；未解决困惑点用 vermilion-fog 语义底，波形条色走 pine token |
 | `ReviewThreePaneLayout.tsx` | ~156 | 课后复习可拖拽三栏容器：两条边界都可拖拽；音频默认比例 27/49/24，视频默认 46/34/20；学习区 / 同桌被挤到阈值后折叠成窄 rail，左证据栏不自动折叠；左证据栏用 paper-warm 底与中/右分层，拖拽缝 hover 用 pine |
-| `ReviewLearningWorkspace.tsx` | ~185 | 课后中间学习工作区：用 `AppRenderSurface` 承载完整应用；应用生成结果与闪卡/测验交互同时写入课后黑板和“最近学习现场”；结构化结果同时进会话层（review-session-outcomes，路径卡摘要 + 下一步的困惑锚点）与长期记忆（assessment 事件）；执行时把会话内结果合成的困惑锚点并入 anchors，闪卡因此知道你刚在测验里错了什么，但不自动升级为长期记忆；闪卡沉浸底统一 `var(--mm-immersive)` |
+| `ReviewLearningWorkspace.tsx` | ~185 | 课后中间学习工作区：用 `AppRenderSurface` 承载完整应用；应用生成结果与闪卡/测验交互同时写入课后黑板和“最近学习现场”；结构化结果同时进会话层（review-session-outcomes，路径卡摘要 + 下一步的困惑锚点）与长期记忆（assessment 事件）；执行时把会话内结果合成的困惑锚点并入 anchors，闪卡因此知道你刚在测验里错了什么，但不自动升级为长期记忆；2026-09-10 起所有应用同一张纸（闪卡深色 `--mm-immersive` 房间删除），头部一行、无说明副题 |
 | `review-learning-blackboard.ts` | ~131 | 课后学习黑板：轻结构自然语言便签；只记录当前中间应用和最近学习现场事实，不写“应该/提醒/建议”等模型指令，中间应用和右侧同桌通过它解耦 |
 | `WorkspaceCaptureEditorModal.tsx` | ~105 | 工作空间 capture 编辑弹窗，从 page.tsx 提取 |
 | `VideoReviewPlayer.tsx` | 823 | 视频复习播放器（pauseNonce/playNonce/seekNonce 命令式控制，点击画面暂停/播放+指示器动画，visibilitychange 倍速恢复，空格/箭头键盘快捷键，B站 Dash 双轨同步，B站封面代理） |
@@ -151,7 +151,7 @@ components/
 | `windows/QuizWindow.tsx` | ~500 | 课堂测验：客观题反馈、主观题对照自评、薄弱题复练与原声证据回跳 |
 | `windows/CheatsheetWindow.tsx` / `windows/cheatsheet-window-model.ts` | ~800 | 跨课考试速查表：纸面轻编辑、A4/Letter 与单双面约束、真实分页预览、浏览器打印 / PDF |
 | `windows/PodcastWindow.tsx` | ~470 | 音频概览：播放优先、制作详情折叠、稳定错误兜底 |
-| `windows/AppWindowPlaceholder.tsx` | ~100 | 六类应用共用的整理中 / 空结果 / 失败状态 |
+| `windows/AppWindowPlaceholder.tsx` + `windows/AppEntrySilhouette.tsx` | ~200 + ~230 | 八类应用共用的进入态（等待 / 空 / 失败一套版式：产物形状 + 一句话 ≤14 字 + 一个槽位；形状按应用各画一张 SVG 线稿），见 `apps/windows/DOMAIN.md`「进入态版式」 |
 | `hooks/useAppExecution.ts` | ~370 | 应用执行 hook |
 
 ## 超预算文件（>500 行）

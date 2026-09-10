@@ -81,8 +81,8 @@ function useIsMobile(breakpoint = 768) {
   return isMobile;
 }
 
-/** 全屏时不要内边距、自己铺满整面的应用（闪卡 / 测验的纸就是窗口）；手机上强制全屏 */
-const IMMERSIVE_APPS: Set<WorkshopAppKey> = new Set(['flashcards', 'quiz']);
+/** 全屏时不要内边距、自己铺满整面的应用（闪卡 / 测验的纸就是窗口）；手机上强制全屏。只是边距差别，不是深色房间 */
+const EDGE_TO_EDGE_APPS: Set<WorkshopAppKey> = new Set(['flashcards', 'quiz']);
 
 // 状态类型与默认展示模式在 workshop-window-state.ts（纯模块）——首屏 hook 从那里取，不必静态加载整棵窗口树
 export type { WorkshopDisplayMode, FloatingWorkshopWindowState } from './workshop-window-state';
@@ -120,13 +120,6 @@ interface WindowCardProps {
   stackOffset: number;
 }
 
-function formatDataSource(dataSource: DataSourceType): string {
-  if (dataSource === 'live') return '实时录音';
-  if (dataSource === 'video') return '视频导入';
-  if (dataSource === 'demo') return '示例课';
-  return '这节课';
-}
-
 function buildInfographicContentContext(summaryOverview: string | undefined, transcript: TranscriptSegment[]): string {
   const normalizedSummary = (summaryOverview || '').trim();
   if (normalizedSummary) return normalizedSummary;
@@ -145,9 +138,9 @@ function taskLabel(taskState: AppTaskState): string {
   return COPY.apps.matrix.waiting;
 }
 
-/** 状态词跟在课名后面；做好了就不说（产物在眼前） */
-function StatusWord({ taskState }: { taskState: AppTaskState }) {
-  if (taskState.status === 'success') return null;
+/** 状态词跟在课名后面；做好了就不说（产物在眼前）；没有成品时正文的进入态自己会说，头部不重复 */
+function StatusWord({ taskState, hasResult }: { taskState: AppTaskState; hasResult: boolean }) {
+  if (!hasResult || taskState.status === 'success') return null;
   const tone = taskState.status === 'error' ? 'text-vermilion' : 'text-ink-muted';
   return <span className={`ml-2 text-[12px] font-normal ${tone}`}>{taskLabel(taskState)}</span>;
 }
@@ -246,9 +239,9 @@ function WindowCard(props: WindowCardProps) {
   });
 
 
-  const isImmersive = IMMERSIVE_APPS.has(windowState.appKey);
-  // 沉浸式应用在移动端强制全屏
-  const isFullscreen = windowState.displayMode === 'fullscreen' || (isMobile && isImmersive);
+  const edgeToEdge = EDGE_TO_EDGE_APPS.has(windowState.appKey);
+  // 铺满整面的应用在移动端强制全屏
+  const isFullscreen = windowState.displayMode === 'fullscreen' || (isMobile && edgeToEdge);
 
   const baseRight = 16 + stackOffset;
   const baseBottom = 20 + stackOffset;
@@ -284,7 +277,8 @@ function WindowCard(props: WindowCardProps) {
         data-testid={`workshop-window-${app.key}-fullscreen`}
         onMouseDown={() => onFocus(app.key)}
       >
-        {/* 头部一行字：返回 / 课名 + 状态（只在正在做 / 没做好时说）/ 模型 / 关闭；不再有状态 pill */}
+        {/* 头部一行字：返回 / 应用名（+ 成品在眼前、正在重做时的状态词）/ 模型 / 关闭。
+            此前第二行写「示例课 / 实时录音」——数据源是内部分类，学生看不出它要说什么 */}
         <header className="flex items-center gap-3 border-b border-divider bg-white px-4 py-2.5 select-none">
           <button type="button" className={`${textAction} inline-flex items-center gap-1`} onClick={() => onClose(app.key)} aria-label={APPS_COPY.shell.back}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -292,13 +286,10 @@ function WindowCard(props: WindowCardProps) {
             </svg>
             <span className="hidden sm:inline">{APPS_COPY.shell.back}</span>
           </button>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">
-              {app.name}
-              <StatusWord taskState={execution.taskState} />
-            </p>
-            <p className="hidden truncate text-xs text-ink-muted sm:block">{formatDataSource(dataSource)}</p>
-          </div>
+          <p className="min-w-0 flex-1 truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">
+            {app.name}
+            <StatusWord taskState={execution.taskState} hasResult={execution.hasResult} />
+          </p>
           <div className="hidden md:block">
             <ModelSelector value={model} onChange={onModelChange} compact allowedProviders={['deepseek', 'qwen', 'volcengine']} />
           </div>
@@ -306,7 +297,7 @@ function WindowCard(props: WindowCardProps) {
             {APPS_COPY.shell.close}
           </button>
         </header>
-        <div className={`min-h-0 flex-1 overflow-auto ${isImmersive ? 'bg-paper p-0' : 'bg-canvas p-4'}`}>
+        <div className={`min-h-0 flex-1 overflow-auto bg-canvas ${edgeToEdge ? 'p-0' : 'p-4'}`}>
           {surface}
         </div>
       </section>
@@ -330,7 +321,7 @@ function WindowCard(props: WindowCardProps) {
         onPointerMove={drag.onPointerMove}
         onPointerUp={drag.onPointerUp}
       >
-        {/* 浮窗头：收起 / 课名 + 状态词 / 模型 / 关闭，全是文字。此前副标题写「会话 7eeeed…4598」——会话 id 是内部黑话 */}
+        {/* 浮窗头：收起 / 应用名 + 状态词 / 模型 / 关闭，全是文字、一行。此前副标题写过「会话 7eeeed…4598」、后来是「示例课」——都是内部分类 */}
         <button
           type="button"
           className={textAction}
@@ -340,13 +331,10 @@ function WindowCard(props: WindowCardProps) {
         >
           {APPS_COPY.shell.minimize}
         </button>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">
-            {app.name}
-            <StatusWord taskState={execution.taskState} />
-          </p>
-          <p className="hidden truncate text-xs text-ink-muted md:block">{formatDataSource(dataSource)}</p>
-        </div>
+        <p className="min-w-0 flex-1 truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">
+          {app.name}
+          <StatusWord taskState={execution.taskState} hasResult={execution.hasResult} />
+        </p>
         <div className="hidden md:block">
           <ModelSelector value={model} onChange={onModelChange} compact allowedProviders={['deepseek', 'qwen', 'volcengine']} />
         </div>

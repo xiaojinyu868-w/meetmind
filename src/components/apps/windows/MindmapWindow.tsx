@@ -207,26 +207,14 @@ export function MindmapWindow({ result, transcript, onSeek, defaultViewMode = 'm
     return () => window.removeEventListener('keydown', onKey);
   }, [isFullscreen]);
 
-  // 加载中：与其他应用同一套"有根的等待"（这节课的原话掠过 + 秒数）
+  // 加载中：与其他应用同一套进入态（几个节点的轮廓 + 一句话 + 这节课的原话掠过）
   if (!result) {
-    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.mindmap.appName} transcript={transcript} />;
+    return <AppWindowPlaceholder status="loading" appKey="mindmap" appName={APPS_COPY.mindmap.appName} transcript={transcript} />;
   }
 
-  // 空态
+  // 空态：同一套进入态（此前是一只虚线框 + 图标 + 两句说明）
   if (children.length === 0) {
-    return (
-      <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-4 rounded-2xl" style={{ background: PALETTE.bg, border: `1px dashed ${PALETTE.border}` }}>
-        <div className="flex h-14 w-14 items-center justify-center rounded-full" style={{ background: `${PALETTE.accent}10` }}>
-          <svg className="h-7 w-7" style={{ color: PALETTE.textMuted }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5" />
-          </svg>
-        </div>
-        <div className="text-center">
-          <p className="text-sm font-medium" style={{ color: PALETTE.textSecondary }}>{APPS_COPY.placeholder.emptyTitle(APPS_COPY.mindmap.appName)}</p>
-          <p className="mt-1 text-xs" style={{ color: PALETTE.textMuted }}>{APPS_COPY.placeholder.emptyBody(APPS_COPY.mindmap.appName)}</p>
-        </div>
-      </div>
-    );
+    return <AppWindowPlaceholder status="empty" appKey="mindmap" appName={APPS_COPY.mindmap.appName} />;
   }
 
   const toolbar = (

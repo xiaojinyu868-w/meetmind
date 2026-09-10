@@ -1,56 +1,49 @@
 'use client';
 
 /**
- * AppWindowPlaceholder — 通用应用窗口占位组件 (v7)
+ * AppWindowPlaceholder — 八个应用共用的进入态（等待 / 空 / 失败），一套版式（2026-09-10 重做）。
  *
- * 诚实 loading：
- *   - 不假装有 step；让模型/服务端做事，UI 只表达"还在做"
- *   - Octo Buddy 听课呼吸态（IP 即视觉主角）
- *   - 真实 elapsed 秒数（不骗用户"已经第几步"）
- *   - 长时（>30s / >60s）才换更柔和的文案，承认"内容多"
+ * 版式只有三层，三种状态都一样，成品落下来时形状变成真东西、位置不跳：
+ *   1. 产物的形状（AppEntrySilhouette）——不看字就知道点开的是什么；等待时内容线呼吸、一处签名色明灭
+ *   2. 一句话（≤14 字）——正在做什么 / 点一下会得到什么 / 刚才没做好
+ *   3. 一个槽位——等待态放这节课的原话掠过（TranscriptDrift，有根的等待）；空态 / 失败态放唯一的动作
  *
- * v7 视觉：
- *   - 米白 paper 底 + 极淡 pine 光晕
- *   - thinking-strip 让"AI 在做"被肉眼看见
- *   - error 用 vermilion 朱批语义（提醒，不是惊吓）
+ * 此前：章鱼 + 「在听这节课，给你课堂测验」+ 原话 + 「同学正在整理 · 01s」计数条 + 双色光晕；空态是虚线框 +
+ * 标题 + 说明句 + 黑白两个按钮。用户原话"每一个应用的进入页面都挺难看"。计数器与光晕删掉；
+ * 长等待仍诚实（30s / 60s 换一句话），只是不再数秒。
  */
 
 import * as React from 'react';
 import { COPY } from '@/lib/ui/copy';
 import { APPS_COPY } from '@/lib/ui/copy-apps';
-import { OctoBuddySprite } from '@/components/classroom/OctoBuddy';
-import { OctoAvatar } from '@/components/ui/octo-avatar';
-import { BrewingStrip } from '@/components/ui/thinking-strip';
+import { WORKSHOP_APP_CATALOG, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
+import { AppEntrySilhouette } from './AppEntrySilhouette';
 import { TranscriptDrift, type DriftLine } from './TranscriptDrift';
 
 interface AppWindowPlaceholderProps {
-  /** 占位状态 */
   status: 'loading' | 'empty' | 'error';
-  /** 应用中文名称（用于文案） */
+  /** 应用 key：决定形状与一句话。不传时按 appName 在目录里反查（旧调用方只传名字） */
+  appKey?: WorkshopAppKey;
+  /** 应用中文名称（失败句用） */
   appName?: string;
-  /**
-   * 这节课的转录（loading 态用）：真实原话按时间顺序缓缓掠过，等待变成"它在读的是我的课"。
-   * 不传就只有章鱼 + 秒数。
-   */
+  /** 这节课的转录（等待态）：真实原话按时间顺序掠过；不传就只有形状 + 一句话 */
   transcript?: ReadonlyArray<DriftLine>;
-  /** 错误消息 */
   errorMessage?: string;
-  /** 重试回调 */
   onRetry?: () => void;
-  /** 返回回调 */
   onBack?: () => void;
-  /** 自定义描述文案 */
+  /** 空态的一句话（缺省用该应用的进入句） */
   description?: string;
-  /** 场景化 loading 主文案；缺省沿用单课应用文案。 */
+  /** 等待态的一句话（缺省用该应用的进入句） */
   loadingLabel?: string;
-  /** 返回动作的场景化名称。 */
+  /** 空态动作的名字（缺省「再做一版」） */
+  actionLabel?: string;
   backLabel?: string;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Loading：诚实的「同学在听」                                          */
-/* ------------------------------------------------------------------ */
+const SLOW_AFTER_SEC = 30;
+const VERY_SLOW_AFTER_SEC = 60;
 
+/** 只为换句话计时，不再把秒数显示出来 */
 function useElapsedSec(): number {
   const [seconds, setSeconds] = React.useState(0);
   React.useEffect(() => {
@@ -63,118 +56,19 @@ function useElapsedSec(): number {
   return seconds;
 }
 
-function ListeningLoading({
-  appName,
-  loadingLabel,
-  transcript,
-}: {
-  appName: string;
-  loadingLabel?: string;
-  transcript?: ReadonlyArray<DriftLine>;
-}) {
-  const seconds = useElapsedSec();
-
-  // 文案分级：30s 内一句温柔陪伴；30-60s 承认内容多；>60s 表达耐心
-  const message =
-    seconds <= 30
-      ? loadingLabel || COPY.stages.listenStart(appName)
-      : seconds <= 60
-        ? COPY.stages.listenSlow
-        : COPY.stages.listenVerySlow;
-  const hasDrift = Boolean(transcript && transcript.length >= 3);
-
-  return (
-    <div className="relative flex h-full min-h-[420px] flex-col items-center justify-center gap-6 px-6 py-12" data-app-placeholder="loading">
-      {/* 极淡 pine / vermilion 双色光晕（v7 仪式时刻） */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background: `
-            radial-gradient(ellipse 60% 40% at 50% 35%, rgba(45,79,62,0.06), transparent 65%),
-            radial-gradient(ellipse 50% 30% at 50% 70%, rgba(181,72,60,0.04), transparent 70%)
-          `,
-        }}
-      />
-
-      {/* Octo Buddy listening · 主角不能小 */}
-      <div className="relative">
-        <OctoBuddySprite mood="listening" size={hasDrift ? 'md' : 'lg'} />
-      </div>
-
-      <div className="relative flex w-full flex-col items-center gap-3 text-center">
-        <p className="text-[15px] font-medium tracking-[-0.01em] text-ink">
-          {message}
-        </p>
-        {/* 有根的等待：这节课的原话按时间顺序翻过——材料本身，不是假进度 */}
-        {hasDrift ? <TranscriptDrift transcript={transcript!} className="mt-1" /> : null}
-        <BrewingStrip>
-          <span className="font-mono tabular-nums text-pine">{APPS_COPY.placeholder.workingElapsed(seconds)}</span>
-        </BrewingStrip>
-      </div>
-    </div>
-  );
+function resolveAppKey(appKey: WorkshopAppKey | undefined, appName: string | undefined): WorkshopAppKey | undefined {
+  if (appKey) return appKey;
+  return WORKSHOP_APP_CATALOG.find((item) => item.name === appName)?.key;
 }
 
-/* ------------------------------------------------------------------ */
-/*  空态引导                                                            */
-/* ------------------------------------------------------------------ */
-
-function EmptyGuide({ appName, description, onRetry, onBack, backLabel }: {
-  appName: string;
-  description?: string;
-  onRetry?: () => void;
-  onBack?: () => void;
-  backLabel?: string;
-}) {
-  return (
-    <div className="flex h-full min-h-[360px] flex-col items-center justify-center gap-6 rounded-2xl border border-dashed border-divider bg-paper p-10">
-      {/* Octo idle · 静静等着 */}
-      <OctoAvatar mood="idle" size="lg" aura />
-
-      {/* 文案 */}
-      <div className="text-center">
-        <p className="text-[15px] font-medium text-ink">
-          {APPS_COPY.placeholder.emptyTitle(appName)}
-        </p>
-        <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-ink-muted">
-          {description || APPS_COPY.placeholder.emptyBody(appName)}
-        </p>
-      </div>
-
-      {/* 操作按钮 */}
-      <div className="flex items-center gap-3">
-        {onRetry ? (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white shadow-soft transition hover:opacity-85 active:scale-[0.97]"
-          >
-            {APPS_COPY.placeholder.remake}
-          </button>
-        ) : null}
-        {onBack ? (
-          <button
-            type="button"
-            onClick={onBack}
-            className="rounded-lg border border-divider bg-card px-4 py-2 text-sm font-medium text-ink-secondary transition hover:border-pine hover:text-pine"
-          >
-            {backLabel || APPS_COPY.placeholder.back}
-          </button>
-        ) : null}
-      </div>
-    </div>
-  );
+function entrySentence(appKey: WorkshopAppKey | undefined): string {
+  return (appKey && APPS_COPY.entry.sentence[appKey]) || APPS_COPY.entry.generic;
 }
-
-/* ------------------------------------------------------------------ */
-/*  错误态                                                              */
-/* ------------------------------------------------------------------ */
 
 /**
  * 服务端错误码 → 人话。课中内联卡把 `/api/apps/execute` 的 error 原样传进来，
  * 学生不该看到 `GENERATION_FAILED` 这种代码；Workshop 侧在 useAppExecution 已转过，
- * 这里兜住剩下的入口，让两条路径说同一句话。
+ * 这里兜住剩下的入口，让两条路径说同一句话。浏览器的网络错误原文（Failed to fetch / Load failed）同样不外露。
  */
 export function describeAppExecutionError(raw: string | undefined): string | undefined {
   const code = raw?.trim();
@@ -188,17 +82,80 @@ export function describeAppExecutionError(raw: string | undefined): string | und
     case 'APP_NOT_SUITABLE':
       return COPY.apps.matrix.executeNotSuitable;
     default:
-      // 像错误码的全大写下划线串一律不外露
-      return /^[A-Z][A-Z0-9_]{3,}$/.test(code) ? undefined : code;
+      // 像错误码的全大写下划线串、浏览器 fetch 的英文原话一律不外露
+      if (/^[A-Z][A-Z0-9_]{3,}$/.test(code)) return undefined;
+      if (/^(Failed to fetch|Load failed|NetworkError|TypeError|fetch failed)/i.test(code)) return undefined;
+      return code;
   }
 }
 
+/** 三种状态共用的三层版式 */
+function EntryFrame({ status, children }: { status: 'loading' | 'empty' | 'error'; children: React.ReactNode }) {
+  return (
+    <div
+      className="flex h-full min-h-[420px] flex-col items-center justify-center gap-6 px-6 py-10"
+      data-app-placeholder={status}
+      aria-busy={status === 'loading' || undefined}
+    >
+      {children}
+    </div>
+  );
+}
+
+const SHAPE_CLASS = 'w-[clamp(160px,28vw,250px)] drop-shadow-[0_6px_18px_rgba(32,49,42,0.06)]';
+const SENTENCE_CLASS = 'text-center text-[15px] font-medium tracking-[-0.01em] text-ink';
+const TEXT_ACTION_CLASS = 'mm-focus rounded text-[12.5px] text-ink-muted transition hover:text-ink';
+const PRIMARY_ACTION_CLASS = 'mm-press mm-focus rounded-full bg-ink px-5 py-2 text-[13px] font-medium text-white shadow-soft hover:opacity-85';
+
+function ListeningLoading({ appKey, loadingLabel, transcript }: { appKey?: WorkshopAppKey; loadingLabel?: string; transcript?: ReadonlyArray<DriftLine> }) {
+  const seconds = useElapsedSec();
+  const sentence = seconds > VERY_SLOW_AFTER_SEC
+    ? APPS_COPY.entry.verySlow
+    : seconds > SLOW_AFTER_SEC
+      ? APPS_COPY.entry.slow
+      : loadingLabel || entrySentence(appKey);
+  const hasDrift = Boolean(transcript && transcript.length >= 3);
+  return (
+    <EntryFrame status="loading">
+      <AppEntrySilhouette appKey={appKey} live className={SHAPE_CLASS} />
+      <p className={SENTENCE_CLASS}>{sentence}</p>
+      {hasDrift ? <TranscriptDrift transcript={transcript!} className="-mt-2 max-w-[400px]" /> : null}
+    </EntryFrame>
+  );
+}
+
+function EmptyGuide({ appKey, description, actionLabel, onRetry, onBack, backLabel }: {
+  appKey?: WorkshopAppKey;
+  description?: string;
+  actionLabel?: string;
+  onRetry?: () => void;
+  onBack?: () => void;
+  backLabel?: string;
+}) {
+  return (
+    <EntryFrame status="empty">
+      <AppEntrySilhouette appKey={appKey} className={SHAPE_CLASS} />
+      <p className={SENTENCE_CLASS}>{description || entrySentence(appKey)}</p>
+      {onRetry ? (
+        <button type="button" onClick={onRetry} className={PRIMARY_ACTION_CLASS}>
+          {actionLabel || APPS_COPY.placeholder.remake}
+        </button>
+      ) : null}
+      {onBack ? (
+        <button type="button" onClick={onBack} className={`${TEXT_ACTION_CLASS} -mt-3`}>
+          {backLabel || APPS_COPY.placeholder.back}
+        </button>
+      ) : null}
+    </EntryFrame>
+  );
+}
+
 /**
- * 失败态只有一句话和一个按钮（2026-09-10）。此前是标题 + 副句 + 两个按钮，再加宿主头部的「没做好」
- * 与课后学习页的 toast——同一件事说了四遍。服务端给出的具体原因（积分 / 材料不足）比通用句更有用时用它，
- * 否则就是「{应用}刚才没做好」；返回退成一行文字链接，不与主动作抢。
+ * 失败态只有一句话和一个按钮。服务端给出的具体原因（积分 / 材料不足）比通用句更有用时用它，
+ * 否则就是「{应用}刚才没做好」；返回退成一行文字链接，不与主动作抢。形状留在原位，签名色换朱砂。
  */
-function ErrorState({ appName, errorMessage, onRetry, onBack, backLabel }: {
+function ErrorState({ appKey, appName, errorMessage, onRetry, onBack, backLabel }: {
+  appKey?: WorkshopAppKey;
   appName: string;
   errorMessage?: string;
   onRetry?: () => void;
@@ -206,7 +163,6 @@ function ErrorState({ appName, errorMessage, onRetry, onBack, backLabel }: {
   backLabel?: string;
 }) {
   const shownMessage = describeAppExecutionError(errorMessage);
-  // 通用失败句不带任何信息，让位给带应用名的那一句
   const generic = !shownMessage
     || shownMessage === COPY.apps.matrix.executeGenerationFailed
     || shownMessage === COPY.apps.matrix.generateFailed
@@ -215,34 +171,22 @@ function ErrorState({ appName, errorMessage, onRetry, onBack, backLabel }: {
     ? (shownMessage.length > 80 ? `${shownMessage.slice(0, 80)}…` : shownMessage)
     : APPS_COPY.placeholder.failedTitle(appName);
   return (
-    <div className="relative flex h-full min-h-[420px] flex-col items-center justify-center gap-5 px-8 py-12" data-app-placeholder="error">
-      <div className="relative">
-        <OctoBuddySprite mood="surprised" size="md" />
-      </div>
-      <p className="relative max-w-sm text-center text-[15px] font-medium leading-relaxed text-ink" title={shownMessage}>
-        {sentence}
-      </p>
+    <EntryFrame status="error">
+      <AppEntrySilhouette appKey={appKey} tone="vermilion" className={SHAPE_CLASS} />
+      <p className={`${SENTENCE_CLASS} max-w-sm leading-relaxed`} title={shownMessage}>{sentence}</p>
       {onRetry ? (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="mm-press mm-focus relative rounded-full bg-ink px-5 py-2 text-[13px] font-medium text-white shadow-soft hover:opacity-85"
-        >
+        <button type="button" onClick={onRetry} className={PRIMARY_ACTION_CLASS}>
           {APPS_COPY.placeholder.retry}
         </button>
       ) : null}
       {onBack ? (
-        <button type="button" onClick={onBack} className="relative text-[12px] text-ink-muted transition hover:text-ink">
+        <button type="button" onClick={onBack} className={`${TEXT_ACTION_CLASS} -mt-3`}>
           {backLabel || APPS_COPY.placeholder.back}
         </button>
       ) : null}
-    </div>
+    </EntryFrame>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  主组件                                                              */
-/* ------------------------------------------------------------------ */
 
 export function AppWindowPlaceholder(props: AppWindowPlaceholderProps) {
   const {
@@ -253,17 +197,17 @@ export function AppWindowPlaceholder(props: AppWindowPlaceholderProps) {
     onBack,
     description,
     loadingLabel,
+    actionLabel,
     backLabel,
     transcript,
   } = props;
+  const appKey = resolveAppKey(props.appKey, appName);
 
   if (status === 'loading') {
-    return <ListeningLoading appName={appName} loadingLabel={loadingLabel} transcript={transcript} />;
+    return <ListeningLoading appKey={appKey} loadingLabel={loadingLabel} transcript={transcript} />;
   }
-
   if (status === 'error') {
-    return <ErrorState appName={appName} errorMessage={errorMessage} onRetry={onRetry} onBack={onBack} backLabel={backLabel} />;
+    return <ErrorState appKey={appKey} appName={appName} errorMessage={errorMessage} onRetry={onRetry} onBack={onBack} backLabel={backLabel} />;
   }
-
-  return <EmptyGuide appName={appName} description={description} onRetry={onRetry} onBack={onBack} backLabel={backLabel} />;
+  return <EmptyGuide appKey={appKey} description={description} actionLabel={actionLabel} onRetry={onRetry} onBack={onBack} backLabel={backLabel} />;
 }

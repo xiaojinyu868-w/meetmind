@@ -13,8 +13,6 @@ import { getWorkshopAppByKey } from '@/lib/ai-native/app-catalog';
 import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
 import { cn } from '@/lib/utils';
-import { COPY } from '@/lib/ui/copy';
-import { APPS_COPY } from '@/lib/ui/copy-apps';
 
 export interface InlineAppCardProps {
   inlineApp: NonNullable<import('./types').CompanionMessage['inlineApp']>;
@@ -57,9 +55,10 @@ export type InlineAppInteraction =
 
 type InlineAppKey = NonNullable<import('./types').CompanionMessage['inlineApp']>['appKey'];
 
+// 四种内联应用同一张纸（2026-09-10：quiz / flashcards 的深色 immersive 底移除——对话里一块黑房间与四周的纸感打架）
 const INLINE_SURFACE_CLASS: Record<InlineAppKey, string> = {
-  quiz: 'h-[520px] bg-[var(--mm-immersive)]',
-  flashcards: 'h-[520px] bg-[var(--mm-immersive)]',
+  quiz: 'h-[520px] bg-paper',
+  flashcards: 'h-[520px] bg-paper',
   mindmap: 'h-[560px] bg-white p-2',
   cheatsheet: 'h-[560px] bg-canvas',
 };
@@ -100,7 +99,7 @@ export function InlineAppCard({ inlineApp, onRetry }: InlineAppCardProps) {
     return (
       <div className="mt-3 overflow-hidden rounded-3xl border border-divider bg-white">
         <div className="h-[360px]">
-          <AppWindowPlaceholder status="loading" appName={appName} />
+          <AppWindowPlaceholder status="loading" appKey={inlineApp.appKey} appName={appName} />
         </div>
       </div>
     );
@@ -109,7 +108,7 @@ export function InlineAppCard({ inlineApp, onRetry }: InlineAppCardProps) {
   if (inlineApp.status === 'error') {
     return (
       <div className="mt-3 overflow-hidden rounded-3xl border border-divider bg-white">
-        <AppWindowPlaceholder status="error" appName={appName} errorMessage={inlineApp.error} onRetry={onRetry} />
+        <AppWindowPlaceholder status="error" appKey={inlineApp.appKey} appName={appName} errorMessage={inlineApp.error} onRetry={onRetry} />
       </div>
     );
   }
@@ -119,14 +118,9 @@ export function InlineAppCard({ inlineApp, onRetry }: InlineAppCardProps) {
 
   return (
     <div className="mt-3 overflow-hidden rounded-3xl border border-divider bg-white">
-      <header className="flex items-center justify-between gap-4 border-b border-divider bg-white px-5 py-3.5">
-        <div className="min-w-0">
-          <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">{appName}</p>
-          <p className="mt-0.5 truncate text-[11.5px] text-ink-muted">{APPS_COPY.inlineSource}</p>
-        </div>
-        <span className="shrink-0 rounded-full border border-divider bg-canvas px-3 py-1 text-[11px] text-ink-muted">
-          {COPY.identity.name}
-        </span>
+      {/* 头部只有应用名：卡已经坐在同学的消息里，「已放进对话」副题与「同学」胶囊都是重复的标签 */}
+      <header className="border-b border-divider bg-white px-5 py-3">
+        <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">{appName}</p>
       </header>
       <div className={cn('overflow-auto', INLINE_SURFACE_CLASS[inlineApp.appKey])}>
         <AppRenderSurface appKey={inlineApp.appKey} result={result} transcript={[]} />

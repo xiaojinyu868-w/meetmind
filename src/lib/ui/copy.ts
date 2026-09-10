@@ -463,18 +463,7 @@ export const COPY = {
     kindOther: '值得回来',
   },
 
-  stages: {
-    /** v3.0：放弃假分阶段叙事，改为 Octo Buddy 听课的诚实表达
-     *  app loading 文案根据 appName 动态拼，用 listening 系列 */
-    reading: '正在读你的课堂',
-    selecting: '正在挑核心',
-    composing: '正在排版',
-    slow: '稍等一下——内容多的时候我也要再想想',
-    /** v3.0 新版 loading 文案 */
-    listenStart: (appName: string): string => `在听这节课，给你${appName}`,
-    listenSlow: '内容有点多，我多听一会儿',
-    listenVerySlow: '还在听——再给我一点时间',
-  },
+  // 应用等待态的句子在 copy-apps.ts `APPS_COPY.entry`（2026-09-10 起按应用各一句，不再拼接应用名）
 
   stop: {
     heard: '这节课我听完了。',
@@ -793,7 +782,6 @@ export const COPY = {
       mobileTitle: '这节课，接下来怎么学',
       mobileSubtitle: '选一种学习动作，同学会直接基于这节课开始。',
       backToMatrix: '所有学习方式',
-      workspaceSubtitle: (action: string, bestFor: string): string => `${action} · ${bestFor}`,
       catalogMeta: {
         cheatsheet: { action: '带进考场', bestFor: '多节课已组成单元，或正在准备允许携带资料的考试', time: '排版约 10–20 分钟' },
         quiz: { action: '检验理解', bestFor: '想做题测一测，马上知道哪里没掌握', time: '作答约 5–8 分钟' },

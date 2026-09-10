@@ -135,10 +135,10 @@ export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onA
   });
 
   if (!result) {
-    return <AppWindowPlaceholder status="loading" appName={APPS_COPY.quiz.appName} transcript={transcript} />;
+    return <AppWindowPlaceholder status="loading" appKey="quiz" appName={APPS_COPY.quiz.appName} transcript={transcript} />;
   }
   if (questions.length === 0 || !current) {
-    return <AppWindowPlaceholder status="empty" appName={APPS_COPY.quiz.appName} />;
+    return <AppWindowPlaceholder status="empty" appKey="quiz" appName={APPS_COPY.quiz.appName} />;
   }
 
   const normalizedAnswer = normalizeQuizAnswer(current.answer, current.options);

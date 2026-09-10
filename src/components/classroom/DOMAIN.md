@@ -25,7 +25,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 | `ClassroomLeftPanel.tsx` | ~680 | （2026-09-10 移除顶部「接回学习现场」横幅——桌面侧栏「继续学习」卡说的是同一件事；移动端仍由 MobileAppShell 挂 ContextRecoveryCard）视图管理器（list ↔ recording 淡入切换）+ 首页能力旅程（听懂现场 / 连起资料 / 练成结果）+ **ActiveLessonPill 置顶活动条** + StickyStartBar 底部主 CTA；零存量态把录音来源选择传给 Hero；试听课完成态透传课后引导动作 |
 | `ClassroomHomeCommandCenter.tsx` | ~105 | 有历史课堂时的桌面首页续学控制台：只保留日期、续学主叙事、真实恢复现场、问课堂与放材料入口；不再重复解释能力，让最近课堂进入首屏 |
 | `ClassroomCompanionPanel.tsx` | ~590 | 右侧同桌面板（header/气泡/流式气泡/thinking/输入栏）；课中不写入自动寒暄消息，header + 轻量 Octo 在场信号承接第一次互动，问题快通道只在输入区保留一套，避免上下两组重复入口；管理员透镜读取与真实课中请求相同的转录、recentFocus、学习理解与最近问题；课后 starter 同样不做重功能卡；v7 按钮语义：InlineActionStrip 主 action / 发送钮 / 课后首 chip 走 pine，次 action 走 ghost 白边；AI 消息带 2px pine 左 rail 作为克制的“AI 在场”信号 |
-| `InlineAppCard.tsx` | ~160 | 对话内应用承载卡（真实应用 UI 复用 `apps/windows/AppRenderSurface`，不再手写一套窄版）；inline quiz / flashcards 沉浸底统一 `var(--mm-immersive)` |
+| `InlineAppCard.tsx` | ~150 | 对话内应用承载卡（真实应用 UI 复用 `apps/windows/AppRenderSurface`，不再手写一套窄版）；2026-09-10：四种内联应用同一张纸（quiz / flashcards 的深色 `--mm-immersive` 底删除），头部只有应用名（「已放进对话」副题与「同学」胶囊删） |
 | `OctoBuddy.tsx` | ~660 | Octo Buddy 像素 IP（Sprite + 悬浮球）；Sprite 自带呼吸 / 听课 / 开心动画，右侧同桌内嵌也必须动起来 |
 | `HeroLiveProof.tsx` | ~130 | "活"的示例卡（课堂首屏与 landing 共用，landing 用 `tone="onDark"` + `href`）：示例课真实转录的三个瞬间循环——原话 StreamText 逐字浮现 → 同桌解释浮起 → 停 4.6s → 下一个；悬停暂停；reduced-motion 静态；文案 COPY.hero.proofMoments |
 | `ClassroomHero.tsx` | ~260 | 课堂零存量首屏；左侧定位与录音入口，右侧 `HeroLiveProof`——示例卡是活的：三个来自示例课真实转录的瞬间循环播放（原话 StreamText 逐字浮现 → 同桌解释浮起 → 停 4.6s → 下一个；悬停暂停；reduced-motion 静态只显第一个；卡片仍是进示例课的入口，文案在 COPY.hero.proofMoments）；存在未完成学习线索时，主叙事上方显示 `ContextRecoveryCard`，可直接接回全局 Ask；proof 卡时间戳统一 `.cite-ts`（朱批 mono 胶囊） |

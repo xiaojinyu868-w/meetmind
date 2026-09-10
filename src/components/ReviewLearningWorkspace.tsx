@@ -67,7 +67,6 @@ export function ReviewLearningWorkspace({
   onOpenApp,
 }: ReviewLearningWorkspaceProps) {
   const app = getWorkshopAppByKey(appKey) || getWorkshopAppByKey('flashcards')!;
-  const isImmersiveApp = app.key === 'flashcards';
   const infographicContentContext = useMemo(
     () => buildInfographicContentContext(summaryOverview, transcript),
     [summaryOverview, transcript],
@@ -154,44 +153,40 @@ export function ReviewLearningWorkspace({
 
   const status = execution.taskState.status;
   const running = status === 'running';
+  // 状态词只在"成品在眼前、正在重做 / 刚没做好"时跟在课名后面；没有成品时正文的进入态自己会说，头部不再重复
+  const statusWord = execution.hasResult
+    ? running ? APPS_COPY.shell.generating : status === 'error' ? COPY.apps.matrix.failed : null
+    : null;
   const textAction = 'mm-focus shrink-0 rounded-md text-[12px] text-ink-muted transition hover:text-ink disabled:opacity-40 disabled:hover:text-ink-muted';
 
   return (
     <section
       ref={sectionRef}
-      className={`mm-app-enter flex min-h-0 flex-col ${isImmersiveApp ? 'bg-[var(--mm-immersive)]' : 'bg-canvas'} ${
-        fullscreen ? 'fixed inset-0 z-[200] h-full' : 'h-full'
-      }`}
+      className={`mm-app-enter flex min-h-0 flex-col bg-canvas ${fullscreen ? 'fixed inset-0 z-[200] h-full' : 'h-full'}`}
       data-testid="review-learning-workspace"
       data-fullscreen={fullscreen || undefined}
     >
-      {/* 头部：一行字。返回与动作都是文字，不做 pill；状态只在"正在做 / 没做好"时说一句，做好了就不说——
-          此前这一条有 3 个描边胶囊 + 1 个状态 pill，比窗口里的内容还抢眼 */}
+      {/* 头部：一行字——返回 · 应用名 · 全屏 · 再做一版。此前还有第二行「检验理解 · 想做题测一测…」的说明句，
+          与正文里的产物重复；闪卡的深色房间（--mm-immersive）也一并去掉：纸底 + 牌本身的纸感与投影已经足够 */}
       <header className="flex shrink-0 items-center gap-3 border-b border-divider bg-white px-4 py-2.5">
         {/* 返回永远回应用矩阵（默认进全屏的应用不该要点两次才回得去）；退出全屏是右侧另一个文字动作 */}
         <button type="button" onClick={onBack} className={`${textAction} inline-flex items-center gap-1`}>
           <ArrowLeft size={13} strokeWidth={1.8} aria-hidden />
           <span className="hidden sm:inline">{COPY.apps.matrix.backToMatrix}</span>
         </button>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">
-            {app.name}
-            {running ? <span className="ml-2 text-[12px] font-normal text-ink-muted">{APPS_COPY.shell.generating}</span> : null}
-            {status === 'error' ? <span className="ml-2 text-[12px] font-normal text-vermilion">{COPY.apps.matrix.failed}</span> : null}
-          </p>
-          <p className="hidden truncate text-[12px] text-ink-muted sm:block">{COPY.apps.matrix.workspaceSubtitle(app.learningAction, app.bestFor)}</p>
-        </div>
-        {!isImmersiveApp ? (
-          <button type="button" onClick={() => setFullscreen((value) => !value)} className={`${textAction} hidden md:inline`}>
-            {fullscreen ? APPS_COPY.shell.exitFullscreen : APPS_COPY.shell.fullscreen}
-          </button>
-        ) : null}
+        <p className="min-w-0 flex-1 truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">
+          {app.name}
+          {statusWord ? <span className={`ml-2 text-[12px] font-normal ${status === 'error' ? 'text-vermilion' : 'text-ink-muted'}`}>{statusWord}</span> : null}
+        </p>
+        <button type="button" onClick={() => setFullscreen((value) => !value)} className={`${textAction} hidden md:inline`}>
+          {fullscreen ? APPS_COPY.shell.exitFullscreen : APPS_COPY.shell.fullscreen}
+        </button>
         <button type="button" onClick={() => void execution.rerun()} disabled={running} className={`${textAction} inline-flex items-center gap-1`}>
           <RotateCw size={12} strokeWidth={1.8} aria-hidden />
           {COPY.apps.matrix.remake}
         </button>
       </header>
-      <div className={`min-h-0 flex-1 overflow-auto ${isImmersiveApp ? 'bg-[var(--mm-immersive)] p-0' : fullscreen ? 'p-4 sm:p-6' : 'p-3'}`}>
+      <div className={`min-h-0 flex-1 overflow-auto ${fullscreen ? 'p-4 sm:p-6' : 'p-3'}`}>
         <AppRenderSurface
           appKey={app.key}
           result={execution.result}

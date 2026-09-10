@@ -1341,10 +1341,8 @@ function CatalogAppScreen({ p, appKey }: { p: MobileAppShellProps; appKey: Works
           <button aria-label={COPY.navigation.back} onClick={() => pop()} className="-ml-1 flex h-8 w-8 items-center justify-center rounded-full text-ink-muted">
             <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
           </button>
-          <div className="text-center">
-            <p className="text-[15px] font-semibold text-ink">{app.name}</p>
-            <p className="mt-1 text-[12px] text-ink-muted">{app.learningAction}</p>
-          </div>
+          {/* 只有应用名：第二行「记住核心」这类分类标签是给目录用的，进了应用就是重复 */}
+          <p className="text-[15px] font-semibold text-ink">{app.name}</p>
           <div className="w-8" />
         </div>
       </div>

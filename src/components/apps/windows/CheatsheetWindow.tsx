@@ -207,7 +207,7 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
   }, [handleEditItem, handleHideItem, handleHideTopic, itemById, onSeek, topicById, topicIndexById]);
 
   if (!payload || !editedPayload) {
-    return <AppWindowPlaceholder status="empty" appName={APPS_COPY.cheatsheet.appName} description={APPS_COPY.cheatsheet.emptyBody} />;
+    return <AppWindowPlaceholder status="empty" appKey="cheatsheet" appName={APPS_COPY.cheatsheet.appName} description={APPS_COPY.cheatsheet.emptyBody} />;
   }
 
   const rootVars = {

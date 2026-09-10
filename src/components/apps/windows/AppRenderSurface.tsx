@@ -92,7 +92,7 @@ export function AppRenderSurface(props: AppRenderSurfaceProps) {
     const app = getWorkshopAppByKey(appKey);
     return (
       <SurfaceFrame phase="error">
-        <AppWindowPlaceholder status="error" appName={app?.name ?? appKey} errorMessage={taskState.error} onRetry={onRegenerate} />
+        <AppWindowPlaceholder status="error" appKey={appKey} appName={app?.name ?? appKey} errorMessage={taskState.error} onRetry={onRegenerate} />
       </SurfaceFrame>
     );
   }
@@ -102,7 +102,7 @@ export function AppRenderSurface(props: AppRenderSurfaceProps) {
     const app = getWorkshopAppByKey(appKey);
     return (
       <SurfaceFrame phase="error">
-        <AppWindowPlaceholder status="error" appName={app?.name ?? appKey} errorMessage="GENERATION_FAILED" onRetry={onRegenerate} />
+        <AppWindowPlaceholder status="error" appKey={appKey} appName={app?.name ?? appKey} errorMessage="GENERATION_FAILED" onRetry={onRegenerate} />
       </SurfaceFrame>
     );
   }
