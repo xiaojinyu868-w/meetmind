@@ -412,7 +412,7 @@ export function reduceTurn(state: TurnMachineState, event: TurnEvent): TurnStep 
   }
 }
 
-/** 画面读得出来的四种状态（面试间底部状态行，见 TeachBackTranscriptColumn）：听讲中 / 你在讲 / 停顿等待 / 听众发言 */
+/** 画面读得出来的四种状态（面试间讲台栏的波形 / 呼吸点，见 TeachBackPodium）：听讲中 / 你在讲 / 停顿等待 / 评委发言 */
 export type StageMood = 'listening' | 'speaking' | 'pausing' | 'judge';
 
 export function stageMoodOf(phase: TurnPhase): StageMood {
