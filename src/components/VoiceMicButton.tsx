@@ -38,6 +38,8 @@ interface VoiceMicButtonProps {
   onTranscript: (text: string) => void;
   /** 录音真正开始的回调（父级可借此让播放中的 TTS 闭嘴） */
   onRecordingStart?: () => void;
+  /** 状态变化（idle / recording / transcribing / error）：宿主可据此显示自己的计时与说明（讲给同桌听的讲课面板） */
+  onStateChange?: (state: 'idle' | 'recording' | 'transcribing' | 'error') => void;
   /** 是否禁用 */
   disabled?: boolean;
   /** 按钮尺寸 */
@@ -95,6 +97,7 @@ function VoiceWaveBars({ size }: { size: 'sm' | 'md' }) {
 export function VoiceMicButton({
   onTranscript,
   onRecordingStart,
+  onStateChange,
   disabled = false,
   size = 'md',
   dark = false,
@@ -112,6 +115,9 @@ export function VoiceMicButton({
 
   React.useEffect(() => {
     stateRef.current = state;
+    onStateChange?.(state);
+    // onStateChange 只在状态变化时通知，不因回调引用变化重跑
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
   const cleanup = React.useCallback(() => {

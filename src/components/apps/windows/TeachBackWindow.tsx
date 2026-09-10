@@ -6,6 +6,7 @@ import type {
   AppExecutionResult,
   TeachBackEvaluation,
   TeachBackEvaluationItem,
+  TeachBackQuadrant,
   TeachBackTurn,
 } from '@/lib/ai-native/types';
 import type { TranscriptSegment } from '@/types';
@@ -96,6 +97,9 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
   const [evalStage, setEvalStage] = useState(0);
   const [evalAttempt, setEvalAttempt] = useState(0);
   const [focusTargetIds, setFocusTargetIds] = useState<string[] | null>(null);
+  /** 结果页：点象限格子后高亮的那一组（1.4s 后自动褪去） */
+  const [activeGroup, setActiveGroup] = useState<TeachBackQuadrant | null>(null);
+  const groupRefs = useRef<Partial<Record<TeachBackQuadrantGroup, HTMLElement | null>>>({});
   const turnsRef = useRef<TeachBackTurn[]>([]);
   const evalRequestRef = useRef(0);
   const autoRetriedRef = useRef(false);
@@ -319,17 +323,29 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
 
   if (phase === 'result' && evaluation) {
     const view = buildTeachBackResultView(evaluation);
+    const jumpToGroup = (quadrant: TeachBackQuadrant) => {
+      const section = groupRefs.current[quadrant];
+      section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setActiveGroup(quadrant);
+      window.setTimeout(() => setActiveGroup((current) => (current === quadrant ? null : current)), 1400);
+    };
+    // 结果揭示：标题 → 一句话 → 象限地图 → 一组一张纸依次浮出（mm-stagger）
     return (
-      <div className="flex h-full min-h-0 flex-col bg-paper">
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+      <div className="flex h-full min-h-0 flex-col bg-paper" data-testid="teach-back-result">
+        <div className="mm-stagger min-h-0 flex-1 overflow-y-auto px-5 py-5">
           <h2 className="text-[17px] font-semibold text-ink">{APPS_COPY.teachBack.resultTitle}</h2>
           {view.headline ? <p className="mt-1.5 text-[13px] leading-6 text-ink-secondary">{view.headline}</p> : null}
           <div className="mt-4">
-            <TeachBackQuadrantMap items={evaluation.items} />
+            <TeachBackQuadrantMap items={evaluation.items} onSelectQuadrant={jumpToGroup} activeQuadrant={activeGroup} />
           </div>
-          <div className="mt-5 flex flex-col gap-5">
+          <div className="mm-stagger mt-5 flex flex-col gap-5">
             {view.groups.map((group) => (
-              <section key={group.key}>
+              <section
+                key={group.key}
+                ref={(node) => { groupRefs.current[group.key] = node; }}
+                data-group={group.key}
+                className={`-mx-2 rounded-xl px-2 transition-[background-color] duration-300 motion-reduce:transition-none ${activeGroup === group.key ? 'bg-pine-fog/70' : ''}`}
+              >
                 <div className="flex items-center gap-2">
                   <span className={`h-2 w-2 rounded-full ${GROUP_STYLES[group.key].dot}`} />
                   <p className={`text-[13px] font-semibold ${GROUP_STYLES[group.key].text}`}>
@@ -365,7 +381,7 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
                               voice.unlockAudio();
                               setPhase('teach');
                             }}
-                            className="text-[12px] font-medium text-pine underline decoration-pine/30 underline-offset-[3px] transition-colors hover:decoration-pine"
+                            className="mm-focus rounded text-[12px] font-medium text-pine underline decoration-pine/30 underline-offset-[3px] transition-colors hover:decoration-pine"
                           >
                             {APPS_COPY.teachBack.reteachPoint}
                           </button>
@@ -380,7 +396,7 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
           {nextStep ? <NextStepCard {...nextStep} /> : null}
         </div>
         <div className="flex flex-shrink-0 items-center justify-between border-t border-divider bg-card px-5 py-3">
-          <button type="button" onClick={handleRetry} className="text-[12px] text-ink-muted transition-colors hover:text-ink">
+          <button type="button" onClick={handleRetry} className="mm-focus rounded text-[12px] text-ink-muted transition-colors hover:text-ink">
             {APPS_COPY.teachBack.backToTargets}
           </button>
           <button
@@ -395,7 +411,7 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
               voice.unlockAudio();
               setPhase('teach');
             }}
-            className="rounded-full bg-pine px-5 py-2.5 text-[13px] font-medium text-white"
+            className="mm-press mm-focus rounded-full bg-pine px-5 py-2.5 text-[13px] font-medium text-white"
           >
             {APPS_COPY.teachBack.retry}
           </button>
@@ -415,7 +431,7 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
 
       {/* 底部上台面板：毛玻璃浮在教室下方 */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col items-center gap-2.5 px-5 pb-6 pt-14" style={{ background: 'linear-gradient(180deg, transparent, rgba(242,240,233,0.92) 38%)' }}>
-        <div className="pointer-events-auto flex w-full max-w-[420px] flex-col items-center gap-2.5 rounded-2xl border border-divider/80 bg-card/90 px-5 py-4 shadow-card backdrop-blur-md">
+        <div className="mm-app-enter pointer-events-auto flex w-full max-w-[420px] flex-col items-center gap-2.5 rounded-2xl border border-divider/80 bg-card/90 px-5 py-4 shadow-card backdrop-blur-md">
           <div className="text-center">
             <p className="text-[14px] font-semibold text-ink">{APPS_COPY.teachBack.targetsTitle}</p>
             <p className="mt-0.5 text-[12px] text-ink-muted">{APPS_COPY.teachBack.targetsSubtitle}</p>
@@ -428,7 +444,7 @@ export function TeachBackWindow({ result, transcript, contextTitle, onSeek, onLe
               voice.unlockAudio();
               setPhase('teach');
             }}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-pine px-5 py-3 text-[14px] font-medium text-white transition-opacity hover:opacity-90"
+            className="mm-press mm-focus inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full bg-pine px-5 py-3 text-[14px] font-medium text-white hover:opacity-90"
           >
             <Mic size={15} strokeWidth={2} />
             {APPS_COPY.teachBack.startVoice}

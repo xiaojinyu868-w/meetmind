@@ -14,6 +14,9 @@ import { APPS_COPY } from '@/lib/ui/copy-apps';
 
 interface TeachBackQuadrantMapProps {
   items: TeachBackEvaluationItem[];
+  /** 点一个格子 → 宿主滚到那一组并高亮（2026-09-10）；不传则格子只是展示 */
+  onSelectQuadrant?: (quadrant: TeachBackQuadrant) => void;
+  activeQuadrant?: TeachBackQuadrant | null;
 }
 
 interface CellDef {
@@ -65,9 +68,20 @@ function Chip({ item, cell, order }: { item: TeachBackEvaluationItem; cell: Cell
   );
 }
 
-function QuadrantCell({ cell, items, orderStart }: { cell: CellDef; items: TeachBackEvaluationItem[]; orderStart: number }) {
+function QuadrantCell({ cell, items, orderStart, onSelect, active }: {
+  cell: CellDef; items: TeachBackEvaluationItem[]; orderStart: number; onSelect?: (quadrant: TeachBackQuadrant) => void; active?: boolean;
+}) {
+  const interactive = Boolean(onSelect) && items.length > 0;
+  const Tag = interactive ? 'button' : 'div';
   return (
-    <div className={`flex min-h-[86px] flex-col gap-1.5 rounded-xl border border-divider/60 p-2.5 ${cell.cellClass}`}>
+    <Tag
+      type={interactive ? 'button' : undefined}
+      onClick={interactive ? () => onSelect?.(cell.key) : undefined}
+      aria-label={interactive ? APPS_COPY.teachBack.quadrantJump(cell.label, items.length) : undefined}
+      className={`mm-focus flex min-h-[86px] flex-col gap-1.5 rounded-xl border p-2.5 text-left transition-[border-color,box-shadow,transform] duration-200 motion-reduce:transition-none ${cell.cellClass} ${
+        active ? 'border-pine shadow-[0_0_0_2px_rgba(47,107,85,0.25)]' : 'border-divider/60'
+      } ${interactive ? 'mm-press cursor-pointer hover:border-ink-muted/60' : ''}`}
+    >
       <p className="text-[10.5px] font-semibold uppercase tracking-wide opacity-80" style={{ color: 'inherit' }}>
         {cell.label}{items.length > 0 ? ` · ${items.length}` : ''}
       </p>
@@ -76,11 +90,11 @@ function QuadrantCell({ cell, items, orderStart }: { cell: CellDef; items: Teach
           <Chip key={item.targetId} item={item} cell={cell} order={orderStart + index} />
         ))}
       </div>
-    </div>
+    </Tag>
   );
 }
 
-export function TeachBackQuadrantMap({ items }: TeachBackQuadrantMapProps) {
+export function TeachBackQuadrantMap({ items, onSelectQuadrant, activeQuadrant = null }: TeachBackQuadrantMapProps) {
   const byQuadrant = (key: TeachBackQuadrant) => items.filter((item) => item.quadrant === key);
   const uncovered = items.filter((item) => item.quadrant === null);
 
@@ -100,10 +114,10 @@ export function TeachBackQuadrantMap({ items }: TeachBackQuadrantMapProps) {
         <p className="font-mono text-[10px] uppercase tracking-caps text-ink-muted">自信 →</p>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <QuadrantCell cell={CELLS.topLeft} items={struggleItems} orderStart={0} />
-        <QuadrantCell cell={CELLS.topRight} items={masteryItems} orderStart={orderTr} />
-        <QuadrantCell cell={CELLS.bottomLeft} items={gapItems} orderStart={orderBl} />
-        <QuadrantCell cell={CELLS.bottomRight} items={blindItems} orderStart={orderBr} />
+        <QuadrantCell cell={CELLS.topLeft} items={struggleItems} orderStart={0} onSelect={onSelectQuadrant} active={activeQuadrant === 'productive-struggle'} />
+        <QuadrantCell cell={CELLS.topRight} items={masteryItems} orderStart={orderTr} onSelect={onSelectQuadrant} active={activeQuadrant === 'mastery'} />
+        <QuadrantCell cell={CELLS.bottomLeft} items={gapItems} orderStart={orderBl} onSelect={onSelectQuadrant} active={activeQuadrant === 'aware-gap'} />
+        <QuadrantCell cell={CELLS.bottomRight} items={blindItems} orderStart={orderBr} onSelect={onSelectQuadrant} active={activeQuadrant === 'blind-spot'} />
       </div>
       <p className="px-1 pt-2 text-right font-mono text-[10px] uppercase tracking-caps text-ink-muted">讲错了 ↓</p>
 

@@ -9,10 +9,16 @@
  *   → 左下 VoiceMicButton（点录再点停 → /api/asr/oneshot → 文字追加进框）
  *   → 按钮行：回到目标 / 讲给同桌（提交一段）/ 讲完了（进入核对）
  * 全部用户面字符串走 APPS_COPY.teachBack。
+ *
+ * 2026-09-10：麦克风旁一行状态把"点一下开始 / 点一下结束"说清楚——录音中显示 rec 点 + 已说秒数（mono），
+ * 转文字时一条呼吸细线；同桌的气泡 220ms 浮出；「讲给同桌」/「讲完了」按不了时 title 说为什么；按钮 ≥40px。
  */
 
+import { useEffect, useState } from 'react';
 import { VoiceMicButton } from '@/components/VoiceMicButton';
 import { APPS_COPY } from '@/lib/ui/copy-apps';
+
+type MicState = 'idle' | 'recording' | 'transcribing' | 'error';
 
 interface TeachBackSpeakPanelProps {
   /** 同桌正在出声 */
@@ -35,6 +41,17 @@ interface TeachBackSpeakPanelProps {
   finishDisabled: boolean;
 }
 
+function useElapsedSeconds(active: boolean): number {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    if (!active) { setSeconds(0); return undefined; }
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => setSeconds(Math.floor((Date.now() - startedAt) / 1000)), 250);
+    return () => window.clearInterval(timer);
+  }, [active]);
+  return seconds;
+}
+
 export function TeachBackSpeakPanel({
   speaking,
   deskmateLines,
@@ -50,20 +67,29 @@ export function TeachBackSpeakPanel({
   const copy = APPS_COPY.teachBack;
   const visibleLines = deskmateLines.slice(0, 2);
   const canSubmit = pendingText.trim().length > 0;
+  const [micState, setMicState] = useState<MicState>('idle');
+  const elapsed = useElapsedSeconds(micState === 'recording');
+  const micLine = micState === 'recording'
+    ? copy.micRecording(`${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`)
+    : micState === 'transcribing'
+      ? copy.micTranscribing
+      : micState === 'error'
+        ? copy.micError
+        : copy.micIdle;
 
   return (
     <div
       className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col items-center px-5 pb-5 pt-14"
       style={{ background: 'linear-gradient(180deg, transparent, rgba(242,240,233,0.94) 30%)' }}
     >
-      <div className="pointer-events-auto flex w-full max-w-[520px] flex-col gap-3 rounded-2xl border border-divider/80 bg-card/92 px-5 py-4 shadow-card backdrop-blur-md">
+      <div className="mm-app-enter pointer-events-auto flex w-full max-w-[520px] flex-col gap-3 rounded-2xl border border-divider/80 bg-card/92 px-5 py-4 shadow-card backdrop-blur-md">
         <div className="flex items-center justify-between">
           <p className="text-[14px] font-semibold text-ink">{copy.textTitle}</p>
           <span className="flex items-center gap-1.5 text-[11px] text-ink-muted">
             <span
               className={`h-1.5 w-1.5 rounded-full transition-colors ${speaking ? 'animate-pulse bg-pine' : 'bg-divider'}`}
             />
-            {copy.deskmateListening}
+            {speaking ? copy.deskmateSpeaking : copy.deskmateListening}
           </span>
         </div>
 
@@ -72,7 +98,7 @@ export function TeachBackSpeakPanel({
             {visibleLines.map((line, index) => (
               <p
                 key={`${index}-${line}`}
-                className={`max-w-[85%] self-start rounded-2xl rounded-bl-md bg-paper px-3 py-1.5 text-[12.5px] leading-5 text-ink-secondary ${
+                className={`mm-app-enter max-w-[85%] self-start rounded-2xl rounded-bl-md bg-paper px-3 py-1.5 text-[12.5px] leading-5 text-ink-secondary ${
                   index > 0 ? 'opacity-60' : ''
                 }`}
               >
@@ -96,20 +122,28 @@ export function TeachBackSpeakPanel({
             size="sm"
             onTranscript={onMicTranscript}
             onRecordingStart={onMicStart}
+            onStateChange={setMicState}
           />
+          {/* 麦克风状态一行：录音中 rec 点 + 已说时长，转文字时一条呼吸细线 */}
+          <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-ink-muted" aria-live="polite">
+            {micState === 'recording' ? <span className="rec-dot" aria-hidden /> : null}
+            {micState === 'transcribing' ? <span className="thinking-strip h-1 w-10 rounded-full" aria-hidden /> : null}
+            <span className={`truncate ${micState === 'recording' ? 'font-mono tabular-nums text-ink' : ''}`}>{micLine}</span>
+          </span>
+          <div className="flex-1" />
           <button
             type="button"
             onClick={onBack}
-            className="text-[12px] text-ink-muted transition-colors hover:text-ink"
+            className="mm-focus hidden min-h-[40px] rounded-md px-1 text-[12px] text-ink-muted transition-colors hover:text-ink sm:inline-flex sm:items-center"
           >
             {copy.backToTargets}
           </button>
-          <div className="flex-1" />
           <button
             type="button"
             onClick={onSubmitSegment}
             disabled={!canSubmit}
-            className="rounded-full border border-pine/40 px-4 py-2 text-[12.5px] font-medium text-pine transition-opacity hover:bg-pine-mist disabled:opacity-40"
+            title={!canSubmit ? copy.submitDisabledHint : undefined}
+            className="mm-press mm-focus min-h-[40px] rounded-full border border-pine/40 px-4 text-[12.5px] font-medium text-pine hover:bg-pine-mist disabled:cursor-not-allowed disabled:opacity-40"
           >
             {copy.submitSegment}
           </button>
@@ -117,7 +151,8 @@ export function TeachBackSpeakPanel({
             type="button"
             onClick={onFinish}
             disabled={finishDisabled}
-            className="rounded-full bg-pine px-5 py-2 text-[13px] font-medium text-white transition-opacity disabled:opacity-40"
+            title={finishDisabled ? copy.finishDisabledHint : undefined}
+            className="mm-press mm-focus min-h-[40px] rounded-full bg-pine px-5 text-[13px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             {copy.finishText}
           </button>

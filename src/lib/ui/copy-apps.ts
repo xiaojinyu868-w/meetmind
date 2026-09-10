@@ -154,6 +154,14 @@ export const APPS_COPY = {
       speakPlaceholder: '讲一段，或打字补充……',
       submitSegment: '讲给同桌',
       deskmateListening: '同桌在听',
+      deskmateSpeaking: '同桌在说',
+      /** 麦克风旁的一行状态（2026-09-10）：点一下开始、点一下结束，不是按住说 */
+      micIdle: '点一下开始讲，不用按住',
+      micRecording: (clock: string): string => `录音中 ${clock} · 点一下结束`,
+      micTranscribing: '正在把你说的转成文字…',
+      micError: '这次没录上，再点一下试试',
+      submitDisabledHint: '先讲一段或打几个字',
+      finishDisabledHint: '讲一段再核对',
       finishText: '讲完了',
       evaluating: '同桌正在对照课堂原声核对你讲的……',
       evaluatingStage2: '正在逐条核对你讲的和课堂原声……',
@@ -167,6 +175,8 @@ export const APPS_COPY = {
       quadrantGap: '自己知道卡住了',
       quadrantBlindSpot: '盲区',
       quadrantUncovered: '还没讲到',
+      /** 象限格子可点：跳到下面那一组 */
+      quadrantJump: (label: string, count: number): string => `看「${label}」的 ${count} 个点`,
       blindSpotHint: '讲的时候很顺，但和课堂内容对不上。',
       backToEvidence: '回到课堂原声',
       retry: '再讲一次',
