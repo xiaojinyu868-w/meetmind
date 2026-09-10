@@ -80,15 +80,11 @@ export function ExplainerWindow({ result, transcript }: ExplainerWindowProps) {
   // 此前整个窗口刷成深色房间：复习页中栏又窄又高，纸面只占上面 1/3，其余全黑，像坏了的投影幕。
   // 头部只剩课题：「N 处老师原话已核对」这类核对统计是引用系统的内部事，不该出现在一堂课的抬头上——
   // quoteStats 仍在 payload 里（normalizeExplainerPayload 保留字段），只是不再当视觉主角。
+  // 2026-09-10：课题交给播放器与黑板、控制条一起垂直居中——此前课题钉在窗口顶端，全屏 / 手机上离板书很远
   return (
-    <div className="flex h-full flex-col">
-      <header className="px-1 pb-3">
-        <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">
-          {payload.title}
-        </h2>
-      </header>
+    <div className="flex h-full min-h-0 flex-col" data-testid="explainer-window">
       <div className="min-h-0 flex-1">
-        <BlackboardPlayer script={payload.script} />
+        <BlackboardPlayer script={payload.script} title={payload.title} />
       </div>
     </div>
   );

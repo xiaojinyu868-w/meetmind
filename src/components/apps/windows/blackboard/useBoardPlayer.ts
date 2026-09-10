@@ -69,6 +69,15 @@ export interface BoardPlayer extends BoardPlayerState {
   toggleSpeed(): void;
   /** checkpoint 交互完成后续播下一段 */
   advanceFromCheckpoint(): void;
+  /**
+   * 上一步 / 下一步（2026-09-10 控制条）：
+   * +1 = 跳过本段剩余讲解——本段动作全部标记触发（板书由 BoardCanvas 串行写完，翻页闸门照常等它），进下一段 / 下一页；
+   * −1 = 回到上一段重讲（本页内：撤掉本段及上一段已触发的动作让它重写；在页首则从本页第一段重播）。
+   * 两者都会进入播放态——像视频播放器跳段一样。
+   */
+  stepSegment(direction: 1 | -1): void;
+  /** 全部讲解段数与当前进度（含已翻过的页），供控制条画连续进度 */
+  progress: { done: number; total: number };
   /** 流式生成：新单元到达（或生成全部完成）时由外部通知，waiting → 续播/收束 */
   notifyScriptGrown(allDone: boolean): void;
 }
@@ -523,6 +532,61 @@ export function useBoardPlayer(
     }
   }, [timeline, segmentIndex, pageIndex, pageCount]);
 
+  const stepSegment = useCallback((direction: 1 | -1) => {
+    if (!script) return;
+    clockRef.current?.cancel();
+    clockRef.current = null;
+    const segmentCount = timeline?.segments.length ?? 0;
+    if (direction > 0) {
+      // 本段剩下的动作一次性触发（板书由串行链写完），再往前走
+      const current = timeline?.segments[segmentIndex];
+      if (current) {
+        setTriggered((prev) => {
+          const next = new Set(prev);
+          current.actions.forEach((_, actionIndex) => next.add(`s${segmentIndex}a${actionIndex}`));
+          return Array.from(next);
+        });
+      }
+      if (segmentIndex + 1 < segmentCount) {
+        setSegmentIndex(segmentIndex + 1);
+      } else if (pageIndex + 1 < pageCount) {
+        setPageIndex(pageIndex + 1);
+        setSegmentIndex(0);
+        setTriggered([]);
+      } else {
+        setStatus('finished');
+        return;
+      }
+    } else if (segmentIndex > 0) {
+      // 回到上一段：撤掉上一段与本段的板书（它们是页面最末的块，撤掉不影响已写在前面的字），重写重讲
+      const target = segmentIndex - 1;
+      setTriggered((prev) => prev.filter((key) => {
+        const match = /^s(\d+)a/.exec(key);
+        return match ? Number(match[1]) < target : true;
+      }));
+      setSegmentIndex(target);
+    } else {
+      // 页首再往回：从本页第一段重播
+      setTriggered([]);
+    }
+    setRunId((id) => id + 1);
+    setStatus('playing');
+  }, [pageCount, pageIndex, script, segmentIndex, timeline]);
+
+  // 连续进度：已翻过的页的全部段 + 本页已到的段
+  const progress = useMemo(() => {
+    if (!script) return { done: 0, total: 0 };
+    let total = 0;
+    let done = 0;
+    script.pages.forEach((scriptPage, index) => {
+      const count = scriptPage.segments.length;
+      total += count;
+      if (index < pageIndex) done += count;
+      else if (index === pageIndex) done += Math.min(count, segmentIndex + (status === 'finished' ? 1 : 0));
+    });
+    return { done, total };
+  }, [pageIndex, script, segmentIndex, status]);
+
   // 流式生成：新单元到达 → waiting 续播下一页；全部生成完 → 收束为 finished
   const notifyScriptGrown = useCallback((allDone: boolean) => {
     if (statusRef.current !== 'waiting') return;
@@ -552,6 +616,8 @@ export function useBoardPlayer(
     replay,
     toggleSpeed,
     advanceFromCheckpoint,
+    stepSegment,
+    progress,
     notifyScriptGrown,
   };
 }

@@ -94,8 +94,7 @@ export const PodcastPlayerBar = forwardRef<HTMLAudioElement, PodcastPlayerBarPro
     const onKey = (event: KeyboardEvent) => {
       const action = resolvePlayerKey(event.key, isTypingTarget(event.target as HTMLElement | null));
       if (!action) return;
-      // 焦点在按钮上时空格本来就会点它，让位
-      if (action === 'toggle' && event.key === ' ' && (event.target as HTMLElement | null)?.tagName === 'BUTTON') return;
+      // 播放器的空格永远是播放 / 暂停（焦点停在倍速上时也不让它被空格再点一次）
       event.preventDefault();
       if (action === 'toggle') toggle();
       else seekBy(action === 'back' ? -SEEK_STEP_SEC : SEEK_STEP_SEC);

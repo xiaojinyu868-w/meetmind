@@ -13,6 +13,8 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Pause, Play, RotateCcw } from 'lucide-react';
+import { isTypingTarget, resolvePlayerKey } from '../app-keys';
 import type { BoardAction, BoardScript } from '@/lib/ai-native/plugins/board-script';
 import { checkpointAnswerText, segmentDisplayText } from '@/lib/ai-native/plugins/board-script';
 import { APPS_COPY } from '@/lib/ui/copy-apps';
@@ -42,39 +44,8 @@ interface BlackboardPlayerProps {
   debugBounds?: boolean;
   /** 流式生成中（后续讲解单元还在生成）：播到当前末尾进入等待态而非完结 */
   generating?: boolean;
-}
-
-function ControlButton({
-  onClick,
-  label,
-  active,
-  disabled,
-}: {
-  onClick: () => void;
-  label: string;
-  active?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        padding: '6px 14px',
-        borderRadius: 8,
-        fontSize: 13,
-        lineHeight: 1,
-        color: active ? '#1f2a2e' : 'rgba(245,242,232,0.85)',
-        background: active ? '#f5f2e8' : 'rgba(245,242,232,0.1)',
-        border: '1px solid rgba(245,242,232,0.22)',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.4 : 1,
-      }}
-    >
-      {label}
-    </button>
-  );
+  /** 课题：与黑板、控制条作为一块垂直居中（此前由窗口放在顶部，全屏下离板书很远） */
+  title?: string;
 }
 
 interface CheckpointArtifacts {
@@ -113,7 +84,7 @@ function buildArtifacts(
   return { writes, annotations };
 }
 
-export function BlackboardPlayer({ script, paceMsPerChar, fontFamily, debugBounds, generating = false }: BlackboardPlayerProps) {
+export function BlackboardPlayer({ script, paceMsPerChar, fontFamily, debugBounds, generating = false, title }: BlackboardPlayerProps) {
   // 翻页闸门：BoardCanvas 上报本页 write 是否全部完成
   const writesDoneRef = useRef(true);
   // v23 反向背压：BoardCanvas 上报的串行书写队列积压数
@@ -447,16 +418,44 @@ export function BlackboardPlayer({ script, paceMsPerChar, fontFamily, debugBound
     setInkActive(true);
   };
 
+  // 键盘：空格 / K 播放暂停，←→（J / L）上一步 / 下一步；板演中不抢键
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (inkActive) return;
+      const action = resolvePlayerKey(event.key, isTypingTarget(event.target as HTMLElement | null));
+      if (!action) return;
+      // 播放器的空格永远是播放 / 暂停（焦点停在「下一步」上时也不让它被空格再点一次）
+      event.preventDefault();
+      if (action === 'toggle') {
+        if (player.status === 'playing') player.pause();
+        else if (player.status === 'finished') player.replay();
+        else player.play();
+      } else {
+        player.stepSegment(action === 'forward' ? 1 : -1);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [inkActive, player]);
+
+  const progressRatio = player.progress.total > 0 ? Math.min(1, player.progress.done / player.progress.total) : 0;
+  const copy = APPS_COPY.explainer;
+  const stepDisabled = player.status === 'checkpoint';
+  const textBtn = 'mm-press mm-focus inline-flex h-9 items-center gap-1 rounded-full px-2.5 text-[12.5px] text-ink-secondary hover:text-ink disabled:cursor-not-allowed disabled:opacity-40';
+
   return (
-    // 外层透明占满窗口、把黑板框垂直居中；黑板框只包住 16:9 纸面 + 控制条。
+    // 外层透明占满窗口、把黑板 + 控制条作为一块垂直居中；黑板框只包住 16:9 纸面。
     // 此前黑板框 h-full 铺满整栏：复习页中栏又窄又高，纸面只占上面 1/3，下面全是黑——像坏了的投影幕。
-    // 纸面按"宽 / 可用高"双约束缩放（BoardCanvas 读 data-board-host 的高度），宽屏矮窗也不会撑出窗外
-    <div className="flex h-full min-h-0 flex-col justify-center" data-board-host data-testid="blackboard-host">
-    <div
-      className="flex min-h-0 flex-col"
-      style={{ background: '#161e21', borderRadius: 12, padding: 14, gap: 12 }}
-    >
-      <div className="flex min-h-0 items-center justify-center" style={{ position: 'relative' }}>
+    // 纸面按"宽 / 可用高"双约束缩放（BoardCanvas 读 data-board-host 的高度），宽屏矮窗也不会撑出窗外。
+    // 2026-09-10：控制条从黑板框里的深色描边按钮改成框下一行文字 / 图标（与播客播放条、其他窗口同一语言），
+    // 加上一步 / 下一步、连续的段进度线与键盘。
+    <div className="flex h-full min-h-0 flex-col justify-center" data-board-host data-board-chrome={title ? 128 : 92} data-testid="blackboard-host">
+    <div className="flex min-h-0 flex-col" style={{ gap: 10 }}>
+      {title ? <h2 className="px-0.5 text-[15px] font-semibold tracking-[-0.01em] text-ink">{title}</h2> : null}
+      <div
+        className="flex min-h-0 items-center justify-center"
+        style={{ position: 'relative', background: '#161e21', borderRadius: 12, padding: 14 }}
+      >
         <BoardCanvas
           page={page}
           pageIndex={player.pageIndex}
@@ -501,7 +500,7 @@ export function BlackboardPlayer({ script, paceMsPerChar, fontFamily, debugBound
               pointerEvents: 'none',
             }}
           >
-            {APPS_COPY.explainer.awaitingGesture}
+            {copy.awaitingGesture}
           </div>
         ) : null}
         {interlude ? (
@@ -538,39 +537,61 @@ export function BlackboardPlayer({ script, paceMsPerChar, fontFamily, debugBound
           </svg>
         ) : null}
       </div>
-      <div className="flex items-center justify-between" style={{ gap: 10 }}>
-        <div className="flex items-center" style={{ gap: 8 }}>
-          {player.status === 'playing' ? (
-            <ControlButton onClick={player.pause} label={APPS_COPY.explainer.pause} />
-          ) : (
-            <ControlButton
-              onClick={player.status === 'finished' ? player.replay : player.play}
-              label={player.status === 'finished' ? APPS_COPY.explainer.replay : APPS_COPY.explainer.play}
-            />
-          )}
-          {player.status !== 'finished' ? (
-            <ControlButton onClick={player.replay} label={APPS_COPY.explainer.replay} />
-          ) : null}
-          <ControlButton onClick={player.toggleSpeed} label={player.speed === 1 ? '1x' : '1.5x'} />
-          <ControlButton
+
+      {/* 控制条：播放键是唯一的实心元素，其余退成文字；下面一根 2px 的段进度线连续地长 */}
+      <div className="flex flex-col gap-1.5 px-0.5" data-testid="board-controls">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={player.status === 'playing' ? player.pause : player.status === 'finished' ? player.replay : player.play}
+            className="mm-press mm-focus flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-white shadow-soft hover:opacity-90"
+            aria-label={player.status === 'playing' ? copy.pause : player.status === 'finished' ? copy.replay : copy.play}
+            title={player.status === 'playing' ? copy.pause : player.status === 'finished' ? copy.replay : copy.play}
+          >
+            {player.status === 'playing' ? <Pause size={14} strokeWidth={2.2} /> : player.status === 'finished' ? <RotateCcw size={14} strokeWidth={2.2} /> : <Play size={14} strokeWidth={2.2} fill="currentColor" className="ml-0.5" />}
+          </button>
+          <button type="button" onClick={() => player.stepSegment(-1)} disabled={stepDisabled} className={textBtn} aria-label={copy.prevStep} title={stepDisabled ? copy.stepDisabledHint : copy.prevStep}>
+            <ChevronLeft size={14} strokeWidth={2} aria-hidden />
+            <span className="hidden sm:inline">{copy.prevStep}</span>
+          </button>
+          <button type="button" onClick={() => player.stepSegment(1)} disabled={stepDisabled} className={textBtn} aria-label={copy.nextStep} title={stepDisabled ? copy.stepDisabledHint : copy.nextStep}>
+            <span className="hidden sm:inline">{copy.nextStep}</span>
+            <ChevronRight size={14} strokeWidth={2} aria-hidden />
+          </button>
+          <span className="mx-1 h-3.5 w-px bg-divider" aria-hidden />
+          <button type="button" onClick={player.toggleSpeed} className={`${textBtn} font-mono tabular-nums`} aria-label={copy.speed(player.speed)} title={copy.speed(player.speed)}>
+            {player.speed === 1 ? '1x' : '1.5x'}
+          </button>
+          <button
+            type="button"
             onClick={toggleInk}
-            label={inkActive ? APPS_COPY.explainer.inkDone : APPS_COPY.explainer.inkStart}
-            active={inkActive}
             disabled={player.status === 'checkpoint'}
-          />
+            className={`${textBtn} ${inkActive ? 'bg-paper-warm text-ink' : ''}`}
+            aria-pressed={inkActive}
+            title={player.status === 'checkpoint' ? copy.inkDisabledHint : undefined}
+          >
+            {inkActive ? copy.inkDone : copy.inkStart}
+          </button>
           {inkActive && strokes.length > 0 ? (
-            <ControlButton
+            <button
+              type="button"
               onClick={() => {
                 setStrokes([]);
                 setGradeMarks([]);
               }}
-              label={APPS_COPY.explainer.inkClear}
-            />
+              className={`${textBtn} mm-app-enter`}
+            >
+              {copy.inkClear}
+            </button>
           ) : null}
+          <span className="ml-auto whitespace-nowrap font-mono text-[11.5px] tabular-nums text-ink-muted">
+            {copy.stepLabel(Math.min(player.progress.total, player.progress.done + 1), player.progress.total)}
+            <span className="hidden sm:inline"> · {copy.pageLabel(player.pageIndex + 1, player.pageCount)}</span>
+          </span>
         </div>
-        <span style={{ fontSize: 12, color: 'rgba(245,242,232,0.55)' }}>
-          {APPS_COPY.explainer.pageLabel(player.pageIndex + 1, player.pageCount)}
-        </span>
+        <div className="h-[2px] w-full overflow-hidden rounded-full bg-divider-light" aria-hidden>
+          <div className="h-full rounded-full bg-pine transition-[width] duration-500 ease-out motion-reduce:transition-none" style={{ width: `${progressRatio * 100}%` }} />
+        </div>
       </div>
     </div>
     </div>

@@ -128,7 +128,9 @@ export function BoardCanvas({
         return;
       }
       const byWidth = Math.max(0, host.clientWidth - 28) / BOARD_WIDTH;
-      const availH = host.clientHeight - HOST_CHROME_PX;
+      // 宿主可以用 data-board-chrome 报自己的非纸面高度（课题行 + 控制条 + 框内边距），缺省 84
+      const chrome = Number(host.dataset.boardChrome) || HOST_CHROME_PX;
+      const availH = host.clientHeight - chrome;
       const byHeight = availH > 0 ? availH / BOARD_HEIGHT : Number.POSITIVE_INFINITY;
       setScale(Math.max(0.05, Math.min(byWidth, byHeight)));
     };
