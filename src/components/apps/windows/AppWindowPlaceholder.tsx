@@ -84,7 +84,7 @@ function ListeningLoading({
   const hasDrift = Boolean(transcript && transcript.length >= 3);
 
   return (
-    <div className="relative flex h-full min-h-[420px] flex-col items-center justify-center gap-6 px-6 py-12">
+    <div className="relative flex h-full min-h-[420px] flex-col items-center justify-center gap-6 px-6 py-12" data-app-placeholder="loading">
       {/* 极淡 pine / vermilion 双色光晕（v7 仪式时刻） */}
       <div
         aria-hidden
@@ -193,6 +193,11 @@ export function describeAppExecutionError(raw: string | undefined): string | und
   }
 }
 
+/**
+ * 失败态只有一句话和一个按钮（2026-09-10）。此前是标题 + 副句 + 两个按钮，再加宿主头部的「没做好」
+ * 与课后学习页的 toast——同一件事说了四遍。服务端给出的具体原因（积分 / 材料不足）比通用句更有用时用它，
+ * 否则就是「{应用}刚才没做好」；返回退成一行文字链接，不与主动作抢。
+ */
 function ErrorState({ appName, errorMessage, onRetry, onBack, backLabel }: {
   appName: string;
   errorMessage?: string;
@@ -201,52 +206,36 @@ function ErrorState({ appName, errorMessage, onRetry, onBack, backLabel }: {
   backLabel?: string;
 }) {
   const shownMessage = describeAppExecutionError(errorMessage);
+  // 通用失败句不带任何信息，让位给带应用名的那一句
+  const generic = !shownMessage
+    || shownMessage === COPY.apps.matrix.executeGenerationFailed
+    || shownMessage === COPY.apps.matrix.generateFailed
+    || shownMessage === '应用执行失败';
+  const sentence = shownMessage && !generic
+    ? (shownMessage.length > 80 ? `${shownMessage.slice(0, 80)}…` : shownMessage)
+    : APPS_COPY.placeholder.failedTitle(appName);
   return (
-    <div className="relative flex h-full min-h-[360px] flex-col items-center justify-center gap-6 px-8 py-12">
-      {/* 朱批红光晕 · 错误是"提醒"不是"惊吓" */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(ellipse 50% 40% at 50% 35%, rgba(181,72,60,0.06), transparent 65%)',
-        }}
-      />
+    <div className="relative flex h-full min-h-[420px] flex-col items-center justify-center gap-5 px-8 py-12" data-app-placeholder="error">
       <div className="relative">
         <OctoBuddySprite mood="surprised" size="md" />
       </div>
-      <div className="relative text-center">
-        <p className="text-[15px] font-medium text-ink">
-          {APPS_COPY.placeholder.failedTitle(appName)}
-        </p>
-        {shownMessage ? (
-          <p className="mt-2 max-w-sm text-[12.5px] leading-relaxed text-ink-muted" title={shownMessage}>
-            {shownMessage.length > 120 ? `${shownMessage.slice(0, 120)}…` : shownMessage}
-          </p>
-        ) : (
-          <p className="mt-2 text-[12.5px] text-ink-muted">{APPS_COPY.placeholder.failedBody}</p>
-        )}
-      </div>
-      <div className="relative flex items-center gap-3">
-        {onRetry ? (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="rounded-full bg-ink px-5 py-2 text-[13px] font-medium text-white shadow-soft transition hover:opacity-85 active:scale-[0.97]"
-          >
-            {APPS_COPY.placeholder.retry}
-          </button>
-        ) : null}
-        {onBack ? (
-          <button
-            type="button"
-            onClick={onBack}
-            className="rounded-full border border-divider bg-card px-5 py-2 text-[13px] font-medium text-ink-secondary transition hover:border-pine hover:text-pine"
-          >
-            {backLabel || APPS_COPY.placeholder.back}
-          </button>
-        ) : null}
-      </div>
+      <p className="relative max-w-sm text-center text-[15px] font-medium leading-relaxed text-ink" title={shownMessage}>
+        {sentence}
+      </p>
+      {onRetry ? (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mm-press mm-focus relative rounded-full bg-ink px-5 py-2 text-[13px] font-medium text-white shadow-soft hover:opacity-85"
+        >
+          {APPS_COPY.placeholder.retry}
+        </button>
+      ) : null}
+      {onBack ? (
+        <button type="button" onClick={onBack} className="relative text-[12px] text-ink-muted transition hover:text-ink">
+          {backLabel || APPS_COPY.placeholder.back}
+        </button>
+      ) : null}
     </div>
   );
 }

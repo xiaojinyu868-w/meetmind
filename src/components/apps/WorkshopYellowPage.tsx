@@ -831,7 +831,9 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
               : undefined,
         });
       } catch (error) {
-        autoOpenedRef.current.delete(app.key);
+        // 窗口已经因「开始」自动打开：失败由窗口体自己说（一句话 + 再试一次），这里不再叠一条 toast——
+        // 此前同一次失败要在窗口正文、宿主头部、右上角 toast 三处各说一遍
+        const windowIsShowingIt = autoOpenedRef.current.delete(app.key);
         const isAborted =
           (error instanceof DOMException && error.name === 'AbortError') ||
           (error instanceof Error && error.name === 'AbortError');
@@ -850,7 +852,9 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
             updatedAt: Date.now(),
             message: timeoutTriggered ? timeoutMessage : COPY.apps.matrix.cancelled,
           });
-          if (timeoutTriggered) {
+          if (windowIsShowingIt) {
+            // 窗口正文会显示失败态
+          } else if (timeoutTriggered) {
             toast.error(COPY.apps.matrix.timeoutFor(app.name));
           } else {
             toast.message(COPY.apps.matrix.cancelledFor(app.name));
@@ -869,7 +873,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
             updatedAt: Date.now(),
             message,
           });
-          toast.error(COPY.apps.matrix.failedFor(app.name));
+          if (!windowIsShowingIt) toast.error(COPY.apps.matrix.failedFor(app.name));
         }
       } finally {
         delete abortControllersRef.current[app.key];

@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, RotateCw } from 'lucide-react';
+import { animateEnter } from '@/components/apps/windows/app-motion';
 import type { TranscriptSegment } from '@/types';
 import type { Anchor } from '@/lib/services/anchor-service';
 import type { DataSourceType } from '@/lib/ai-native/types';
@@ -143,14 +144,22 @@ export function ReviewLearningWorkspace({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [fullscreen]);
+  // 全屏 ⇄ 中栏是同一棵树换容器：不重挂载（窗口内部状态不丢），只重放一次 220ms 进场
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    if (!mountedRef.current) { mountedRef.current = true; return; }
+    animateEnter(sectionRef.current);
+  }, [fullscreen]);
 
   const status = execution.taskState.status;
   const running = status === 'running';
-  const textAction = 'shrink-0 text-[12px] text-ink-muted transition hover:text-ink disabled:opacity-40 disabled:hover:text-ink-muted';
+  const textAction = 'mm-focus shrink-0 rounded-md text-[12px] text-ink-muted transition hover:text-ink disabled:opacity-40 disabled:hover:text-ink-muted';
 
   return (
     <section
-      className={`flex min-h-0 flex-col ${isImmersiveApp ? 'bg-[var(--mm-immersive)]' : 'bg-canvas'} ${
+      ref={sectionRef}
+      className={`mm-app-enter flex min-h-0 flex-col ${isImmersiveApp ? 'bg-[var(--mm-immersive)]' : 'bg-canvas'} ${
         fullscreen ? 'fixed inset-0 z-[200] h-full' : 'h-full'
       }`}
       data-testid="review-learning-workspace"
@@ -198,6 +207,7 @@ export function ReviewLearningWorkspace({
           onLearningActivity={recordInteraction}
           onAssessment={recordAssessment}
           nextStep={nextStep}
+          hostFullscreen={fullscreen}
         />
       </div>
     </section>

@@ -39,6 +39,8 @@ interface MindmapWindowProps {
   onSeek?: (startMs: number) => void;
   /** 窄屏可以先给可读大纲；全屏始终由用户主动触发。 */
   defaultViewMode?: ViewMode;
+  /** 宿主已是全屏舞台：不再提供窗口自己的第二层「全屏」（否则叠两层，返回被盖住） */
+  hostFullscreen?: boolean;
 }
 
 interface MindmapPayload {
@@ -603,7 +605,7 @@ function OutlineNode({
 /*  主组件                                                              */
 /* ================================================================== */
 
-export function MindmapWindow({ result, transcript, onSeek, defaultViewMode = 'mindmap' }: MindmapWindowProps) {
+export function MindmapWindow({ result, transcript, onSeek, defaultViewMode = 'mindmap', hostFullscreen = false }: MindmapWindowProps) {
   const { root, children, markdown } = useMemo(() => normalizePayload(result), [result]);
   // 手机或三栏中的窄学习区优先给可读大纲；宽画布才默认展示整图。
   const shellRef = useRef<HTMLElement>(null);
@@ -703,9 +705,11 @@ export function MindmapWindow({ result, transcript, onSeek, defaultViewMode = 'm
         <span className="hidden text-[12px] sm:inline" style={{ color: PALETTE.textMuted }}>{APPS_COPY.mindmap.stats(children.length, totalNodes, treeDepthValue)}</span>
       </div>
       <div className="flex items-center gap-4 text-[12.5px]" style={{ color: PALETTE.textSecondary }}>
-        <button type="button" onClick={isFullscreen ? () => setIsFullscreen(false) : enterFullscreen} className="transition hover:text-ink">
-          {isFullscreen ? APPS_COPY.mindmap.exitFullscreen : APPS_COPY.mindmap.fullscreen}
-        </button>
+        {!hostFullscreen || isFullscreen ? (
+          <button type="button" onClick={isFullscreen ? () => setIsFullscreen(false) : enterFullscreen} className="transition hover:text-ink">
+            {isFullscreen ? APPS_COPY.mindmap.exitFullscreen : APPS_COPY.mindmap.fullscreen}
+          </button>
+        ) : null}
         <button type="button" onClick={handleCopyOutline} className="transition hover:text-ink" style={copyFeedback ? { color: PALETTE.accent } : undefined}>
           {copyFeedback ? APPS_COPY.mindmap.copied : APPS_COPY.mindmap.copyOutline}
         </button>
@@ -718,8 +722,8 @@ export function MindmapWindow({ result, transcript, onSeek, defaultViewMode = 'm
       rootTitle={root}
       className="min-h-0 flex-1"
       style={isFullscreen ? undefined : { borderRadius: '0 0 12px 12px', border: `1px solid ${PALETTE.border}`, borderTop: 'none' }}
-      isFullscreen={isFullscreen}
-      onToggleFullscreen={enterFullscreen}
+      isFullscreen={isFullscreen || hostFullscreen}
+      onToggleFullscreen={hostFullscreen ? undefined : enterFullscreen}
     >
       {children}
     </CustomMindmapRenderer>

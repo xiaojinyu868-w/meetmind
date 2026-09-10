@@ -1848,3 +1848,56 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 @media (prefers-reduced-motion: reduce) {
   .mm-notebook-page { animation: mm-notebook-veil 1300ms ease-in-out forwards; transform: none; }
 }
+
+/* ── 应用窗口动效底座（2026-09-10 交互打磨，src/components/apps/windows 共用）──
+   四种状态（加载 / 成品 / 失败 / 再做一版）之间 150–250ms 的淡入 + 轻微上移；
+   揭示类动效（勾在画、色在染）≤300ms；prefers-reduced-motion 下全部退成瞬时。
+   只追加，不改上面任何规则。 */
+@keyframes mm-app-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes mm-app-exit {
+  to { opacity: 0; transform: translateY(-4px); }
+}
+@keyframes mm-pop-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes mm-draw-stroke {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes mm-rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.mm-app-enter { animation: mm-app-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.mm-app-exit  { animation: mm-app-exit 160ms ease-in both; }
+.mm-pop-in    { animation: mm-pop-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+/* 勾 / 叉一笔画出：配合 SVG path 的 pathLength=1 */
+.mm-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: mm-draw-stroke 260ms cubic-bezier(0.2, 0.8, 0.2, 1) 40ms forwards; }
+/* 一组一张纸依次浮出：子元素按序 60ms 错峰 */
+.mm-stagger > * { animation: mm-rise-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.mm-stagger > *:nth-child(2) { animation-delay: 60ms; }
+.mm-stagger > *:nth-child(3) { animation-delay: 120ms; }
+.mm-stagger > *:nth-child(4) { animation-delay: 180ms; }
+.mm-stagger > *:nth-child(5) { animation-delay: 240ms; }
+.mm-stagger > *:nth-child(6) { animation-delay: 300ms; }
+.mm-stagger > *:nth-child(n+7) { animation-delay: 360ms; }
+/* 可点的东西按下有反馈：scale 0.98，只在支持 hover 的设备上给 hover 底色（触屏不留 sticky hover） */
+.mm-press { transition: transform 120ms ease, background-color 160ms ease, color 160ms ease, border-color 160ms ease, opacity 160ms ease; }
+.mm-press:active:not(:disabled) { transform: scale(0.98); }
+@media (hover: hover) {
+  .mm-hover-warm:hover:not(:disabled) { background-color: var(--mm-paper-warm); }
+  .mm-hover-ink:hover:not(:disabled) { color: var(--mm-ink); }
+}
+/* 焦点环：设计系统的 pine 环 */
+.mm-focus:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--mm-card), 0 0 0 4px rgba(47, 107, 85, 0.45); }
+.mm-focus-inset:focus-visible { outline: none; box-shadow: inset 0 0 0 2px rgba(47, 107, 85, 0.45); }
+@media (prefers-reduced-motion: reduce) {
+  .mm-app-enter, .mm-app-exit, .mm-pop-in, .mm-draw, .mm-stagger > * {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+  }
+  .mm-press, .mm-press:active:not(:disabled) { transition: none; transform: none; }
+}

@@ -81,7 +81,7 @@ function useIsMobile(breakpoint = 768) {
   return isMobile;
 }
 
-/** 需要沉浸式全屏体验的应用（深色背景、精简header） */
+/** 全屏时不要内边距、自己铺满整面的应用（闪卡 / 测验的纸就是窗口）；手机上强制全屏 */
 const IMMERSIVE_APPS: Set<WorkshopAppKey> = new Set(['flashcards', 'quiz']);
 
 // 状态类型与默认展示模式在 workshop-window-state.ts（纯模块）——首屏 hook 从那里取，不必静态加载整棵窗口树
@@ -256,101 +256,67 @@ function WindowCard(props: WindowCardProps) {
 
   if (!app) return null;
 
-  // 沉浸式全屏模式（闪卡等）— 深色背景、极简header
-  if (isFullscreen && isImmersive) {
-    return (
-      <section
-        className="pointer-events-auto fixed inset-0 z-[200] flex flex-col overflow-hidden bg-ink"
-        data-testid={`workshop-window-${app.key}-fullscreen`}
-        onMouseDown={() => onFocus(app.key)}
-      >
-        {/* 沉浸式 header — 极简，融入深色背景 */}
-        <header className="flex items-center gap-3 px-4 py-2.5 select-none">
-          <button
-            type="button"
-            className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-            onClick={() => onClose(app.key)}
-            aria-label={APPS_COPY.shell.close}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-            <span className="text-sm">{APPS_COPY.shell.back}</span>
-          </button>
-          <div className="min-w-0 flex-1 text-center">
-            <p className="text-sm font-medium text-white/80">{app.name}</p>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {execution.taskState.status === 'running' && (
-              <span className="text-xs text-white/60">{APPS_COPY.shell.generating}</span>
-            )}
-          </div>
-        </header>
+  const textAction = 'mm-focus rounded-md text-[12px] text-ink-muted transition hover:text-ink';
+  const surface = (
+    <WindowErrorBoundary appName={app.name} onRetry={() => void execution.rerun()}>
+      <AppRenderSurface
+        appKey={app.key}
+        result={execution.result}
+        transcript={transcript}
+        taskState={execution.taskState}
+        sessionId={sessionId}
+        contentContext={infographicContentContext}
+        onSeek={onSeek}
+        onRegenerate={() => void execution.rerun()}
+        onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
+        onResultUpdate={execution.updateResult}
+        hostFullscreen={isFullscreen}
+      />
+    </WindowErrorBoundary>
+  );
 
-        {/* 沉浸式内容区 — 无内边距，组件自己控制 */}
-        <div className="flex-1 overflow-auto">
-          <WindowErrorBoundary appName={app.name} onRetry={() => void execution.rerun()}>
-            <AppRenderSurface appKey={app.key} result={execution.result} transcript={transcript} taskState={execution.taskState} onSeek={onSeek} onRegenerate={() => void execution.rerun()} />
-          </WindowErrorBoundary>
-        </div>
-      </section>
-    );
-  }
-
-  // 标准全屏模式（思维导图、信息图等）
+  // 全屏：四个宿主同一张纸。此前闪卡 / 测验走"沉浸式"深绿 header（bg-ink）盖在米白正文上——
+  // 头是夜里、身子是白天，与复习页舞台 / 独立页都不一致；现在只剩一个全屏壳，闪卡 / 测验只是去掉内边距
   if (isFullscreen) {
     return (
       <section
-        className="pointer-events-auto fixed inset-0 z-[200] flex flex-col overflow-hidden bg-white"
+        className="mm-app-enter pointer-events-auto fixed inset-0 z-[200] flex flex-col overflow-hidden bg-white"
         data-testid={`workshop-window-${app.key}-fullscreen`}
         onMouseDown={() => onFocus(app.key)}
       >
-        {/* 全屏 header */}
-        {/* 头部一行字：课名 + 状态（只在正在做 / 没做好时说）+ 模型 + 关闭；不再有状态 pill */}
+        {/* 头部一行字：返回 / 课名 + 状态（只在正在做 / 没做好时说）/ 模型 / 关闭；不再有状态 pill */}
         <header className="flex items-center gap-3 border-b border-divider bg-white px-4 py-2.5 select-none">
+          <button type="button" className={`${textAction} inline-flex items-center gap-1`} onClick={() => onClose(app.key)} aria-label={APPS_COPY.shell.back}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            <span className="hidden sm:inline">{APPS_COPY.shell.back}</span>
+          </button>
           <div className="min-w-0 flex-1">
             <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">
               {app.name}
               <StatusWord taskState={execution.taskState} />
             </p>
-            <p className="truncate text-xs text-ink-muted">{formatDataSource(dataSource)}</p>
+            <p className="hidden truncate text-xs text-ink-muted sm:block">{formatDataSource(dataSource)}</p>
           </div>
-          <ModelSelector value={model} onChange={onModelChange} compact allowedProviders={['deepseek', 'qwen', 'volcengine']} />
-          <button
-            type="button"
-            className="text-[12px] text-ink-muted transition hover:text-ink"
-            onClick={() => onClose(app.key)}
-            aria-label={APPS_COPY.shell.close}
-          >
+          <div className="hidden md:block">
+            <ModelSelector value={model} onChange={onModelChange} compact allowedProviders={['deepseek', 'qwen', 'volcengine']} />
+          </div>
+          <button type="button" className={textAction} onClick={() => onClose(app.key)} aria-label={APPS_COPY.shell.close}>
             {APPS_COPY.shell.close}
           </button>
         </header>
-
-        {/* 全屏内容区 */}
-        <div className="flex-1 overflow-auto bg-canvas p-4">
-          <WindowErrorBoundary appName={app.name} onRetry={() => void execution.rerun()}>
-            <AppRenderSurface
-              appKey={app.key}
-              result={execution.result}
-              transcript={transcript}
-              taskState={execution.taskState}
-              sessionId={sessionId}
-              contentContext={infographicContentContext}
-              onSeek={onSeek}
-              onRegenerate={() => void execution.rerun()}
-              onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
-              onResultUpdate={execution.updateResult}
-            />
-          </WindowErrorBoundary>
+        <div className={`min-h-0 flex-1 overflow-auto ${isImmersive ? 'bg-paper p-0' : 'bg-canvas p-4'}`}>
+          {surface}
         </div>
       </section>
     );
   }
 
-  // 面板模式（原浮动窗口）
+  // 面板模式（浮窗）：进场 180ms 弹出；浮在课堂上要有一层真实的投影（此前只有 1px 描边，像贴在页面上的一块）
   return (
     <section
-      className="pointer-events-auto fixed flex h-[min(78vh,820px)] w-[min(860px,calc(100vw-24px))] flex-col overflow-hidden rounded-2xl border border-divider bg-white max-md:left-2 max-md:right-2 max-md:top-14 max-md:h-[78vh] max-md:w-auto"
+      className="mm-pop-in pointer-events-auto fixed flex h-[min(78vh,820px)] w-[min(860px,calc(100vw-24px))] flex-col overflow-hidden rounded-2xl border border-divider bg-white shadow-float max-md:left-2 max-md:right-2 max-md:top-14 max-md:h-[78vh] max-md:w-auto"
       data-testid={`floating-workshop-window-${app.key}`}
       style={{
         ...drag.style,
@@ -359,7 +325,7 @@ function WindowCard(props: WindowCardProps) {
       onMouseDown={() => onFocus(app.key)}
     >
       <header
-        className="flex cursor-grab items-center gap-1.5 border-b border-divider bg-white px-3 py-2 active:cursor-grabbing select-none md:gap-2"
+        className="flex cursor-grab touch-none items-center gap-1.5 border-b border-divider bg-white px-3 py-2 active:cursor-grabbing select-none md:gap-2"
         onPointerDown={drag.onPointerDown}
         onPointerMove={drag.onPointerMove}
         onPointerUp={drag.onPointerUp}
@@ -367,7 +333,7 @@ function WindowCard(props: WindowCardProps) {
         {/* 浮窗头：收起 / 课名 + 状态词 / 模型 / 关闭，全是文字。此前副标题写「会话 7eeeed…4598」——会话 id 是内部黑话 */}
         <button
           type="button"
-          className="text-[12px] text-ink-muted transition hover:text-ink"
+          className={textAction}
           onClick={() => onToggleMinimize(app.key)}
           data-testid={`workshop-window-minimize-${app.key}`}
           aria-label={APPS_COPY.shell.minimize}
@@ -386,7 +352,7 @@ function WindowCard(props: WindowCardProps) {
         </div>
         <button
           type="button"
-          className="text-[12px] text-ink-muted transition hover:text-ink"
+          className={textAction}
           onClick={() => onClose(app.key)}
           data-testid={`workshop-window-close-${app.key}`}
           aria-label={APPS_COPY.shell.close}
@@ -396,20 +362,7 @@ function WindowCard(props: WindowCardProps) {
       </header>
 
       <div className="flex-1 overflow-auto bg-canvas p-3">
-        <WindowErrorBoundary appName={app.name} onRetry={() => void execution.rerun()}>
-          <AppRenderSurface
-            appKey={app.key}
-            result={execution.result}
-            transcript={transcript}
-            taskState={execution.taskState}
-            sessionId={sessionId}
-            contentContext={infographicContentContext}
-            onSeek={onSeek}
-            onRegenerate={() => void execution.rerun()}
-            onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
-            onResultUpdate={execution.updateResult}
-          />
-        </WindowErrorBoundary>
+        {surface}
       </div>
     </section>
   );
@@ -457,6 +410,21 @@ export function WorkshopWindowManager(props: WorkshopWindowManagerProps) {
     () => [...windows].filter((windowState) => windowState.minimized).sort((a, b) => b.zIndex - a.zIndex),
     [windows]
   );
+
+  // Esc 关掉最上面那个浮窗 / 全屏窗（正在输入时不抢；窗口内部自己处理 Esc 的——导图退自己的全屏——先收到，
+  // 这里只在事件没被它们 preventDefault 时才动）
+  const topWindow = openedWindows[openedWindows.length - 1];
+  useEffect(() => {
+    if (!topWindow) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable) return;
+      onClose(topWindow.appKey);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, topWindow]);
 
   if (windows.length === 0) return null;
 

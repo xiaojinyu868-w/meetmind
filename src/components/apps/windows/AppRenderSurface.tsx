@@ -1,5 +1,6 @@
 'use client';
 
+import type React from 'react';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import type { TranscriptSegment } from '@/types';
@@ -17,6 +18,7 @@ import { TeachBackWindow } from './TeachBackWindow';
 import { ExplainerWindow } from './ExplainerWindow';
 import type { AssessmentDraft } from './assessment-events';
 import type { NextStepCardProps } from './NextStepCard';
+import { useDelayedFlag } from './app-motion';
 
 /**
  * "成品"里一件东西都没有——测验没题、闪卡没卡、导图没分支、幻灯没页。
@@ -61,9 +63,54 @@ export interface AppRenderSurfaceProps {
   nextStep?: NextStepCardProps;
   /** 移动端结果页先展示大纲；桌面工作区默认导图。 */
   mindmapDefaultViewMode?: 'mindmap' | 'outline';
+  /** 宿主已经是全屏舞台：窗口自己的「全屏」不再出现（导图此前会叠出第二层全屏，盖住返回） */
+  hostFullscreen?: boolean;
 }
 
-export function AppRenderSurface({
+type SurfacePhase = 'waiting' | 'loading' | 'error' | 'ready';
+
+/**
+ * 四种状态之间的过渡（DOMAIN.md「状态过渡」）：phase 变化时这一层重挂载，带 220ms 淡入 + 上移；
+ * 加载态先静默 300ms（缓存命中 / 秒回不值得闪一张骨架），期间只占住高度不跳版。
+ */
+function SurfaceFrame({ phase, children }: { phase: SurfacePhase; children?: React.ReactNode }) {
+  if (phase === 'waiting') return <div className="h-full min-h-[420px]" aria-busy data-app-surface="waiting" />;
+  return (
+    <div key={phase} className="mm-app-enter flex h-full min-h-0 flex-col" data-app-surface={phase}>
+      {children}
+    </div>
+  );
+}
+
+export function AppRenderSurface(props: AppRenderSurfaceProps) {
+  const { appKey, result, taskState, onRegenerate } = props;
+  const loading = !result && taskState?.status !== 'error';
+  const showLoading = useDelayedFlag(loading);
+  // 生成失败（含 GENERATION_FAILED）且没有旧成品：所有应用统一进"这次没做出来，再试一次"，
+  // 不再让窗口体停在加载态、只有头部一个"失败"小标
+  if (!result && taskState?.status === 'error') {
+    const app = getWorkshopAppByKey(appKey);
+    return (
+      <SurfaceFrame phase="error">
+        <AppWindowPlaceholder status="error" appName={app?.name ?? appKey} errorMessage={taskState.error} onRetry={onRegenerate} />
+      </SurfaceFrame>
+    );
+  }
+  // 有"成品"但里面一道题 / 一张卡 / 一个分支都没有（旧缓存或异常返回）：这不是"做好了"，
+  // 按失败处理并给"再试一次"——之前窗口体显示空态、顶栏却写着「做好了」，且没有按钮
+  if (result && isEmptyAppResult(appKey, result)) {
+    const app = getWorkshopAppByKey(appKey);
+    return (
+      <SurfaceFrame phase="error">
+        <AppWindowPlaceholder status="error" appName={app?.name ?? appKey} errorMessage="GENERATION_FAILED" onRetry={onRegenerate} />
+      </SurfaceFrame>
+    );
+  }
+  if (loading && !showLoading) return <SurfaceFrame phase="waiting" />;
+  return <SurfaceFrame phase={loading ? 'loading' : 'ready'}><AppSurfaceBody {...props} /></SurfaceFrame>;
+}
+
+function AppSurfaceBody({
   appKey,
   result,
   transcript = [],
@@ -79,19 +126,8 @@ export function AppRenderSurface({
   onAssessment,
   nextStep,
   mindmapDefaultViewMode = 'mindmap',
+  hostFullscreen = false,
 }: AppRenderSurfaceProps) {
-  // 生成失败（含 GENERATION_FAILED）且没有旧成品：所有应用统一进"这次没做出来，再试一次"，
-  // 不再让窗口体停在加载态、只有头部一个"失败"小标
-  if (!result && taskState?.status === 'error') {
-    const app = getWorkshopAppByKey(appKey);
-    return <AppWindowPlaceholder status="error" appName={app?.name ?? appKey} errorMessage={taskState.error} onRetry={onRegenerate} />;
-  }
-  // 有"成品"但里面一道题 / 一张卡 / 一个分支都没有（旧缓存或异常返回）：这不是"做好了"，
-  // 按失败处理并给"再试一次"——之前窗口体显示空态、顶栏却写着「做好了」，且没有按钮
-  if (result && isEmptyAppResult(appKey, result)) {
-    const app = getWorkshopAppByKey(appKey);
-    return <AppWindowPlaceholder status="error" appName={app?.name ?? appKey} errorMessage="GENERATION_FAILED" onRetry={onRegenerate} />;
-  }
   if (appKey === 'audio-overview') {
     return <PodcastWindow result={result} transcript={transcript} taskState={taskState} onSeek={onSeek} onRegenerate={onRegenerate} />;
   }
@@ -105,7 +141,7 @@ export function AppRenderSurface({
   }
 
   if (appKey === 'mindmap') {
-    return <MindmapWindow result={result} transcript={transcript} onSeek={onSeek} defaultViewMode={mindmapDefaultViewMode} />;
+    return <MindmapWindow result={result} transcript={transcript} onSeek={onSeek} defaultViewMode={mindmapDefaultViewMode} hostFullscreen={hostFullscreen} />;
   }
 
   if (appKey === 'infographic') {
