@@ -2,13 +2,26 @@ import { describe, expect, it } from 'vitest';
 import type { TeachBackEvaluation, TeachBackEvaluationItem } from '@/lib/ai-native/types';
 import {
   buildReviewBlocks,
+  foldRecord,
   formatClock,
   heldCounts,
+  lingerOpacity,
   listenerStatusOf,
   locateTurnForPoint,
   nextHeldToReveal,
+  PERFORM_MAX_MS,
+  PERFORM_QUIET_CONFIRM_MS,
+  PERFORM_VOICE_GRACE_MS,
+  performanceFinished,
+  readingTimeMs,
   reteachTargetIds,
   shouldShowEntry,
+  sortRecord,
+  SPEECH_FADE_MS,
+  SPEECH_LINGER_MS,
+  speechPhaseOf,
+  toggleFlipped,
+  typedChars,
   visibleFeedback,
   type FeedbackEntry,
   type TranscriptTurn,
@@ -169,5 +182,90 @@ describe('时钟', () => {
     expect(formatClock(0)).toBe('00:00');
     expect(formatClock(61_500)).toBe('01:01');
     expect(formatClock(3_725_000)).toBe('62:05');
+  });
+});
+
+describe('手卡翻转', () => {
+  it('点一张翻过去，再点翻回来；不改原集合', () => {
+    const none = new Set<string>();
+    const one = toggleFlipped(none, 't1');
+    expect([...one]).toEqual(['t1']);
+    expect(none.size).toBe(0);
+    const two = toggleFlipped(one, 't2');
+    expect([...two].sort()).toEqual(['t1', 't2']);
+    expect([...toggleFlipped(two, 't1')]).toEqual(['t2']);
+  });
+});
+
+describe('评委脚下的话：说完留一会再淡进记录', () => {
+  it('没说完 = speaking；说完未到期 = lingering；到期 = gone', () => {
+    expect(speechPhaseOf(null, 99_999)).toBe('speaking');
+    expect(speechPhaseOf(10_000, 10_000 + SPEECH_LINGER_MS - 1)).toBe('lingering');
+    expect(speechPhaseOf(10_000, 10_000 + SPEECH_LINGER_MS)).toBe('gone');
+  });
+
+  it('不透明度：前面一直是 1，最后一段线性淡到 0', () => {
+    const closedAt = 5_000;
+    expect(lingerOpacity(closedAt, closedAt)).toBe(1);
+    expect(lingerOpacity(closedAt, closedAt + SPEECH_LINGER_MS - SPEECH_FADE_MS)).toBe(1);
+    expect(lingerOpacity(closedAt, closedAt + SPEECH_LINGER_MS - SPEECH_FADE_MS / 2)).toBe(0.5);
+    expect(lingerOpacity(closedAt, closedAt + SPEECH_LINGER_MS)).toBe(0);
+    expect(lingerOpacity(closedAt, closedAt + SPEECH_LINGER_MS + 500)).toBe(0);
+  });
+});
+
+describe('讲完后的表演：一条什么时候算说完', () => {
+  const text = '你只说了"能找到"，但没解释清楚逻辑矛盾。如果不是单射，一个 y 对应了两个 x，反过来做映射会违反哪条规则？';
+
+  it('逐字流出与读完的时间', () => {
+    expect(typedChars(text, 0)).toBe(0);
+    expect(typedChars(text, 28 * 10)).toBe(10);
+    expect(typedChars(text, 10 * 60_000)).toBe(text.length);
+    expect(readingTimeMs('短')).toBe(2_500);
+    expect(readingTimeMs(text)).toBe(1_500 + text.length * 110);
+    expect(readingTimeMs('字'.repeat(500))).toBe(14_000);
+  });
+
+  it('出声关着：字打完 + 读完的时间到就算说完', () => {
+    const base = { text, voiceEnabled: false, voiceHeard: false, quietForMs: null };
+    expect(performanceFinished({ ...base, elapsedMs: 1_000 })).toBe(false);
+    expect(performanceFinished({ ...base, elapsedMs: readingTimeMs(text) - 1 })).toBe(false);
+    expect(performanceFinished({ ...base, elapsedMs: readingTimeMs(text) })).toBe(true);
+  });
+
+  it('出声开着：声音响过就等它安静满确认时长；没响过再宽限一段', () => {
+    const read = readingTimeMs(text);
+    const voiced = { text, voiceEnabled: true, voiceHeard: true };
+    expect(performanceFinished({ ...voiced, elapsedMs: read + 10_000, quietForMs: null })).toBe(false);
+    expect(performanceFinished({ ...voiced, elapsedMs: read + 10_000, quietForMs: PERFORM_QUIET_CONFIRM_MS - 100 })).toBe(false);
+    expect(performanceFinished({ ...voiced, elapsedMs: read + 10_000, quietForMs: PERFORM_QUIET_CONFIRM_MS })).toBe(true);
+    const silent = { text, voiceEnabled: true, voiceHeard: false, quietForMs: null };
+    expect(performanceFinished({ ...silent, elapsedMs: read + PERFORM_VOICE_GRACE_MS - 1 })).toBe(false);
+    expect(performanceFinished({ ...silent, elapsedMs: read + PERFORM_VOICE_GRACE_MS })).toBe(true);
+  });
+
+  it('无论如何不超过上限', () => {
+    expect(performanceFinished({ text, elapsedMs: PERFORM_MAX_MS, voiceEnabled: true, voiceHeard: true, quietForMs: null })).toBe(true);
+  });
+});
+
+describe('对话记录', () => {
+  const entries = [
+    { id: 'a', at: 1_000 },
+    { id: 'b', at: 5_000 },
+    { id: 'c', at: 5_000 },
+    { id: 'd', at: 3_000 },
+    { id: 'e', at: 9_000 },
+  ];
+
+  it('最新的在最上；同一时刻后加进来的算更新', () => {
+    expect(sortRecord(entries).map((entry) => entry.id)).toEqual(['e', 'c', 'b', 'd', 'a']);
+  });
+
+  it('默认只露最近三条，展开后全部；不够三条不折', () => {
+    const sorted = sortRecord(entries);
+    expect(foldRecord(sorted, false)).toEqual({ shown: sorted.slice(0, 3), hidden: 2 });
+    expect(foldRecord(sorted, true)).toEqual({ shown: sorted, hidden: 0 });
+    expect(foldRecord(sorted.slice(0, 2), false)).toEqual({ shown: sorted.slice(0, 2), hidden: 0 });
   });
 });

@@ -36,7 +36,6 @@ export const APPS_COPY = {
       nextTitle: '先做这一件',
       nextSwitch: '换一个',
       pathTitle: '这节课的学习路径',
-      pathHint: '先暴露问题，再记牢，再讲出来，最后带走。顺序只是建议。',
       stepLabels: {
         quiz: '检验',
         flashcards: '记住',
@@ -197,52 +196,42 @@ export const APPS_COPY = {
       evalFailed: '这次没能完成核对，你讲的内容还在，可以再试一次。',
       retryEval: '重新核对',
       textHint: '用嘴讲，同桌听得见；他跟不上时会开口问。',
-      /* ── 2026-09-10 面试间：一个界面——左边你的话往上流，右边是听你讲的三个人；没有看板、没有教室 ── */
-      /** 三位听众的名字与一行人设（名字同时是 prompt 里的称呼，见 teach-back-panel-prompt.ts） */
+      /* ── 2026-09-10 面试间 v3：讲者面对一排评委，不看自己的转写。全屏常驻的字只有三个名字、手卡要点、已讲时长、「讲完了」；
+         其余都藏进 title / 一次性 toast。没有眉题、没有状态词、没有人设常驻、没有说明句。 ── */
+      /** 三位评委的名字与一行人设（名字同时是 prompt 里的称呼，见 teach-back-panel-prompt.ts）；人设只在 hover / 长按肖像时出现 */
       judges: {
         direct: { name: '直言', persona: '一针见血，直接指出问题' },
         guide: { name: '引导', persona: '循循善诱，帮你往前推一步' },
         probe: { name: '追问', persona: '抓细节，要例子、要定义' },
       },
-      /** 两栏的眉题（小字大写等宽风格的那一行） */
-      yourWords: '你的话',
-      listenersTitle: '听你讲的人',
-      /** 开场：左边是要讲的几点 */
-      openingPointsTitle: '这节课，把这几点讲出来',
-      /** 底部状态行：一句状态词 */
-      statusCalibrating: '听一下周围',
-      statusListening: '在听你讲',
-      statusPausing: '停了一下',
-      statusThinking: '有人想问',
-      statusSpeaking: (name: string): string => `${name}在说`,
-      statusFinished: '讲完了',
-      elapsed: (clock: string): string => `已讲 ${clock}`,
-      /** 听众此刻的状态词——全部来自真实事件 */
-      listenerListening: '在听',
-      listenerThinking: '想问',
-      listenerSpeaking: '在说',
-      listenerNoted: (count: number): string => `记了 ${count} 笔`,
-      listenerClosing: '说几句',
-      /** 两个文字开关：「实时反馈 开 / 关」「出声 开 / 关」（偏好记 meetmind:teach-back:live-feedback / :voice） */
-      liveFeedbackLabel: '实时反馈',
-      voiceLabel: '出声',
-      toggleOn: '开',
-      toggleOff: '关',
-      liveFeedbackOffHint: '他们只听、只记，讲完了再说。',
-      /** 反馈流空着时的一句 */
-      feedbackEmptyLive: '你停下来，才有人开口。',
-      feedbackEmptyHeld: '讲完了，他们记下的话会在这里长出来。',
-      feedbackInterrupted: '（被你打断）',
+      /** 实时反馈关着时肖像角标的 title */
+      notedCount: (count: number): string => `记了 ${count} 笔`,
+      /** 讲台栏：麦克风点 / 时长 的 title */
+      micOnTitle: '麦克风常开',
+      elapsedTitle: '已讲',
+      /** 讲台栏三个图标开关的 title（选中态实心，字只在这里）；偏好记 meetmind:teach-back:live-feedback / :voice */
+      liveFeedbackOnTitle: '实时反馈 · 开',
+      liveFeedbackOffTitle: '实时反馈 · 关（他们只听、只记，讲完了再说）',
+      voiceOnTitle: '出声 · 开',
+      voiceOffTitle: '出声 · 关',
+      transcriptOnTitle: '转写 · 开（讲台上方一行，给需要确认识别的人）',
+      transcriptOffTitle: '转写 · 关',
+      /** 手卡 */
+      cueHint: '讲过了就点一下翻过去',
+      cueFlippedHint: '讲过了 · 再点翻回来',
+      /** 对话记录 */
+      recordExpand: (count: number): string => `更早的 ${count} 条`,
+      recordCollapse: '收起',
       jumpToTranscript: '回到这段原话',
-      backToCurrent: '回到当前',
+      /** 复盘里可展开的整场文字 */
+      fullTranscript: '整场转写',
       micDenied: '没拿到麦克风权限。在浏览器地址栏允许后再开麦，或者先打字讲。',
       micLost: '麦克风断开了，点一下重新开麦',
       micBusy: '正在录课，先停下录音再开讲。',
       asrDown: '实时转写连不上，先打字讲吧。',
       reconnectMic: '重新开麦',
       typeFallbackPlaceholder: '也可以打字讲，回车算一段',
-      /** 复盘：三位听众各说各的——直言说没讲清的、引导说最稳的 + 下一步、追问说没讲到的 */
-      reviewTitle: '复盘',
+      /** 复盘：三位评委各说各的（渲染进评委脚下）——直言说没讲清的、引导说最稳的 + 下一步、追问说没讲到的 */
       reviewUnclearLead: (count: number): string => `这${['一', '两', '三', '四', '五', '六', '七', '八', '九'][count - 1] ?? count}处没讲清、或讲错了：`,
       reviewUnclearNone: '没抓到讲错的地方。',
       reviewSteady: (point: string): string => `讲得最稳的是「${point}」。`,
