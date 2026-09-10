@@ -259,7 +259,7 @@ export function PodcastWindow({ result, transcript, taskState, onRegenerate }: P
   const hasAudio = Boolean(payload.audioUrl);
 
   return (
-    <section ref={rootRef} className="relative mx-auto flex max-w-2xl flex-col gap-6" data-testid="podcast-window">
+    <section ref={rootRef} className="relative mx-auto flex max-w-2xl flex-col gap-6 px-4 py-3 sm:px-0 sm:py-0" data-testid="podcast-window">
       {hasAudio ? (
         <PodcastPlayerBar ref={audioRef} src={payload.audioUrl as string} title={result?.render?.title || undefined} />
       ) : (

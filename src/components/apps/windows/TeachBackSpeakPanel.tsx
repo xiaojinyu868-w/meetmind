@@ -125,12 +125,11 @@ export function TeachBackSpeakPanel({
             onStateChange={setMicState}
           />
           {/* 麦克风状态一行：录音中 rec 点 + 已说时长，转文字时一条呼吸细线 */}
-          <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-ink-muted" aria-live="polite">
+          <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[11.5px] text-ink-muted" aria-live="polite">
             {micState === 'recording' ? <span className="rec-dot" aria-hidden /> : null}
             {micState === 'transcribing' ? <span className="thinking-strip h-1 w-10 rounded-full" aria-hidden /> : null}
             <span className={`truncate ${micState === 'recording' ? 'font-mono tabular-nums text-ink' : ''}`}>{micLine}</span>
           </span>
-          <div className="flex-1" />
           <button
             type="button"
             onClick={onBack}
@@ -143,7 +142,7 @@ export function TeachBackSpeakPanel({
             onClick={onSubmitSegment}
             disabled={!canSubmit}
             title={!canSubmit ? copy.submitDisabledHint : undefined}
-            className="mm-press mm-focus min-h-[40px] rounded-full border border-pine/40 px-4 text-[12.5px] font-medium text-pine hover:bg-pine-mist disabled:cursor-not-allowed disabled:opacity-40"
+            className="mm-press mm-focus min-h-[40px] shrink-0 whitespace-nowrap rounded-full border border-pine/40 px-4 text-[12.5px] font-medium text-pine hover:bg-pine-mist disabled:cursor-not-allowed disabled:opacity-40"
           >
             {copy.submitSegment}
           </button>
@@ -152,7 +151,7 @@ export function TeachBackSpeakPanel({
             onClick={onFinish}
             disabled={finishDisabled}
             title={finishDisabled ? copy.finishDisabledHint : undefined}
-            className="mm-press mm-focus min-h-[40px] rounded-full bg-pine px-5 text-[13px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+            className="mm-press mm-focus min-h-[40px] shrink-0 whitespace-nowrap rounded-full bg-pine px-5 text-[13px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             {copy.finishText}
           </button>
