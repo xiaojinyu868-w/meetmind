@@ -7,6 +7,8 @@ import { toast } from 'sonner';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import { APPS_COPY } from '@/lib/ui/copy-apps';
 import { AppWindowPlaceholder } from './AppWindowPlaceholder';
+import { InfographicPoster } from './InfographicPoster';
+import { LayoutPreview, PreparingState, WordToggle } from './InfographicPanels';
 import {
   type DraftPayload,
   type ImageConfigResponse,
@@ -21,48 +23,6 @@ import {
   resolveInfographicGenerationBase,
   resolveStylePresetKey,
 } from './infographic-window-data';
-
-function PreparingState() {
-  // 等待态与讲给同桌听的核对等待同一语言：一条呼吸的细线 + 一句话，不放图标盒子
-  return (
-    <section
-      className="flex h-full items-center justify-center bg-canvas px-6"
-      data-testid="infographic-window"
-    >
-      <div className="flex max-w-sm flex-col items-center gap-4 text-center">
-        <span className="thinking-strip h-1 w-40 rounded-full" />
-        <div>
-          <p className="text-[14px] font-medium text-ink">{APPS_COPY.infographic.preparing}</p>
-          <p className="mt-1 text-[12px] leading-6 text-ink-muted">{APPS_COPY.infographic.preparingHint}</p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/** 两个词 + 下划线的切换（与导图顶栏、速查表工具条同一控件语言） */
-function WordToggle<T extends string>({ value, options, onChange }: { value: T; options: Array<{ value: T; label: string }>; onChange: (next: T) => void }) {
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-      {options.map((option) => {
-        const active = option.value === value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-            aria-pressed={active}
-            className={`text-[13px] underline-offset-[5px] transition ${
-              active ? 'font-medium text-ink underline decoration-ink' : 'text-ink-muted hover:text-ink'
-            }`}
-          >
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 export function InfographicWindow({
   sessionId,
@@ -102,6 +62,7 @@ export function InfographicWindow({
   const [generating, setGenerating] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const [previewMode, setPreviewMode] = useState<'fit' | 'full'>('fit');
+  const [zoomPercent, setZoomPercent] = useState(100);
 
   useEffect(() => {
     let cancelled = false;
@@ -300,7 +261,7 @@ export function InfographicWindow({
   }, [onGenerateDraft, requestImage, result]);
 
   if ((taskState?.status === 'running' && !result) || generating || checking) {
-    return <PreparingState />;
+    return <PreparingState orientation={orientation} />;
   }
 
   if (imageUrl && !customizeMode) {
@@ -323,26 +284,26 @@ export function InfographicWindow({
                 { value: 'full', label: APPS_COPY.infographic.full },
               ]}
             />
+            <span className="hidden font-mono tabular-nums text-ink-muted sm:inline">{zoomPercent}%</span>
             <span className="h-3 w-px self-center bg-divider" aria-hidden />
-            <button type="button" onClick={downloadImage} className="text-ink-muted transition hover:text-ink">
+            <button type="button" onClick={downloadImage} className="mm-focus rounded text-ink-muted transition hover:text-ink">
               {APPS_COPY.infographic.save}
             </button>
-            <button type="button" onClick={() => setCustomizeMode(true)} className="text-ink-muted transition hover:text-ink">
+            <button type="button" onClick={() => setCustomizeMode(true)} className="mm-focus rounded text-ink-muted transition hover:text-ink">
               {APPS_COPY.infographic.adjust}
             </button>
           </div>
         </header>
 
-        <div className={`min-h-0 flex-1 ${previewMode === 'fit' ? 'overflow-hidden' : 'overflow-auto'}`}>
-          <div className="flex min-h-full items-center justify-center py-4">
-            <img
-              src={imageUrl}
-              alt={previewDraft.title || APPS_COPY.infographic.appName}
-              className={previewMode === 'fit'
-                ? 'h-auto max-h-full w-auto max-w-full rounded-[10px] object-contain shadow-card'
-                : 'h-auto max-w-none rounded-[10px] object-contain shadow-card'}
-            />
-          </div>
+        {/* 海报查看器：滚轮 / 双指缩放、放大后可拖、双击切全图 / 原始、+ − 0 */}
+        <div className="min-h-0 flex-1 py-3">
+          <InfographicPoster
+            src={imageUrl}
+            alt={previewDraft.title || APPS_COPY.infographic.appName}
+            mode={previewMode}
+            onModeChange={setPreviewMode}
+            onScaleChange={setZoomPercent}
+          />
         </div>
       </section>
     );
@@ -451,7 +412,8 @@ export function InfographicWindow({
           </div>
         ) : null}
 
-        <dl className="mt-7 divide-y divide-divider">
+        <div className="mt-7 flex flex-col gap-6 md:flex-row md:items-start">
+        <dl className="min-w-0 flex-1 divide-y divide-divider">
           <div className="grid grid-cols-[64px_1fr] items-baseline gap-4 py-3.5">
             <dt className="text-[12px] text-ink-muted">{APPS_COPY.infographic.orientation}</dt>
             <dd>
@@ -485,6 +447,15 @@ export function InfographicWindow({
             </dd>
           </div>
         </dl>
+        <div className="shrink-0 md:w-[220px]">
+          <LayoutPreview
+            orientation={orientation}
+            styleClassName={currentStyle.previewClassName}
+            title={previewDraft.title || APPS_COPY.infographic.appName}
+            points={previewDraft.keyPoints || []}
+          />
+        </div>
+        </div>
 
         <div className="mt-6 flex justify-end">
           <button
@@ -494,7 +465,8 @@ export function InfographicWindow({
               void generateFromCurrentContext();
             }}
             disabled={!imageEnabled || generating}
-            className="inline-flex items-center gap-2 rounded-full bg-pine px-5 py-2.5 text-[13px] font-semibold text-white transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+            title={!imageEnabled ? APPS_COPY.infographic.serviceUnavailable : undefined}
+            className="mm-press mm-focus inline-flex items-center gap-2 rounded-full bg-pine px-5 py-2.5 text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             <ImageIcon size={ICON_SM} strokeWidth={ICON_STROKE} />
             {result ? APPS_COPY.infographic.regenerate : APPS_COPY.infographic.generate}

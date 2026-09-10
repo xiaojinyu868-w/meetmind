@@ -118,6 +118,10 @@ export const APPS_COPY = {
       finished: '做好了',
       fit: '看全图',
       full: '看细节',
+      zoomIn: '放大',
+      zoomOut: '缩小',
+      /** 定制态右侧的版面示意 */
+      layoutPreview: '版面示意 · 以成品为准',
       save: '保存图片',
       adjust: '调整',
       createTitle: '把这节课变成一张图',
