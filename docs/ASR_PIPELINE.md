@@ -22,6 +22,12 @@
        ├→ 去重 (shouldDedupSegment, LCS 相似度 + 时间 gap)
        └→ interim/stable/final 三段式课中渲染
 
+录课中的持久化（2026-09-10 录课不丢）
+  ├→ MediaRecorder 每 1s 一片 → useRecordingCheckpoint 每 5s 批量追加 IndexedDB.recordingChunks（正常结束后由最终 blob 取代并删除）
+  ├→ 已定稿实时字幕每 5s 整段快照覆盖 IndexedDB.transcripts（不改 transcriptionStatus）+ audioSessions.checkpointAt
+  ├→ 登录用户：开始即打、开头 15s 一次、之后 60s 一次 POST /api/workspace/recording-checkpoint（recordingState=recording，另一设备列表显示「录制中」）
+  └→ 关页 / 崩溃 / 被系统回收 → 下次打开首页「有一节课没结束」：继续录 / 就到这里（分片拼回原声 + 字幕 + 服务端 + 课后理解）；>6h 自动收尾
+
 结束这节课
   ├→ 新协议发送 finish-task / 旧协议 server_vad 会话发送 session.finish（不是 manual-only commit）
   ├→ 收到 task-finished / session.finished 后交付完整 realtime 尾句 + 原声
@@ -29,7 +35,8 @@
        ├→ 不再自动跑 qwen-audio-3.0-asr-flash / filetrans 课后定稿；/api/transcribe* 保留供手动「重新精转」
        ├→ 例外：realtime 一句没接住且原声有效 → 兜底批量转写（唯一转录来源，保留）
        ├→ 「重录」同走此保底：旧录音先按停录契约落库/兜底，再开始新录音，不再静默丢弃（2026-09）
-       └→ 兜底结果按 recordingId + sessionId 回填，不得覆盖下一节课 UI
+       ├→ 兜底结果按 recordingId + sessionId 回填，不得覆盖下一节课 UI
+       └→ 结束时转录用整段覆盖写 IndexedDB（录课中检查点已写过快照）；服务端 capture 同一把 sourceKey live:{uid}:{sid}，写失败标 syncState=failed 由 syncPendingRecordings 补传
 
 课中可观测
   ├→ 连续 15s 绝对零音量（PCM 链路静默）→ 当场提醒一次「一直收不到声音」（realtime 必空的唯一常见根因）

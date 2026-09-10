@@ -5,6 +5,19 @@
 
 ---
 
+## 2026-09-10 — 录课不丢、结束即可见：一节课从开始录到出现在任何设备上
+
+用户原话：「录一节课，录到一半，如果忘记保存、忘记结束，这节课就直接没了。我经常录了一节课，去其他设备看，并没有这节课的记录。」沿源码追完整个生命周期 + 生产库只读查询 + Playwright 在生产 3002 上用合成账户实测（FINDINGS 与前后截图在 `/tmp/mm-sync/`）。真相：录课期间音频分片与实时字幕**只在内存**，「结束这节课」是唯一的持久化时刻；服务端写入一次性 fire-and-forget、失败只 console.error；另一设备只在页面加载那一刻拉一次列表，课堂 tab 点开跨设备的课**没有任何反应**。生产库 90 天 79 节课：只有 40 节在结束那一刻到了服务端，39 节靠下次页面加载的登录迁移才上去（中位 8.9 小时、p90 54 天），57 节在服务端是两行。七个原子提交：
+
+- **IndexedDB v10 + 现场录音 payload 单一真相**：新表 `recordingChunks`（录课中音频分片），`audioSessions` 新增 `checkpointAt / syncState / remoteRecordingState` 等非索引字段；`lib/capture/live-recording-capture.ts` 把检查点 / 结束 / 原声回写 / 恢复收尾 / 补传五处写服务端 capture 的形状收成一处，sourceKey 从结束时随机的 `live:audio-xxx` 改成录课一开始就能算出的 `live:{userId}:{sessionId}`。
+- **服务端护栏**（`workspace-context-service` + `workspace-capture-guards`）：同一节课按 `metadata.sessionId` 复用已有行（三把钥匙不再各占一行）；upsert 撞唯一键（结束时全量转录写入与原声回写并发，dev 实测撞掉的正是带转录那次、服务端只剩 0 段的壳）改为重试更新；部分更新与已有 metadata 合并（原声回写不再冲掉 evidenceAvailable）；零信息标题不盖具体标题；读列表时历史双行折叠成一行。
+- **录课中检查点**：`POST /api/workspace/recording-checkpoint`（`recordingState=recording`，不带正文不触发理解）+ 客户端 `useRecordingCheckpoint`（每 5s 分片 / 字幕快照落 IndexedDB；登录用户开始即打、15s→60s 一次服务端检查点；页面隐藏 keepalive 心跳）+ Recorder `onAudioChunk`。另一台设备录课期间就看到「录制中 · 已 N 分钟」。
+- **忘记结束不丢课**：`useUnfinishedRecordings` + `UnfinishedLessonBar`（首页顶部一行：有一节课没结束 · 继续录 / 就到这里）+ `recording-recovery-service`（分片拼回原声 + 字幕 + 服务端 + 课后理解；有原声没字幕先兜底批量转写再写服务端）；`useClassroomLessons` 不再在挂载时把 recording 态一刀改成 completed；>6h 没回来的本机自动收尾、服务端读列表时把 6h 无检查点的「录制中」翻成 completed 并出一次理解；`lessonAdapter` 只把当前 Recorder 在录的那节渲染成活动条。桌面课堂 tab 与手机首页都挂。
+- **结束即可见**：`useWorkspaceContextLoader` 首次加载后回前台 / 聚焦 / 联网（≥20s）与每 60s 定时刷新；`backfill` 写 / 翻远端录制态与服务端标题；课堂 tab `onOpenLesson` 本地没转录时走收集列表同一条懒拉 evidence 路径（2026-07-16 列表轻量化后一直缺这一步）；结束时 POST 失败本地标 `syncState=failed` + 一句 toast，`syncPendingRecordings` 在进课堂 / 联网 / 回前台补传。
+- 附带修：录课开始写的占位行 `userId` 恒为 'anonymous'（classroom-data-service）。
+- 验证：`make check`、改过文件 eslint 零新增、`make test` 1668 例全绿（新增 live-recording-capture / workspace-capture-guards / recording-checkpoint-service 单测）；Playwright 四场景（录课中另一设备可见 / 关页后恢复条 → 就到这里 / 正常结束另一设备不刷新 16–33s 看到并能点开复习 / 关页后继续录）截图 `/tmp/mm-sync/after/`。
+- 没做的：多设备同时录同一节课的合并；「继续录」不接续原声容器（两段各自成课）；历史双行的物理清理（读时折叠，删数据是独立决定）；登录迁移仍每次页面加载全量重推（现在会命中同一行、不再制造双行，频率是下一步）。
+
 ## 2026-09-10 — 应用进入态一套版式 · 闪卡去深色房间 · 产品内去衬线斜体 · 少文字
 
 用户原话：「闪卡的进入页面完全是黑色的，太难看了。每一个应用的进入页面都挺难看。产品里很多「同学」用的衬线斜体，跟其他地方完全不一致，非常别扭。整个产品的表单感、demo 感太重。好的产品应该尽可能少用文字，让用户不看文字就能知道这里是什么意思。」审计（生产 3002 访客试听 → 复习页，八应用 × 复习页中栏 / 舞台 / 浮窗 / 手机；Playwright 拦住 `/api/apps/execute` 让进入页停住）与前后截图在 `/tmp/mm-ui/`（AUDIT.md / before / after）。三个原子提交：

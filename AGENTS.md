@@ -99,7 +99,7 @@ make smoke-context-live # 真 Hindsight + Tutor + 浏览器全链路验收（SMO
 3. **Tutor 六模式单一入口**：`POST /api/tutor/agent`（in-class / review / shared / goal / word / global），纯对话无 native tools → `src/app/api/tutor/DOMAIN.md` + `docs/TUTOR_AGENT.md`
 4. **应用矩阵 M14.6**：结构化产物不走 LLM marker，前端 SkillChip 直调 `/api/apps/execute` → `src/lib/ai-native/DOMAIN.md` + `docs/APPLICATION_MATRIX_PRD.md`
 5. **ASR 单遍化（2026-08）**：课中 realtime 即定稿，课后不再自动跑 batch 定稿与说话人分离（/api/transcribe*、/api/asr/diarize 保留供手动精转）；realtime 零产出时兜底批量转写仍保留；文本纠错由 post-edit（DeepSeek V4 Flash，默认开）接管 → `docs/ASR_PIPELINE.md` + `src/lib/services/asr/DOMAIN.md`
-6. **跨设备证据**：服务端正规化（TranscriptSegment + CaptureArtifact），按课堂懒拉回填 IndexedDB，不覆盖本机编辑 → `roadmap/v2.1-cross-browser-sync-gap.md`
+6. **跨设备证据**：服务端正规化（TranscriptSegment + CaptureArtifact），按课堂懒拉回填 IndexedDB，不覆盖本机编辑；**录课不丢（2026-09-10）**：录课中每 5s 分片 / 字幕落 IndexedDB + 登录用户每分钟服务端检查点（`/api/workspace/recording-checkpoint`，另一设备看到「录制中」），忘记结束下次打开首页恢复条「继续录 / 就到这里」，>6h 自动收尾；列表 60s / 回前台刷新；一节课服务端只一行（sourceKey `live:{uid}:{sid}` + 按 sessionId 去重） → `roadmap/v2.1-cross-browser-sync-gap.md`
 7. **v4.0 全端采集层**：桌面壳（Electron：参数化桌宠 Octo Buddy + 内嵌网页 + loopback 系统音频 + 双击旁听 + **口袋**：`⌘⇧M` 收下任何应用里的选中文字（HTML→Markdown 含 TeX、来源三元组）/ 剪贴板图 / 框选屏，`⌘⇧K` 口袋窗，拖到桌宠也收；服务端 `/api/workspace/clip` + `pocket-clip-service`，北极星 `docs/plans/2026-09-09-pocket-capture.md`）+ 课中主动截图关键帧 + 移动端 Capacitor（方向已定未动工）→ `roadmap/v4.0-everywhere-capture.md` + `desktop/DOMAIN.md`
 8. **标题与课后理解**：`主题 · 课程 · M-D` 契约 + 用户改名双锁；定稿后一次 LLM 调用出标题/摘要/精选 → `src/lib/services/lesson-understanding-service.ts` + `src/app/api/DOMAIN.md`
 9. **分享裂变 v3.0**：场景上下文可分享、个人上下文默认私有、Agent 是分享单元 → `roadmap/v3.0-virality-agent.md` + `src/app/share/DOMAIN.md`
