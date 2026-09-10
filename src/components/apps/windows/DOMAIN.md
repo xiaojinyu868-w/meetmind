@@ -210,7 +210,7 @@ quiz-observation.ts 为提交动作附加完整 practice.attempt 观察：保留
 - **评委席 = 人设 + 上下文 + 判断权**（`src/lib/prompts/teach-back-panel-prompt.ts`，`/api/apps/teach-back/turn`）：三位——直言（一针见血）/ 引导（循循善诱）/ 追问（抓具体）。模型拿到课堂原文（≤9k 字）、目标点、本场至今记录（≤5k 字）、刚讲完的这段、最近谁开口过，自己决定谁说、说什么、还是 `none` 让他继续。没有模板反馈、没有兜底：模型沉默 / 请求失败 = 评委不开口。检查点：讲过一段后 40s 没人说话 → `check-in` 回合，评委问一句要不要先到这。
 - **声音**：三位评委三种 qwen3-tts 音色（Ethan / Serena / Chelsie，`teach-back-panel.ts` 名册）经 `/api/teach/tts` 的 `voice` / `instruct` 参数；文字先到、声音后到（TTS 单句 1.3~1.9s）；TTS 失败只静默回退到文字。「出声 / 只看文字」两个词 + 下划线，偏好记 `meetmind:teach-back:voice`。只看文字时评委说完立刻回到听讲；出声时等声音说完（`judge-speaking` 期间 ASR 文本不进回合缓冲——那多半是回声）。
 - **边界**：与正在录课的 Recorder 互斥（`isRecording` 为真不上台，上台后录课开始自动下台）；手机切后台 `AudioContext` 被挂起回前台 resume，轨道被系统收走 → 「麦克风断开了，点一下重新上台」；麦克风拿不到 / 实时转写连不上 → 打字兜底（回车算一段，同一条提交路径 `typed` 事件）。`evaluate` 契约与象限语义不变（评委发言以 `role: 'assistant'` 进 `teachingTurns`，`judgeId` 不传）。
-- **实测（Playwright Chromium 假麦克风灌 TTS 合成的学生讲述，`/tmp/mm-teachback/`）**：开口 → 画面切到「你在讲」≈0.6s；停下 → 回合提交 1.3~1.7s（含 settle）；提交 → 评委首字 1.0~2.3s（qwen3.7-plus，thinking 关，~5k prompt tokens；dev 服务器有编译抖动，以生产为准）；插话 → 气泡收起 <0.5s（含 400ms 打断 attack）。dev 模式下 Next HMR 的 WS 握手会挂住并按 RFC 6455 串行阻塞同 host 的后续 WS 握手（ASR 连不上）——测试脚本用 initScript 不建 HMR WS，生产无此问题。
+- **实测（2026-09-10 生产 3002，Playwright Chromium 假麦克风灌 TTS 合成的学生讲述，脚本与截图在 `/tmp/mm-teachback/`）**：点「走上讲台」→ 麦克风与 ASR 就绪 0.7s，校准完 1.3s；开口 → 画面切到「你在讲」≈0.5s；停下 → 回合提交 1.4~1.7s（1.2s 静音 + settle 等定稿 0.3~0.5s）；提交 → 评委首字 0.95~1.6s（qwen3.7-plus，thinking 关，~5k prompt tokens）；全文出完再 ~1.5s；插话 → 请求中止、气泡收起 ≈0.75s（含 400ms 打断 attack）；评委一段 45~70 字的话 TTS 读完约 10~13s（随时可插话）。dev 模式下 Next HMR 的 WS 握手会挂住并按 RFC 6455 串行阻塞同 host 的后续 WS 握手（ASR 连不上）——测试脚本用 initScript 不建 HMR WS，生产无此问题；dev 还会因按需编译让首个回合慢 3~8s，延迟数字只看生产。
 
 ## AppRenderSurface
 
