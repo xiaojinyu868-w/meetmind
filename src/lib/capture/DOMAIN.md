@@ -10,5 +10,6 @@
 | `collection-context.ts` | 139 | 收集上下文项类型 + 用户面显示逻辑（音频显示为“录音”） | `CollectionContextItem`, `getCollectionContextDisplayTitle`, `buildSelectedCollectionContextText` |
 | `collection-context.test.ts` | — | 收集上下文用户面文案护栏 | `getCollectionContextTypeLabel` |
 | `live-recording.ts` | 64 | 实时录音追加（时间偏移 + 段落规范化） | `resolveLiveRecordingAppendOffset`, `appendLiveRecordingSegments` |
+| `live-recording-capture.ts` | ~150 | 现场录音 → Workspace capture 的唯一 payload 真相（2026-09-10）：sourceKey `live:{userId}:{sessionId}`（录课一开始就能算出）、`recordingState` / `checkpointAt` metadata、检查点不带正文、空分段不放 transcriptSegments 键；检查点 / 结束 / 原声回写 / 恢复收尾 / 补传五处共用 | `buildLiveCaptureSourceKey`, `buildLiveRecordingCaptureInput`, `readRecordingState`, `isRecordingCheckpointStale`, `UNFINISHED_RECORDING_AUTO_FINALIZE_MS` |
 | `video-session.ts` | 76 | 视频会话判断 + 元数据构建 | `isStoredVideoFileSession`, `isStoredVideoSession`, `buildStoredVideoSource` |
 | `source-provenance.ts` | ~130 | 统一来源契约：canonical URL、进入方式、原始平台/作者、提取方式与正文完整度；写入 `WorkspaceCapture.metadata.provenance` 跨设备恢复 | `canonicalizeSourceUrl`, `buildSourceProvenance`, `readSourceProvenance`, `getProvenanceSourceLabel` |

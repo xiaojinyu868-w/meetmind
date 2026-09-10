@@ -62,6 +62,46 @@ export async function addTranscripts(
   return added;
 }
 
+/**
+ * 录课检查点：用当前实时字幕快照整体替换这节课已落盘的转录段。
+ *
+ * 与 addTranscripts 的区别：实时字幕会被合并 / 替换（mergeRealtimeTranscriptSegment 的 replaceIds、
+ * 静默纠错改写前句），只能"整段快照覆盖"而不能追加；而且录课中不能把 audioSession 标成
+ * transcriptionStatus=completed（那是结束时的语义）。删除 + 批量写在同一个事务里，
+ * 页面在中途被杀也不会留下半份。
+ */
+export async function replaceSessionTranscripts(
+  sessionId: string,
+  userId: string,
+  segments: Array<{
+    text: string;
+    startMs: number;
+    endMs: number;
+    speakerId?: string;
+    confidence?: number;
+    isFinal?: boolean;
+  }>
+): Promise<number> {
+  if (typeof sessionId !== 'string' || !sessionId.trim()) return 0;
+  const records = segments
+    .filter((seg) => typeof seg.text === 'string' && seg.text.trim())
+    .map(seg => ({
+      sessionId,
+      userId: userId || ANONYMOUS_USER_ID,
+      text: seg.text,
+      startMs: seg.startMs,
+      endMs: seg.endMs,
+      speakerId: seg.speakerId,
+      confidence: seg.confidence ?? 1.0,
+      isFinal: seg.isFinal ?? true,
+    }));
+  await db.transaction('rw', db.transcripts, async () => {
+    await db.transcripts.where('sessionId').equals(sessionId).delete();
+    if (records.length > 0) await db.transcripts.bulkAdd(records);
+  });
+  return records.length;
+}
+
 /** 获取会话的所有转录 */
 export async function getSessionTranscripts(sessionId: string): Promise<TranscriptSegment[]> {
   return db.transcripts

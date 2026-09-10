@@ -16,11 +16,15 @@ export {
   type ConversationHistoryRecord,
   type ConversationMessageRecord,
   type LessonDigestRecord,
+  type RecordingChunk,
 } from './schema';
 export {
   ANONYMOUS_USER_ID,
   saveAudioSession,
   updateSessionStatus,
+  markSessionCheckpoint,
+  listUnfinishedRecordings,
+  setSessionSyncState,
   updateSessionTopic,
   getTodaySessions,
   cleanOldData,
@@ -47,8 +51,15 @@ export {
 export {
   addTranscript,
   addTranscripts,
+  replaceSessionTranscripts,
   getSessionTranscripts,
 } from './transcripts';
+export {
+  appendRecordingChunks,
+  assembleRecordingBlob,
+  countRecordingChunks,
+  deleteRecordingChunks,
+} from './recording-chunks';
 export {
   getTranscriptLexicon,
   upsertTranscriptLexiconEntry,

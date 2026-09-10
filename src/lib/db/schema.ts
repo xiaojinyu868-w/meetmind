@@ -33,6 +33,40 @@ export interface AudioSession {
   status: 'recording' | 'completed' | 'archived';
   createdAt: Date;
   updatedAt: Date;
+  /**
+   * 录课检查点（2026-09-10 起）：录音期间每隔几秒把已定稿字幕 / 音频分片落盘时顺手写这两个字段，
+   * 忘记结束再回来时靠它们判断「已录 N 分钟」与是否超过自动收尾时限（>6h）。
+   */
+  checkpointAt?: Date;
+  lastCheckpointDurationMs?: number;
+  /**
+   * 这节课的服务端 capture 同步状态（仅登录用户；访客与旧数据为 undefined）。
+   * pending = 结束后还没成功写到服务端；failed = 上次尝试失败（syncError 记原因）；synced = 已到服务端。
+   * pending / failed 会被 sync-pending-recordings 在进课堂 / 恢复联网 / 页面回前台时补传，绝不静默丢。
+   */
+  syncState?: 'pending' | 'synced' | 'failed';
+  syncError?: string;
+  syncedAt?: Date;
+  /**
+   * 另一台设备正在录这节课（服务端 capture metadata.recordingState 回填）：
+   * 列表显示「录制中 · 已 N 分钟」而不是「正在整理」；服务端翻成 completed 后清掉。
+   */
+  remoteRecordingState?: 'recording' | 'completed';
+  remoteCheckpointAt?: Date;
+}
+
+/**
+ * 录课期间的音频分片（MediaRecorder timeslice 产物，按 seq 递增）。
+ * 正常结束后由最终完整 blob 取代并删除；页面被关掉 / 崩溃时靠它把已录部分拼回一整段原声。
+ * 同一 MediaRecorder 的分片按顺序 new Blob([...]) 即是合法 webm，首片带容器头。
+ */
+export interface RecordingChunk {
+  id?: number;
+  sessionId: string;
+  seq: number;
+  blob: Blob;
+  mimeType: string;
+  createdAt: Date;
 }
 
 export interface Anchor {
@@ -237,6 +271,7 @@ export class MeetMindDB extends Dexie {
   audioSessions!: Table<AudioSession>;
   anchors!: Table<Anchor>;
   keyframes!: Table<KeyframeRecord>;
+  recordingChunks!: Table<RecordingChunk>;
   transcripts!: Table<TranscriptSegment>;
   transcriptLexicon!: Table<TranscriptLexiconEntry>;
   transcriptEditDiffs!: Table<TranscriptEditDiff>;
@@ -367,6 +402,27 @@ export class MeetMindDB extends Dexie {
       audioSessions: '++id, sessionId, userId, status, createdAt, [userId+createdAt]',
       anchors: '++id, sessionId, timestamp, status, type',
       keyframes: '++id, sessionId, timestampMs',
+      transcripts: '++id, sessionId, userId, startMs, isFinal',
+      transcriptLexicon: '++id, term, canonical, scope, status, hitCount, updatedAt, [scope+status], [scope+term]',
+      transcriptEditDiffs: '++id, originalText, correctedText, scope, hitCount, promoted, updatedAt, [scope+promoted], [scope+originalText+correctedText]',
+      preferences: 'key',
+      highlightTopics: '++id, topicId, sessionId, importance, createdAt',
+      classSummaries: '++id, summaryId, sessionId, createdAt',
+      notes: '++id, noteId, sessionId, studentId, source, createdAt',
+      tutorResponseCache: '++id, anchorId, sessionId, timestamp, createdAt',
+      lessonDigests: '++id, sessionId, updatedAt',
+      conversationHistory: '++id, conversationId, userId, type, sessionId, anchorId, [userId+type], updatedAt',
+      conversationMessages: '++id, messageId, conversationId, createdAt',
+    });
+
+    // v10（2026-09-10 录课不丢）：新增 recordingChunks（录课中音频分片，按 sessionId+seq 取回拼原声）。
+    // audioSessions 新增的 checkpointAt / syncState / remoteRecordingState 等是非索引字段，不需要迁移；
+    // 旧行缺这些字段 = 「没有检查点 / 未知同步态」，消费方按 undefined 处理。
+    this.version(10).stores({
+      audioSessions: '++id, sessionId, userId, status, createdAt, [userId+createdAt]',
+      anchors: '++id, sessionId, timestamp, status, type',
+      keyframes: '++id, sessionId, timestampMs',
+      recordingChunks: '++id, sessionId, [sessionId+seq]',
       transcripts: '++id, sessionId, userId, startMs, isFinal',
       transcriptLexicon: '++id, term, canonical, scope, status, hitCount, updatedAt, [scope+status], [scope+term]',
       transcriptEditDiffs: '++id, originalText, correctedText, scope, hitCount, promoted, updatedAt, [scope+promoted], [scope+originalText+correctedText]',

@@ -194,6 +194,46 @@ export async function updateSessionStatus(
     .modify({ status, updatedAt: new Date() });
 }
 
+/**
+ * 录课检查点心跳：录音期间每次把字幕 / 分片落盘时顺手记下时刻与已录时长。
+ * 只 modify 不 upsert——占位行由 handleRecordingStart 写入；行不存在说明这次调用已经过时。
+ */
+export async function markSessionCheckpoint(
+  sessionId: string,
+  options: { durationMs?: number; mimeType?: string } = {}
+): Promise<void> {
+  if (!isValidSessionIdKey(sessionId)) return;
+  const patch: Partial<AudioSession> = { checkpointAt: new Date(), updatedAt: new Date() };
+  if (typeof options.durationMs === 'number' && options.durationMs > 0) {
+    patch.lastCheckpointDurationMs = Math.round(options.durationMs);
+  }
+  if (options.mimeType) patch.mimeType = options.mimeType;
+  await db.audioSessions.where('sessionId').equals(sessionId).modify(patch);
+}
+
+/**
+ * 没结束的课：status 仍是 'recording' 的会话（页面被关 / 崩溃 / 被系统回收时留下的）。
+ * 调用方自己排除当前 Recorder 正在录的那一节。
+ */
+export async function listUnfinishedRecordings(): Promise<AudioSession[]> {
+  const rows = await db.audioSessions.where('status').equals('recording').toArray();
+  return rows.filter((row) => isValidSessionIdKey(row.sessionId));
+}
+
+/** 这节课的服务端同步状态（登录用户）：pending → synced / failed；失败原因给恢复与重试用 */
+export async function setSessionSyncState(
+  sessionId: string,
+  state: NonNullable<AudioSession['syncState']>,
+  error?: string
+): Promise<void> {
+  if (!isValidSessionIdKey(sessionId)) return;
+  await db.audioSessions.where('sessionId').equals(sessionId).modify({
+    syncState: state,
+    syncError: state === 'failed' ? (error || '同步失败') : undefined,
+    ...(state === 'synced' ? { syncedAt: new Date() } : {}),
+  });
+}
+
 /** 更新会话标题/主题；lock=true 表示用户手动改名（自动标题系统不再覆盖） */
 export async function updateSessionTopic(
   sessionId: string,
@@ -471,6 +511,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
     db.tutorResponseCache.where('sessionId').equals(sessionId).delete(),
     db.lessonDigests.where('sessionId').equals(sessionId).delete(),
     db.conversationHistory.where('sessionId').equals(sessionId).delete(),
+    db.recordingChunks.where('sessionId').equals(sessionId).delete(),
   ]);
   await db.audioSessions.where('sessionId').equals(sessionId).delete();
 }
