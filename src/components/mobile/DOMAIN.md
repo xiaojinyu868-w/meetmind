@@ -32,7 +32,7 @@
 | `MobileFirstLearningScreen.tsx` | 手机端真正零内容用户的首次学习页：一个主心智、一个录课主动作，加上放资料、问 MeetMind 和真实试听；不再堆能力清单与小字说明 |
 | `MobileLearningCommandCenter.tsx` | 移动首页首屏学习控制台：用一个主表面统一录课、资料、拍照、全局“问同学”入口；首屏只保留一个主叙事、一个录课主动作和三个大号入口，不展示上下文计数、说明段落、按钮副标或能力承诺小字；次入口采用图标在上、短标签在下，禁止窄屏文字截断；朱批红只做动作记号 |
 | `MobileAppRunner.tsx` | 移动端应用执行器：封装 useAppExecution + AppRenderSurface，支持七类 catalog 应用；透传真实 `dataSource`，避免官方试听在执行阶段再次被短内容门禁拦截；信息图复用课堂文本作为 contentContext；失败态保留“重试 / 看看其他方式”两条出口；可分享成果在结果上方直接出现“分享”；应用生成结果与闪卡/测验交互通过共用 hook 回写最近学习现场 |
-| `MobileLessonPath.tsx` | 手机端课后学习页（2026-09-08，课后学习页 v2 的手机形态）：此前是 8 个应用平铺 + 一枚「推荐」角标；现在是「这节课（标题 + 时长 / 标记 / 难点）→ 先做这一件（带学生能核对的理由，页面唯一饱和主按钮）→ 学习路径（检验 → 记住 → 讲出来 → 带走，每步写结果 "8 张记住 6" 或 还没开始 / 做好了）→ 还可以这样学（安静列表）→ 走完了（wrap）」。与桌面读同一份判断（`lesson-path-model`）和会话层结果（`review-session-outcomes`）；「已做好」按 `readCachedAppResult` 本机缓存判定；锚点直接读 capture editor store（与 segments 同源，不按 sessionId 过滤——示例课锚点带 DEMO_SESSION_ID 而会话键是 guest-demo）。`AppsScreen` 只管导航与头部 |
+| `MobileLessonPath.tsx` | 手机端课后学习页（2026-09-08，课后学习页 v2 的手机形态）：此前是 8 个应用平铺 + 一枚「推荐」角标；现在是「这节课（标题 + 时长 / 标记 / 难点）→ 先做这一件（带学生能核对的理由，页面唯一饱和主按钮）→ 学习路径（检验 → 记住 → 讲出来 → 带走，每步写结果 "8 张记住 6" 或 还没开始 / 做好了；2026-09-10 删掉标题旁的路径说明句）→ 还可以这样学（安静列表）→ 走完了（wrap）」。与桌面读同一份判断（`lesson-path-model`）和会话层结果（`review-session-outcomes`）；「已做好」按 `readCachedAppResult` 本机缓存判定；锚点直接读 capture editor store（与 segments 同源，不按 sessionId 过滤——示例课锚点带 DEMO_SESSION_ID 而会话键是 guest-demo）。`AppsScreen` 只管导航与头部 |
 | `MobileCollectionCard.tsx` | 移动端精简收集流卡片；速记直接显示正文，并展示微信/公众号/B站等可识别的来源标签 |
 | `mobile-collection-utils.ts` | 移动收集区与课堂时间轴纯展示模型；以不可变方式生成最新优先的资料收件箱，并把实时转录与课中板书按同一课堂时钟排序；照片优先使用文件实际拍摄时刻 |
 

@@ -125,10 +125,7 @@ export function MobileLessonPath({ sessionId, title, segments, anchors, keyDiffi
       {/* 学习路径 */}
       {pathApps.length > 0 ? (
         <section aria-label={copy.pathTitle}>
-          <div className="flex items-baseline justify-between px-1">
-            <h3 className="text-[13px] font-semibold text-ink">{copy.pathTitle}</h3>
-            <p className="text-[11px] text-ink-muted">{copy.pathHint.split('。')[0]}</p>
-          </div>
+          <h3 className="px-1 text-[13px] font-semibold text-ink">{copy.pathTitle}</h3>
           <ol className="mt-2 overflow-hidden rounded-[20px] border border-divider bg-white">
             {pathApps.map((app, index) => {
               const done = generated.has(app.key);

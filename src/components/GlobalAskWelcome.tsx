@@ -146,9 +146,6 @@ export function GlobalAskWelcome({
               );
             })}
           </div>
-          <span className="hidden text-[11px] text-ink-muted sm:inline">
-            {depth === 'quick' ? GLOBAL_ASK_COPY.quickModeBody : GLOBAL_ASK_COPY.deepModeBody}
-          </span>
         </div>
       </div>
 

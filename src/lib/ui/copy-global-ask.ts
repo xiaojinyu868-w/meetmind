@@ -10,8 +10,6 @@ export const GLOBAL_ASK_COPY = {
     quickMode: '直接回答',
     deepMode: '陪我学会',
     modeSelectorLabel: '选择问同学的方式',
-    quickModeBody: '马上回答，自动接上相关内容',
-    deepModeBody: '先理解目标，再陪你走完整过程',
     memoryAction: '我的上下文',
     newConversation: '新对话',
     historyRestored: '已接回上次对话',

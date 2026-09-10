@@ -1117,8 +1117,8 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       {pathApps.length > 0 ? (
         <section className={styles.matrixSection} aria-labelledby="workshop-path-title">
           <div className={styles.sectionHeading}>
+            {/* 只有标题：「先暴露问题，再记牢…顺序只是建议」那句说明删了——四步的动作词本身就是顺序 */}
             <h3 id="workshop-path-title" className={styles.sectionTitle}>{APPS_COPY.path.pathTitle}</h3>
-            <p className={styles.pathHint}>{APPS_COPY.path.pathHint}</p>
           </div>
           <div className={styles.pathGrid}>
             {pathApps.map((app, index) => renderAppCard(app, { variant: 'step', stepIndex: index + 1 }))}

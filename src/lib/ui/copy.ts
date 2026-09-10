@@ -697,11 +697,8 @@ export const COPY = {
   apps: {
     // 只留 matrix：app-catalog 在 /app 首屏用它；其余窗口文案在 copy-apps.ts（体积）
     matrix: {
-      eyebrow: '基于这节课',
       title: '接下来怎么学',
-      subtitle: '先选一个当下最需要的动作。同学会在后台做好，你可以留在这里继续看。',
       recommendedTitle: '现在最适合',
-      recommendedHint: '根据这节课的内容和你留下的标记排序，不替你做决定。',
       allTitle: '其他学习方式',
       availableTitle: '可以这样继续',
       previewTitle: '其他内容可以这样学',
@@ -787,7 +784,6 @@ export const COPY = {
       courseCheatsheetRouteTitle: '考试速查表从多节课开始',
       courseCheatsheetRouteBody: '先选择一门课程和至少两节课堂；MeetMind 会把课堂、课件与考试范围合成一份可编辑、可打印的速查表。',
       mobileTitle: '这节课，接下来怎么学',
-      mobileSubtitle: '选一种学习动作，同学会直接基于这节课开始。',
       backToMatrix: '所有学习方式',
       catalogMeta: {
         cheatsheet: { action: '带进考场', bestFor: '多节课已组成单元，或正在准备允许携带资料的考试', time: '排版约 10–20 分钟' },
