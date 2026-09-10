@@ -1910,3 +1910,6 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 @media (prefers-reduced-motion: reduce) {
   .mm-card-rise { animation-duration: 1ms !important; }
 }
+/* 横向滚动的一行控件（速查表窄屏工具条）：不显示滚动条 */
+.mm-no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.mm-no-scrollbar::-webkit-scrollbar { display: none; }

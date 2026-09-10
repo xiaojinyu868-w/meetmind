@@ -30,6 +30,8 @@ export const CHEATSHEET_PAPER_CSS = `
   width: calc(794px * var(--cs-scale));
   height: calc(var(--cs-page-h, 1123px) * var(--cs-scale));
   flex-shrink: 0;
+  /* 缩放 / 装进一页 / 单页缩短：纸的尺寸 280ms 过渡，不跳 */
+  transition: width 280ms cubic-bezier(0.2, 0.8, 0.2, 1), height 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .cs-page {
   position: absolute;
@@ -51,6 +53,10 @@ export const CHEATSHEET_PAPER_CSS = `
   box-shadow: 0 1px 2px rgba(32, 49, 42, 0.06), 0 12px 36px rgba(32, 49, 42, 0.08);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1), height 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cs-page-frame, .cs-page, .cs-hl { transition: none !important; }
 }
 
 /* 首页标题区 */
@@ -196,6 +202,10 @@ export const CHEATSHEET_PAPER_CSS = `
   color: inherit;
   background-image: linear-gradient(100deg, transparent 0.6%, var(--hl) 2.6%, var(--hl) 96.5%, transparent 98.6%);
   background-repeat: no-repeat;
+  /* 开关时荧光笔像被划上 / 擦掉：background-size 从左往右 240ms（渐变本身不能过渡） */
+  background-size: 100% 100%;
+  background-position: left center;
+  transition: background-size 240ms ease;
   padding: 0.05em 0.26em 0.03em;
   margin: 0 -0.2em;
   border-radius: 0.35em 0.18em 0.32em 0.22em;
@@ -204,7 +214,8 @@ export const CHEATSHEET_PAPER_CSS = `
 }
 .cs-hl[data-kind='formula'] { --hl: var(--mm-marker-green); }
 .cs-hl[data-kind='pitfall'] { --hl: var(--mm-marker-red); }
-.cs-root[data-highlight='off'] .cs-hl { background-image: none; padding: 0; margin: 0; }
+.cs-root[data-highlight='off'] .cs-hl { background-size: 0% 100%; }
+@media print { .cs-root[data-highlight='off'] .cs-hl { background-image: none; padding: 0; margin: 0; } }
 
 .cs-inline-body .cheatsheet-richtext,
 .cs-inline-body .cheatsheet-richtext > p,

@@ -408,6 +408,8 @@ export const APPS_COPY = {
       zoomIn: '放大',
       zoomOut: '缩小',
       zoomFit: '适合宽度',
+      /** 只在第一次进入出现一次（keyboard-hints） */
+      keyboardHint: '− / + 缩放 · 0 适合宽度',
       copyMarkdown: '复制文字',
       copied: '已复制',
       print: '打印 / PDF',

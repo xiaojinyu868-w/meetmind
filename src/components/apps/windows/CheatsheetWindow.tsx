@@ -35,6 +35,8 @@ import {
   type CheatsheetLayoutPrefs,
 } from './cheatsheet-window-model';
 import { blockOrderOf, useCheatsheetLayout } from './use-cheatsheet-layout';
+import { isTypingTarget } from './app-keys';
+import { useKeyboardHintOnce } from './keyboard-hints';
 
 interface CheatsheetWindowProps {
   result: AppExecutionResult | null;
@@ -108,6 +110,7 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
   const [itemEdits, setItemEdits] = useState<Record<string, CheatsheetItemEdit>>({});
   const [copyState, setCopyState] = useState<'idle' | 'done'>('idle');
   const [zoom, setZoom] = useState<CheatsheetZoom>('fit');
+  const showKeyboardHint = useKeyboardHintOnce('cheatsheet');
 
   const editedPayload = useMemo<CheatsheetPayload | null>(() => {
     if (!payload) return null;
@@ -143,6 +146,23 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
 
   const layout = useCheatsheetLayout(visibleTopics, prefs, Boolean(payload) && !flow);
   const density = CHEATSHEET_DENSITY_PRESETS[prefs.density];
+
+  // 栏数 / 密度 / 字号 / 装进一页 一变，纸面重排是瞬间的：给它一次 220ms 的重新进场（key 变 → mm-app-enter），
+  // 缩放（displayScale）不走这里——纸的 transform / 尺寸自己有 280ms 过渡
+  const reflowKey = `${prefs.columns}:${prefs.density}:${prefs.fontPx}:${prefs.fitOnePage}`;
+
+  // 键盘：− / + 缩放，0 回到适合宽度（正在输入时不抢；窄屏单栏流没有缩放）
+  useEffect(() => {
+    if (flow) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (isTypingTarget(event.target as HTMLElement | null) || event.metaKey || event.ctrlKey) return;
+      if (event.key === '+' || event.key === '=') { event.preventDefault(); setZoom((current) => Math.min(2, Math.round(((current === 'fit' ? fitScale : current) + 0.1) * 10) / 10)); }
+      else if (event.key === '-') { event.preventDefault(); setZoom((current) => Math.max(0.4, Math.round(((current === 'fit' ? fitScale : current) - 0.1) * 10) / 10)); }
+      else if (event.key === '0') { event.preventDefault(); setZoom('fit'); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fitScale, flow]);
 
   const handleHideItem = useCallback((itemId: string) => setHiddenItemIds((prev) => new Set(prev).add(itemId)), []);
   const handleHideTopic = useCallback((topicId: string) => setHiddenTopicIds((prev) => new Set(prev).add(topicId)), []);
@@ -217,6 +237,7 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
         onRestoreHidden={handleRestoreHidden}
         onPrint={handlePrint}
         onCopy={() => void handleCopy()}
+        keyboardHint={showKeyboardHint && !flow ? APPS_COPY.cheatsheet.keyboardHint : undefined}
       />
 
       {/* 桌面：纸放在桌上 */}
@@ -227,7 +248,7 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
           <CheatsheetFlow payload={editedPayload} lessonCount={lessonCount} blockIds={blockIds} highlight={prefs.highlight} renderBlock={renderBlock} />
         ) : (
           <>
-            <div style={{ opacity: layout.ready ? 1 : 0, transition: 'opacity 160ms ease' }}>
+            <div key={reflowKey} className="mm-app-enter" style={{ opacity: layout.ready ? 1 : 0, transition: 'opacity 160ms ease' }}>
               <CheatsheetPages
                 payload={editedPayload}
                 lessonCount={lessonCount}

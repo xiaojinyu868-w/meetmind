@@ -38,8 +38,11 @@ interface CheatsheetToolbarProps {
   onRestoreHidden: () => void;
   onPrint: () => void;
   onCopy: () => void;
+  /** 第一次进入时的一行快捷键提示（keyboard-hints 记住） */
+  keyboardHint?: string;
 }
 
+/** 文字开关：36px 高的命中区（触屏够按），下划线 180ms 淡入淡出，pine 焦点环 */
 function TextToggle({ active, onClick, children, ariaLabel }: { active: boolean; onClick: () => void; children: ReactNode; ariaLabel?: string }) {
   return (
     <button
@@ -47,12 +50,12 @@ function TextToggle({ active, onClick, children, ariaLabel }: { active: boolean;
       onClick={onClick}
       aria-pressed={active}
       aria-label={ariaLabel}
-      className={`cs-tb-btn relative whitespace-nowrap text-[12.5px] transition-colors ${active ? 'text-ink' : 'text-ink-muted hover:text-ink'}`}
+      className={`cs-tb-btn mm-press mm-focus relative inline-flex min-h-9 items-center whitespace-nowrap rounded-md px-1 text-[12.5px] ${active ? 'text-ink' : 'text-ink-muted mm-hover-ink'}`}
     >
       {children}
       <span
         aria-hidden
-        className={`absolute -bottom-[3px] left-0 right-0 h-[1.5px] rounded-full bg-pine transition-opacity ${active ? 'opacity-100' : 'opacity-0'}`}
+        className={`absolute bottom-[5px] left-1 right-1 h-[1.5px] rounded-full bg-pine transition-opacity duration-[180ms] ${active ? 'opacity-100' : 'opacity-0'}`}
       />
     </button>
   );
@@ -63,7 +66,7 @@ function TextAction({ onClick, children, primary }: { onClick: () => void; child
     <button
       type="button"
       onClick={onClick}
-      className={`whitespace-nowrap text-[12.5px] transition-colors ${primary ? 'font-medium text-ink hover:text-pine' : 'text-ink-secondary hover:text-ink'}`}
+      className={`mm-press mm-focus inline-flex min-h-9 items-center whitespace-nowrap rounded-md px-1 text-[12.5px] ${primary ? 'font-medium text-ink hover:text-pine' : 'text-ink-secondary mm-hover-ink'}`}
     >
       {children}
     </button>
@@ -73,11 +76,12 @@ function TextAction({ onClick, children, primary }: { onClick: () => void; child
 function Stepper({ value, onDec, onInc, decLabel, incLabel, disabledDec, disabledInc }: {
   value: ReactNode; onDec: () => void; onInc: () => void; decLabel: string; incLabel: string; disabledDec?: boolean; disabledInc?: boolean;
 }) {
+  const btn = 'mm-press mm-focus mm-hover-warm flex h-8 w-8 items-center justify-center rounded-full text-[15px] leading-none text-ink-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-30';
   return (
-    <span className="inline-flex items-center gap-1 font-mono text-[12px] tabular-nums text-ink-secondary">
-      <button type="button" onClick={onDec} disabled={disabledDec} aria-label={decLabel} className="h-6 w-6 rounded-full text-[14px] leading-none text-ink-muted hover:bg-paper-warm hover:text-ink disabled:opacity-30">−</button>
-      <span className="min-w-[3ch] text-center">{value}</span>
-      <button type="button" onClick={onInc} disabled={disabledInc} aria-label={incLabel} className="h-6 w-6 rounded-full text-[14px] leading-none text-ink-muted hover:bg-paper-warm hover:text-ink disabled:opacity-30">+</button>
+    <span className="inline-flex items-center gap-0.5 font-mono text-[12px] tabular-nums text-ink-secondary">
+      <button type="button" onClick={onDec} disabled={disabledDec} aria-label={decLabel} title={decLabel} className={btn}>−</button>
+      <span className="min-w-[4ch] text-center">{value}</span>
+      <button type="button" onClick={onInc} disabled={disabledInc} aria-label={incLabel} title={incLabel} className={btn}>+</button>
     </span>
   );
 }
@@ -92,7 +96,7 @@ function formatGeneratedAt(iso: string | undefined): string | null {
 export function CheatsheetToolbar(props: CheatsheetToolbarProps) {
   const {
     title, generatedAt, pageCount, itemCount, hiddenCount, prefs, effectiveFontPx, flow, zoom, displayScale,
-    copyState, onPrefsChange, onZoomChange, onRestoreHidden, onPrint, onCopy,
+    copyState, onPrefsChange, onZoomChange, onRestoreHidden, onPrint, onCopy, keyboardHint,
   } = props;
   const [layoutOpen, setLayoutOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -125,7 +129,7 @@ export function CheatsheetToolbar(props: CheatsheetToolbarProps) {
   const fontCompressed = Math.abs(effectiveFontPx - prefs.fontPx) > 0.05;
 
   return (
-    <div className="cs-noprint flex flex-wrap items-center gap-x-5 gap-y-2 px-4 pb-3 pt-3 sm:px-6">
+    <div className={`cs-noprint flex items-center gap-x-5 gap-y-1 px-4 pb-2 pt-2 sm:px-6 ${flow ? 'flex-col items-stretch' : 'flex-wrap'}`}>
       <div className="min-w-0 flex-1">
         <p className="truncate text-[13px] font-semibold tracking-[-0.01em] text-ink">
           {title}
@@ -138,19 +142,21 @@ export function CheatsheetToolbar(props: CheatsheetToolbarProps) {
           {hiddenCount > 0 ? (
             <>
               <span aria-hidden> · </span>
-              <button type="button" onClick={onRestoreHidden} className="text-ink-muted underline decoration-divider underline-offset-2 hover:text-ink">
+              <button type="button" onClick={onRestoreHidden} className="mm-focus rounded text-ink-muted underline decoration-divider underline-offset-2 hover:text-ink">
                 {copy.restoreHidden(hiddenCount)}
               </button>
             </>
           ) : null}
+          {keyboardHint ? <span className="hidden text-ink-muted/70 md:inline"> · {keyboardHint}</span> : null}
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      {/* 窄屏：动作一行横向滚动，不折成两行 */}
+      <div className={`flex items-center gap-x-3 ${flow ? 'mm-no-scrollbar -mx-1 overflow-x-auto px-1' : 'flex-wrap gap-y-1'}`}>
         <div ref={popoverRef} className="relative">
           <TextToggle active={layoutOpen} onClick={() => setLayoutOpen((open) => !open)}>{copy.layout}</TextToggle>
           {layoutOpen ? (
-            <div className="absolute right-0 top-[calc(100%+10px)] z-30 w-[236px] rounded-[14px] border border-divider bg-white p-4 shadow-float">
+            <div className={`mm-pop-in absolute top-[calc(100%+6px)] z-30 w-[236px] rounded-[14px] border border-divider bg-white p-4 shadow-float ${flow ? 'left-0' : 'right-0'}`}>
               {!flow ? (
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[12px] text-ink-secondary">{copy.columns}</span>
@@ -205,7 +211,7 @@ export function CheatsheetToolbar(props: CheatsheetToolbarProps) {
               incLabel={copy.zoomIn}
             />
             {zoom !== 'fit' ? (
-              <button type="button" onClick={() => onZoomChange('fit')} className="ml-1 text-[11.5px] text-ink-muted hover:text-ink">{copy.zoomFit}</button>
+              <button type="button" onClick={() => onZoomChange('fit')} className="mm-focus mm-app-enter ml-1 rounded text-[11.5px] text-ink-muted hover:text-ink">{copy.zoomFit}</button>
             ) : null}
           </span>
         ) : null}
