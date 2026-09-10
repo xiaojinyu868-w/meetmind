@@ -234,8 +234,13 @@ export const APPS_COPY = {
     },
     quiz: {
       appName: '课堂测验',
-      /** 桌面端一行键盘提示，只在第一题作答前出现一次 */
-      keyboardHint: '按 1–4 选，回车确认',
+      /** 桌面端一行键盘提示，只在第一次进入时出现一次（keyboard-hints 记住） */
+      keyboardHint: '1–4 选 · 回车 / 空格确认 · ←→ 翻题',
+      /** 「确认答案」还按不了时的原因（title） */
+      pickFirst: '先选一个答案',
+      /** 从结束页点题号回看后，回到结果 */
+      backToReport: '回到结果',
+      reviewQuestion: (index: number): string => `回看第 ${index} 题`,
       questionNo: (index: number): string => `第 ${index} 题`,
       explanationLabel: '解析',
       previous: '上一题',

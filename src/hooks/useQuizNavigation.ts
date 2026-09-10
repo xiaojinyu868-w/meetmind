@@ -1,13 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type TouchEvent } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-/** Keyboard, touch and animated paging; no question or memory policy. */
+/** 测验翻题：键盘 ←→ 与两段式切换（离场 150ms → 换题 → 由窗口做进场）。触屏滑动由窗口用 swipe-model 处理。 */
+export const QUIZ_EXIT_MS = 150;
+
 export function useQuizNavigation(questionCount: number) {
   const [index, setIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const [slideDir, setSlideDir] = useState<'none' | 'left' | 'right'>('none');
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => () => clearTimeout(timer.current), []);
   const navigateTo = useCallback((newIndex: number, dir: 'left' | 'right') => {
@@ -18,7 +19,7 @@ export function useQuizNavigation(questionCount: number) {
       setIndex(newIndex);
       setSlideDir('none');
       setIsAnimating(false);
-    }, 250);
+    }, QUIZ_EXIT_MS);
   }, [isAnimating]);
   const goToPrev = useCallback(() => {
     if (index > 0 && !isAnimating) navigateTo(index - 1, 'right');
@@ -36,17 +37,5 @@ export function useQuizNavigation(questionCount: number) {
     window.addEventListener('keydown', keyDown);
     return () => window.removeEventListener('keydown', keyDown);
   }, [goToNext, goToPrev]);
-  const handleTouchStart = useCallback((event: TouchEvent) => {
-    touchStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY };
-  }, []);
-  const handleTouchEnd = useCallback((event: TouchEvent) => {
-    if (!touchStart.current) return;
-    const x = event.changedTouches[0].clientX - touchStart.current.x;
-    const y = event.changedTouches[0].clientY - touchStart.current.y;
-    touchStart.current = null;
-    if (Math.abs(x) > Math.abs(y) && Math.abs(x) > 50) {
-      if (x < 0) goToNext(); else goToPrev();
-    }
-  }, [goToNext, goToPrev]);
-  return { index, setIndex, isAnimating, slideDir, navigateTo, goToNext, goToPrev, handleTouchStart, handleTouchEnd };
+  return { index, setIndex, isAnimating, slideDir, navigateTo, goToNext, goToPrev };
 }
