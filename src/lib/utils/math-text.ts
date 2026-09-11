@@ -420,3 +420,41 @@ export function speakableText(text: string): string {
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
+
+/** 课堂色板宏：\pine{…} \amber{…} \blue{…} \rose{…} \ink{…} \faint{…} → \textcolor（图里 a 是松绿，公式里的 a 也是松绿）。
+ * 在文本层展开，不走 KaTeX macros：KaTeX 宏体里的 #2F6B55 会被当成参数 #2。 */
+const COLOR_MACROS: Record<string, string> = {
+  pine: '#2F6B55',
+  amber: '#C8873A',
+  blue: '#3B6FB6',
+  rose: '#C24B5A',
+  ink: '#20312A',
+  faint: '#819087',
+};
+
+export function expandColorMacros(tex: string): string {
+  let out = '';
+  let i = 0;
+  const re = /\\(pine|amber|blue|rose|ink|faint)\s*\{/g;
+  for (;;) {
+    re.lastIndex = i;
+    const m = re.exec(tex);
+    if (!m) {
+      out += tex.slice(i);
+      break;
+    }
+    out += tex.slice(i, m.index);
+    // 找配平的右花括号
+    let depth = 1;
+    let j = m.index + m[0].length;
+    while (j < tex.length && depth > 0) {
+      if (tex[j] === '{') depth++;
+      else if (tex[j] === '}') depth--;
+      j++;
+    }
+    const inner = tex.slice(m.index + m[0].length, depth === 0 ? j - 1 : j);
+    out += `\\textcolor{${COLOR_MACROS[m[1]]}}{${expandColorMacros(inner)}}`;
+    i = j;
+  }
+  return out;
+}

@@ -25,6 +25,8 @@ export interface Transform {
   h: number;
   /** 有坐标系时的可视范围（像素矩形），无限直线裁到这里而不是画布边 */
   clip?: { x0: number; y0: number; x1: number; y1: number };
+  /** 实际采用的坐标范围（老师给的范围比内容大太多时会收紧到内容附近；时间轴各帧共用同一个） */
+  view?: Bounds;
 }
 
 export interface RenderResult {
@@ -73,6 +75,37 @@ interface Bounds {
 
 function computeBounds(scene: Scene): Bounds {
   if (scene.view) return { ...scene.view };
+  return contentBounds(scene);
+}
+
+/**
+ * 老师写 axes({ x: [-4, 4], y: [-4, 4] }) 却只在 [0, 1]² 画了一个单位正方形——图就成了大画框里的一粒芝麻（2026-09-11 实测）。
+ * 内容在两个方向都不到范围的 45% 时，收紧到内容附近（留 35% 余量、至少 0.6 个单位、保留原点让坐标轴还在），
+ * 但绝不超出老师给的范围；axes({ lock: true }) 可关掉。
+ */
+export function tightenView(view: Bounds, content: Bounds): Bounds {
+  const vw = view.xmax - view.xmin;
+  const vh = view.ymax - view.ymin;
+  if (!(vw > 0) || !(vh > 0)) return view;
+  if (![content.xmin, content.xmax, content.ymin, content.ymax].every(Number.isFinite)) return view;
+  const c = { ...content };
+  // 原点在范围内就一起保留：坐标轴的交点是读图的锚
+  if (view.xmin <= 0 && view.xmax >= 0) { c.xmin = Math.min(c.xmin, 0); c.xmax = Math.max(c.xmax, 0); }
+  if (view.ymin <= 0 && view.ymax >= 0) { c.ymin = Math.min(c.ymin, 0); c.ymax = Math.max(c.ymax, 0); }
+  const cw = c.xmax - c.xmin;
+  const ch = c.ymax - c.ymin;
+  if (cw >= 0.45 * vw || ch >= 0.45 * vh) return view;
+  const px = Math.max(0.6, 0.35 * cw);
+  const py = Math.max(0.6, 0.35 * ch);
+  return {
+    xmin: Math.max(view.xmin, c.xmin - px),
+    xmax: Math.min(view.xmax, c.xmax + px),
+    ymin: Math.max(view.ymin, c.ymin - py),
+    ymax: Math.min(view.ymax, c.ymax + py),
+  };
+}
+
+function contentBounds(scene: Scene, margin = true): Bounds {
   let b: Bounds = { xmin: Infinity, xmax: -Infinity, ymin: Infinity, ymax: -Infinity };
   const take = (p: Pt) => {
     if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
@@ -122,6 +155,7 @@ function computeBounds(scene: Scene): Bounds {
     b.ymin -= 1;
     b.ymax += 1;
   }
+  if (!margin) return b;
   // 自由几何图：四周留 8% 数学余量给标签
   const mx = (b.xmax - b.xmin) * 0.08;
   const my = (b.ymax - b.ymin) * 0.08;
@@ -129,7 +163,8 @@ function computeBounds(scene: Scene): Bounds {
 }
 
 export function fitTransform(scene: Scene): Transform {
-  const b = computeBounds(scene);
+  const hasContent = scene.drawables.some((d) => d.kind !== 'axes' && d.kind !== 'note');
+  const b = scene.view && !scene.viewLocked && hasContent ? tightenView(scene.view, contentBounds(scene, false)) : computeBounds(scene);
   const bw = b.xmax - b.xmin;
   const bh = b.ymax - b.ymin;
   const { w } = scene.size;
@@ -144,7 +179,7 @@ export function fitTransform(scene: Scene): Transform {
     const needsEqual = scene.equalAxes || scene.drawables.some((d) => d.kind === 'circle' || d.kind === 'arc' || d.kind === 'angle');
     const sx = needsEqual ? Math.min(rawSx, rawSy) : rawSx;
     const sy = needsEqual ? sx : rawSy;
-    const t: Transform = { s: Math.min(sx, sy), sx, sy, ox: w / 2 - sx * cx, oy: h / 2 + sy * cy, w, h };
+    const t: Transform = { s: Math.min(sx, sy), sx, sy, ox: w / 2 - sx * cx, oy: h / 2 + sy * cy, w, h, view: b };
     t.clip = { x0: PAD - 12, y0: PAD - 12, x1: w - PAD + 12, y1: h - PAD + 12 };
     return t;
   }
@@ -270,7 +305,7 @@ export function render(
   const t = options.transform ?? fitTransform(scene);
   const fromChunk = options.fromChunk ?? 0;
   const placer = new LabelPlacer(t);
-  const view = scene.view ?? computeBounds(scene);
+  const view = t.view ?? scene.view ?? computeBounds(scene);
   const sceneCenter = toPx(t, G.centroid(collectPoints(scene)));
 
   // 先登记障碍（所有 chunk 的点与线段），标签避让要知道整张图；顺手记下像素范围（into 追加可能越界，viewBox 要外扩）
@@ -350,7 +385,7 @@ export function render(
     return d.trim() + (close ? ' Z' : '');
   };
 
-  for (const d of scene.drawables) {
+  for (const d of orderForPaint(scene.drawables)) {
     switch (d.kind) {
       case 'axes': {
         const g: string[] = [];
@@ -514,9 +549,11 @@ export function render(
         const end = G.sub(B, G.mul(dir, 6));
         emit(d, `<path ${idAttr(d)} d="M${f1(A.x)} ${f1(A.y)} L${f1(end.x)} ${f1(end.y)}" fill="none" ${strokeAttrs(d.style, 'blue', 2.5)} marker-end="url(#${markerId})">${children(d)}</path>`);
         if (d.label) {
+          // 向量的名字写在箭头尖附近（沿方向再往前一点），不是线中间——几支从原点出发的向量标签才不会挤在一起
+          const tip = G.add(B, G.mul(dir, 10));
           let n = G.norm(G.perp(dir));
-          if (G.dot(n, G.sub(G.midpoint(A, B), sceneCenter)) < 0) n = G.mul(n, -1);
-          labelFor(d, G.midpoint(A, B), n, d.label);
+          if (G.dot(n, G.sub(B, sceneCenter)) < 0) n = G.mul(n, -1);
+          labelFor(d, tip, G.norm(G.add(dir, G.mul(n, 0.6))), d.label);
         }
         break;
       }
@@ -602,6 +639,19 @@ function notePosition(region: NoteRegion, t: Transform, cursors: Partial<Record<
   else y = t.h / 2 - blockHeight / 2 + used;
   cursors[region] = used + blockHeight + 10;
   return { x, y };
+}
+
+/**
+ * 上板顺序：同一段脚本里，坐标系与带填充的面（polygon / area）先上，其余按老师写的顺序。
+ * 面后画会把先画的向量 / 边压在底下（单位正方形盖住 e₂，2026-09-11 实测）；而"先铺出形状、再在上面画向量与点"也正是人在黑板上的顺序。
+ * 段与段之间不重排（into 追加只输出新元素）。
+ */
+const PAINT_LAYER: Partial<Record<Drawable['kind'], number>> = { axes: 0, area: 1, polygon: 1 };
+function orderForPaint(drawables: Drawable[]): Drawable[] {
+  return drawables
+    .map((d, i) => ({ d, i }))
+    .sort((a, b) => a.d.chunk - b.d.chunk || (PAINT_LAYER[a.d.kind] ?? 2) - (PAINT_LAYER[b.d.kind] ?? 2) || a.i - b.i)
+    .map((x) => x.d);
 }
 
 function collectPoints(scene: Scene): Pt[] {

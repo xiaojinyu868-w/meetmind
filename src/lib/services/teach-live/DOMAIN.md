@@ -47,7 +47,7 @@ output 1–2.4k tokens，TTFT 0.8–1.1s（百炼 GLM-5.3-Flash 实测 2026-09-1
 | `teach-live-service.ts` | 编排：会话注册表（globalThis）、历史（内存 + 事件日志重建）、`runTurn`（streamText → parser → emit）、409 防并发、打断（abort → interrupted → 附文字续讲）、课名跟随首个 `<scene title>`、image 块闭合即生图。对外三件：`preflightTeachLive` / `sendTeachLiveMessage` / `interruptTeachLiveThread`（与前两线同形） |
 | `live-markup-parser.ts` | 增量解析器（零 IO）：顶层扫已知标签、块内原文模式只找自己的闭合标签；裸文本 = 隐式 say；半截标签只在「可能是已知标签前缀」时扣住；剥 markdown 围栏；丢游离闭合标签 |
 | `live-history.ts` | 事件日志 ⇄ 模型历史：块事件拼回标签；重块正文按 kind 限长压占位（svg 3000 保留——老师要 `into` 追加、要 point 到里面的 id；anim/widget 320）；相邻同角色合并；`trimHistory` 保留最近 16 条 |
-| `draw-repair.ts` | `<draw>` 脚本自愈：`repairDrawScript(threadId, chunks, index, error)` → generateText（live provider，temperature 0.2，≤1500 tokens）→ `cleanScript` → 服务端 `runDraw` 复跑验证 → `{ script, verified }`；每线程 40 次上限 |
+| `draw-repair.ts` | `<draw>` 脚本自愈：`repairDrawScript(threadId, chunks, index, error)` → generateText（live provider，temperature 0.2，≤1500 tokens）→ `extractScript`（`<draw>…</draw>` 取内部、剥围栏与解释句；模型常把修正段又包一层标签，之前直接 `SyntaxError: Unexpected token '<'`）→ 服务端 `runDraw` 复跑验证 → `{ script, verified }`；每线程 40 次上限。日志 `teach-live-repair` 带 `reported`（前端报上来的原始错误）——这是「模型最常写错什么」的第一手数据，2026-09-11 的「数组当点 / label+样式四参数」两类就是从这里发现后改宽 API 的 |
 | `inline-math-stream.ts` | 流式 `{{ }}` 求值（`lib/utils/safe-math`）：未闭合的 `{{` 扣住等下一 chunk，块闭合 flush |
 | `live-image.ts` | `<image prompt>` 异步生图（dashscope-image-service，落 `public/uploads/teach-live/`，sha1(thread:block) 命名）→ image-ready；inflight 去重 + 失败 10 分钟冷却；历史回放自愈 `scheduleMissingLiveImages` |
 | `__tests__/live-markup-parser.test.ts` | 解析器：结构 / 分块不变性（1–7 字符切片同构）/ 隐式 say / 前缀扣留 / 原文模式 / 截断 / 围栏 / 大小写 / 属性 |

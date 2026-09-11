@@ -79,12 +79,13 @@ export async function liveFixDraw(
   chunks: string[],
   index: number,
   error: string,
+  segmentId?: string,
 ): Promise<{ script: string; verified: boolean; error?: string }> {
   return readJson(
     await fetch(`/api/teach/threads/${encodeURIComponent(threadId)}/draw-fix`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chunks, index, error }),
+      body: JSON.stringify({ chunks, index, error, segmentId }),
     }),
   );
 }

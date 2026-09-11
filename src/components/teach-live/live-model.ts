@@ -21,6 +21,8 @@ export interface LiveSegment {
   text: string;
   complete: boolean;
   revealed: boolean;
+  /** 直接以终态上板，不逐笔描（重新取景后的整图：之前已经画过一遍了） */
+  instant?: boolean;
 }
 
 export interface LiveBlock {
@@ -291,6 +293,19 @@ function applyServerEvent(state: LessonState, ev: TeachStreamEvent, replay: bool
           [block.id]: { ...block, segments: [{ ...block.segments[0], text: nextText }] },
         },
         transcript: upsertTranscript(state.transcript, block.id, { text: nextText }),
+      };
+    }
+
+    case 'draw-fix': {
+      // 自愈后的脚本替换原段（回看 / 恢复时才会走到这里；直播中 DrawBlock 自己持有修正）
+      const owner = findSegmentOwner(state, ev.segmentId);
+      if (!owner || owner.kind !== 'draw') return state;
+      return {
+        ...state,
+        blocks: {
+          ...state.blocks,
+          [owner.id]: { ...owner, segments: owner.segments.map((s) => (s.id === ev.segmentId ? { ...s, text: ev.script } : s)) },
+        },
       };
     }
 

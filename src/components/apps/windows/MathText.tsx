@@ -13,7 +13,7 @@
 import { useMemo } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { splitMathText } from '@/lib/utils/math-text';
+import { expandColorMacros, splitMathText } from '@/lib/utils/math-text';
 
 export { splitMathText };
 
@@ -24,7 +24,7 @@ export function MathText({ text, className }: { text: string; className?: string
     <span className={className}>
       {segments.map((segment, index) => {
         if (segment.kind === 'text') return <span key={index}>{segment.value}</span>;
-        const html = katex.renderToString(segment.value, { throwOnError: false, strict: 'ignore', displayMode: segment.kind === 'block', output: 'html' });
+        const html = katex.renderToString(expandColorMacros(segment.value), { throwOnError: false, strict: 'ignore', displayMode: segment.kind === 'block', output: 'html' });
         return (
           <span
             key={index}

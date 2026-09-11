@@ -46,6 +46,21 @@ export interface DrawRepairResult {
   error?: string;
 }
 
+/** 模型的回复里把脚本捞出来：<draw>…</draw> 取内部；围栏 / 首尾解释性文字剥掉 */
+export function extractScript(raw: string): string {
+  let text = raw.trim();
+  const block = /<draw\b[^>]*>([\s\S]*?)<\/draw>/i.exec(text);
+  if (block) text = block[1];
+  text = text.replace(/^[\s\S]*?(?=```)/, (m) => (m.includes('\n') ? '' : m)); // 围栏前的一句解释
+  text = cleanScript(text)
+    .replace(/^<draw\b[^>]*>/i, '')
+    .replace(/<\/draw>\s*$/i, '')
+    .trim();
+  // 仍以 < 开头（例如只剩 <draw into="x">）：不是脚本
+  if (text.startsWith('<')) text = text.replace(/^<[^>]*>\s*/, '');
+  return text.trim();
+}
+
 /** 修出错的第 index 段；返回修正后的脚本（服务端已复跑验证）。 */
 export async function repairDrawScript(threadId: string, chunks: string[], index: number, error: string): Promise<DrawRepairResult> {
   const provider = resolveTeachLiveProvider();
@@ -73,7 +88,7 @@ export async function repairDrawScript(threadId: string, chunks: string[], index
     temperature: 0.2,
     providerOptions: (typeof effort === 'string' ? { openai: { reasoningEffort: effort } } : undefined) as Parameters<typeof generateText>[0]['providerOptions'],
   });
-  const script = cleanScript(result.text).replace(/^<draw[^>]*>/i, '').replace(/<\/draw>\s*$/i, '').trim();
+  const script = extractScript(result.text);
   if (!script) throw new DrawRepairError('empty', '模型没有给出修正脚本', 502);
 
   const fixed = chunks.slice();
@@ -85,6 +100,8 @@ export async function repairDrawScript(threadId: string, chunks: string[], index
     index,
     ms: Date.now() - startedAt,
     verified,
+    // 前端报上来的原始错误：这是「模型最常写错什么」的第一手数据（数组当点 / 四参数样式 …都是从这里发现的）
+    reported: error.slice(0, 200),
     error: verified ? undefined : check.ok ? check.error : check.error,
     outputTokens: result.usage?.outputTokens,
   });

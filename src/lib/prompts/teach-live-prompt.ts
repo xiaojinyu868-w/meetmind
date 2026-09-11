@@ -67,6 +67,9 @@ export const DRAW_API = `# draw 脚本怎么写（坐标是数学坐标，y 向�
   角度按数学习惯：逆时针，0° 向右、90° 向上、**270° 向下**（悬着的单摆 = polar(O, L, 270 + θ)，θ 左右摆）；y 轴向上，别按屏幕坐标想
   squareOn(A, B, awayFrom) → 4 个点   regularPolygon(O, r, n)   centroid([...])   dist(A,B)   angleOf(A,B,C)   range(n)
 对象的字段：线有 .a .b（线上两点，angle(O, P, t.b) 这样用）；圆有 .c .r；draw(任何对象) 把它画出来。
+点可以直接写数组 [x, y]（segment([0,0], [3,4])、polygon([[0,0],[1,0],[1,1]])）；标签和样式可以同时给：segment(A, B, 'c', { color: 'amber' })。
+三维：const v = view3d({ yaw: 35 + 20 * t, pitch: 22 })（配 time 就会转）→ v.axes3d(3)（x 蓝 y 玫红 z 松绿）、v.point3([1,2,3], 'P')、v.arrow3([0,0,0], [2,2,2], 'v', { color: 'amber' })、v.segment3(a, b)、v.box3([0,0,0], 2, 1, 3)、v.proj([x,y,z]) 得到二维点再用任何函数。
+坐标范围：axes() 不给 x / y 就自动贴着内容；给了也只比内容大一点，别留一大片空白。
 函数与曲线（表达式可写字符串 'x^2 - 2x' 或函数 x => …）：
   axes({ x: [-3, 3], y: [-1, 9] })       坐标系，先调它定可视范围
   const c = curve('x^2', [-3, 3], 'f')   曲线

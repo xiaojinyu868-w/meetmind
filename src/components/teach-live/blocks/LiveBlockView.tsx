@@ -39,41 +39,10 @@ import { DrawBlock } from '../draw/DrawBlock';
  * 不走 KaTeX 的 macros：宏体里的 `#2F6B55` 会被 TeX 当成参数记号（字符串宏与函数宏都实测出错），
  * 所以在送进 KaTeX 之前做一次配平花括号的文本替换：\pine{x} → \textcolor{#2F6B55}{x}。
  */
-const COLOR_MACROS: Record<string, string> = {
-  pine: '#2F6B55',
-  amber: '#C8873A',
-  blue: '#3B6FB6',
-  rose: '#C24B5A',
-  ink: '#20312A',
-  faint: '#819087',
-};
+import { expandColorMacros, splitMathText } from '@/lib/utils/math-text';
 
-export function expandColorMacros(tex: string): string {
-  let out = '';
-  let i = 0;
-  const re = /\\(pine|amber|blue|rose|ink|faint)\s*\{/g;
-  for (;;) {
-    re.lastIndex = i;
-    const m = re.exec(tex);
-    if (!m) {
-      out += tex.slice(i);
-      break;
-    }
-    out += tex.slice(i, m.index);
-    // 找配平的右花括号
-    let depth = 1;
-    let j = m.index + m[0].length;
-    while (j < tex.length && depth > 0) {
-      if (tex[j] === '{') depth++;
-      else if (tex[j] === '}') depth--;
-      j++;
-    }
-    const inner = tex.slice(m.index + m[0].length, depth === 0 ? j - 1 : j);
-    out += `\\textcolor{${COLOR_MACROS[m[1]]}}{${expandColorMacros(inner)}}`;
-    i = j;
-  }
-  return out;
-}
+export { expandColorMacros };
+
 const KATEX_TRUSTED = new Set(['\\htmlId', '\\htmlClass', '\\textcolor', '\\color']);
 
 function renderTexLine(tex: string): string {
@@ -112,11 +81,26 @@ function MathBlock({ block, animate }: { block: LiveBlock; animate: boolean }) {
 
 // ---------- note ----------
 
+/**
+ * 老师在 <note> 里常直接写裸 LaTeX（\pine{e_1 \to (1,0)}、\frac{1}{2}）而不加 $：
+ * 用产品统一的公式识别把它们补上定界符、展开色板宏，再交给 markdown + KaTeX。
+ */
+export function normalizeNoteMarkdown(body: string): string {
+  return splitMathText(body)
+    .map((seg) => {
+      if (seg.kind === 'text') return seg.value;
+      const tex = expandColorMacros(seg.value);
+      return seg.kind === 'block' ? `\n$$\n${tex}\n$$\n` : `$${tex}$`;
+    })
+    .join('');
+}
+
 const NoteBlock = React.memo(function NoteBlock({ body }: { body: string }) {
+  const markdown = React.useMemo(() => normalizeNoteMarkdown(body), [body]);
   return (
     <div className="live-note">
       <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-        {body}
+        {markdown}
       </ReactMarkdown>
     </div>
   );
@@ -324,11 +308,9 @@ interface LiveBlockViewProps {
 
 export const LiveBlockView = React.memo(function LiveBlockView({ block, animate, onGrow, onIssue, quoted, threadId }: LiveBlockViewProps) {
   const revealed = block.segments.some((s) => s.revealed);
-  // draw 块未揭示也先挂载：脚本在到达时就开始算（必要时自愈），揭示那一刻直接描画
-  if (!revealed && block.kind === 'draw') {
-    return <DrawBlock block={block} animate={animate} revealed={false} threadId={threadId} onIssue={onIssue} />;
-  }
-  if (!revealed) return null;
+  // draw 块未揭示也先挂载：脚本在到达时就开始算（必要时自愈），揭示那一刻直接描画。
+  // 揭示前后必须是同一个 React 位置上的同一个元素——否则揭示那一刻重新挂载，算好的结果与自愈全部丢掉、再算一遍（2026-09-11 实测：同一段自愈请求发了两次）
+  if (!revealed && block.kind !== 'draw') return null;
   const body = revealedBody(block);
   const complete = block.segments.filter((s) => s.revealed).every((s) => s.complete);
   const title = block.attrs.title;
@@ -340,7 +322,7 @@ export const LiveBlockView = React.memo(function LiveBlockView({ block, animate,
       content = <ProgressiveSvg attrs={block.attrs} segments={block.segments} animate={animate} onGrow={onGrow} className="live-svg" />;
       break;
     case 'draw':
-      content = <DrawBlock block={block} animate={animate} revealed threadId={threadId} onGrow={onGrow} onIssue={onIssue} />;
+      content = <DrawBlock block={block} animate={animate} revealed={revealed} threadId={threadId} onGrow={onGrow} onIssue={onIssue} />;
       break;
     case 'plot':
       content = <PlotBlock block={block} animate={animate} onGrow={onGrow} />;
@@ -373,11 +355,13 @@ export const LiveBlockView = React.memo(function LiveBlockView({ block, animate,
       return null;
   }
 
+  // 未揭示的 draw 块：外框先占位但不显示（hidden），揭示时只是显示出来——同一个位置、同一个实例
   return (
     <section
       className={`live-block live-block-${block.kind} live-block-${width}${block.highlighted ? ' is-highlighted' : ''}${quoted ? ' is-quoted' : ''}${animate ? ' live-enter' : ''}`}
       data-block-id={block.id}
       data-label={block.label ?? undefined}
+      hidden={!revealed}
     >
       {title && block.kind !== 'math' ? <header className="live-block-title">{title}</header> : null}
       {content}

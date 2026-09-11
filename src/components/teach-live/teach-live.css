@@ -227,6 +227,10 @@
   padding: 8px 10px;
   transition: box-shadow 260ms ease, background 260ms ease;
 }
+.live-block[hidden] {
+  /* 未揭示的 draw 块先挂载算图，不占位 */
+  display: none;
+}
 .live-block-full {
   grid-column: 1 / -1;
 }
