@@ -18,7 +18,7 @@ import { getThread } from '@/lib/services/teach-codex/thread-store';
 /**
  * POST /api/teach/threads/[id]/messages —— 发学生消息 / 开始讲课。
  *
- * body: {text}（≤2000字）。返回 {ok:true} 表示底座已收下本轮；
+ * body: {text, boardNote?}（≤2000字；boardNote 仅 live 线：前端报告的板上情况，只进模型上下文）。返回 {ok:true} 表示底座已收下本轮；
  * 该轮所有事件经 GET .../stream 的 SSE 流出（本路由自身不流式）。
  * 老师正在讲时返回 409（先 interrupt 或等 turn-complete）。
  *
@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     engine === 'live' ? preflightTeachLive() : engine === 'engine' ? preflightTeachEngine() : preflightTeach();
   if (!preflight.ok) return Response.json({ error: preflight.error }, { status: 500 });
 
-  let body: { text?: unknown };
+  let body: { text?: unknown; boardNote?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -49,7 +49,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
 
   try {
-    if (engine === 'live') await sendTeachLiveMessage(params.id, text);
+    if (engine === 'live') await sendTeachLiveMessage(params.id, text, typeof body.boardNote === 'string' ? body.boardNote : undefined);
     else if (engine === 'engine') await sendTeachEngineMessage(params.id, text);
     else await sendTeachMessage(params.id, text);
     return Response.json({ ok: true });

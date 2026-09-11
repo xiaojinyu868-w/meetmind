@@ -33,6 +33,8 @@ export type TeachStreamEvent =
   | { type: 'interrupted' }
   | { type: 'image-ready'; id: string; url: string }
   | { type: 'error'; message: string }
+  /** live 线程：一轮的用量与估算费用（人民币；按 provider 刊例，见 teach.config liveCostCny） */
+  | { type: 'usage'; inputTokens: number; outputTokens: number; costCny: number; ms: number; model: string }
   | LiveEvent;
 
 /**

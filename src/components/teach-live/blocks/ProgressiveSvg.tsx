@@ -13,6 +13,8 @@ import * as React from 'react';
 import type { LiveAttrs } from '@/types/teach-live';
 import type { LiveSegment } from '../live-model';
 import { animateDrawIn, createPen, mountSvgChildren, splitTopLevelSvgChildren, type PenController } from '../svg-draw';
+import { roughenElements } from '../svg-rough';
+import { LiveStyleContext } from '../live-style-context';
 
 interface ProgressiveSvgProps {
   attrs: LiveAttrs;
@@ -22,6 +24,8 @@ interface ProgressiveSvgProps {
   className?: string;
   /** 每次挂上新元素后回调（滚动跟随用） */
   onGrow?: () => void;
+  /** 覆盖舞台级手绘开关（plot 传 false 保持工整） */
+  rough?: boolean;
 }
 
 function parseViewBox(attrs: LiveAttrs): { viewBox: string; ratio: number } {
@@ -33,8 +37,10 @@ function parseViewBox(attrs: LiveAttrs): { viewBox: string; ratio: number } {
   return { viewBox: '0 0 800 450', ratio: 800 / 450 };
 }
 
-export const ProgressiveSvg = React.memo(function ProgressiveSvg({ attrs, segments, animate, className, onGrow }: ProgressiveSvgProps) {
+export const ProgressiveSvg = React.memo(function ProgressiveSvg({ attrs, segments, animate, className, onGrow, rough }: ProgressiveSvgProps) {
   const svgRef = React.useRef<SVGSVGElement | null>(null);
+  const style = React.useContext(LiveStyleContext);
+  const useRough = rough ?? style.rough;
   const penRef = React.useRef<PenController | null>(null);
   /** segmentId → 已挂上的顶层元素数 */
   const mountedRef = React.useRef<Map<string, number>>(new Map());
@@ -52,7 +58,8 @@ export const ProgressiveSvg = React.memo(function ProgressiveSvg({ attrs, segmen
       const already = mountedRef.current.get(segment.id) ?? 0;
       if (complete.length <= already) continue;
       const fresh = complete.slice(already);
-      const mounted = mountSvgChildren(svg, fresh.join(''));
+      let mounted = mountSvgChildren(svg, fresh.join(''));
+      if (useRough) mounted = roughenElements(svg, mounted);
       mountedRef.current.set(segment.id, complete.length);
       if (mounted.length) {
         grew = true;
@@ -66,7 +73,7 @@ export const ProgressiveSvg = React.memo(function ProgressiveSvg({ attrs, segmen
       if (pen) svg.appendChild(pen);
     }
     if (grew) onGrow?.();
-  }, [segments, animate, onGrow]);
+  }, [segments, animate, onGrow, useRough]);
 
   React.useEffect(() => {
     return () => {

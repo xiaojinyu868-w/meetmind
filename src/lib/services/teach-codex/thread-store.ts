@@ -94,10 +94,30 @@ function eventLogPath(threadId: string): string {
   return path.join(process.cwd(), TeachConfig.eventLogDir, `${safe}.jsonl`);
 }
 
-export async function appendThreadEvent(threadId: string, event: TeachLogEvent): Promise<void> {
-  const file = eventLogPath(threadId);
-  await mkdir(path.dirname(file), { recursive: true });
-  await appendFile(file, JSON.stringify({ ts: Date.now(), ...event }) + '\n', 'utf8');
+/**
+ * 每线程串行写：`await mkdir` 再 `await appendFile` 的两段异步会让相邻两条事件落盘顺序颠倒。
+ * 老线事件粗（几十条 / 轮）几乎撞不上；live 线一轮上千条 delta，颠倒一次 draw 脚本就成了
+ * `const = A point(...)`（2026-09-11 实测）。队列挂 globalThis（Next dev 每路由独立编译 entry）。
+ */
+const globalForLog = globalThis as unknown as { __teachEventLogQueues?: Map<string, Promise<void>> };
+const appendQueues: Map<string, Promise<void>> = globalForLog.__teachEventLogQueues ?? new Map();
+globalForLog.__teachEventLogQueues = appendQueues;
+
+export function appendThreadEvent(threadId: string, event: TeachLogEvent): Promise<void> {
+  const line = JSON.stringify({ ts: Date.now(), ...event }) + '\n';
+  const prev = appendQueues.get(threadId) ?? Promise.resolve();
+  const next = prev
+    .catch(() => undefined)
+    .then(async () => {
+      const file = eventLogPath(threadId);
+      await mkdir(path.dirname(file), { recursive: true });
+      await appendFile(file, line, 'utf8');
+    });
+  appendQueues.set(threadId, next);
+  void next.finally(() => {
+    if (appendQueues.get(threadId) === next) appendQueues.delete(threadId);
+  });
+  return next;
 }
 
 export async function readThreadEvents(threadId: string): Promise<TeachLogEvent[]> {

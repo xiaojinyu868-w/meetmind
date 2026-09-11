@@ -14,6 +14,7 @@ Context v1 在 middleware 白名单中仅为委托认证：mmctx_ token 不符�
 
 | 文件 | 行数 | 职责 | 核心 export |
 |------|------|------|------------|
+| `safe-math.ts` | ~240 | 无 eval 的算术 / 一元函数表达式求值（手写 shunting-yard：+ - * / ^、一元负号、sin cos tan exp ln log sqrt abs…、pi / e、隐式乘法 2x）；teach-live 三处共用：`<plot>` 函数图、`<draw>` 运行时字符串函数、口播 `{{ 24 / 2 }}` 内联计算 | `compileExpression`, `evaluateInlineMath` |
 | `json-utils.ts` | 459 | JSON 解析/修复（LLM 未转义引号修复、安全序列化） | `parseJsonResponse`, `safeStringify`, `deepClone`, `isValidJson` |
 | `page-utils.ts` | 10 | Barrel re-export — 实际实现在 `page/` 子目录 | 全部 54 个导出符号 |
 | `video-link.ts` | 191 | 视频链接解析 | `VideoProvider`, `ParsedVideoLink`, `parseVideoLink` |

@@ -9,7 +9,9 @@
  *
  * 事件按 rAF 批量喂 reducer（一轮 700+ 事件，逐个 dispatch 会让 React 忙死）。
  * 打断 = director.reset() + discard-unrevealed + 服务端 interrupt（附文字即续讲）。
- * 历史课程：事件日志 replay 直接终态（不经 Director），再订阅续讲。
+ * 历史课程两种打开法：resume = 事件日志直接终态（不经 Director）再订阅续讲；
+ * replay = 事件日志整段喂给 Director，按当年的节奏 + 声音重放（回看这节课），中途插话即全部揭示。
+ * 板上出问题（draw 脚本报错）记在 boardNotesRef，下次学生开口随消息带给老师（只进模型上下文）。
  */
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
@@ -35,6 +37,17 @@ export interface PointerTarget {
 }
 
 export type ConnectionState = 'idle' | 'connecting' | 'open' | 'reconnecting';
+
+/** 学生「指着板上的东西」：块 + 可选图内元素 */
+export interface BoardQuote {
+  blockId: string;
+  /** 给老师看的名字：块的 title / label / kind */
+  title: string;
+  /** 图内元素（data-name / id） */
+  inner: string | null;
+}
+
+export type OpenMode = 'resume' | 'replay';
 
 /** 首条学生消息：开课口令（不进课堂记录） */
 const START_MESSAGE = '开始上课';
@@ -95,6 +108,11 @@ export function useLiveLesson() {
   const [pointer, setPointer] = useState<PointerTarget | null>(null);
   const [directorBusy, setDirectorBusy] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [rate, setRateState] = useState(1);
+  const [quote, setQuote] = useState<BoardQuote | null>(null);
+  const [replaying, setReplaying] = useState(false);
+  const replayingRef = useRef(false);
+  const boardNotesRef = useRef<string[]>([]);
 
   const subscriptionRef = useRef<LiveSubscription | null>(null);
   const eventBufferRef = useRef<TeachStreamEvent[]>([]);
@@ -127,7 +145,14 @@ export function useLiveLesson() {
           if (meta.phase === 'pending' && text && speakingRef.current) return;
           setCaption(text ? { text, phase: meta.phase, ask: meta.ask } : null);
         },
-        onDrain: () => setDirectorBusy(false),
+        onStudent: (text) => dispatch({ type: 'student-message', text }),
+        onDrain: () => {
+          setDirectorBusy(false);
+          if (replayingRef.current) {
+            replayingRef.current = false;
+            setReplaying(false);
+          }
+        },
       }),
     [port],
   );
@@ -197,14 +222,34 @@ export function useLiveLesson() {
   }, [feedLiveEvent]);
 
   const rebuildFromLog = useCallback(
-    async (threadId: string, epoch: number) => {
+    async (threadId: string, epoch: number, mode: OpenMode = 'resume') => {
       const { events, title, topic } = await liveFetchEvents(threadId);
       if (epoch !== epochRef.current) return;
       director.reset();
       eventBufferRef.current = [];
       speechBlockRef.current = null;
+      cutterRef.current.reset();
       dispatch({ type: 'reset', threadId, title, topic });
       let turn = 0;
+      if (mode === 'replay') {
+        // 整段喂给 Director：按当年的节奏 + 声音重放；学生的话演到才进记录
+        replayingRef.current = true;
+        setReplaying(true);
+        for (const ev of events) {
+          if ((ev as { type: string }).type === 'student-message') {
+            turn += 1;
+            const text = (ev as { text: string }).text;
+            if (turn === 1 && text === START_MESSAGE) continue;
+            director.push({ kind: 'student', text });
+            continue;
+          }
+          if (ev.type === 'turn-complete' || ev.type === 'interrupted' || ev.type === 'error') continue;
+          feedLiveEvent(ev);
+        }
+        // 日志里没有 generating 语义：回看时不显示「老师想了想」
+        dispatch({ type: 'server', event: { type: 'turn-complete' } });
+        return;
+      }
       for (const ev of events) {
         if ((ev as { type: string }).type === 'student-message') {
           turn += 1;
@@ -214,9 +259,10 @@ export function useLiveLesson() {
         }
         dispatch({ type: 'server', event: ev, replay: true });
       }
+      dispatch({ type: 'server', event: { type: 'turn-complete' } });
       setCaption(null);
     },
-    [director],
+    [director, feedLiveEvent],
   );
 
   const subscribe = useCallback(
@@ -277,6 +323,10 @@ export function useLiveLesson() {
         director.reset();
         setCaption(null);
         setPointer(null);
+        setQuote(null);
+        boardNotesRef.current = [];
+        replayingRef.current = false;
+        setReplaying(false);
         dispatch({ type: 'reset', threadId: thread.id, title: thread.title, topic: thread.topic });
         subscribe(thread.id, epoch);
         dispatch({ type: 'student-message', text: START_MESSAGE, silent: true });
@@ -294,12 +344,14 @@ export function useLiveLesson() {
   );
 
   const openLesson = useCallback(
-    async (threadId: string) => {
+    async (threadId: string, mode: OpenMode = 'resume') => {
       unlockAudio();
       const epoch = ++epochRef.current;
       subscriptionRef.current?.close();
       setPointer(null);
-      await rebuildFromLog(threadId, epoch);
+      setQuote(null);
+      boardNotesRef.current = [];
+      await rebuildFromLog(threadId, epoch, mode);
       if (epoch !== epochRef.current) return;
       subscribe(threadId, epoch);
       if (typeof window !== 'undefined') {
@@ -311,7 +363,11 @@ export function useLiveLesson() {
     [rebuildFromLog, subscribe, unlockAudio],
   );
 
-  /** 学生开口：老师在讲就打断（服务端仍在生成 → interrupt 附文字；已生成完 → 直接发） */
+  /**
+   * 学生开口：老师在讲就打断（服务端仍在生成 → interrupt 附文字；已生成完 → 直接发）。
+   * 带着「指着板上的 X」时，老师收到的是「学生指着板上的「X」问：…」；课堂记录只记学生的原话。
+   * 回看中开口：没演到的全部揭示（不是丢弃——那是历史，不是未来）。
+   */
   const send = useCallback(
     async (text: string) => {
       const threadId = stateRef.current.threadId;
@@ -319,25 +375,63 @@ export function useLiveLesson() {
       if (!threadId || !clean) return;
       unlockAudio();
       const wasGenerating = stateRef.current.generating;
+      const wasReplaying = replayingRef.current;
       director.reset();
       setCaption(null);
       setPointer(null);
-      dispatch({ type: 'discard-unrevealed' });
+      if (wasReplaying) {
+        replayingRef.current = false;
+        setReplaying(false);
+        dispatch({ type: 'reveal-all' });
+      } else {
+        dispatch({ type: 'discard-unrevealed' });
+      }
       dispatch({ type: 'student-message', text: clean });
       speechBlockRef.current = null;
       cutterRef.current.reset();
-      if (wasGenerating) await livePostInterrupt(threadId, clean);
-      else await livePostMessage(threadId, clean);
+      const q = quote;
+      setQuote(null);
+      const wire = q
+        ? `学生指着板上的「${q.inner ? `${q.title}」里的「${q.inner}` : q.title}」问：${clean}`
+        : clean;
+      const boardNote = boardNotesRef.current.length ? boardNotesRef.current.join('；') : undefined;
+      boardNotesRef.current = [];
+      if (wasGenerating) await livePostInterrupt(threadId, wire, boardNote);
+      else await livePostMessage(threadId, wire, boardNote);
     },
-    [director, unlockAudio],
+    [director, unlockAudio, quote],
   );
+
+  /** 板上出了问题（draw 脚本报错）：记下，下次开口带给老师 */
+  const reportBoardIssue = useCallback((_blockId: string, message: string) => {
+    if (!boardNotesRef.current.includes(message)) boardNotesRef.current.push(message);
+  }, []);
+
+  const setRate = useCallback(
+    (value: number) => {
+      setRateState(value);
+      port.player.setRate(value);
+    },
+    [port],
+  );
+
+  const replayLesson = useCallback(() => {
+    const threadId = stateRef.current.threadId;
+    if (threadId) void openLesson(threadId, 'replay');
+  }, [openLesson]);
 
   /** 举手：老师立刻闭嘴（学生准备说话） */
   const hush = useCallback(async () => {
     const threadId = stateRef.current.threadId;
     director.reset();
     setCaption(null);
-    dispatch({ type: 'discard-unrevealed' });
+    if (replayingRef.current) {
+      replayingRef.current = false;
+      setReplaying(false);
+      dispatch({ type: 'reveal-all' });
+    } else {
+      dispatch({ type: 'discard-unrevealed' });
+    }
     if (threadId && stateRef.current.generating) await livePostInterrupt(threadId);
   }, [director]);
 
@@ -349,6 +443,9 @@ export function useLiveLesson() {
     setCaption(null);
     setPointer(null);
     setConnection('idle');
+    setQuote(null);
+    replayingRef.current = false;
+    setReplaying(false);
     dispatch({ type: 'reset', threadId: null, title: '', topic: '' });
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -370,6 +467,13 @@ export function useLiveLesson() {
     /** 老师这边还有没演完的内容（生成中或演出中） */
     busy: state.generating || directorBusy,
     starting,
+    rate,
+    setRate,
+    quote,
+    setQuote,
+    replaying,
+    replayLesson,
+    reportBoardIssue,
     startLesson,
     openLesson,
     send,

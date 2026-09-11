@@ -29,6 +29,7 @@ import type { LiveBlock } from '../live-model';
 import { revealedBody } from '../live-model';
 import { compilePlotSvg, parsePlot } from '../plot-dsl';
 import { ProgressiveSvg } from './ProgressiveSvg';
+import { DrawBlock } from '../draw/DrawBlock';
 
 // ---------- math ----------
 
@@ -239,6 +240,7 @@ function PlotBlock({ block, animate, onGrow }: { block: LiveBlock; animate: bool
       segments={[{ id: `${block.id}-plot`, text: compiled.markup, complete: true, revealed: true }]}
       animate={animate}
       onGrow={onGrow}
+      rough={false}
     />
   );
 }
@@ -250,9 +252,13 @@ interface LiveBlockViewProps {
   /** false = 历史回放：所有块直接终态 */
   animate: boolean;
   onGrow?: () => void;
+  /** 板上出了问题（draw 脚本报错）→ 会话层记下，下次学生开口时告诉老师 */
+  onIssue?: (blockId: string, message: string) => void;
+  /** 学生正指着这一块 */
+  quoted?: boolean;
 }
 
-export const LiveBlockView = React.memo(function LiveBlockView({ block, animate, onGrow }: LiveBlockViewProps) {
+export const LiveBlockView = React.memo(function LiveBlockView({ block, animate, onGrow, onIssue, quoted }: LiveBlockViewProps) {
   const revealed = block.segments.some((s) => s.revealed);
   if (!revealed) return null;
   const body = revealedBody(block);
@@ -264,6 +270,9 @@ export const LiveBlockView = React.memo(function LiveBlockView({ block, animate,
   switch (block.kind) {
     case 'svg':
       content = <ProgressiveSvg attrs={block.attrs} segments={block.segments} animate={animate} onGrow={onGrow} className="live-svg" />;
+      break;
+    case 'draw':
+      content = <DrawBlock block={block} animate={animate} onGrow={onGrow} onIssue={onIssue} />;
       break;
     case 'plot':
       content = <PlotBlock block={block} animate={animate} onGrow={onGrow} />;
@@ -298,7 +307,7 @@ export const LiveBlockView = React.memo(function LiveBlockView({ block, animate,
 
   return (
     <section
-      className={`live-block live-block-${block.kind} live-block-${width}${block.highlighted ? ' is-highlighted' : ''}${animate ? ' live-enter' : ''}`}
+      className={`live-block live-block-${block.kind} live-block-${width}${block.highlighted ? ' is-highlighted' : ''}${quoted ? ' is-quoted' : ''}${animate ? ' live-enter' : ''}`}
       data-block-id={block.id}
       data-label={block.label ?? undefined}
     >

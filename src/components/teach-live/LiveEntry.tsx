@@ -8,12 +8,13 @@
 import * as React from 'react';
 import { TEACH_LIVE_COPY } from '@/lib/ui/copy-teach-live';
 import { liveListThreads, type LiveThreadMeta } from './live-client';
+import type { OpenMode } from './useLiveLesson';
 
 interface LiveEntryProps {
   starting: boolean;
   error: string | null;
   onStart: (topic: string) => void;
-  onResume: (threadId: string) => void;
+  onResume: (threadId: string, mode: OpenMode) => void;
 }
 
 function relativeDay(iso: string): string {
@@ -94,12 +95,17 @@ export function LiveEntry({ starting, error, onStart, onResume }: LiveEntryProps
             ) : (
               <div className="live-recent-list">
                 {recent.map((t) => (
-                  <button key={t.id} type="button" className="live-recent-item" onClick={() => onResume(t.id)}>
-                    <span>{t.title}</span>
-                    <small>
-                      {relativeDay(t.updatedAt)} · {TEACH_LIVE_COPY.resume}
-                    </small>
-                  </button>
+                  <div key={t.id} className="live-recent-item">
+                    <button type="button" className="live-recent-main" onClick={() => onResume(t.id, 'resume')}>
+                      <span>{t.title}</span>
+                      <small>
+                        {relativeDay(t.updatedAt)} · {TEACH_LIVE_COPY.resume}
+                      </small>
+                    </button>
+                    <button type="button" className="live-recent-replay" onClick={() => onResume(t.id, 'replay')} title={TEACH_LIVE_COPY.replayLesson}>
+                      {TEACH_LIVE_COPY.replayLesson}
+                    </button>
+                  </div>
                 ))}
               </div>
             )}

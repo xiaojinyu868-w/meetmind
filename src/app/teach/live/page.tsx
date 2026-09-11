@@ -14,7 +14,7 @@ import '@/components/teach-live/teach-live.css';
 import { TEACH_LIVE_COPY } from '@/lib/ui/copy-teach-live';
 import { LiveEntry } from '@/components/teach-live/LiveEntry';
 import { LiveStage } from '@/components/teach-live/LiveStage';
-import { useLiveLesson } from '@/components/teach-live/useLiveLesson';
+import { useLiveLesson, type OpenMode } from '@/components/teach-live/useLiveLesson';
 
 export default function TeachLivePage() {
   const lesson = useLiveLesson();
@@ -53,13 +53,18 @@ export default function TeachLivePage() {
   );
 
   const onResume = React.useCallback(
-    (threadId: string) => {
+    (threadId: string, mode: OpenMode) => {
       setEntryError(null);
-      setLive(false);
-      lesson.openLesson(threadId).catch(() => setEntryError(TEACH_LIVE_COPY.errorCreate));
+      setLive(mode === 'replay');
+      lesson.openLesson(threadId, mode).catch(() => setEntryError(TEACH_LIVE_COPY.errorCreate));
     },
     [lesson],
   );
+
+  // 舞台里点「回看这节课」：切回动画模式
+  React.useEffect(() => {
+    if (lesson.replaying) setLive(true);
+  }, [lesson.replaying]);
 
   if (!lesson.state.threadId) {
     return <LiveEntry starting={lesson.starting} error={entryError} onStart={onStart} onResume={onResume} />;

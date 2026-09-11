@@ -35,7 +35,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     engine === 'live' ? preflightTeachLive() : engine === 'engine' ? preflightTeachEngine() : preflightTeach();
   if (!preflight.ok) return Response.json({ error: preflight.error }, { status: 500 });
 
-  let body: { text?: unknown } = {};
+  let body: { text?: unknown; boardNote?: unknown } = {};
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const text = typeof body.text === 'string' ? body.text.trim() : undefined;
 
   try {
-    if (engine === 'live') await interruptTeachLiveThread(params.id, text);
+    if (engine === 'live') await interruptTeachLiveThread(params.id, text, typeof body.boardNote === 'string' ? body.boardNote : undefined);
     else if (engine === 'engine') await interruptTeachEngineThread(params.id, text);
     else await interruptTeachThread(params.id, text);
     return Response.json({ ok: true });

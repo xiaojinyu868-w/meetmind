@@ -19,18 +19,23 @@ Director ──► TeachSpeechPlayer（/api/teach/tts 按句合成、预取两�
 
 | 文件 | 职责 |
 |---|---|
-| `live-model.ts` | 纯 reducer：`LessonState`（pages / blocks / labels / transcript / stagePageId vs currentPageId / sceneQueue / pendingAsk）。`scene` 到达时只建页并排队，Director 演到才推进 `stagePageId`；`svg into=` 作为目标块的新 segment；ask 既是口播又是提问卡；`replay=true` 全部直接 revealed |
-| `director.ts` | `Director`（beat 队列 + 代数作废）、`SentenceCutter`（中日英句末标点切句）、`cleanSpeechText`（口播里的标签 / markdown 记号不念）、`estimateSpeechMs` |
-| `useLiveLesson.ts` | 会话 hook：SSE → rAF 批量喂 reducer + 生成 beats；`PlayerSpeechPort` 把 TeachSpeechPlayer 的 onSentenceStart 变成 `speak()` 的 resolve；`startLesson`（建线程 + 发「开始上课」不进记录）/ `openLesson`（事件日志 replay 终态再订阅）/ `send`（生成中 → interrupt 附文字，否则直接发）/ `hush`（按住麦克风时老师先停）；断线重连整体按日志重建 |
+| `live-model.ts` | 纯 reducer：`LessonState`（pages / blocks / labels / transcript / stagePageId vs currentPageId / sceneQueue / pendingAsk / usage 累计）。`scene` 到达时只建页并排队，Director 演到才推进 `stagePageId`；`svg` / `draw` 的 `into=` 作为同类目标块的新 segment；ask 既是口播又是提问卡；`replay=true` 全部直接 revealed；`reveal-all`（回看被打断） |
+| `director.ts` | `Director`（beat 队列 + 代数作废；beat 多一种 `student`——回看时学生当年的话演到才进记录）、`SentenceCutter`（中日英句末标点切句）、`cleanSpeechText`（口播里的标签 / markdown 记号不念）、`estimateSpeechMs` |
+| `useLiveLesson.ts` | 会话 hook：SSE → rAF 批量喂 reducer + 生成 beats；`PlayerSpeechPort` 把 TeachSpeechPlayer 的 onSentenceStart 变成 `speak()` 的 resolve；`startLesson`（建线程 + 发「开始上课」不进记录）/ `openLesson(id, 'resume' | 'replay')`（resume = 日志终态再订阅；replay = 日志整段喂 Director 按当年节奏 + 声音重放，学生的话演到才进记录，中途开口即 `reveal-all` 而非丢弃——那是历史不是未来）/ `send`（生成中 → interrupt 附文字，否则直接发；带引用时发「学生指着板上的「X」问：…」，记录只记原话；顺带把 draw 报错作 `boardNote` 交给老师）/ `hush` / `setRate`（语速）/ `replayLesson`；断线重连整体按日志重建 |
 | `live-client.ts` | `/api/teach/*` 收口：列表（`?engine=live`）/ 建课（body.engine='live' + 本机 learner 切片）/ 事件 / 发消息 / 打断 / EventSource 订阅（onOpen 区分首连与重连） |
 | `svg-draw.ts` | 让 SVG 一笔一笔长出来：`splitTopLevelSvgChildren`（流式正文切成已闭合的顶层元素）、`mountSvgChildren`（剥 `<style>`/`<script>`：内联 SVG 的 style 会泄漏整页）、`animateDrawIn`（描边按路径长度 stroke-dashoffset 描画 → 填充淡入；文字上浮；`<g>` 递归错开；>6 个子元素或 `data-draw="fade"` 的组整体淡入）、`createPen`（琥珀色笔尖沿正在画的路径走） |
 | `plot-dsl.ts` | `<plot>` 声明式语法 → SVG 标记（纯函数）：手写 shunting-yard 表达式求值（无 eval；隐式乘法 2x）、nice 刻度、原点穿轴、断点 / 越界裁剪、曲线尾部标签；grid / ticks / legend 标 `data-draw="fade"` 快速淡入，曲线描画 |
-| `blocks/ProgressiveSvg.tsx` | 增量 DOM：按 segment 记已挂元素数，只挂新闭合的、只描新挂的；不重渲染整张图（那会让动画重放） |
+| `blocks/ProgressiveSvg.tsx` | 增量 DOM：按 segment 记已挂元素数，只挂新闭合的、只描新挂的；不重渲染整张图（那会让动画重放）。读 `LiveStyleContext.rough`：开着就先经 `svg-rough.ts` 换成手绘笔迹再描画 |
+| `draw/DrawBlock.tsx` | `<draw>` 块：脚本 → `draw-runtime-client` → 编译好的 SVG 走 ProgressiveSvg（首段决定布局，`into` 段沿用；`param()` 登记的参数在图下出滑块，拖动整图重算瞬时替换）；脚本报错显示一句人话并经 `onIssue` 记入会话（下次开口带给老师） |
+| `draw/draw-runtime-client.ts` | 主线程侧：一个共享 Worker + 请求队列 + 2s 超时（死循环 → terminate 重建）；Worker 不可用回退主线程执行 |
+| `draw/draw-worker.ts` | Worker 入口：拆掉 fetch / XHR / WebSocket / importScripts / indexedDB 等全局后执行 `lib/teach-live-draw/runtime.runDraw` |
+| `svg-rough.ts` | 手绘笔迹：把刚挂上的几何元素换成 rough.js 的 `<g>`（roughness 0.55、单笔、保留 id / data-* / 虚线 / 透明度 / marker）；文字、`data-draw="fade"` 的网格刻度、带 SMIL 子元素的形状、半径 < 6 的点保持工整 |
+| `live-style-context.ts` | 舞台级视觉开关（手绘 / 工整），默认开，localStorage 记住 |
 | `blocks/LiveBlockView.tsx` | 按 kind 分发：svg / plot（编译后走 ProgressiveSvg）/ math（KaTeX）/ note（react-markdown + gfm + math）/ code（ChatCodeBlock）/ diagram（mermaid lazy，失败回退源码）/ anim（无脚本 iframe srcdoc：SVG 的 style 与 SMIL 只作用于自己那格）/ widget（allow-scripts 沙箱 + postMessage 自报高度 ≤560）/ image（占位卡 → image-ready 淡入）/ ask（提问卡）。只渲染有 revealed segment 的块 |
-| `LiveStage.tsx` | 上课屏：顶栏（课名 / 页签：有内容或正在演的页才出现，学生手动翻页后出「回到老师那页」/ 课堂记录 / 声音）→ 板（只展示 activePage；最新块 `scrollIntoView nearest`）→ 字幕（pending 半透明 / speaking 全亮；上一句还在播时下一句的 pending 不抢）→ 输入 |
+| `LiveStage.tsx` | 上课屏：顶栏（课名 / 页签：有内容或正在演的页才出现，学生手动翻页后出「回到老师那页」/ 手绘开关 / 语速 1×·1.25×·1.5× / 回看这节课 / 课堂记录 / 声音）→ 板（只展示 activePage；最新块 `scrollIntoView nearest`；**点任何一块或图里带名字的部分 = 指着它**，输入框出引用 chip）→ 字幕（pending 半透明 / speaking 全亮；上一句还在播时下一句的 pending 不抢；Octo Buddy 头像三态：想 / 讲 / 等）→ 输入。课堂记录抽屉底部一行本节课累计 token 与估算费用 |
 | `LivePointer.tsx` | 激光笔：目标是块（`data-block-id`）或图内 `#id`；相对 `.live-board-inner` 定位，光点滑过去 + 目标柔光圈，3.4s 淡出；目标未挂上时多试几帧 |
-| `LiveComposer.tsx` | 输入 + 按住说话（`useVoiceInput` 流式 ASR；按下即 hush，松开发送累计转写）+ 发送；老师提问时占位「回答老师…」；一轮讲完给「继续讲」 |
-| `LiveEntry.tsx` | 开课屏：今天想学什么 + 建议 + 上过的课（`?engine=live`）；点「开始上课」是解锁自动播放的用户手势 |
+| `LiveComposer.tsx` | 输入 + 按住说话（`useVoiceInput` 流式 ASR；按下即 hush，松开发送累计转写；**焦点不在输入框时按住空格同效**）+ 发送；引用 chip（指着板上的 X，可取消）；老师提问时占位「回答老师…」；一轮讲完给「继续讲」 |
+| `LiveEntry.tsx` | 开课屏：今天想学什么 + 建议 + 上过的课（`?engine=live`；每节课两个动作：接着上 = 终态续讲，回看 = 按当年节奏 + 声音重放）；点「开始上课」是解锁自动播放的用户手势 |
 | `teach-live.css` | 全部样式（不走 Tailwind 类名：这一屏的视觉是一体的）；色彩来自 tokens.css 暗色 + 白天板面；`prefers-reduced-motion` 关动画 |
 | `live-stage.test.ts` | 用真解析器 + reducer + Director（假语音口）走一遍课：到达时页 / 演出时页、揭示顺序、into 追加、highlight、ask、打断丢弃、回放终态；Director 辅助函数 |
 
@@ -45,7 +50,8 @@ Director ──► TeachSpeechPlayer（/api/teach/tts 按句合成、预取两�
 
 ## 未做 / 下一步
 
-- 语音打断只在按住麦克风时；自由说话（VAD barge-in）未做。
+- 视觉自检（老师「看一眼板」修重叠）未做——严谨图已由 `<draw>` 保证，自由 `<svg>` 的重叠留观察。
+- 语音打断只在按住麦克风 / 空格时；自由说话（VAD barge-in）未做。
 - 学生拍题 / 传图进课堂（设计文档 §5.5-4）未接。
 - 课后沉淀回主线（复习材料）未接：事件日志已是完整素材。
 - 移动端只做了单列降级，未专门设计。

@@ -5,6 +5,14 @@
 > 决策记录：`docs/TEACH_TUTOR_ENGINE.md` §12。用户目标原话：真人老师 1/4 的价格、相近甚至更好的效果——
 > 效果来自「边说边画」的临场感 + 真人做不到的多模态（代码驱动的图形与动画流式长出来、函数图一秒画好、参数能拉、慢生图异步补位）。
 
+## 第二轮（2026-09-11）新增：精确图形与几处精确性
+
+- **`<draw>` 块**：老师写 JS 脚本，前端 Worker 里的确定性运行时（`src/lib/teach-live-draw/`）算几何 / 函数 / 动画并渲染。切线一定垂直半径、交点一定在线上、动点永不离开曲线。服务端只当它是一种块正文（原文透传），历史保留 4000 字（追加段要用前面的变量名）。
+- **`{{ 表达式 }}` 内联计算**：口播 / ask / note / math 里的算式由 `inline-math-stream.ts` 在流式到达时算好再发出（chunk 边界切开的 `{{` 会扣住等 `}}`），TTS、字幕、记录、模型历史都只见数字。
+- **板上情况回传**：前端 draw 脚本报错记在会话里，学生下次开口时随 `messages` / `interrupt` 的 `boardNote` 字段带给老师（只进模型上下文，不进课堂记录），老师自己改。
+- **usage 事件**：每轮结束广播 `{type:'usage', inputTokens, outputTokens, costCny, ms, model}`（刊例价见 `teach.config liveCostCny`，默认百炼 GLM-5.3-Flash 输入 0.8 / 输出 2.8 元每百万 token），前端课堂记录底部累计成本行。
+- **事件日志串行写**：live 一轮上千条 delta，`await mkdir` + `await appendFile` 两段异步会让相邻事件落盘颠倒（实测把 draw 脚本写成 `const = A point(...)`）；`thread-store.appendThreadEvent` 改为每线程串行队列。
+
 ## 一句话架构
 
 ```
@@ -38,6 +46,7 @@ output 1–2.4k tokens，TTFT 0.8–1.1s（百炼 GLM-5.3-Flash 实测 2026-09-1
 | `teach-live-service.ts` | 编排：会话注册表（globalThis）、历史（内存 + 事件日志重建）、`runTurn`（streamText → parser → emit）、409 防并发、打断（abort → interrupted → 附文字续讲）、课名跟随首个 `<scene title>`、image 块闭合即生图。对外三件：`preflightTeachLive` / `sendTeachLiveMessage` / `interruptTeachLiveThread`（与前两线同形） |
 | `live-markup-parser.ts` | 增量解析器（零 IO）：顶层扫已知标签、块内原文模式只找自己的闭合标签；裸文本 = 隐式 say；半截标签只在「可能是已知标签前缀」时扣住；剥 markdown 围栏；丢游离闭合标签 |
 | `live-history.ts` | 事件日志 ⇄ 模型历史：块事件拼回标签；重块正文按 kind 限长压占位（svg 3000 保留——老师要 `into` 追加、要 point 到里面的 id；anim/widget 320）；相邻同角色合并；`trimHistory` 保留最近 16 条 |
+| `inline-math-stream.ts` | 流式 `{{ }}` 求值（`lib/utils/safe-math`）：未闭合的 `{{` 扣住等下一 chunk，块闭合 flush |
 | `live-image.ts` | `<image prompt>` 异步生图（dashscope-image-service，落 `public/uploads/teach-live/`，sha1(thread:block) 命名）→ image-ready；inflight 去重 + 失败 10 分钟冷却；历史回放自愈 `scheduleMissingLiveImages` |
 | `__tests__/live-markup-parser.test.ts` | 解析器：结构 / 分块不变性（1–7 字符切片同构）/ 隐式 say / 前缀扣留 / 原文模式 / 截断 / 围栏 / 大小写 / 属性 |
 
@@ -47,11 +56,12 @@ output 1–2.4k tokens，TTFT 0.8–1.1s（百炼 GLM-5.3-Flash 实测 2026-09-1
 ## 事件契约（追加在 teach-codex/event-bus.ts 的联合类型上，老事件原样复用）
 
 ```
-{type:'block-open', id, kind, attrs}     kind ∈ say|ask|note|math|svg|plot|diagram|code|anim|widget|image；attrs 键已小写（viewbox）
+{type:'block-open', id, kind, attrs}     kind ∈ say|ask|note|math|svg|draw|plot|diagram|code|anim|widget|image；attrs 键已小写（viewbox）
 {type:'block-delta', id, text}           非口播块的正文增量（口播正文走 text-delta，兼容老消费方读转写）
 {type:'block-close', id, complete}       complete=false = 截断 / 打断
 {type:'cue', name, args}                 scene|point|highlight|pause|erase
 text-delta / turn-complete / interrupted / error / image-ready   不变；student-message 只落盘
+{type:'usage', inputTokens, outputTokens, costCny, ms, model}    每轮用量与估算费用（live 独有）
 ```
 
 块 id 由服务端分配（`lb_<n>`，线程内跨轮唯一）；模型自己写的 `id="tri"` 留在 `attrs.id` 作为标签，

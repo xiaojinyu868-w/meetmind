@@ -974,3 +974,161 @@ figure.live-image .live-image-caption {
     animation: none;
   }
 }
+
+/* ---------- 第二轮：draw / 引用 / 回看 / 头像 / 成本 ---------- */
+
+.live-page-enter {
+  animation: live-page-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes live-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.live-draw {
+  width: 100%;
+}
+.live-draw-svg {
+  max-height: 50vh;
+}
+.live-draw-params {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 6px 22px;
+  padding: 6px 14px 2px;
+}
+.live-draw-param {
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--live-ink-2);
+}
+.live-draw-param-name strong {
+  color: var(--live-pine-strong);
+  font-variant-numeric: tabular-nums;
+}
+.live-draw-param input[type='range'] {
+  width: 100%;
+  accent-color: var(--live-pine-strong);
+}
+.live-draw-error {
+  font-size: 13px;
+  color: var(--live-ink-3);
+  padding: 8px 12px;
+  border-left: 3px dashed var(--live-ink-4);
+}
+
+/* 学生指着的块：琥珀虚线圈 */
+.live-block.is-quoted {
+  box-shadow: 0 0 0 2px rgba(200, 135, 58, 0.75);
+  background: rgba(200, 135, 58, 0.06);
+}
+.live-board-inner .live-block:not(.live-block-ask) {
+  cursor: pointer;
+}
+.live-quote-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto 8px;
+  padding: 4px 6px 4px 12px;
+  border-radius: 999px;
+  background: rgba(200, 135, 58, 0.16);
+  border: 1px solid rgba(200, 135, 58, 0.5);
+  color: #f0d9b8;
+  font-size: 13px;
+  max-width: min(760px, 100%);
+}
+.live-quote-chip button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(242, 237, 227, 0.1);
+  color: inherit;
+  cursor: pointer;
+}
+.live-quote-chip button svg {
+  width: 13px;
+  height: 13px;
+}
+.live-composer {
+  flex-direction: column;
+  align-items: center;
+}
+.live-composer-inner.has-quote {
+  border-color: rgba(200, 135, 58, 0.55);
+}
+
+/* 头像：Octo Buddy 三态 */
+.live-avatar {
+  background: radial-gradient(circle at 30% 30%, rgba(107, 144, 128, 0.35), rgba(47, 107, 85, 0.55));
+  overflow: hidden;
+}
+.live-avatar img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  display: block;
+  transform: translateY(1px);
+}
+
+/* 课堂记录底部：成本 */
+.live-drawer-footer {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--live-line);
+  font-size: 12px;
+  color: var(--live-fg-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 入口：上过的课 = 接着上 + 回看 */
+.live-recent-item {
+  padding: 0;
+  overflow: hidden;
+}
+.live-recent-main {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+.live-recent-main small {
+  color: var(--live-fg-3);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.live-recent-replay {
+  flex: none;
+  font: inherit;
+  font-size: 12px;
+  padding: 0 14px;
+  align-self: stretch;
+  border: 0;
+  border-left: 1px solid var(--live-line);
+  background: transparent;
+  color: var(--live-fg-3);
+  cursor: pointer;
+}
+.live-recent-replay:hover {
+  color: var(--live-fg);
+  background: rgba(107, 144, 128, 0.14);
+}

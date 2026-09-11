@@ -152,6 +152,16 @@ export function resolveTeachLiveProvider(): TeachProviderConfig {
   return factory();
 }
 
+/**
+ * live 引擎的模型刊例价（人民币 / 百万 token；默认 = 百炼 GLM-5.3-Flash 北京 2026-09：输入 0.8 / 输出 2.8，
+ * https://help.aliyun.com/zh/model-studio/glm-5-3-flash-by-zhipu）。换 provider 请同时改这两个 env。
+ */
+export function liveCostCny(inputTokens: number, outputTokens: number): number {
+  const inPrice = Number(env('TEACH_LIVE_PRICE_IN_CNY_PER_MTOK') || 0.8);
+  const outPrice = Number(env('TEACH_LIVE_PRICE_OUT_CNY_PER_MTOK') || 2.8);
+  return (inputTokens * inPrice + outputTokens * outPrice) / 1_000_000;
+}
+
 export const TeachConfig = {
   /** 教学引擎选择：codex（现役 app-server 底座）/ engine（pi loop + vendor OpenMAIC，P1）/ live（标签流舞台引擎，2026-09） */
   engine: env('TEACH_ENGINE') || 'codex',

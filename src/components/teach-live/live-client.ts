@@ -53,22 +53,22 @@ export async function liveFetchEvents(threadId: string): Promise<{ events: Teach
   return readJson(await fetch(`/api/teach/threads/${encodeURIComponent(threadId)}/events`));
 }
 
-export async function livePostMessage(threadId: string, text: string): Promise<void> {
+export async function livePostMessage(threadId: string, text: string, boardNote?: string): Promise<void> {
   await readJson(
     await fetch(`/api/teach/threads/${encodeURIComponent(threadId)}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(boardNote ? { text, boardNote } : { text }),
     }),
   );
 }
 
-export async function livePostInterrupt(threadId: string, text?: string): Promise<void> {
+export async function livePostInterrupt(threadId: string, text?: string, boardNote?: string): Promise<void> {
   await readJson(
     await fetch(`/api/teach/threads/${encodeURIComponent(threadId)}/interrupt`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(text ? { text } : {}),
+      body: JSON.stringify(text ? (boardNote ? { text, boardNote } : { text }) : {}),
     }),
   );
 }

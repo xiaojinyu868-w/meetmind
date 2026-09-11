@@ -9,9 +9,10 @@
  */
 
 import * as React from 'react';
-import { ArrowUp, Mic } from 'lucide-react';
+import { ArrowUp, Mic, X } from 'lucide-react';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 import { TEACH_LIVE_COPY } from '@/lib/ui/copy-teach-live';
+import type { BoardQuote } from './useLiveLesson';
 
 interface LiveComposerProps {
   disabled?: boolean;
@@ -21,9 +22,12 @@ interface LiveComposerProps {
   onSend: (text: string) => void;
   /** 学生准备开口：老师先停 */
   onHush: () => void;
+  /** 正指着板上的东西 */
+  quote?: BoardQuote | null;
+  onClearQuote?: () => void;
 }
 
-export function LiveComposer({ disabled, teacherBusy, pendingAsk, onSend, onHush }: LiveComposerProps) {
+export function LiveComposer({ disabled, teacherBusy, pendingAsk, onSend, onHush, quote, onClearQuote }: LiveComposerProps) {
   const [text, setText] = React.useState('');
   const spokenRef = React.useRef<string[]>([]);
   const pressingRef = React.useRef(false);
@@ -44,34 +48,65 @@ export function LiveComposer({ disabled, teacherBusy, pendingAsk, onSend, onHush
     onSend(clean);
   }, [text, disabled, onSend]);
 
-  const startPress = React.useCallback(
-    async (e: React.PointerEvent) => {
-      e.preventDefault();
-      if (disabled || pressingRef.current) return;
-      pressingRef.current = true;
-      spokenRef.current = [];
+  const beginTalk = React.useCallback(async () => {
+    if (disabled || pressingRef.current) return;
+    pressingRef.current = true;
+    spokenRef.current = [];
+    setText('');
+    onHush();
+    await voice.startRecording();
+  }, [disabled, onHush, voice]);
+
+  const endTalk = React.useCallback(async () => {
+    if (!pressingRef.current) return;
+    pressingRef.current = false;
+    await voice.stopRecording();
+    const spoken = spokenRef.current.join('').trim();
+    spokenRef.current = [];
+    if (spoken) {
       setText('');
-      onHush();
-      await voice.startRecording();
+      onSend(spoken);
+    }
+  }, [voice, onSend]);
+
+  const startPress = React.useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      void beginTalk();
     },
-    [disabled, onHush, voice],
+    [beginTalk],
+  );
+  const endPress = React.useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      void endTalk();
+    },
+    [endTalk],
   );
 
-  const endPress = React.useCallback(
-    async (e: React.PointerEvent) => {
+  // 按住空格说话（焦点不在输入框里时）
+  React.useEffect(() => {
+    const isTyping = () => {
+      const el = document.activeElement;
+      return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable);
+    };
+    const onDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || e.repeat || isTyping()) return;
       e.preventDefault();
-      if (!pressingRef.current) return;
-      pressingRef.current = false;
-      await voice.stopRecording();
-      const spoken = spokenRef.current.join('').trim();
-      spokenRef.current = [];
-      if (spoken) {
-        setText('');
-        onSend(spoken);
-      }
-    },
-    [voice, onSend],
-  );
+      void beginTalk();
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || !pressingRef.current) return;
+      e.preventDefault();
+      void endTalk();
+    };
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    return () => {
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
+    };
+  }, [beginTalk, endTalk]);
 
   const placeholder = voice.isRecording
     ? TEACH_LIVE_COPY.composerMicRecording
@@ -81,7 +116,18 @@ export function LiveComposer({ disabled, teacherBusy, pendingAsk, onSend, onHush
 
   return (
     <div className="live-composer">
-      <div className="live-composer-inner">
+      {quote ? (
+        <div className="live-quote-chip">
+          <span>
+            {TEACH_LIVE_COPY.quotePrefix}
+            {quote.inner ? TEACH_LIVE_COPY.quoteInner(quote.title, quote.inner) : quote.title}
+          </span>
+          <button type="button" onClick={onClearQuote} aria-label={TEACH_LIVE_COPY.quoteClear} title={TEACH_LIVE_COPY.quoteClear}>
+            <X />
+          </button>
+        </div>
+      ) : null}
+      <div className={`live-composer-inner${quote ? ' has-quote' : ''}`}>
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -107,7 +153,7 @@ export function LiveComposer({ disabled, teacherBusy, pendingAsk, onSend, onHush
           onPointerUp={endPress}
           onPointerCancel={endPress}
           onPointerLeave={(e) => {
-            if (pressingRef.current) void endPress(e);
+            if (pressingRef.current) endPress(e);
           }}
           onContextMenu={(e) => e.preventDefault()}
           disabled={disabled}

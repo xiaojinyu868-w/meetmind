@@ -56,13 +56,15 @@ export interface SpeechAudioHandle {
   pause(): void;
   /** 播放结束回调（播放器赋值） */
   onended: (() => void) | null;
+  /** 语速（1 = 原速）；不实现则忽略 */
+  setRate?(rate: number): void;
 }
 
 interface TeachSpeechPlayerOptions {
   /** 拉一句音频（默认 POST /api/teach/tts → Blob）；null = 该句跳过 */
   fetchAudio?: (text: string) => Promise<Blob | null>;
-  /** 构造播放句柄（测试注入假实现） */
-  createAudio?: (blob: Blob) => SpeechAudioHandle;
+  /** 构造播放句柄（测试注入假实现）；第二参数是当前语速 */
+  createAudio?: (blob: Blob, rate?: number) => SpeechAudioHandle;
   /** 状态变化（playing/speaking 指示用） */
   onSpeakingChange?: (speaking: boolean) => void;
   /**
@@ -86,13 +88,18 @@ async function defaultFetchAudio(text: string): Promise<Blob | null> {
   }
 }
 
-function defaultCreateAudio(blob: Blob): SpeechAudioHandle {
+function defaultCreateAudio(blob: Blob, rate = 1): SpeechAudioHandle {
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
+  audio.playbackRate = rate;
+  audio.preservesPitch = true;
   const handle: SpeechAudioHandle = {
     play: () => audio.play(),
     pause: () => audio.pause(),
     onended: null,
+    setRate: (r) => {
+      audio.playbackRate = r;
+    },
   };
   audio.onended = () => {
     URL.revokeObjectURL(url);
@@ -103,7 +110,8 @@ function defaultCreateAudio(blob: Blob): SpeechAudioHandle {
 
 export class TeachSpeechPlayer {
   private readonly fetchAudio: (text: string) => Promise<Blob | null>;
-  private readonly createAudio: (blob: Blob) => SpeechAudioHandle;
+  private readonly createAudio: (blob: Blob, rate?: number) => SpeechAudioHandle;
+  private rate = 1;
   private readonly onSpeakingChange?: (speaking: boolean) => void;
   private readonly onSentenceStart?: (seq: number) => void;
   private queue: Array<{ text: string; seq: number }> = [];
@@ -133,6 +141,16 @@ export class TeachSpeechPlayer {
   setMuted(muted: boolean): void {
     this.muted = muted;
     if (muted) this.stopAll();
+  }
+
+  /** 语速 1 / 1.25 / 1.5：当前句立刻生效，后面的句子按此播 */
+  setRate(rate: number): void {
+    this.rate = rate;
+    this.current?.setRate?.(rate);
+  }
+
+  get playbackRate(): number {
+    return this.rate;
   }
 
   get isMuted(): boolean {
@@ -199,7 +217,7 @@ export class TeachSpeechPlayer {
       // 声画联动闸门：句子开始播放（或合成失败被跳过）= 放行锚到这句的板书
       this.onSentenceStart?.(item.seq);
       if (!blob) return; // 合成失败：跳过这句，继续下一句
-      const handle = this.createAudio(blob);
+      const handle = this.createAudio(blob, this.rate);
       this.current = handle;
       const ended = new Promise<void>((resolve) => {
         handle.onended = resolve;

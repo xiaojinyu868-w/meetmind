@@ -12,6 +12,8 @@
  *   <note title="要点">markdown</note>         要点 / 小结（流式）
  *   <math label="勾股定理">a^2+b^2=c^2</math>  公式（KaTeX）
  *   <svg viewBox="0 0 800 450">…</svg>         自由图形（逐元素渐进描画）
+ *   <draw id="fig">JS 脚本</draw>              精确图形：脚本在沙箱里跑，几何 / 函数 / 动画由代码计算（lib/teach-live-draw）
+ *   <draw into="fig">…</draw>                  往已有 draw 图上追加（同一作用域，同一布局）
  *   <plot x="-5,5" y="-3,3">f(x)=x^2</plot>    函数图 / 坐标系（声明式，前端排版）
  *   <diagram>mermaid</diagram>                流程 / 关系 / 时间线 / 思维导图
  *   <code lang="python">…</code>              代码（流式，落定后高亮）
@@ -33,6 +35,7 @@ export const LIVE_BLOCK_KINDS = [
   'note',
   'math',
   'svg',
+  'draw',
   'plot',
   'diagram',
   'code',

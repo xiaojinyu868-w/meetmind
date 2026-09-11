@@ -23,6 +23,7 @@ export interface ChatTurnMessage {
  */
 const HEAVY_BODY_LIMITS: Partial<Record<LiveBlockKind, number>> = {
   svg: 3000,
+  draw: 4000, // 脚本里的变量名（A、B、圆 c）后面 into 追加要用，几乎不压
   plot: 1200,
   anim: 320,
   widget: 320,
@@ -58,7 +59,7 @@ export function renderBlockMarkup(kind: LiveBlockKind, attrs: LiveAttrs, body: s
  */
 export function compactMarkupForHistory(raw: string): string {
   return raw.replace(
-    /<(svg|anim|widget|code|diagram|plot)\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi,
+    /<(svg|draw|anim|widget|code|diagram|plot)\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi,
     (whole, kind: string, attrText: string, body: string) => {
       if (body.trim().length <= heavyLimit(kind.toLowerCase())) return whole;
       return `<${kind.toLowerCase()}${attrText}><!-- 已在板上，正文省略（${body.trim().length} 字） --></${kind.toLowerCase()}>`;

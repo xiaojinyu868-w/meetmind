@@ -7,8 +7,8 @@
  * - 「演出」：Director（director.ts）按语音节奏决定何时 reveal 哪个 segment、何时
  *   触发 cue——学生看到的是老师说到哪画到哪，而不是一屏 SVG 瞬间糊上来。
  *
- * svg 支持 `into="label"` 追加：追加的正文作为目标块的新 segment，独立 reveal，
- * 所以「先画三角形，讲到斜边再补斜边」是分两次长出来的。
+ * svg / draw 支持 `into="label"` 追加：追加的正文作为目标块的新 segment，独立 reveal，
+ * 所以「先画三角形，讲到斜边再补斜边」是分两次长出来的（draw 的追加段与首段在同一脚本作用域里执行）。
  *
  * 历史回放（replay=true）：全部直接 revealed，Director 不参与。
  */
@@ -84,6 +84,8 @@ export interface LessonState {
   pendingAsk: string | null;
   /** 当前打开、未闭合的口播块（text-delta 归到它） */
   openSpeechId: string | null;
+  /** 本节课累计用量（服务端 usage 事件求和） */
+  usage: { turns: number; inputTokens: number; outputTokens: number; costCny: number };
 }
 
 export type LessonAction =
@@ -95,6 +97,8 @@ export type LessonAction =
   | { type: 'stage-cue'; name: LiveCueName; args: LiveAttrs }
   | { type: 'view-page'; pageId: string | null }
   | { type: 'discard-unrevealed' }
+  /** 回看被打断：没演到的全部直接揭示，舞台跳到最后一页 */
+  | { type: 'reveal-all' }
   | { type: 'reset'; threadId: string | null; title: string; topic: string };
 
 export const INITIAL_PAGE_ID = 'p_0';
@@ -118,6 +122,7 @@ export function createLessonState(params: { threadId: string | null; title: stri
     error: null,
     pendingAsk: null,
     openSpeechId: null,
+    usage: { turns: 0, inputTokens: 0, outputTokens: 0, costCny: 0 },
   };
 }
 
@@ -213,6 +218,15 @@ export function lessonReducer(state: LessonState, action: LessonAction): LessonS
     case 'view-page':
       return { ...state, viewingPageId: action.pageId };
 
+    case 'reveal-all': {
+      const blocks: Record<string, LiveBlock> = {};
+      for (const [id, b] of Object.entries(state.blocks)) {
+        blocks[id] = b.segments.every((s) => s.revealed) ? b : { ...b, segments: b.segments.map((s) => ({ ...s, revealed: true })) };
+      }
+      const last = state.pages[state.pages.length - 1];
+      return { ...state, blocks, stagePageId: last.id, viewingPageId: null, sceneQueue: [] };
+    }
+
     case 'discard-unrevealed': {
       // 打断：还没演到的 segment 永远不演了；一个 revealed segment 都没有的块从板上撤下
       //（口播块留着给课堂记录，但 ask 卡不再占位）
@@ -306,6 +320,17 @@ function applyServerEvent(state: LessonState, ev: TeachStreamEvent, replay: bool
       if (!block) return state;
       return { ...state, blocks: { ...state.blocks, [ev.id]: { ...block, imageUrl: ev.url } } };
     }
+
+    case 'usage':
+      return {
+        ...state,
+        usage: {
+          turns: state.usage.turns + 1,
+          inputTokens: state.usage.inputTokens + ev.inputTokens,
+          outputTokens: state.usage.outputTokens + ev.outputTokens,
+          costCny: state.usage.costCny + ev.costCny,
+        },
+      };
 
     case 'turn-complete':
       return { ...state, generating: false };
@@ -428,12 +453,12 @@ function openBlock(state: LessonState, ev: Extract<TeachStreamEvent, { type: 'bl
   }
 
   let attrs = ev.attrs;
-  // svg into="label"：作为目标块的新 segment（目标不存在则降级成一张新图）
-  if (ev.kind === 'svg' && attrs.into) {
+  // svg / draw 的 into="label"：作为同类目标块的新 segment（目标不存在则降级成一张新图）
+  if ((ev.kind === 'svg' || ev.kind === 'draw') && attrs.into) {
     const into = attrs.into;
     const targetId = state.labels[into] ?? (state.blocks[into] ? into : undefined);
     const target = targetId ? state.blocks[targetId] : undefined;
-    if (target && target.kind === 'svg') {
+    if (target && target.kind === ev.kind) {
       return {
         ...state,
         blocks: {

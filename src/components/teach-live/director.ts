@@ -17,7 +17,9 @@ import type { LiveAttrs, LiveCueName } from '@/types/teach-live';
 export type Beat =
   | { kind: 'speech'; blockId: string; text: string; ask: boolean }
   | { kind: 'reveal'; segmentId: string; blockId: string }
-  | { kind: 'cue'; name: LiveCueName; args: LiveAttrs };
+  | { kind: 'cue'; name: LiveCueName; args: LiveAttrs }
+  /** 回看时学生当时说的话（演到这里才进课堂记录） */
+  | { kind: 'student'; text: string };
 
 export interface SpeechPort {
   /** 播一句；resolve 于该句**开始**出声。静音 / 不可用 → 立即 resolve(false) */
@@ -33,6 +35,7 @@ export interface DirectorHooks {
   onCaption(text: string | null, meta: { blockId: string | null; ask: boolean; phase: CaptionPhase }): void;
   /** 队列演完（此刻没有更多 beat）——用来显示「等你回答」 */
   onDrain?(): void;
+  onStudent?(text: string): void;
   estimateMs?(text: string): number;
   sleep?(ms: number): Promise<void>;
   now?(): number;
@@ -116,6 +119,12 @@ export class Director {
           if (gen !== this.generation) return;
           this.hooks.onReveal(beat.segmentId, beat.blockId);
           this.lastRevealAt = this.now();
+        } else if (beat.kind === 'student') {
+          // 学生开口：老师上一句说完再放进记录，停半拍
+          await this.sleep(400);
+          if (gen !== this.generation) return;
+          this.hooks.onStudent?.(beat.text);
+          this.silentGateUntil = this.now() + 900;
         } else if (beat.name === 'pause') {
           const seconds = Number(beat.args.s ?? beat.args.seconds ?? 1);
           await this.sleep(Math.min(5000, Math.max(200, (Number.isFinite(seconds) ? seconds : 1) * 1000)));

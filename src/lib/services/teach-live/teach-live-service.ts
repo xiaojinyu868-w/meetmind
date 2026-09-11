@@ -18,7 +18,7 @@
  */
 
 import { createLogger } from '@/lib/logger';
-import { resolveTeachLiveProvider, teachProviderApiKey, TeachConfig, type TeachProviderConfig } from '@/lib/config/teach.config';
+import { liveCostCny, resolveTeachLiveProvider, teachProviderApiKey, TeachConfig, type TeachProviderConfig } from '@/lib/config/teach.config';
 import { buildTeachLivePrompt } from '@/lib/prompts/teach-live-prompt';
 import { createOpenAI } from '@ai-sdk/openai';
 import { streamText, type LanguageModel } from 'ai';
@@ -28,6 +28,7 @@ import * as store from '../teach-codex/thread-store';
 import { LiveMarkupParser } from './live-markup-parser';
 import { compactMarkupForHistory, eventsToHistory, trimHistory, type ChatTurnMessage } from './live-history';
 import { generateLiveImage, scheduleMissingLiveImages } from './live-image';
+import { InlineMathStream } from './inline-math-stream';
 
 const log = createLogger('teach-live');
 
@@ -148,27 +149,50 @@ async function followTitle(session: LiveSession, title: string): Promise<void> {
   await store.renameThread(session.threadId, clean).catch(() => undefined);
 }
 
+/** 口播 / 要点 / 公式里的 {{ }} 在服务端算好（TTS、字幕、记录、历史看到的都是数字） */
+const INLINE_MATH_KINDS: ReadonlySet<LiveBlockKind> = new Set(['say', 'ask', 'note', 'math']);
+
+interface TurnBuffers {
+  openKinds: Map<string, LiveBlockKind>;
+  imagePrompts: Map<string, string>;
+  inlineMath: Map<string, InlineMathStream>;
+}
+
 /** 解析器事件 → 总线事件（口播正文改走 text-delta；image 块闭合即开始生图） */
-function forwardLiveEvent(session: LiveSession, ev: LiveEvent, openKinds: Map<string, LiveBlockKind>, imagePrompts: Map<string, string>): void {
+function forwardLiveEvent(session: LiveSession, ev: LiveEvent, buffers: TurnBuffers): void {
   const threadId = session.threadId;
+  const { openKinds, imagePrompts, inlineMath } = buffers;
+  const emitBody = (id: string, kind: LiveBlockKind | undefined, text: string) => {
+    if (!text) return;
+    if (kind && LIVE_SPEECH_KINDS.has(kind)) emit(threadId, { type: 'text-delta', text });
+    else emit(threadId, { type: 'block-delta', id, text });
+  };
   switch (ev.type) {
     case 'block-open':
       openKinds.set(ev.id, ev.kind);
       if (ev.kind === 'image') imagePrompts.set(ev.id, ev.attrs.prompt ?? '');
+      if (INLINE_MATH_KINDS.has(ev.kind)) inlineMath.set(ev.id, new InlineMathStream());
       emit(threadId, ev);
       return;
     case 'block-delta': {
       const kind = openKinds.get(ev.id);
-      if (kind && LIVE_SPEECH_KINDS.has(kind)) emit(threadId, { type: 'text-delta', text: ev.text });
-      else {
-        if (kind === 'image') imagePrompts.set(ev.id, (imagePrompts.get(ev.id) ?? '') + ev.text);
+      if (kind === 'image') {
+        imagePrompts.set(ev.id, (imagePrompts.get(ev.id) ?? '') + ev.text);
         emit(threadId, ev);
+        return;
       }
+      const math = inlineMath.get(ev.id);
+      emitBody(ev.id, kind, math ? math.push(ev.text) : ev.text);
       return;
     }
     case 'block-close': {
-      emit(threadId, ev);
       const kind = openKinds.get(ev.id);
+      const math = inlineMath.get(ev.id);
+      if (math) {
+        emitBody(ev.id, kind, math.flush());
+        inlineMath.delete(ev.id);
+      }
+      emit(threadId, ev);
       openKinds.delete(ev.id);
       if (kind === 'image') {
         const prompt = imagePrompts.get(ev.id) ?? '';
@@ -184,17 +208,17 @@ function forwardLiveEvent(session: LiveSession, ev: LiveEvent, openKinds: Map<st
   }
 }
 
-function runTurn(session: LiveSession, text: string): void {
+function runTurn(session: LiveSession, text: string, boardNote?: string): void {
   const threadId = session.threadId;
   const provider = resolveTeachLiveProvider();
   session.turnActive = true;
   const abortController = new AbortController();
   session.abortController = abortController;
-  session.history.push({ role: 'user', content: text });
+  // 板上情况（前端报告的 draw 脚本错误等）只进模型上下文，不进课堂记录
+  session.history.push({ role: 'user', content: boardNote ? `${text}\n\n（板上情况，学生看不到这段：${boardNote}）` : text });
 
   const parser = new LiveMarkupParser(() => `lb_${++session.blockCounter}`);
-  const openKinds = new Map<string, LiveBlockKind>();
-  const imagePrompts = new Map<string, string>();
+  const buffers: TurnBuffers = { openKinds: new Map(), imagePrompts: new Map(), inlineMath: new Map() };
   let raw = '';
   const startedAt = Date.now();
   let firstTokenAt: number | null = null;
@@ -215,12 +239,26 @@ function runTurn(session: LiveSession, text: string): void {
         if (!delta) continue;
         if (firstTokenAt === null) firstTokenAt = Date.now();
         raw += delta;
-        for (const ev of parser.push(delta)) forwardLiveEvent(session, ev, openKinds, imagePrompts);
+        for (const ev of parser.push(delta)) forwardLiveEvent(session, ev, buffers);
       }
-      for (const ev of parser.finish()) forwardLiveEvent(session, ev, openKinds, imagePrompts);
-      const usage = abortController.signal.aborted
-        ? null
-        : await Promise.resolve(result.usage).catch(() => null);
+      for (const ev of parser.finish()) forwardLiveEvent(session, ev, buffers);
+      // 被打断也尽量拿 usage（上游已计费）；拿不到就不发
+      const usage = await Promise.race([
+        Promise.resolve(result.usage).catch(() => null),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
+      ]);
+      if (usage && (usage.inputTokens || usage.outputTokens)) {
+        const inputTokens = usage.inputTokens ?? 0;
+        const outputTokens = usage.outputTokens ?? 0;
+        emit(threadId, {
+          type: 'usage',
+          inputTokens,
+          outputTokens,
+          costCny: liveCostCny(inputTokens, outputTokens),
+          ms: Date.now() - startedAt,
+          model: provider.model,
+        });
+      }
       log.info('live turn finished', {
         threadId,
         ttftMs: firstTokenAt ? firstTokenAt - startedAt : null,
@@ -232,7 +270,7 @@ function runTurn(session: LiveSession, text: string): void {
       });
       emit(threadId, abortController.signal.aborted ? { type: 'interrupted' } : { type: 'turn-complete' });
     } catch (err) {
-      for (const ev of parser.finish()) forwardLiveEvent(session, ev, openKinds, imagePrompts);
+      for (const ev of parser.finish()) forwardLiveEvent(session, ev, buffers);
       if (abortController.signal.aborted) {
         emit(threadId, { type: 'interrupted' });
       } else {
@@ -260,7 +298,7 @@ function runTurn(session: LiveSession, text: string): void {
   session.turnPromise = done;
 }
 
-export async function sendTeachLiveMessage(threadId: string, text: string): Promise<void> {
+export async function sendTeachLiveMessage(threadId: string, text: string, boardNote?: string): Promise<void> {
   const row = await store.getThread(threadId);
   if (!row) throw new TeachLiveError('thread-not-found', '课程不存在', 404);
   const existing = state.sessions.get(threadId);
@@ -269,11 +307,11 @@ export async function sendTeachLiveMessage(threadId: string, text: string): Prom
   const session = await ensureSession(row);
   await store.touchThread(threadId);
   void store.appendThreadEvent(threadId, { type: 'student-message', text }).catch(() => undefined);
-  runTurn(session, text);
-  log.info('live turn started', { threadId, chars: text.length });
+  runTurn(session, text, boardNote?.trim().slice(0, 600) || undefined);
+  log.info('live turn started', { threadId, chars: text.length, boardNote: Boolean(boardNote) });
 }
 
-export async function interruptTeachLiveThread(threadId: string, text?: string): Promise<void> {
+export async function interruptTeachLiveThread(threadId: string, text?: string, boardNote?: string): Promise<void> {
   const row = await store.getThread(threadId);
   if (!row) throw new TeachLiveError('thread-not-found', '课程不存在', 404);
   const session = state.sessions.get(threadId);
@@ -288,5 +326,5 @@ export async function interruptTeachLiveThread(threadId: string, text?: string):
       ]);
     }
   }
-  if (text?.trim()) await sendTeachLiveMessage(threadId, text.trim());
+  if (text?.trim()) await sendTeachLiveMessage(threadId, text.trim(), boardNote);
 }
