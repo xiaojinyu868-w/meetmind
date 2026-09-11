@@ -15,8 +15,9 @@ set -euo pipefail
 
 # 生产专用检出（git worktree，分支 release/prod）；开发工作树不再是运行目录——见 docs/RELEASE_FLOW.md
 PROJECT_DIR="${MEETMIND_PROD_DIR:-/mnt/meetmind-prod}"
-APP_NAME="meetmind"
-PORT=3002
+# 同一脚本也服务独立子域名的试用实例（如知乎线 meetmind-zhihu @ 3012，make deploy-zhihu）：三个变量一起改，别只改一个
+APP_NAME="${MEETMIND_APP_NAME:-meetmind}"
+PORT="${MEETMIND_PORT:-3002}"
 HEALTH_URL="http://127.0.0.1:${PORT}/api/health"
 MAX_WAIT=30  # 健康检查最大等待秒数
 

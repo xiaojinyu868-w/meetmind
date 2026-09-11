@@ -11,6 +11,7 @@
 | `/mnt/meetmind-capture-v1-server-handoff` | `feat/settings-redesign` | teach 会话的开发目录（历史上也是生产目录，现在只是开发目录） |
 | `/mnt/meetmind-product-polish` | `feat/product-polish` | 产品打磨 / 内容层 |
 | `/mnt/meetmind-reliability` | `feat/reliability` | 课堂线可靠性 |
+| `/mnt/meetmind-zhihu` | `feat/zhihu-hackathon` | 知乎线（收藏夹开课）。**同时是一个独立试用实例的运行目录**：PM2 `meetmind-zhihu` @ 3012，nginx `zhihu.meetmind.online`，`make deploy-zhihu` 在这里旁路构建；与生产同库同数据目录，零 schema 改动。是否合进 `release/prod` 由产品负责人试用后决定（`docs/plans/2026-09-12-zhihu-line.md`） |
 
 数据不在版本库里，目前仍放在 `/mnt/meetmind-capture-v1-server-handoff/`（`prisma/meetmind.db`、`public/uploads`、`public/downloads`、`public/wechat-media`、`data/`），生产目录用软链指过去；`.env` 里 `DATABASE_URL` 用**绝对路径**，`src/lib/prisma.ts` 读它（此前只按 cwd 找库，换目录会静默新建空库）。**下一步维护窗口把这些数据迁到 `/mnt/meetmind-data` 并双向软链**，让数据也不住在任何人的开发目录里。
 
@@ -24,6 +25,14 @@ ln -s /mnt/meetmind-capture-v1-server-handoff/node_modules node_modules   # 同�
 cp /mnt/meetmind-prod/.env .env                                             # DATABASE_URL 已是绝对路径
 PORT=31xx NEXT_DEV_DIST_DIR=.next-dev-<线名> make dev                        # 端口与 dist 目录各自独立
 ```
+
+## 独立子域名试用实例（2026-09-12 起，知乎线首用）
+
+一条线想先给人试用、再决定合不合：不合进 `release/prod`，而是**把它的 worktree 当作第二个运行目录**——
+`ecosystem.config.js` 加一个 app（cwd 指向该 worktree、独立端口）、`scripts/deploy.sh` 用 `MEETMIND_PROD_DIR / MEETMIND_APP_NAME / MEETMIND_PORT`
+三个变量一起指过去（有 `make deploy-zhihu` 作样板）、nginx 一个子域名 server 块（模板 `ops/nginx/`）、certbot 签证书。
+约束：该分支**不能有 schema 改动**（共库）；`.env` 是生产副本加本线独有变量；`data/` `public/uploads` 等软链同生产；`make deploy-xxx` 前同样看 `free -m`。
+试用结束要么合进 `release/prod` 并 `pm2 delete` 这个实例，要么整体下线——不要让试用实例长期与生产各跑一版。
 
 ## 日常开发的三条铁律
 

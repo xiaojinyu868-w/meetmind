@@ -251,6 +251,25 @@
 
 ---
 
+## 2026-09-12 — 知乎线：用知乎登录 → 选一个收藏夹 → 同学开成一节课（独立子域名试用）
+
+- **一句话**：你在知乎收藏过的，让同学讲给你听；讲完考一考，没稳的再去知乎上接着看。赛事起因是知乎黑客松 2026（知识炼金场），
+  每一组按"赛后留在产品里"的标准做：知乎登录（降低登录墙）、收藏夹进收集流（零动作的第二条收集入口）、知乎搜索进今日情报（有权威分级的中文一手经验）。
+- **知乎给了什么**：全部只读——站内 / 全网搜索、热榜、直答、本人或 OAuth 用户的创作 / 关注 / 收藏；**没有正文**（正文靠 Firecrawl 抓页面，实测 4/4）、
+  没有写接口、拿不到他人数据。逐字段事实清单在 `src/lib/services/zhihu/DOMAIN.md`。
+- **七个提交、七组**：接入层（客户端 + 页面去杂质 + `make smoke-zhihu`）→ 登录 / 绑定（cookie 对账补知乎不回传 state 的缺口；稳定身份 = `/user` 的 url_token，
+  拿不到只允许绑定不允许登录）→ 收藏夹进收集流（sourceKey 按 canonical URL；摘要先进标 partial，正文按需抽）→ 开课（teach-live 学会「学生自带材料」：
+  材料包落盘 `data/teach-materials/`，`buildTeachLivePrompt` 第三参数，对 teach-live 的改动是加法）→ 讲完就考 + 继续看（材料包变伪转录喂既有应用矩阵，
+  不改 ai-native 主干；知乎搜索按权威 / 赞同 / 有反方评论排序）→ 第一屏 `/apps/zhihu` + 课堂页（LiveStage 原样复用 + 材料 / 考一考 / 继续看侧栏）→ 独立实例上线。
+- **实测**：`make smoke-zhihu-lesson`（不需凭证）在 dev 与生产构建上各过一遍——老师口播「你收藏的三篇材料共同的出发点，过拟合……材料 1 说，那里就是模型开始背题的地方」，
+  伪转录 12 段 / 156s 过 readiness 门，quiz 7 题；93 个新单测；`make check` / eslint 零新增。
+- **上线形态**：`/mnt/meetmind-zhihu` worktree 同时是运行目录——PM2 `meetmind-zhihu` @ 3012、nginx `zhihu.meetmind.online`（HTTP 块已就位，DNS 到位后 certbot 签证）、
+  `make deploy-zhihu`（deploy.sh 用 `MEETMIND_PROD_DIR / APP_NAME / PORT` 参数化）；与生产同库同数据目录，零 schema 改动。合并与否待产品负责人试用。
+- **零改动 / 未做**：`schema.prisma` 一字未动；ai-native 来源无关输入（`LearningSource[]`）留给主干下一步；共享 SQLite 仍是 delete 日志模式，
+  多进程并发下偶发写锁超时（smoke 里已见一次），建议维护窗口切 WAL。
+
+---
+
 ## 2026-09-09 — 问同学第一屏重做：同学开口，不陈列库存
 
 - **病灶**：上一版空态是大头像 + 眉题 + 衬线大标题 + 副标题 + 「上次继续」列表行 + 一张带"正在读 / 记住"标签与 chip 的书桌 +

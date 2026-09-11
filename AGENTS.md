@@ -89,6 +89,11 @@ make smoke-pocket # 合成账户 → /api/workspace/clip → /pocket 读到 → 
 make test-desktop # 桌面壳纯逻辑单测（不需要 Electron）；框选 / 回执 / 热键体验要在 Mac 上 npm run desktop:dev
 make test-context # Context 权限 / 来源 / 重试 / HTTP 契约测试
 make smoke-context-live # 真 Hindsight + Tutor + 浏览器全链路验收（SMOKE_BASE 指隔离服务，SMOKE_BROWSER=chromium；非生产库）
+
+# 知乎线（独立试用实例）
+make smoke-zhihu        # 知乎只读接口 smoke（本人模式：搜索 / 收藏夹 / 近期收藏 → 抽一条正文 → 去杂质；需 ZHIHU_ACCESS_SECRET）
+make smoke-zhihu-lesson # 收藏夹开课闭环（不需知乎凭证）：合成收藏 → 开课 → 老师口播命中材料 → 伪转录出题 → 清理；SMOKE_BROWSER=chromium 截图
+make deploy-zhihu       # 在 /mnt/meetmind-zhihu 旁路构建 → PM2 meetmind-zhihu（3012）→ 健康检查；nginx zhihu.meetmind.online
 ```
 
 ---
@@ -113,6 +118,7 @@ make smoke-context-live # 真 Hindsight + Tutor + 浏览器全链路验收（SMO
 16. **teach 引擎迁移（2026-09，pi + vendor OpenMAIC，P1 已接线）**：主线 14 的 engine 侧——`src/lib/services/teach-engine/`（teach-engine-service 编排：每线程一个 pi Agent + StreamFn 桥 + 结构化动作直出边生成边执行；vendor 树豁免 500 行铁律）；`TEACH_ENGINE=codex|engine` 决定新建线程归属（TeachThread.engine 快照），事件契约与 codex 线一致（name 为新动作词表；v1 不发 image-ready）；与 codex 底座双线并存 → `src/lib/services/teach-engine/DOMAIN.md` + `docs/TEACH_TUTOR_ENGINE.md`
 17. **共享记忆底座（2026-09-09 合入，Hindsight 0.9.2）**：`src/lib/services/context/`（Context v1 API `/api/context/v1/*` / 可靠投递 worker `make context-worker` / 用户+空间独立 bank / 授权 mmctx_ / 暂停·忘记清理 / prepare 召回）；写侧 `learning-observation-service` **双写** `LearningEvent`（事实）+ `ContextEvent`（原始经历 → Hindsight）；读侧 `LearnerContext` = 事实半（`learner-context-provider`，掌握轨迹）+ 理解半（`context/learner-understanding`，有来源的跨应用记忆），应用矩阵 / Tutor / teach 一处格式化消费；`CONTEXT_ENABLED` 灰度，关掉只影响内部应用读写不删数据 → `src/lib/services/context/DOMAIN.md` + `docs/plans/CONTEXT_M1_DELIVERY.md` + `docs/plans/CONTEXT_SERVER_HANDOFF.md`
 18. **teach 第三代引擎 live stage（2026-09-10，第二～四轮 09-11）**：主线 14/16 的继任候选——模型直出「标签流」（口播 / 板书块 / 动作交错；`<draw>` 模型写 JS 由确定性运行时算几何 / 函数 / 动画 / 三维投影（`src/lib/teach-live-draw/`，Worker 沙箱，切线一定垂直半径；API 按老师最自然的写法收——`[x, y]` 即点、`'label', { style }` 并存——自愈只是兜底）、`<svg>` 逐元素闭合即上板、`<plot>` 声明式函数图、`<anim>` 代码动画、`<widget>` 沙箱交互件、`<image>` 异步生图、口播 `{{ }}` 内联计算），服务端只解析 + 扇出（`src/lib/services/teach-live/`，一轮一次 streamText，GLM-5.3-Flash `reasoning_effort=low` TTFT ~0.9s），前端 `/teach/live` 按语音节奏演出（到达 / 演出两条时间轴，`src/components/teach-live/`）；`TeachThread.engine='live'`，与 codex / engine 三线并存 → `src/lib/services/teach-live/DOMAIN.md` + `docs/TEACH_TUTOR_ENGINE.md` §12
+19. **知乎线（2026-09-12，独立子域名试用）**：用知乎登录 → 选一个收藏夹 → 同学开成一节 live 课 → 讲完就考 → 哪没稳 → 知乎上继续看。`src/lib/services/zhihu/`（只读接口客户端 / 页面去杂质 / OAuth 登录绑定 / 收藏夹进收集流 / 材料包开课 / 知乎搜索补货）+ `api/auth/zhihu/*` `api/zhihu/*` + `/apps/zhihu`；teach-live 学会「学生自带材料」（`teach-live/live-materials.ts`，材料段进 system prompt）；知乎搜索作为今日情报并列 provider。零 schema 改动，`ZHIHU_ENABLED` 灰度；运行在 `/mnt/meetmind-zhihu`（PM2 `meetmind-zhihu` @ 3012，`zhihu.meetmind.online`），合并与否待试用 → `docs/plans/2026-09-12-zhihu-line.md` + `src/lib/services/zhihu/DOMAIN.md` + `src/app/api/zhihu/DOMAIN.md`
 
 ---
 
@@ -149,6 +155,7 @@ make smoke-context-live # 真 Hindsight + Tutor + 浏览器全链路验收（SMO
 | **改状态管理 / 类型 / 配置 / 模型** | `src/stores/DOMAIN.md` / `src/types/DOMAIN.md` / `src/lib/config/DOMAIN.md` → `app.config.ts` → `llm-service.ts` |
 | **改设置项 / 用户偏好** | `src/app/DOMAIN.md` 设置页 → `src/lib/utils/DOMAIN.md` → 所有消费该偏好的 hooks/components |
 | **改共享学习记忆 / Context 服务 / 记忆开发者接入** | `docs/plans/LEARNING_MEMORY_V1_SPEC.md`（V1 目标）→ `docs/plans/CONTEXT_M1_DELIVERY.md`（已实现能力与限制）→ `src/lib/services/context/DOMAIN.md` + `src/app/api/context/DOMAIN.md`；UI 看 `src/components/context/DOMAIN.md`，接入包看 `packages/context-sdk/DOMAIN.md`；旧入口与迁移背景见 `src/app/api/memory/DOMAIN.md` + `docs/plans/LEARNING_MEMORY_P0_HANDOFF.md` |
+| **改知乎线（登录 / 收藏夹开课 / 补货）** | `docs/plans/2026-09-12-zhihu-line.md`（北极星与接缝）→ `src/lib/services/zhihu/DOMAIN.md`（知乎接口逐字段事实 + 服务边界）→ `src/app/api/zhihu/DOMAIN.md`（路由 + 页面）→ 材料段在 `src/lib/services/teach-live/live-materials.ts`；文案 `src/lib/ui/copy-zhihu.ts`；验证 `make smoke-zhihu`（需 Secret）/ `make smoke-zhihu-lesson`（不需）；上线 `make deploy-zhihu`（`docs/RELEASE_FLOW.md` 试用实例节） |
 | **改设计 / 视觉** | `docs/DESIGN_SYSTEM.md` + `design-demo/v7/` showcase + `docs/PRODUCT_TASTE.md` |
 | **处理 bug** | `skills/debugging/SKILL.md` → 先诊断再动手 |
 

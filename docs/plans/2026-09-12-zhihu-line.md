@@ -50,13 +50,13 @@
 
 | 组 | 内容 | 验证门 | 状态 |
 |---|---|---|---|
-| G1 接入 | 客户端 + 去杂质 + config + smoke | `make check`；`npx vitest run src/lib/services/zhihu`（35 例）；`make smoke-zhihu`（凭证到手后） | 代码完成，待凭证 live 验证 |
-| G2 身份 | OAuth 路由 + auth service | 路由 / nonce 单测；部署后本人真实授权 | — |
-| G3 导入 | 收藏夹 → capture；按需正文 | 单测；smoke 扩展：导入 → 二次导入零重复 → 抽三条 → 状态迁移 → 清理 | — |
-| G5 开课 | 材料包 + teach-live 材料段 | teach-live 现有测试全绿 + 材料段单测；真实收藏夹开课彩排 | — |
-| G6 考 + 补货 | 伪转录适配 + zhihu provider + 继续看 | 单测；一轮真实产物核对"回到知乎原文" | — |
-| G7 第一屏 | `/apps/zhihu` + 文案 + 失败态 | 浏览器 smoke 截图 | — |
-| 上线 | PM2 + nginx + 证书 + `make deploy-zhihu` | `/api/health` + 静态 chunk 抽样 + 子域名走通旅程 | 需 DNS A 记录 |
+| G1 接入 | 客户端 + 去杂质 + config + smoke | `make check`；`npx vitest run src/lib/services/zhihu`；`make smoke-zhihu`（凭证到手后） | 6d907e0 完成；live 验证待凭证 |
+| G2 身份 | OAuth 路由 + auth service | 路由 / nonce 单测；部署后本人真实授权 | 7b1583c 完成；真实授权待 app_id/app_key + DNS |
+| G3 导入 | 收藏夹 → capture；按需正文 | 注入测试（翻页 / 去 utm / partial→complete / 失败留痕） | a414941 完成 |
+| G5 开课 | 材料包 + teach-live 材料段 | teach-live 现有测试全绿 + 材料段单测；`smoke-zhihu-lesson` 老师口播命中材料 | 0adccfa 完成，实测通过 |
+| G6 考 + 补货 | 伪转录适配 + zhihu provider + 继续看 | 单测；`smoke-zhihu-lesson` quiz 7 题 | e00ee4d 完成 |
+| G7 第一屏 | `/apps/zhihu` + 课堂页 + 文案 + 失败态 | `smoke-zhihu-lesson` 浏览器截图三张 | ebf90dc 完成 |
+| 上线 | PM2 + nginx + 证书 + `make deploy-zhihu` | `/api/health` + 静态 chunk 抽样 + 子域名走通旅程 | 实例已在 3012 跑、nginx HTTP 块已就位、生产构建上 smoke 通过；**证书等 DNS A 记录**（`certbot --nginx -d zhihu.meetmind.online`） |
 
 ## 风险与兜底
 
@@ -69,3 +69,11 @@
 - 2026-09-12：讲课只走 teach-live（codex / engine 将废弃）；知乎线独立子域名上线试用后再决定合并；G1–G7 一路做完。
 - 2026-09-12：赛前不改 ai-native 主干（另一会话正在动），用伪转录适配器保完成度，`LearningSource[]` 赛后做。
 - 2026-09-12：零 schema 改动（cookie nonce / 文件材料 / 现有 AuthProvider），避开多会话对 `schema.prisma` 的串行约束。
+
+## 待产品负责人（2026-09-12 凌晨交付时）
+
+1. DNS：`zhihu.meetmind.online A 47.112.160.134`；到位后在服务器上 `certbot --nginx -d zhihu.meetmind.online`（nginx HTTP 块已在 `/etc/nginx/conf.d/`）。
+2. 凭证：`ZHIHU_ACCESS_SECRET / ZHIHU_OAUTH_APP_ID / ZHIHU_OAUTH_APP_KEY` 写进 `/mnt/meetmind-zhihu/.env`（模板已留好），然后 `pm2 restart meetmind-zhihu`；开放平台登记回调 `https://zhihu.meetmind.online/api/auth/zhihu/callback`。
+   想不走 OAuth 先用自己的知乎账号演示：把自己的 MeetMind userId 填进 `ZHIHU_SELF_MODE_USER_IDS`。
+3. 建议维护窗口把共享 SQLite 切到 WAL（`PRAGMA journal_mode=WAL`，一次性、可回退）：现在 delete 模式下生产 + worker + 试用实例三个进程并发，偶发写锁超时。
+

@@ -67,6 +67,10 @@ smoke-pocket: ## 口袋闭环：合成账户 → /api/workspace/clip（ChatGPT �
 smoke-zhihu: ## 知乎接入 smoke（只读、不起服务）：本人模式走搜索 / 收藏夹 / 近期收藏 → Firecrawl 抽一条正文 → 去杂质；需 .env 的 ZHIHU_ACCESS_SECRET（SMOKE_ZHIHU_URL 指定要抽的链接）
 	@npx tsx tests/smoke/smoke-zhihu.ts
 
+.PHONY: deploy-zhihu
+deploy-zhihu: ## 知乎线独立试用实例上线：在 /mnt/meetmind-zhihu 旁路构建 → 原子切换 → PM2 meetmind-zhihu（3012）重载 → 健康检查；nginx zhihu.meetmind.online 反代到它（docs/plans/2026-09-12-zhihu-line.md）
+	@MEETMIND_PROD_DIR=/mnt/meetmind-zhihu MEETMIND_APP_NAME=meetmind-zhihu MEETMIND_PORT=3012 ./scripts/deploy.sh
+
 .PHONY: smoke-zhihu-lesson
 smoke-zhihu-lesson: ## 收藏夹开课闭环（不需知乎凭证）：合成账户 → 3 条正文完整的收藏 → /api/zhihu/lesson → 老师开讲命中材料概念 → 伪转录出题 → continue → 清理；SMOKE_BASE 指服务（默认 3106），SMOKE_BROWSER=chromium 截图，SMOKE_SKIP_LLM=1 不花模型钱
 	@SMOKE_BASE=$${SMOKE_BASE:-http://localhost:3106} npx tsx tests/smoke/smoke-zhihu-lesson.ts
