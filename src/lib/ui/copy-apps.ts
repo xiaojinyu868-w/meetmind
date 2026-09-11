@@ -54,6 +54,9 @@ export const APPS_COPY = {
       outcome: {
         quiz: (total: number, correct: number): string => `${total} 题对 ${correct}`,
         flashcards: (total: number, got: number): string => `${total} 张记住 ${got}`,
+        /** 已有牌堆里有到期的卡时，路径卡副题换成到期数（到期模型 useFlashcardsReview） */
+        flashcardsDue: (count: number): string => `今天到期 ${count} 张`,
+        flashcardsMissedFirst: (count: number): string => `上次没记住的 ${count} 张待复习`,
         teachBack: (mastery: number, weak: number): string => (
           weak > 0 ? `讲透 ${mastery} 个 · ${weak} 个还没讲清` : `${mastery} 个都讲透了`
         ),
@@ -288,6 +291,9 @@ export const APPS_COPY = {
       backLabel: '答',
       /** 牌堆下方还剩几张（不含当前） */
       remaining: (count: number): string => `还剩 ${count} 张`,
+      /** 进入态那一句（2026-09-11 跨会话间隔复习）：到期模型说这叠卡里哪几张先来；全是新卡时不说 */
+      entryMissedFirst: (count: number): string => `上次没记住的 ${count} 张先来`,
+      entryDue: (count: number): string => `今天到期 ${count} 张`,
       missedList: '没记住的',
       previous: '上一张',
       next: '下一张',
@@ -300,6 +306,8 @@ export const APPS_COPY = {
       keyboardHint: '1–4 选 · 回车 / 空格确认 · ←→ 翻题',
       /** 「确认答案」还按不了时的原因（title） */
       pickFirst: '先选一个答案',
+      /** 多选题题号旁唯一的形态提示（2026-09-11）：选中是切换，全对才算对 */
+      multipleHint: '多选',
       /** 从结束页点题号回看后，回到结果 */
       backToReport: '回到结果',
       reviewQuestion: (index: number): string => `回看第 ${index} 题`,

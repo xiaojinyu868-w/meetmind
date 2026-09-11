@@ -1,10 +1,25 @@
 import { buildTerminologyHintBlock } from './prompt-context';
 import { buildPromptTranscriptContext } from './prompt-context';
 import type { TranscriptSegment } from '@/types';
+import type { MaterialDescription } from './app-prompts-practice';
+
+// 闪卡 / 测验（练习类）两组 prompt 与学习者段落在 app-prompts-practice.ts：本文件已到行数预算，且它们共享"掌握轨迹怎么进 prompt"这一套上下文；
+// 从这里再导出是为了 ai-control-service / teach-back-prompts 等既有 import 路径不变。
+export {
+  buildFlashcardsSystemPrompt,
+  buildFlashcardsUserPrompt,
+  buildLearnerContextParagraph,
+  buildQuizSystemPrompt,
+  buildQuizUserPrompt,
+  describeMaterial,
+  type MaterialDescription,
+} from './app-prompts-practice';
 
 export const APP_PROMPT_VERSIONS = {
-  flashcards: 'app-flashcards-v1',
-  quiz: 'app-quiz-v1',
+  /** v2（2026-09-11）：正面是提示不是标题、背面 ≤2 行、掌握轨迹决定哪些点该有卡、卡数随材料 */
+  flashcards: 'app-flashcards-v2',
+  /** v2（2026-09-11）：这套题是为这个人出的——掌握轨迹进 prompt、题型按内容选、每题必有先对后错的解析、难度有走向、题量随材料 */
+  quiz: 'app-quiz-v2',
   mindmap: 'app-mindmap-v2',
   cheatsheet: 'app-cheatsheet-v2',
   audioOverview: 'app-audio-overview-v1',
@@ -18,12 +33,8 @@ export interface StructuredAppPromptContext {
   terminologyHint?: string;
   /** formatLearnerContextForPrompt 的输出：这个学习者跨课的掌握状态 / 困惑 / 最近学过（空串 = 不写） */
   learnerContext?: string;
-}
-
-/** 学习者段落：各应用 user prompt 里"这个人"的那一段（"这节课"的在 transcriptContext / anchorContext） */
-export function buildLearnerContextParagraph(learnerContext: string | undefined): string {
-  if (!learnerContext?.trim()) return '';
-  return `关于这个学习者（来自他此前真实做过的检验与他自己确认过的话，跨课；还没稳的地方值得在本课相关处多覆盖，已经稳的不必再重复）：\n${learnerContext.trim()}\n\n`;
+  /** 材料体量（describeMaterial）：模型据此决定题量 / 卡数，不传就只按原文长短自己估 */
+  material?: MaterialDescription;
 }
 
 export interface CheatsheetPromptContext extends StructuredAppPromptContext {
@@ -94,64 +105,6 @@ export function buildCheatsheetScopePromptContext(input: CheatsheetScopePromptIn
     sourceSummary,
     ...(examScope ? { examScope } : {}),
   };
-}
-
-export function buildFlashcardsSystemPrompt(): string {
-  return '你是一位深谙认知科学和间隔重复理论的学习教练。学生刚上完一节课，需要通过主动回忆来真正记住核心知识，而不仅仅是机械背诵。把这节课的内容转化为一组让他“看到题就能在脑子里把答案重建出来”的闪卡。';
-}
-
-export function buildFlashcardsUserPrompt(context: StructuredAppPromptContext): string {
-  return `${context.goalIntent ? `他的学习目标：${context.goalIntent}\n\n` : ''}${context.anchorContext ? `他听课时的困惑点（这些地方更容易出问题，值得多覆盖）：\n${context.anchorContext}\n\n` : ''}${buildLearnerContextParagraph(context.learnerContext)}课堂原文：
-${context.transcriptContext}
-
-输出 JSON：
-{
-  "deckTitle": string,
-  "overview": string,
-  "cards": [
-    { "question": string, "answer": string, "startMs": number, "endMs": number, "hint"?: string, "difficulty"?: "core"|"challenge"|"transfer" }
-  ]
-}
-
-质量合同：
-- 共 8 张左右；以核心概念为主，保留 1-2 张需要比较、推理或迁移到新情境的卡
-- 一张卡只检验一个认知动作；题面脱离原文也能读懂，不问“老师讲了什么”“这段主要说什么”
-- answer 用 1-3 句话给出可核对的最小完整答案，不把整段转录搬过来
-- hint 只能给思考方向，不能直接泄露答案关键词
-- 困惑点优先覆盖，但没有课堂证据的内容宁可不出
-- startMs/endMs 必须指向真正支持答案的原文位置，不能按卡片顺序平均分配
-
-只输出 JSON，不解释。${buildTerminologyHintBlock(context.terminologyHint)}`;
-}
-
-export function buildQuizSystemPrompt(): string {
-  return '你是一位经验丰富的命题研究员，擅长设计能区分“真懂”和“以为自己懂”的测试题。学生刚上完一节课，想检验自己对课堂内容的理解程度。题目类型可以是单选、判断、填空、简答任意组合，由你按内容性质决定哪种最合适。' +
-    '单选题的每个干扰项都必须来自课堂内容里真实存在的、似是而非的理解偏差或易混淆概念，写成具体、自洽、有信息量的陈述；严禁出现“该片段主要讨论了X”“跳过了这个话题”“仅做了简单引用，未做实质分析”这类与具体知识无关、一眼就是模板的空话选项。如果一道题凑不出 3 个有内容的干扰项，就把它出成简答题而不是硬凑选择题。' +
-    '题目会显示在三栏学习界面的中间窄区，阅读成本必须低：每题只检验一个判断；中文题干尽量不超过 32 字，英文题干尽量不超过 24 个词；中文选项尽量不超过 24 字，英文选项尽量不超过 16 个词。不要反复写“根据上下文”“Based on the context”等无信息铺垫，直接提问。通常生成 4-6 道互不重复的题，内容不足时宁可少出。题面与选项优先沿用课堂原文的主要语言，explanation 使用简体中文帮助复盘。';
-}
-
-export function buildQuizUserPrompt(context: StructuredAppPromptContext): string {
-  return `${context.goalIntent ? `他的学习目标：${context.goalIntent}\n\n` : ''}${context.anchorContext ? `他听课时的困惑点（这些地方更容易出问题，值得重点检验）：\n${context.anchorContext}\n\n` : ''}${buildLearnerContextParagraph(context.learnerContext)}课堂原文：
-${context.transcriptContext}
-
-输出 JSON：
-{
-  "title": string,
-  "strategy": string,
-  "questions": [
-    {
-      "stem": string,
-      "type": "single" | "judge" | "fill" | "short",
-      "options": string[],
-      "answer": string,
-      "explanation": string,
-      "startMs": number,
-      "endMs": number
-    }
-  ]
-}
-
-只输出 JSON，不解释。${buildTerminologyHintBlock(context.terminologyHint)}`;
 }
 
 export function buildMindmapSystemPrompt(): string {

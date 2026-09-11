@@ -66,8 +66,8 @@ export interface LearnerConceptState {
   lastAt: string;
   /** 事实序列（测验 ✕ → 闪卡 ✓），最旧在前 */
   steps?: Array<{ appId: string; positive: boolean; at: string }>;
-  /** 回到原话的证据（课堂时间点） */
-  evidence?: { sessionId?: string; startMs: number; endMs?: number };
+  /** 回到原话的证据：哪节课（sessionId）、课堂时间点。2026-09-11 起 startMs 可缺——检验记录没带课堂时间时仍要知道是哪节课（prompt 里标「本课」） */
+  evidence?: { sessionId?: string; startMs?: number; endMs?: number };
   evidenceIds?: string[];
 }
 

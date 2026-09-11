@@ -13,6 +13,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
+import { OUTCOMES_UPDATED_EVENT } from '@/lib/learning/device-outcomes';
 import type { LearningAssessmentDraft } from '@/types/learning-event';
 
 export interface StoredAssessment extends LearningAssessmentDraft {
@@ -68,6 +69,8 @@ export function recordSessionAssessment(sessionId: string, draft: LearningAssess
   cache.set(sessionId, next);
   writeStorage(sessionId, next);
   listeners.forEach((listener) => listener());
+  // 跨会话复习计划（useFlashcardsReview）按这个事件重读本机历史：刚打完分的一轮立刻进到期模型
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(OUTCOMES_UPDATED_EVENT));
 }
 
 function subscribe(listener: () => void): () => void {

@@ -89,6 +89,11 @@ export function isNegativeOutcome(outcome: LearningAssessmentOutcome): boolean {
   return NEGATIVE.has(outcome);
 }
 
+/** 记住 / 答对 / 讲透 = 正向；uncovered 两边都不算（调用方先排除） */
+export function isPositiveOutcome(outcome: LearningAssessmentOutcome): boolean {
+  return POSITIVE.has(outcome);
+}
+
 const STATUS_RANK: Record<MasteryStatus, number> = { unstable: 0, improving: 1, stable: 2 };
 
 function sortTrail(entries: MasteryTrailEntry[], limit: number): MasteryTrailEntry[] {
@@ -117,7 +122,8 @@ export function trailFromLearnerMastery(mastery: readonly LearnerConceptState[])
         status: state.status,
         steps,
         lastAt,
-        evidence: state.evidence ? { startMs: state.evidence.startMs, endMs: state.evidence.endMs } : undefined,
+        // 轨迹条目的 evidence 是"回到原话"用的：服务端只知道是哪节课、没有课堂时间点时，这里没有可跳的证据
+        evidence: typeof state.evidence?.startMs === 'number' ? { startMs: state.evidence.startMs, endMs: state.evidence.endMs } : undefined,
       };
     });
 }

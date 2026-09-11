@@ -42,6 +42,14 @@ tests/eval/
 │   ├── real-caller.ts       # --real 等效生产链路（skills + engine prompt + streamText 多轮）
 │   ├── runs/
 │   └── runner.ts            # dry-run 用生产真件跑冻结 DSL 输出 = 出题 e2e
+├── apps/                    # 应用矩阵练习类产物质量（测验 / 闪卡，2026-09-11 内容层；详见 apps/DOMAIN.md）
+│   ├── datasets/            # JSONL，{ id, app, fixture, learner?(掌握轨迹), anchors?, expect{minQuestions|minCards, mustCover}, stubOutput }
+│   ├── fixtures/            # 真课转录（宋浩《高等数学》映射，公开课）；试听课直接 import src/fixtures/demo-data
+│   ├── graders/
+│   │   ├── quiz-quality.ts        # 每题有解析 / 无重复 / 无"以下哪个不是" / 无模板选项 / 解析不漏段号 / 多选字母契约 / 不稳概念覆盖
+│   │   └── flashcards-quality.ts  # 一卡一点 / 正面是提示不是词条 / 正面不泄答 / 背面两行内 / 不复述摘要 / 不稳概念覆盖
+│   ├── real-caller.ts       # 与生产同一份 prompt / 上下文组装调真模型；--record 冻结输出
+│   └── runner.ts            # 模型原文 → 生产后处理（去重 / 题型收口 / 泄答剔除 / 证据落地）→ grader
 └── promptfooconfig.yaml     # CI 入口；上面的 graders 都通过 javascript: 断言接入
 ```
 
@@ -55,6 +63,8 @@ ASR_EVAL_TRANSPORT=realtime make eval-asr-real  # 真实产品 WS 链路
 make eval-tutor
 make eval-teach          # Teach 引擎出题闭环评测（dry-run，生产真件跑冻结 DSL 输出）
 make eval-teach-real     # 真实链路（需 TEACH provider 的 key）
+make eval-apps           # 测验 / 闪卡产物质量（dry-run；改 quiz / flashcards prompt 或插件后跑）
+make eval-apps-real      # 真模型出一套题 / 一叠卡并打分（RECORD=1 冻结成新的 dry-run 材料）——然后读 runs 里的 items
 ```
 
 ### 单条调试
@@ -64,7 +74,7 @@ npx tsx tests/eval/tutor/runner.ts --id tool-flashcards-01
 ```
 
 ### 产出
-每次 run 都会写 `tests/eval/{asr,tutor}/runs/<timestamp>-<commit>.jsonl`（gitignore），
+每次 run 都会写 `tests/eval/{asr,tutor,teach,apps}/runs/<timestamp>.jsonl`（gitignore），
 并在 stdout 打一份 summary，便于 CI grep：
 
 ```

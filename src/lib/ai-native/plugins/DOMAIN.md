@@ -7,13 +7,13 @@
 
 | 文件 | 职责 |
 |------|------|
-| `quiz.plugin.ts` | 测验插件（LLM 生成单选 / 判断 / 填空 / 简答）。**2026-09-09 起没有兜底题**：模型的题就是题；证据落地（在整份转录里找）只决定要不要给"回到原话"跳转（`meta.evidence = text / timestamp / none`），不再把落地失败的题换成"回放 X:XX 复述"模板题；LLM 一次重试，可用题 <2 抛 `GENERATION_FAILED`（窗口给"再试一次"，不写记忆） |
+| `quiz.plugin.ts` | 测验插件（v0.3，2026-09-11 内容层）：**这套题是为这个人出的**——prompt（`../app-prompts-practice.ts`，`app-quiz-v2`）拿到 LearnerContext 事实半（掌握轨迹：还没稳 / 刚记住 / 已经稳了，标「本课」）+ 理解半（Hindsight 记忆）+ 材料体量（分钟 / 字数），由模型决定哪些概念多出、换角度出、只出一道确认题、题量多少——代码里不按状态分配配额。题型 single / **multiple**（新，答案收口成 "A、C" 字母契约，`../quiz-answer.ts`）/ judge / fill / short，`resolveQuestionShape` 收口（多选只解析出一个正确项 → 单选；单选答案落不到选项 → 简答；判断题答案按肯定 / 否定归位）；**每题必有解析**（缺解析的题不算可用题）；同题干复读去重；`concept` 进 meta；题量上限 12（保险丝，不是目标）；转录上下文给时间戳不给段号（解析里引原话写时间点，v1 段号会漏进解析）；不用 json_object 严格模式，LaTeX 反斜杠由 `latex-json-repair` 修。导出 `buildQuizPromptMessages` / `generateQuizDraft` / `parseQuizDraft` 供 eval（`tests/eval/apps`）与生产同一份。**2026-09-09 起没有兜底题**：模型的题就是题；证据落地（在整份转录里找）只决定要不要给"回到原话"跳转（`meta.evidence = text / timestamp / none`）；LLM 一次重试，可用题 <2 抛 `GENERATION_FAILED`（窗口给"再试一次"，不写记忆） |
 | `class-check.plugin.ts` | 随堂检验插件（基于知识点结构的智能随堂检验，视频内触发，不在 catalog）。题目只来自模型（一次重试，答案解析不到选项的题丢弃，仍无题抛 `GENERATION_FAILED`）；证据落地在整份转录里找，只决定「回放」跳到哪——2026-09 前会用最近一段原话切"关键短语"拼题且答案恒 A |
 | `studio-workshop.plugin.ts` | Studio Workshop 主文件（~340 行），子模块如下。2026-09-09 起：非播客模式模型两次无卡片、播客模式两次无脚本计划均抛 `GENERATION_FAILED`；卡片引用按整份转录落地给，不再按序号挂抽样片段、不再补"证据模块 N" |
 | `studio-workshop.types.ts` | 类型/模式检测/解析辅助（~210 行，有测试） |
 | `studio-workshop.podcast.ts` | 播客管线（~310 行）：plan/清洗/时间戳污染检测/脚本行选择；每轮对白的「回放」锚点按对白内容在整份转录里落地，落地不到就没有引用 / 跳转（2026-09 前按序号轮流挂 8 段抽样片段，跳到的是别处）；合成 provider 由 `PODCAST_TTS_PROVIDER` 一行切换（默认 dashscope 逐句合成+拼接，volc 一键成品备选）；音频没拿到即整次 execute 抛错（"不出音频不算好"） |
 | `studio-workshop.renderers.ts` | 渲染负载构建器（~150 行）；幻灯页只来自模型 slides，为空抛 `GENERATION_FAILED`（2026-09 前会用卡片 / 抽样片段拼页） |
-| `flashcards.plugin.ts` | 闪卡。**2026-09-09 起没有兜底卡**：模型的卡就是卡，落地只决定跳转；填充词 / 空题面的卡剔除；一次重试，可用卡 <2 抛 `GENERATION_FAILED` |
+| `flashcards.plugin.ts` | 闪卡（v0.5，2026-09-11 内容层）：prompt（`app-flashcards-v2`）写清一张好卡的标准——正面是提示不是标题、只有一个问号、答案关键词不出现在正面、背面两行内可用 $…$ TeX、覆盖要点不复述摘要；掌握轨迹进 prompt：还没稳的概念必须有卡且换角度（prompt 里给了具体换法：上次没记住"满射的定义"→ 这次问 $y=x^2$ 是不是满射），已经稳的不再做卡；卡数随材料（上限 16）。代码侧只做字面质量门：`frontRevealsBack`（背面整体出现在正面 / 正反同一句）剔除、同正面去重、`concept` 进 meta。导出 `generateFlashcardsDraft` / `parseFlashcardsDraft` / `buildFlashcardCards` 供 eval。**2026-09-09 起没有兜底卡**：模型的卡就是卡，落地只决定跳转；填充词 / 空题面的卡剔除；一次重试，可用卡 <2 抛 `GENERATION_FAILED`。跨会话间隔复习不在插件里——牌堆顺序由 `hooks/useFlashcardsReview` + `lib/learning/spaced-review-model` 在窗口侧决定 |
 | `flashcards.plugin.test.ts` | 闪卡证据回锚测试：语义匹配优先、秒/毫秒归一、禁止按卡片序号轮转原文 |
 | `mindmap.plugin.ts` | 思维导图（节点 prompt 要求“地图标签”式短语而非解释句；无原文支持的叶子节点会被剔除，保留节点回写证据时间）。2026-09-09 起节点只标注时间点不删节点，空树一次重试后抛 `GENERATION_FAILED`，不再用抽样片段拼假树 |
 | `cheatsheet.plugin.ts` | 跨课 / 考试速查表。**2026-09-09 契约扩展（向后兼容）**：模型按「考试主题」组织 `topics[] → items[]`，每条带 `kind`（definition / formula / process / contrast / pitfall / exemplar）+ `term` + `latex`，`sections`（按 kind 分组）仍照常产出供旧缓存 / 分享预览 / Markdown 读；prompt 带 `buildCheatsheetMaterialHint` 按转录长度给条目数量的数字目标并禁止元说明条目；`maxTokens` 9000、不再 `responseFormat: json_object`（严格 JSON 模式把 LaTeX 反斜杠吃掉），改由 `latex-json-repair.ts` 在 parse 前后修复转义（`\\to`→tab、`\.in`、`\\"in` 等实测坏例）。原有规则：课堂、大纲、真题三类证据分别回锚；证据落地只决定条目要不要带引用，落地不到条目照留（2026-09 前直接丢条目，术语课整页 CONTENT_NOT_READY）；`strong` 只由明确强调或真题证据保留；正文保留有依据的 GFM / LaTeX / 紧凑 Mermaid（flowchart / pie / xychart-beta；小表格只用于对比，图中数值必须直接来自证据），不得为装饰滥用富文本；模型判断材料无学习价值或全部条目无法落回证据时返回 `CONTENT_NOT_READY`，禁止逐句包装原文制造假成品 |
@@ -33,7 +33,7 @@
 | `fallback.plugin.ts` | 没有插件认领时抛 `APP_NOT_SUITABLE`（2026-09-09 前会产出"已进入通用处理流程"的假成品） |
 | `index.ts` | 插件注册（9 个插件） |
 
-应用的可评测 Prompt 基线统一放在上级 `../app-prompts.ts`（teach-back 的三段 prompt——选点 / 安静学生 instructions / 四象限核对——单独在 `../teach-back-prompts.ts`，因 app-prompts.ts 已达行数上限；只放纯字符串函数。2026-08 语音讲课下线后「安静学生 instructions」暂无调用方，已标 deprecated；explainer 的 prompt 在本目录 `explainer-prompts.ts`，只放纯字符串函数）；应用矩阵七类应用已接入管理员运行时控制（explainer 暂未列入 `GOVERNED_APP_KEYS`，运行时直接用本目录 Prompt 基线），真实插件执行、产品现场透镜、控制中心预览和线上/候选试跑共用同一份 System/User Prompt。导图是单课轻结构 Markdown；速查表要求跨课 / 考试证据与可打印 JSON；信息图只保留一个中心命题并限制手机阅读负担；播客把可朗读语料与章节时间证据分离，避免把时间读进音频或让模型猜章节。管理员只可追加指令和选择模型，证据回锚、层级边界、输出格式、视觉 / 音频价值合同不可覆盖。
+应用的可评测 Prompt 基线统一放在上级 `../app-prompts.ts`（闪卡 / 测验两组在 `../app-prompts-practice.ts`，2026-09-11 拆出并由 app-prompts 再导出——两者共享"掌握轨迹怎么进 prompt"这一套上下文；teach-back 的三段 prompt——选点 / 安静学生 instructions / 四象限核对——单独在 `../teach-back-prompts.ts`，因 app-prompts.ts 已达行数上限；只放纯字符串函数。2026-08 语音讲课下线后「安静学生 instructions」暂无调用方，已标 deprecated；explainer 的 prompt 在本目录 `explainer-prompts.ts`，只放纯字符串函数）；应用矩阵七类应用已接入管理员运行时控制（explainer 暂未列入 `GOVERNED_APP_KEYS`，运行时直接用本目录 Prompt 基线），真实插件执行、产品现场透镜、控制中心预览和线上/候选试跑共用同一份 System/User Prompt。导图是单课轻结构 Markdown；速查表要求跨课 / 考试证据与可打印 JSON；信息图只保留一个中心命题并限制手机阅读负担；播客把可朗读语料与章节时间证据分离，避免把时间读进音频或让模型猜章节。管理员只可追加指令和选择模型，证据回锚、层级边界、输出格式、视觉 / 音频价值合同不可覆盖。
 
 运行时治理必须由服务端 `/api/apps/execute` 读取后写入 `AppExecutionContext.runtimeControl`；插件自身不得静态 import Prisma-backed `ai-control-service`。插件模块可能被客户端窗口复用类型或纯函数，破坏该边界会把 `better-sqlite3` 打进浏览器构建。
 
@@ -55,5 +55,6 @@
 - `studio-workshop.types.test.ts` — 44 tests，覆盖模式检测/时间戳/数组/对话解析
 - `flashcards.plugin.test.ts` — 覆盖模型时间戳不可信时，题面/答案仍能回到真正支持它的课堂片段
 - `latex-json-repair.test.ts`（`src/lib/ai-native/`）— LLM JSON 里 LaTeX 转义修复；`mindmap-tree.test.ts` — 节点标签 TeX → Unicode（`flattenInlineTex`，SVG 文字不能渲染 KaTeX；prompt `app-mindmap-v2` 同时要求模型直接写 Unicode）
-- `quiz.plugin.test.ts` / `cheatsheet.plugin.test.ts` / `mindmap.plugin.test.ts` — 覆盖错误时间戳、幻觉条目、虚假重点、跨课课内时间与大纲证据的处理（2026-09-09 起：题 / 卡 / 节点只标注证据强弱，不删不换；整份不可用才 GENERATION_FAILED）
+- `quiz.plugin.test.ts` / `cheatsheet.plugin.test.ts` / `mindmap.plugin.test.ts` — 覆盖错误时间戳、幻觉条目、虚假重点、跨课课内时间与大纲证据的处理（2026-09-09 起：题 / 卡 / 节点只标注证据强弱，不删不换；整份不可用才 GENERATION_FAILED）；quiz 另覆盖多选答案收口（"A, D" → "A、D"、单项 → 单选、对不上 → 简答）、缺解析不算题、复读去重、判断题归位
+- `tests/eval/apps/`（`make eval-apps`）— 测验 / 闪卡**产物质量**评测：真课转录（映射课）× 访客 / 有掌握轨迹的学习者，冻结的模型输出过生产后处理再断言（每题有解析、无重复、无"以下哪个不是"、解析不漏段号、不稳概念被覆盖；一卡一点、正面不泄答、背面两行内）。改 prompt 后 `make eval-apps-real` 看真产物并读 runs 里的 items——dry-run 不测 prompt
 - `teach-back.plugin.test.ts` — 选点正规化：anchorText 锚定、锚不住不伪造时间戳、去重与上限

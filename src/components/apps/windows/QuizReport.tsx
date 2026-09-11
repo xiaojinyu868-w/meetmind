@@ -12,6 +12,7 @@ import type { ReactNode } from 'react';
 import { APPS_COPY } from '@/lib/ui/copy-apps';
 import { isQuizAnswerCorrect, type QuizQuestion } from './quiz-window-model';
 import { useCountUp } from './app-motion';
+import { MathText } from './MathText';
 
 interface QuizReportProps {
   questions: QuizQuestion[];
@@ -105,7 +106,7 @@ export function QuizReport({ questions, selected, correctCount, elapsedMinutes, 
                       className="mm-hover-warm mm-focus-inset -mx-2 flex w-[calc(100%+1rem)] gap-3 rounded-md px-2 py-2.5 text-left text-[14px] leading-[1.7] text-ink-secondary disabled:cursor-default"
                     >
                       <span className="shrink-0 tabular-nums text-vermilion">{position + 1}.</span>
-                      <span className="min-w-0 truncate">{question.stem}</span>
+                      <span className="min-w-0 truncate"><MathText text={question.stem} /></span>
                     </button>
                   </li>
                 );

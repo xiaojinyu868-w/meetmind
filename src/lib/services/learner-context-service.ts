@@ -25,7 +25,11 @@ import {
 
 const log = createLogger('learner-context');
 
-const FACTS_BUDGET_CHARS = 600;
+/**
+ * 事实半的字符预算。2026-09-11 从 600 提到 1000：掌握轨迹里的"概念"是题面原文（每条 ≤40 字 + 结果序列），
+ * 600 字只装得下还没稳的那几条，"已经稳的少出"这一半信息到不了模型手里。
+ */
+const FACTS_BUDGET_CHARS = 1000;
 /** 理解半是 JSON 证据（prepare 已按 token 预算裁过），这里只做最后的字符兜底 */
 const UNDERSTANDING_BUDGET_CHARS = 6_000;
 
@@ -34,7 +38,7 @@ const conceptStateSchema = z.object({
   status: z.enum(['unstable', 'improving', 'stable']),
   lastAt: z.string().max(40),
   steps: z.array(z.object({ appId: z.string().max(60), positive: z.boolean(), at: z.string().max(40) })).max(20).optional(),
-  evidence: z.object({ sessionId: z.string().max(120).optional(), startMs: z.number().nonnegative(), endMs: z.number().nonnegative().optional() }).optional(),
+  evidence: z.object({ sessionId: z.string().max(120).optional(), startMs: z.number().nonnegative().optional(), endMs: z.number().nonnegative().optional() }).optional(),
   evidenceIds: z.array(z.string().max(120)).max(20).optional(),
 });
 
@@ -116,26 +120,35 @@ function clip(text: string, max: number): string {
   return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
 
+export interface FormatLearnerContextOptions {
+  /**
+   * 当前课堂：掌握轨迹里证据落在这节课的概念标「本课」——模型据此分清"这节课上检验过、还没稳"（该换角度再考）
+   * 与"别的课上没稳"（只有这节课碰到时才出迁移题）。不传就不标。
+   */
+  sessionId?: string;
+}
+
 /**
  * 切片 → prompt 段落。只写事实，让模型自己决定怎么用（"prompt 永远不为最弱的模型降级设计"）。
- * 顺序：还没稳 → 刚记住 → 没过去的困惑 → 最近学过 → 在学 / 目标；预算内截断，空切片返回 ''。
+ * 顺序：还没稳 → 刚记住 → 已经稳 → 没过去的困惑 → 最近学过 → 在学 / 目标；预算内截断，空切片返回 ''。
  */
-export function formatLearnerContextForPrompt(context: LearnerContext | null | undefined): string {
+export function formatLearnerContextForPrompt(context: LearnerContext | null | undefined, options: FormatLearnerContextOptions = {}): string {
   if (!context || isLearnerContextEmpty(context)) return '';
   const lines: string[] = [];
   const unstable = context.mastery.filter((m) => m.status === 'unstable');
   const improving = context.mastery.filter((m) => m.status === 'improving');
   const stable = context.mastery.filter((m) => m.status === 'stable');
+  const isThisLesson = (m: LearnerContext['mastery'][number]) => Boolean(options.sessionId && m.evidence?.sessionId === options.sessionId);
   const describe = (m: LearnerContext['mastery'][number]) => {
     const trail = m.steps && m.steps.length > 0
       ? `（${m.steps.slice(-3).map((s) => `${s.appId}${s.positive ? '✓' : '✕'}`).join(' → ')}）`
       : '';
-    const where = m.evidence ? `，原话在 ${fmtTime(m.evidence.startMs)}` : '';
-    return `${clip(m.concept, 40)}${trail}${where}`;
+    const where = typeof m.evidence?.startMs === 'number' ? `，原话在 ${fmtTime(m.evidence.startMs)}` : '';
+    return `${isThisLesson(m) ? '「本课」' : ''}${clip(m.concept, 40)}${trail}${where}`;
   };
-  if (unstable.length) lines.push(`${STATUS_LABEL.unstable}：${unstable.slice(0, 6).map(describe).join('；')}`);
+  if (unstable.length) lines.push(`${STATUS_LABEL.unstable}：${unstable.slice(0, 8).map(describe).join('；')}`);
   if (improving.length) lines.push(`${STATUS_LABEL.improving}：${improving.slice(0, 6).map(describe).join('；')}`);
-  if (stable.length) lines.push(`${STATUS_LABEL.stable}：${stable.slice(0, 6).map((m) => clip(m.concept, 30)).join('、')}`);
+  if (stable.length) lines.push(`${STATUS_LABEL.stable}：${stable.slice(0, 8).map((m) => `${isThisLesson(m) ? '「本课」' : ''}${clip(m.concept, 30)}`).join('、')}`);
   if (context.challenges.length) lines.push(`还没过去的困惑：${context.challenges.slice(0, 4).map((c) => clip(c.title, 40)).join('；')}`);
   if (context.recentLessons.length) lines.push(`最近学过：${context.recentLessons.slice(0, 4).map((l) => clip(l.title, 30)).join('、')}`);
   if (context.topics.length) lines.push(`在学：${context.topics.slice(0, 4).map((t) => clip(t, 24)).join('、')}`);

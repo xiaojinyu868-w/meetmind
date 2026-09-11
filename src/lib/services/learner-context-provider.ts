@@ -15,7 +15,7 @@
  */
 
 import prisma from '@/lib/prisma';
-import { buildMasteryTrail, type AssessmentRecord } from '@/lib/learning/mastery-trail-model';
+import { buildMasteryTrail, type AssessmentRecord, type MasteryTrailEntry } from '@/lib/learning/mastery-trail-model';
 import type { LearnerProfile, LearningActivityEntry, LearningMemoryEntry } from '@/types/user';
 import {
   LEARNER_CONTEXT_VERSION,
@@ -42,6 +42,43 @@ function parseAssessment(payloadJson: string, at: number, eventId: string): (Ass
   } catch {
     return null;
   }
+}
+
+function normalizeConcept(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+const STATUS_RANK: Record<MasteryTrailEntry['status'], number> = { unstable: 0, improving: 1, stable: 2 };
+
+/**
+ * 从完整轨迹里挑出这次请求要的那几条：
+ * - request.concepts 点名的概念（闪卡到期模型按卡面问"这几张卡的历史"）全部保留，不占 limit；
+ * - 其余按 状态（还没稳在前）→ 本课优先（证据落在 request.sessionId 的课）→ 最近 排序取 limit 条。
+ * 为什么本课优先：给测验 / 闪卡出题时，"这节课上检验过还没稳"比"别的课没稳"更该被看见；跨课的靠状态与时间自然浮上来。
+ */
+export function selectMasteryEntries(
+  trail: readonly MasteryTrailEntry[],
+  request: Pick<LearnerContextRequest, 'concepts' | 'sessionId'>,
+  evidenceByConcept: ReadonlyMap<string, { sessionId?: string }>,
+  limit: number,
+): MasteryTrailEntry[] {
+  const wanted = new Set((request.concepts ?? []).map(normalizeConcept).filter(Boolean));
+  const named = trail.filter((entry) => wanted.has(normalizeConcept(entry.concept)));
+  const namedKeys = new Set(named.map((entry) => normalizeConcept(entry.concept)));
+  const rest = trail
+    .filter((entry) => !namedKeys.has(normalizeConcept(entry.concept)))
+    .sort((a, b) => {
+      const byStatus = STATUS_RANK[a.status] - STATUS_RANK[b.status];
+      if (byStatus !== 0) return byStatus;
+      if (request.sessionId) {
+        const aHere = evidenceByConcept.get(normalizeConcept(a.concept))?.sessionId === request.sessionId ? 0 : 1;
+        const bHere = evidenceByConcept.get(normalizeConcept(b.concept))?.sessionId === request.sessionId ? 0 : 1;
+        if (aHere !== bHere) return aHere - bHere;
+      }
+      return b.lastAt - a.lastAt;
+    })
+    .slice(0, limit);
+  return [...named, ...rest];
 }
 
 function readProfile(json: string | null): LearnerProfile | null {
@@ -83,18 +120,21 @@ export async function buildLearnerContextFromStore(request: LearnerContextReques
   const evidenceByConcept = new Map<string, { eventId: string; sessionId?: string }>();
   for (const record of [...records].sort((a, b) => a.at - b.at)) {
     for (const item of record.items) {
-      evidenceByConcept.set(item.concept.replace(/\s+/g, ' ').trim().toLowerCase(), { eventId: record.eventId, sessionId: record.sessionId });
+      evidenceByConcept.set(normalizeConcept(item.concept), { eventId: record.eventId, sessionId: record.sessionId });
     }
   }
-  const trail = buildMasteryTrail(records, limit * 2);
-  const mastery: LearnerConceptState[] = trail.slice(0, limit).map((entry) => {
-    const ref = evidenceByConcept.get(entry.concept.replace(/\s+/g, ' ').trim().toLowerCase());
+  const mastery: LearnerConceptState[] = selectMasteryEntries(buildMasteryTrail(records, Number.POSITIVE_INFINITY), request, evidenceByConcept, limit).map((entry) => {
+    const ref = evidenceByConcept.get(normalizeConcept(entry.concept));
     return {
       concept: entry.concept,
       status: entry.status,
       lastAt: new Date(entry.lastAt).toISOString(),
-      steps: entry.steps.slice(-6).map((step) => ({ appId: step.appKey, positive: step.positive, at: new Date(step.at).toISOString() })),
-      evidence: entry.evidence ? { sessionId: ref?.sessionId, startMs: entry.evidence.startMs, endMs: entry.evidence.endMs } : undefined,
+      // 最近 8 步够算出到期（连续记住的次数）与轨迹；更早的历史留在事件表里
+      steps: entry.steps.slice(-8).map((step) => ({ appId: step.appKey, positive: step.positive, at: new Date(step.at).toISOString() })),
+      // 没有课堂时间点也带上 sessionId：prompt 要靠它标「本课」
+      evidence: entry.evidence
+        ? { sessionId: ref?.sessionId, startMs: entry.evidence.startMs, endMs: entry.evidence.endMs }
+        : ref?.sessionId ? { sessionId: ref.sessionId } : undefined,
       evidenceIds: ref ? [ref.eventId] : undefined,
     };
   });

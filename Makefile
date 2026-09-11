@@ -5,7 +5,7 @@
 RUNTIME_TARGETS := dev check build deploy test test-watch test-server test-all lint \
 	smoke smoke-intent smoke-review smoke-in-class smoke-shared smoke-all ttft \
 	eval eval-unit eval-asr eval-asr-real eval-tutor eval-tutor-real eval-teach \
-	eval-teach-real eval-guard eval-guard-update eval-ci db-push db-studio ledger \
+	eval-teach-real eval-apps eval-apps-real eval-guard eval-guard-update eval-ci db-push db-studio ledger \
 	context-worker context-mcp context-example test-context smoke-context smoke-context-live
 
 # --- Node 24 运行时：先自动找，找不到才报错 ---
@@ -196,7 +196,7 @@ ledger: ## 生成能力台账（design-demo/capability-board/ledger.json）—�
 # 每次改 ASR / Agent 前后必跑，数字变动 = 回归信号
 
 .PHONY: eval
-eval: eval-unit eval-asr eval-tutor eval-teach ## 跑完整评测套件（单测 + ASR + Tutor + Teach）
+eval: eval-unit eval-asr eval-tutor eval-teach eval-apps ## 跑完整评测套件（单测 + ASR + Tutor + Teach + 应用矩阵练习类产物）
 
 .PHONY: eval-unit
 eval-unit: ## Eval harness 本身的 grader 单测
@@ -226,6 +226,14 @@ eval-teach: ## Teach 引擎出题闭环评测（dry-run）
 eval-teach-real: ## Teach 引擎出题闭环评测（真实链路，需 TEACH provider 的 key）
 	npx tsx tests/eval/teach/runner.ts --real
 
+.PHONY: eval-apps
+eval-apps: ## 测验 / 闪卡产物质量评测（dry-run：冻结的模型输出过生产后处理 + grader；改 quiz / flashcards prompt 或插件后跑）
+	npx tsx tests/eval/apps/runner.ts --dry-run
+
+.PHONY: eval-apps-real
+eval-apps-real: ## 测验 / 闪卡真模型评测（需 DASHSCOPE_API_KEY；加 RECORD=1 把这一版模型输出冻结进 dataset）
+	npx tsx tests/eval/apps/runner.ts --real $(if $(RECORD),--record,)
+
 .PHONY: eval-guard
 eval-guard: ## Harness 回归 guard（CI gate；baseline 在 tests/eval/baselines/）
 	npx tsx tests/eval/regression-guard.ts
@@ -235,7 +243,7 @@ eval-guard-update: ## 接受当前数字为新 baseline（慎用；确认改动�
 	npx tsx tests/eval/regression-guard.ts --update
 
 .PHONY: eval-ci
-eval-ci: eval-unit eval-asr eval-tutor eval-teach eval-guard ## CI 完整流程：单测 + 跑 harness + guard
+eval-ci: eval-unit eval-asr eval-tutor eval-teach eval-apps eval-guard ## CI 完整流程：单测 + 跑 harness + guard
 
 .PHONY: lint
 lint: ## ESLint 检查

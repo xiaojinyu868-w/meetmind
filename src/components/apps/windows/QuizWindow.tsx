@@ -18,6 +18,9 @@
  * - 触屏左右滑走 swipe-model 阈值与竖向取消
  * - 结束页圆环从 0 画到答稳率，逐题可点回看；「只练需要回看的」进度线归零 + 内容重新进场
  * 逻辑（对错判定、自评、记忆观测、报告）全部沿用 quiz-window-model / assessment-events。
+ *
+ * 多选题（2026-09-11 内容层）：type=multiple 的题点选项是切换而不是替换，选中的集合存在同一个 selected 字段里
+ * （quiz-answer 的连接符），交卷时集合完全一致才算对；题号旁一枚「多选」小字是唯一的形态提示，其余版式与单选同一套。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -30,19 +33,24 @@ import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceho
 import { formatQuizActivity, formatQuizCompleteActivity } from '@/components/review-learning-activity';
 import { APPS_COPY } from '@/lib/ui/copy-apps';
 import {
+  correctOptionsOf,
+  formatQuizAnswerForDisplay,
   formatQuizEvidenceTime,
+  isMultipleQuizQuestion,
   isQuizAnswerCorrect,
   isSubjectiveQuizQuestion,
-  normalizeQuizAnswer,
   normalizeQuizQuestions,
   QUIZ_SELF_CORRECT,
   QUIZ_SELF_WRONG,
+  selectedOptionsOf,
   stripQuizOptionPrefix,
+  toggleMultipleSelection,
 } from './quiz-window-model';
 import { buildQuizAssessment, type AssessmentDraft } from './assessment-events';
 import { NextStepCard, type NextStepCardProps } from './NextStepCard';
 import { QuizReport } from './QuizReport';
 import { QuizOptionMark, type QuizMarkState } from './QuizOptionMark';
+import { MathText } from './MathText';
 import { isTypingTarget, resolveQuizKey } from './app-keys';
 import { useKeyboardHintOnce } from './keyboard-hints';
 import { resolveSwipe } from './swipe-model';
@@ -95,6 +103,23 @@ export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onA
   const selectedOption = current ? selected[current.id] : undefined;
   const isSubmitted = current ? Boolean(submitted[current.id]) : false;
   const subjective = current ? isSubjectiveQuizQuestion(current) : false;
+  const multiple = current ? isMultipleQuizQuestion(current) : false;
+
+  /** 点 / 按数字键选一个选项：单选替换，多选切换（空集合回到未选，主按钮随之禁用） */
+  const pickOption = useCallback((question: typeof current, option: string) => {
+    if (!question) return;
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (isMultipleQuizQuestion(question)) {
+        const toggled = toggleMultipleSelection(prev[question.id], option);
+        if (toggled) next[question.id] = toggled;
+        else delete next[question.id];
+      } else {
+        next[question.id] = option;
+      }
+      return next;
+    });
+  }, []);
 
   // 换题 / 换轮时正文重新进场（key 变化 → 重挂载 → mm-app-enter）
   const enterKey = `${reviewQuestionIds ? reviewQuestionIds.join(',') : 'all'}:${index}`;
@@ -113,7 +138,7 @@ export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onA
       if (action.type === 'select') {
         event.preventDefault();
         const option = current.options[action.index];
-        if (option) setSelected((prev) => ({ ...prev, [current.id]: option }));
+        if (option) pickOption(current, option);
         return;
       }
       if (primaryRef.current && !primaryRef.current.disabled) {
@@ -123,7 +148,7 @@ export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onA
     };
     window.addEventListener('keydown', keyDown);
     return () => window.removeEventListener('keydown', keyDown);
-  }, [current, isSubmitted, subjective]);
+  }, [current, isSubmitted, pickOption, subjective]);
 
   // 触屏左右滑翻题：阈值 / 竖向取消见 swipe-model
   const swipe = useSwipe({
@@ -141,7 +166,9 @@ export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onA
     return <AppWindowPlaceholder status="empty" appKey="quiz" appName={APPS_COPY.quiz.appName} />;
   }
 
-  const normalizedAnswer = normalizeQuizAnswer(current.answer, current.options);
+  const correctOptions = correctOptionsOf(current);
+  const chosenOptions = selectedOptionsOf(current, selectedOption);
+  const answerDisplay = formatQuizAnswerForDisplay(current);
   const isCorrect = isQuizAnswerCorrect(current, selectedOption);
 
   function recordAttempt(picked: string, selfAssessment?: 'correct' | 'incorrect'): void {
@@ -149,8 +176,9 @@ export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onA
     const observation = buildQuizAttemptObservation({ question: current, picked, selfAssessment, referencePreviouslySeen: seenReferences.current.has(key) });
     seenReferences.current.add(key);
     onLearningActivity?.(formatQuizActivity({
-      index: index + 1, total: activeQuestions.length, stem: current.stem, picked,
-      answer: normalizedAnswer, correct: selfAssessment ? selfAssessment === 'correct' : isQuizAnswerCorrect(current, picked),
+      index: index + 1, total: activeQuestions.length, stem: current.stem,
+      picked: multiple ? selectedOptionsOf(current, picked).map(stripQuizOptionPrefix).join('、') : picked,
+      answer: answerDisplay, correct: selfAssessment ? selfAssessment === 'correct' : isQuizAnswerCorrect(current, picked),
     }), observation);
   }
 
@@ -209,9 +237,9 @@ export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onA
   }
 
   const optionStateOf = (option: string): OptionState => {
-    const active = selectedOption === option;
+    const active = chosenOptions.includes(option);
     if (!isSubmitted) return active ? 'selected' : 'idle';
-    if (option === normalizedAnswer) return 'correct';
+    if (correctOptions.includes(option)) return 'correct';
     if (active) return 'wrong';
     return 'dim';
   };
@@ -239,6 +267,7 @@ export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onA
             <div className="mb-4 flex items-baseline justify-between text-[12px] tabular-nums tracking-[0.04em] text-ink-muted">
               <span>
                 {APPS_COPY.quiz.questionNo(index + 1)}
+                {multiple ? <span className="ml-2 text-ink-muted/80">{APPS_COPY.quiz.multipleHint}</span> : null}
                 {isSubmitted ? (
                   <span className={`ml-3 ${isCorrect ? 'text-pine' : 'text-vermilion'}`}>{isCorrect ? APPS_COPY.quiz.correct : APPS_COPY.quiz.wrong}</span>
                 ) : null}
@@ -247,8 +276,9 @@ export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onA
             </div>
 
             {/* 题干 */}
+            {/* 题干 / 选项 / 解析都可能夹着 $…$ 行内 TeX（v2 prompt 允许数学题用公式），走 MathText 与闪卡同一渲染 */}
             <h2 className="mb-6 text-[19px] font-semibold leading-[1.7] tracking-[-0.015em] text-ink md:text-[21px]">
-              {current.stem}
+              <MathText text={current.stem} />
             </h2>
 
             {subjective ? (
@@ -260,7 +290,7 @@ export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onA
                 ) : (
                   <div className="mm-app-enter border-t border-divider pt-4">
                     <p className="mb-1.5 text-[12px] tracking-[0.04em] text-ink-muted">{APPS_COPY.quiz.referenceAnswer}</p>
-                    <p className="text-[15px] leading-[1.8] text-ink">{current.answer || APPS_COPY.quiz.referenceFallback}</p>
+                    <p className="text-[15px] leading-[1.8] text-ink"><MathText text={current.answer || APPS_COPY.quiz.referenceFallback} /></p>
                     {isSubmitted ? (
                       <p className={`mt-3 text-[13px] font-medium ${selectedOption === QUIZ_SELF_CORRECT ? 'text-pine' : 'text-vermilion'}`}>
                         {selectedOption === QUIZ_SELF_CORRECT ? APPS_COPY.quiz.selfCorrect : APPS_COPY.quiz.selfWrong}
@@ -281,13 +311,13 @@ export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onA
                         type="button"
                         disabled={isSubmitted}
                         aria-pressed={state === 'selected'}
-                        onClick={() => !isSubmitted && setSelected((prev) => ({ ...prev, [current.id]: option }))}
+                        onClick={() => !isSubmitted && pickOption(current, option)}
                         className={`group mm-press mm-focus-inset -mx-3 flex min-h-[52px] w-[calc(100%+1.5rem)] items-start gap-4 rounded-lg px-3 py-3.5 text-left ${OPTION_ROW[state]} ${isSubmitted ? 'cursor-default' : 'cursor-pointer'}`}
                         style={delay ? { transitionDelay: `${delay}ms` } : undefined}
                       >
                         <QuizOptionMark state={state} letter={letter} delayMs={delay} />
                         <span className={`pt-[3px] text-[15.5px] leading-[1.7] transition-colors duration-[280ms] motion-reduce:transition-none ${state === 'correct' ? 'text-ink' : state === 'wrong' ? 'text-vermilion-deep' : state === 'dim' ? 'text-ink-muted' : 'text-ink'}`}>
-                          {stripQuizOptionPrefix(option)}
+                          <MathText text={stripQuizOptionPrefix(option)} />
                         </span>
                       </button>
                     </li>
@@ -302,10 +332,10 @@ export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onA
                 <p className="mb-1.5 text-[12px] tracking-[0.04em] text-ink-muted">{APPS_COPY.quiz.explanationLabel}</p>
                 {!subjective && !isCorrect ? (
                   <p className="mb-1.5 text-[14px] font-medium text-vermilion">
-                    {APPS_COPY.quiz.correctAnswer(stripQuizOptionPrefix(normalizedAnswer))}
+                    <MathText text={APPS_COPY.quiz.correctAnswer(answerDisplay)} />
                   </p>
                 ) : null}
-                {current.explanation ? <p className="text-[14.5px] leading-[1.8] text-ink-secondary">{current.explanation}</p> : null}
+                {current.explanation ? <p className="text-[14.5px] leading-[1.8] text-ink-secondary"><MathText text={current.explanation} /></p> : null}
               </div>
             ) : null}
             {isSubmitted && current.evidence ? (

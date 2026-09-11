@@ -1,27 +1,37 @@
 import type { TranscriptSegment } from '@/types';
 import { formatLearnerContextForPrompt } from '@/lib/services/learner-context-service';
+import { createLogger } from '@/lib/logger';
 import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
 import { buildPromptAnchorContext, buildPromptTranscriptContext } from '../prompt-context';
 import { resolveGroundedEvidence } from '../evidence-grounding';
-import { buildFlashcardsSystemPrompt, buildFlashcardsUserPrompt } from '../app-prompts';
+import { buildFlashcardsSystemPrompt, buildFlashcardsUserPrompt, describeMaterial } from '../app-prompts';
+import { normalizeLatexInRichText, repairLatexEscapesInJson } from '../latex-json-repair';
 
-const TARGET_CARD_COUNT = 8;
+const log = createLogger('flashcards-plugin');
+
+/**
+ * 卡数由模型按材料决定（prompt 里给了分钟数与字数），这里只是防失控的上限：
+ * 一节 60 分钟要点密的课 10-14 张是常态，超过 16 张基本是在把一个点拆成几张。
+ */
+const MAX_CARD_COUNT = 16;
 /** 少于这个数就当这次没做出来：宁可诚实失败让人重试，也不用模板卡凑数 */
 const MIN_CARD_COUNT = 2;
 export const GENERATION_FAILED = 'GENERATION_FAILED';
 
-interface FlashcardDraft {
+export interface FlashcardDraft {
   question?: string;
   answer?: string;
   hint?: string;
+  /** 这张卡检验的那个点（短语）；只进 meta / trace，不进牌面 */
+  concept?: string;
   startMs?: number | string;
   endMs?: number | string;
-  difficulty?: 'core' | 'challenge' | string;
+  difficulty?: 'core' | 'challenge' | 'transfer' | string;
 }
 
-interface FlashcardLLMOutput {
+export interface FlashcardLLMOutput {
   deckTitle?: string;
   overview?: string;
   cards?: FlashcardDraft[];
@@ -35,10 +45,12 @@ function formatTimestamp(ms: number): string {
 }
 
 function cleanText(value: string): string {
-  return value
-    .replace(/[\u0000-\u001f]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return normalizeLatexInRichText(
+    value
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  );
 }
 
 function isFillerOnly(value: string): boolean {
@@ -47,6 +59,10 @@ function isFillerOnly(value: string): boolean {
   return /^(嗯+|呃+|啊+|这个|那个|然后|就是|所以|好|行|对|是的?)$/i.test(core);
 }
 
+/** 比较用：去空白与标点、去 $ 记号、小写 */
+function comparable(value: string): string {
+  return cleanText(value).replace(/[\s$，。？！、,.!?：:；;'"""''()（）「」《》]/g, '').toLowerCase();
+}
 
 function toTimestamp(value: unknown, fallback: number, timelineEndMs = 0): number {
   const normalizeNumber = (raw: number): number => {
@@ -107,44 +123,81 @@ function isUsableCard(draft: FlashcardDraft | undefined): draft is FlashcardDraf
   return Boolean(front && back && !isFillerOnly(front) && !isFillerOnly(back));
 }
 
-async function generateDeckWithLLM(
-  context: AppExecutionContext,
-  model: string,
-  transcriptContext: string,
-  anchorContext: string,
-  systemPrompt: string,
-): Promise<FlashcardLLMOutput | null> {
-  // 提示词哲学：描述用户和目标，不描述路径。
-  // 难度分级、卡片数量、措辞风格——交给模型自己判断。
-  const response = await chat(
-    [
-      {
-        role: 'system',
-        content: systemPrompt,
-      },
-      {
-        role: 'user',
-        content: buildFlashcardsUserPrompt({
-          goalIntent: context.goal.intent,
-          transcriptContext,
-          anchorContext,
-          terminologyHint: context.memory.terminologyHint,
-          learnerContext: formatLearnerContextForPrompt(context.learner),
-        }),
-      },
-    ],
-    model,
-    { temperature: 0.4, maxTokens: 2400, responseFormat: 'json_object' }
-  );
-
-  return parseJsonResponse<FlashcardLLMOutput>(response.content);
+/**
+ * 正面把答案说出来的卡不是卡（翻面前就没有回忆可做）：背面整体出现在正面里、或正反面同一句，剔除。
+ * 只做字面判断——"正面提到了答案里的一个词"这种由 prompt 与 eval 把关，不在这里猜。
+ */
+export function frontRevealsBack(front: string, back: string): boolean {
+  const f = comparable(front);
+  const b = comparable(back);
+  if (!f || !b) return false;
+  if (f === b) return true;
+  return b.length >= 4 && f.includes(b);
 }
 
-function buildCards(
+/** 同一正面出两遍是复读，不是两张卡：按去标点的正面去重（保留先出现的） */
+function dedupeCards(drafts: FlashcardDraft[]): FlashcardDraft[] {
+  const seen = new Set<string>();
+  return drafts.filter((draft) => {
+    const key = comparable(draft.question ?? '');
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** 给模型的整套输入（eval 的 --real 与生产同一份） */
+export function buildFlashcardsPromptMessages(context: AppExecutionContext, systemPrompt: string): Array<{ role: 'system' | 'user'; content: string }> {
+  const promptContext = buildPromptTranscriptContext(context.input.transcript, {
+    maxChars: 48_000,
+    includeIndex: true,
+    includeTimestamp: true,
+    minCharsPerSegment: 48,
+  });
+  return [
+    { role: 'system', content: systemPrompt },
+    {
+      role: 'user',
+      content: buildFlashcardsUserPrompt({
+        goalIntent: context.goal.intent,
+        transcriptContext: promptContext.text,
+        anchorContext: buildPromptAnchorContext(context.input.anchors, 12),
+        terminologyHint: context.memory.terminologyHint,
+        learnerContext: formatLearnerContextForPrompt(context.learner, { sessionId: context.input.sessionId }),
+        material: describeMaterial(context.input.transcript),
+      }),
+    },
+  ];
+}
+
+/** 模型输出原文 → 草稿（LaTeX 反斜杠先修再 parse）；解析失败返回 null */
+export function parseFlashcardsDraft(raw: string): FlashcardLLMOutput | null {
+  return parseJsonResponse<FlashcardLLMOutput>(repairLatexEscapesInJson(raw));
+}
+
+/**
+ * 一次模型调用：返回原文与草稿。提示词哲学：描述用户和目标，不描述路径——
+ * 难度分级、卡片数量、措辞风格、哪些点该有卡，交给模型按上下文判断。eval 的 --real / --record 也走这里。
+ */
+export async function generateFlashcardsDraft(
+  context: AppExecutionContext,
+  model: string,
+  systemPrompt: string,
+): Promise<{ raw: string; draft: FlashcardLLMOutput | null }> {
+  // 不用 json_object 严格模式：它会把 $…$ 里的反斜杠吃掉（速查表实测），改由 latex-json-repair 在 parse 前后修
+  const response = await chat(buildFlashcardsPromptMessages(context, systemPrompt), model, { temperature: 0.4, maxTokens: 5000 });
+  return { raw: response.content, draft: parseFlashcardsDraft(response.content) };
+}
+
+export function buildFlashcardCards(
   transcript: TranscriptSegment[],
-  llmOutput: FlashcardLLMOutput | null
+  llmOutput: FlashcardLLMOutput | null,
 ): AppExecutionResult['cards'] {
-  const drafts = (Array.isArray(llmOutput?.cards) ? llmOutput.cards : []).filter(isUsableCard).slice(0, TARGET_CARD_COUNT);
+  const drafts = dedupeCards(
+    (Array.isArray(llmOutput?.cards) ? llmOutput.cards : [])
+      .filter(isUsableCard)
+      .filter((draft) => !frontRevealsBack(draft.question!, draft.answer!)),
+  ).slice(0, MAX_CARD_COUNT);
   if (drafts.length < MIN_CARD_COUNT) throw new Error(GENERATION_FAILED);
 
   const cards: AppExecutionResult['cards'] = [];
@@ -188,6 +241,7 @@ function buildCards(
         back,
         hint: cleanText(draftCard.hint?.trim() || ''),
         difficulty: draftCard.difficulty || 'core',
+        ...(typeof draftCard.concept === 'string' && draftCard.concept.trim() ? { concept: cleanText(draftCard.concept).slice(0, 40) } : {}),
         evidence: grounding.supported ? 'text' : grounding.method === 'timestamp' ? 'timestamp' : 'none',
       },
     });
@@ -211,8 +265,8 @@ export const flashcardsPlugin: AppPlugin = {
   manifest: {
     id: 'flashcards-lab',
     name: '闪卡训练',
-    version: '0.4.0',
-    description: '基于课堂证据生成可回放的主动回忆闪卡，单卡可独立分享。',
+    version: '0.5.0',
+    description: '为这个人做的主动回忆闪卡：正面是提示、背面是最小答案，可回放课堂原话，单卡可独立分享。',
     tags: ['student', 'flashcard', 'memory', 'active-recall', 'shareable'],
     capabilities: ['citation-card', 'seek-action', 'task-writeback'],
     enabledByDefault: true,
@@ -225,15 +279,14 @@ export const flashcardsPlugin: AppPlugin = {
     return context.goal.appKey === 'flashcards' || context.goal.expectedOutput === 'cards';
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
-    // 48000 字对齐 cheatsheet：长课不再被稀释成残句（8000 是 180s LLM 超时时代的遗留）。
-    // 上下文 > 指令，但上下文也要给得有节制。
+    // 48000 字对齐 cheatsheet：长课不再被稀释成残句（8000 是 180s LLM 超时时代的遗留）；prompt 组装在 buildFlashcardsPromptMessages。
+    // 上下文 > 指令，但上下文也要给得有节制。这里只为 trace 统计用了多少段。
     const promptContext = buildPromptTranscriptContext(context.input.transcript, {
       maxChars: 48_000,
       includeIndex: true,
       includeTimestamp: true,
       minCharsPerSegment: 48,
     });
-    const anchorContext = buildPromptAnchorContext(context.input.anchors, 12);
     const systemPrompt = context.runtimeControl?.systemPrompt || buildFlashcardsSystemPrompt();
     const model = context.runtimeControl?.modelId || context.model || DEFAULT_MODEL_ID;
 
@@ -243,22 +296,22 @@ export const flashcardsPlugin: AppPlugin = {
     while (attempts < 2 && !(Array.isArray(llmOutput?.cards) && llmOutput.cards.some(isUsableCard))) {
       attempts += 1;
       try {
-        llmOutput = await generateDeckWithLLM(context, model, promptContext.text, anchorContext, systemPrompt);
+        llmOutput = (await generateFlashcardsDraft(context, model, systemPrompt)).draft;
         if (!Array.isArray(llmOutput?.cards) || !llmOutput.cards.some(isUsableCard)) {
-          console.warn('[flashcards-plugin] LLM returned no usable cards. attempt=', attempts, 'model=', model);
+          log.warn('flashcards.no_usable_cards', { attempt: attempts, model });
         }
       } catch (err) {
-        console.error('[flashcards-plugin] generateDeckWithLLM failed: attempt=', attempts, err instanceof Error ? err.message : err);
+        log.error('flashcards.llm_failed', { attempt: attempts, message: err instanceof Error ? err.message : String(err) });
         llmOutput = null;
       }
     }
 
-    const cards = buildCards(context.input.transcript, llmOutput);
+    const cards = buildFlashcardCards(context.input.transcript, llmOutput);
     const deckCards = cards.filter((card) => card.meta?.cardKind === 'flashcard');
 
     return {
       pluginId: 'flashcards-lab',
-      version: '0.4.0',
+      version: '0.5.0',
       model,
       trace: [
         `intent=${context.goal.intent}`,
@@ -283,6 +336,7 @@ export const flashcardsPlugin: AppPlugin = {
             front: typeof card.meta?.front === 'string' ? card.meta.front : card.body,
             back: typeof card.meta?.back === 'string' ? card.meta.back : '',
             hint: typeof card.meta?.hint === 'string' ? card.meta.hint : '',
+            ...(typeof card.meta?.concept === 'string' ? { concept: card.meta.concept } : {}),
           })),
         },
       },

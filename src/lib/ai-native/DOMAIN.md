@@ -31,7 +31,9 @@ page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → r
 | `registry.ts` | ~85 | 插件注册中心；区分运行故障与语义拒绝 / 产物失败（`CONTENT_NOT_READY`、`信息图出图失败*`、`播客出音频失败*` 透传） |
 | `registry.test.ts` | — | 插件运行故障兜底与内容拒绝透传契约 |
 | `prompt-context.ts` | ~130 | Prompt 上下文构建（转录 + 锚点 + 术语）；超预算时逐段压缩但保留段号/时间戳，并在注入文本前声明"…处有内容缺失、残句非完整原话"（朗读语料可用 `truncationNotice: false` 关闭） |
-| `app-prompts.ts` | ~420 | 应用矩阵应用的版本化 System/User Prompt 基线；含速查表跨课来源拼装、播客去时间戳朗读语料与带时间戳章节证据的分离构建，真实插件、产品现场管理员透镜与控制中心共同复用（信息图除外：2026-09 起迁至 `src/lib/services/infographic-skill-service.ts` 宝玉手册管线） |
+| `app-prompts.ts` | ~260 | 应用矩阵应用的版本化 System/User Prompt 基线（导图 / 速查表 / 播客）；含速查表跨课来源拼装、播客去时间戳朗读语料与带时间戳章节证据的分离构建，真实插件、产品现场管理员透镜与控制中心共同复用（信息图除外：2026-09 起迁至 `src/lib/services/infographic-skill-service.ts` 宝玉手册管线）。闪卡 / 测验两组从这里再导出 |
+| `app-prompts-practice.ts` | ~130 | **闪卡 / 测验（练习类）prompt v2（2026-09-11 内容层）**：`buildLearnerContextParagraph`（学习者段落：说明每行是他此前被检验的题面 / 卡面原文 + 结果序列，标「本课」）、`describeMaterial`（分钟 / 字数，题量 / 卡数"随材料"要给模型一个数）；system prompt 写的是标准与理由（题型按内容选含多选、干扰项来自课里真实误解、每题先对后错的解析、难度先确认再拉伸、正面是提示不是标题、背面两行内），怎么用掌握轨迹（还没稳多出换角度 / 刚记住出迁移题 / 已经稳少出）写成上下文与具体换法示例，不在代码里分配配额。三轮真模型迭代留下的判断记在 `tests/eval/apps/DOMAIN.md` |
+| `quiz-answer.ts` | ~110 | 选择题答案解析（随堂检验 / 测验共用）：`resolveAnswerIndex`（字母 / 原文 / 带前缀原文 → 下标，认不出 -1）；**多选契约（2026-09-11）**：`parseMultipleAnswer`（"AC" / "A、C" / "A, C" / "A和C" / 原文都认）→ 选项文本数组，`formatMultipleAnswer` → "A、C" 存进产物，学生作答用 `QUIZ_MULTI_SEPARATOR`（\u001f）连接，`sameOptionSet` 判全对 |
 | `app-prompts.test.ts` | ~150 | 六类应用 Prompt 的证据、认知动作、防泄题、打印 / 手机阅读、音频章节定位与输出格式合同测试 |
 | `tools.ts` | 48 | 插件工具注入 |
 | `index.ts` | 38 | barrel 导出 |

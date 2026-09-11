@@ -22,35 +22,58 @@ import {
 } from '@/lib/services/infographic-skill-service';
 
 describe('structured app prompt contracts', () => {
-  it('keeps flashcards grounded, atomic, and answer-safe', () => {
+  it('keeps flashcards grounded, atomic, and answer-safe（v2：正面是提示不是标题、背面两行内、掌握轨迹决定哪些点该有卡）', () => {
     const system = buildFlashcardsSystemPrompt();
     const user = buildFlashcardsUserPrompt({
       goalIntent: '区分机会成本和沉没成本',
       transcriptContext: '[00:10] 真实课堂原文',
       anchorContext: '[00:12] 学生困惑',
       terminologyHint: '机会成本',
+      learnerContext: '还没稳：「本课」机会成本指的是什么？（quiz✕）',
+      material: { minutes: 42, chars: 12_340 },
     });
     expect(system).toContain('主动回忆');
-    expect(user).toContain('一张卡只检验一个认知动作');
-    expect(user).toContain('hint 只能给思考方向');
+    expect(system).toContain('一张卡只装一个可回忆的点');
+    expect(system).toContain('正面是提示，不是标题');
+    expect(system).toContain('答案里的关键词不出现在正面');
+    expect(system).toContain('两行以内');
+    expect(system).toContain('还没稳的概念必须有卡');
+    expect(system).toContain('已经稳的不再做卡');
+    expect(system).toContain('卡数随材料决定');
     expect(user).toContain('没有课堂证据的内容宁可不出');
+    expect(user).toContain('关于这个学习者');
+    expect(user).toContain('「本课」机会成本');
+    expect(user).toContain('约 42 分钟、12300 字');
     expect(user).toContain('[00:10] 真实课堂原文');
     expect(user).toContain('输出 JSON');
   });
 
-  it('makes quiz distractors meaningful and keeps narrow-column reading light', () => {
+  it('makes quiz personal, explained and light to read（v2：掌握轨迹进 prompt、题型含多选、每题先对后错的解析、不出"以下哪个不是"）', () => {
     const system = buildQuizSystemPrompt();
     const user = buildQuizUserPrompt({
       transcriptContext: '[00:10] 真实课堂原文',
       terminologyHint: '混淆变量',
     });
-    expect(system).toContain('干扰项都必须来自课堂内容');
-    expect(system).toContain('就把它出成简答题');
-    expect(system).toContain('中文题干尽量不超过 32 字');
-    expect(system).toContain('不要反复写“根据上下文”');
+    expect(system).toContain('这套题只为他一个人出');
+    expect(system).toContain('干扰项必须是课里真实出现过的误解');
+    expect(system).toContain('multiple');
+    expect(system).toContain('不出"以下哪个不是');
+    expect(system).toContain('每题必须有 explanation');
+    expect(system).toContain('先说这个答案为什么对，再说其他选项');
+    expect(system).toContain('先确认基本概念，后面拉伸');
+    expect(system).toContain('题量随材料决定');
+    expect(system).toContain('中文题干尽量 32 字内');
+    expect(system).toContain('还没稳的概念多出、换角度出');
+    expect(system).toContain('刚记住的出一道迁移题');
+    expect(system).toContain('已经稳的少出或只出一道稍难的确认题');
+    expect(user).toContain('"multiple"');
+    expect(user).toContain('如 "A、C"');
     expect(user).toContain('[00:10] 真实课堂原文');
     expect(user).toContain('输出 JSON');
     expect(user).toContain('混淆变量');
+    // 没给学习者事实与材料体量时，两段都不出现（不给模型空段落）
+    expect(user).not.toContain('关于这个学习者');
+    expect(user).not.toContain('这节课的材料');
   });
 
   it('keeps a one-class mindmap light, structural, and out of note-writing territory', () => {

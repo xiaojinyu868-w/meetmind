@@ -43,14 +43,23 @@ export function buildLearnerContextRequest(input: Pick<LocalLearnerContextInput,
 
 export function buildLocalLearnerContext(input: LocalLearnerContextInput): LearnerContext {
   const limit = input.limit ?? 8;
-  const outcomes = input.outcomes ?? collectDeviceOutcomes();
+  const outcomes: ReadonlyArray<StoredAssessment & { sessionId?: string }> = input.outcomes ?? collectDeviceOutcomes();
+  // 每个概念的证据落在哪节课：本机记录从 localStorage key 带回 sessionId（device-outcomes）；调用方自带的 outcomes 没有就按当前课
+  const sessionByConcept = new Map<string, string | undefined>();
+  for (const record of [...outcomes].sort((a, b) => a.at - b.at)) {
+    for (const item of record.items) sessionByConcept.set(item.concept.replace(/\s+/g, ' ').trim().toLowerCase(), record.sessionId ?? input.sessionId);
+  }
   const trail = buildMasteryTrail(outcomes, limit * 2);
   const mastery: LearnerConceptState[] = trail.slice(0, limit).map((entry) => ({
     concept: entry.concept,
     status: entry.status,
     lastAt: new Date(entry.lastAt).toISOString(),
-    steps: entry.steps.slice(-6).map((step) => ({ appId: step.appKey, positive: step.positive, at: new Date(step.at).toISOString() })),
-    evidence: entry.evidence ? { sessionId: input.sessionId, startMs: entry.evidence.startMs, endMs: entry.evidence.endMs } : undefined,
+    steps: entry.steps.slice(-8).map((step) => ({ appId: step.appKey, positive: step.positive, at: new Date(step.at).toISOString() })),
+    evidence: entry.evidence
+      ? { sessionId: sessionByConcept.get(entry.concept.replace(/\s+/g, ' ').trim().toLowerCase()), startMs: entry.evidence.startMs, endMs: entry.evidence.endMs }
+      : sessionByConcept.get(entry.concept.replace(/\s+/g, ' ').trim().toLowerCase())
+        ? { sessionId: sessionByConcept.get(entry.concept.replace(/\s+/g, ' ').trim().toLowerCase()) }
+        : undefined,
   }));
 
   const seen = new Set<string>();

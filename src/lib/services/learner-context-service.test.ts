@@ -92,3 +92,25 @@ describe('resolveLearnerContext', () => {
     expect(parseLearnerContext({ ...sample, v: 2 })).toBeNull();
   });
 });
+
+describe('formatLearnerContextForPrompt · 本课标记与预算（2026-09-11）', () => {
+  it('传 sessionId 时证据落在这节课的概念标「本课」；预算 1000 字', () => {
+    const marked: LearnerContext = {
+      ...emptyLearnerContext('server'),
+      mastery: [
+        { concept: '为什么只有单射才有逆映射？', status: 'unstable', lastAt: '2026-09-09T10:00:00Z', evidence: { sessionId: 'lesson-1', startMs: 1_151_000 } },
+        { concept: '贝叶斯公式的分母是什么', status: 'unstable', lastAt: '2026-09-08T10:00:00Z', evidence: { sessionId: 'lesson-0', startMs: 6_000 } },
+        { concept: '映射的定义', status: 'stable', lastAt: '2026-09-09T10:00:00Z', evidence: { sessionId: 'lesson-1', startMs: 918_000 } },
+      ],
+    };
+    const text = formatLearnerContextForPrompt(marked, { sessionId: 'lesson-1' });
+    expect(text).toContain('「本课」为什么只有单射才有逆映射？');
+    expect(text).not.toContain('「本课」贝叶斯');
+    expect(text).toContain('已经稳了：「本课」映射的定义');
+    expect(formatLearnerContextForPrompt(marked)).not.toContain('「本课」');
+    const huge: LearnerContext = { ...marked, mastery: Array.from({ length: 40 }, (_, i) => ({ concept: `概念${i}`.padEnd(40, '长'), status: (i % 3 === 0 ? 'unstable' : i % 3 === 1 ? 'improving' : 'stable') as const, lastAt: '2026-09-08T10:00:00Z' })) };
+    const long = formatLearnerContextForPrompt(huge);
+    expect(long.length).toBeLessThanOrEqual(1000);
+    expect(long.length).toBeGreaterThan(600);
+  });
+});
