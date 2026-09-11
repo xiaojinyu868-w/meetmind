@@ -586,6 +586,12 @@ export const COPY = {
       `实时文字已收下，正在用原声定稿 · ${count} 段${enhancedCount > 0 ? ` · 已优化 ${enhancedCount} 段` : ''}`,
     /** 结束时写服务端失败：内容已在本机，联网 / 回到课堂时自动补传（sync-pending-recordings） */
     syncDeferred: '这节课先存在这台设备上，联网后会自动同步到你的账号。',
+    /**
+     * 实时字幕链路（2026-09-11）：断了在重连 / 本节课不会再有实时字幕。
+     * 放在转录卡头部那一行状态里（替代「正在听这一句…」等），恢复后自动消失；录音始终不受影响。
+     */
+    liveCaptionsReconnecting: '实时字幕暂时断开，录音仍在继续',
+    liveCaptionsOffline: '实时字幕已停下，录音仍在继续，结束后再整理文字',
     /** 忘记结束的课（2026-09-10）：首页顶部一行安静的恢复条 + 两个文字动作 */
     unfinished: {
       line: (title: string, minutes: number): string =>

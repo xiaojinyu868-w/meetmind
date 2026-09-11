@@ -482,6 +482,15 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
     ? selectDemoLiveSegments(p.currentTime / 1000)
     : allSegments;
   const liveInterimText = useCaptureEditorStore(s => s.liveInterimText);
+  // 实时字幕链路断了在重连 / 已停下：把「待整理」占位卡那一句换成链路状态，恢复后自动换回；录音不受影响
+  const liveAsrLink = useCaptureEditorStore(s => s.liveAsrLink);
+  const liveCaptionsNotice = !p.demoMode
+    ? (liveAsrLink === 'reconnecting'
+        ? COPY.recording.liveCaptionsReconnecting
+        : liveAsrLink === 'offline'
+          ? COPY.recording.liveCaptionsOffline
+          : null)
+    : null;
   const sessionPhotos = useCollectionStore(s => s.sourceItems).filter(i => (
     i.type === 'image' && i.role === 'support' && Boolean(p.sessionId) && i.sessionId === p.sessionId
   ));
@@ -746,7 +755,9 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
                 <span className="font-mono text-[9px] font-semibold text-ink-muted bg-paper-warm px-1.5 py-0.5 rounded">待整理</span>
                 <span className="font-mono text-[9px] text-ink-muted ml-auto">{fmtSec(elapsedSeconds)}</span>
               </div>
-              <p className="text-[11px] text-ink-muted leading-relaxed">这段老师还在讲，课后整理笔记时会补上。</p>
+              <p className="text-[11px] text-ink-muted leading-relaxed" data-testid="mobile-live-status-line">
+                {liveCaptionsNotice ?? '这段老师还在讲，课后整理笔记时会补上。'}
+              </p>
             </div>
             <div className="h-20" />
           </div>

@@ -39,6 +39,12 @@ import type { VideoInsightItem } from '@/components/VideoInsightTimeline';
  */
 export type RecorderAudioSource = 'mic' | 'system' | 'mixed';
 
+/**
+ * 实时字幕链路状态（录课界面的一行状态用；2026-09-11）：
+ * idle 没在录 / connecting 首次连接中 / live 字幕在流 / reconnecting 断了正在重连（录音不受影响）/ offline 本节课不会再有实时字幕
+ */
+export type LiveAsrLinkState = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'offline';
+
 // ==================== 类型定义 ====================
 
 interface CaptureEditorState {
@@ -68,6 +74,11 @@ interface CaptureEditorState {
    */
   liveInterimText: string;
   /**
+   * 实时字幕链路状态。由 Recorder 的 onLinkStateChange 写入；录课界面据此在一行状态里说
+   * 「实时字幕暂时断开，录音仍在继续」，恢复后自动消失。录音停止 / Recorder 卸载时回到 idle。
+   */
+  liveAsrLink: LiveAsrLinkState;
+  /**
    * 课堂场景的 ASR 热词/上下文提示。
    * 由 ClassroomView 根据当天的预习材料标题等聚合后写入，
    * page.tsx 的 liveASRContextHint 合入后传给 Recorder 的 contextHint，
@@ -92,6 +103,7 @@ interface CaptureEditorActions {
   setRecorderAutoStartSignal: (signal: number) => void;
   setRecorderAudioSource: (source: RecorderAudioSource) => void;
   setLiveInterimText: (text: string) => void;
+  setLiveAsrLink: (state: LiveAsrLinkState) => void;
   setClassroomASRContextHint: (hint: string) => void;
 
   /** 重置全部课堂内容数据（新会话时调用） */
@@ -118,6 +130,7 @@ const initialState: CaptureEditorState = {
   recorderAutoStartSignal: 0,
   recorderAudioSource: 'mic',
   liveInterimText: '',
+  liveAsrLink: 'idle',
   classroomASRContextHint: '',
 };
 
@@ -150,6 +163,7 @@ export const useCaptureEditorStore = create<CaptureEditorStore>()(
         setRecorderAutoStartSignal: (signal) => set({ recorderAutoStartSignal: signal }, false, 'setRecorderAutoStartSignal'),
         setRecorderAudioSource: (source) => set({ recorderAudioSource: source }, false, 'setRecorderAudioSource'),
         setLiveInterimText: (text) => set({ liveInterimText: text }, false, 'setLiveInterimText'),
+        setLiveAsrLink: (state) => set({ liveAsrLink: state }, false, 'setLiveAsrLink'),
         setClassroomASRContextHint: (hint) => set({ classroomASRContextHint: hint }, false, 'setClassroomASRContextHint'),
 
         resetCaptureEditorState: () => set(initialState, false, 'resetCaptureEditorState'),
@@ -176,6 +190,7 @@ export const useExtractedTermsHint = () => useCaptureEditorStore((s) => s.extrac
 export const useRecorderAutoStartSignal = () => useCaptureEditorStore((s) => s.recorderAutoStartSignal);
 export const useRecorderAudioSource = () => useCaptureEditorStore((s) => s.recorderAudioSource);
 export const useLiveInterimText = () => useCaptureEditorStore((s) => s.liveInterimText);
+export const useLiveAsrLink = () => useCaptureEditorStore((s) => s.liveAsrLink);
 export const useClassroomASRContextHint = () => useCaptureEditorStore((s) => s.classroomASRContextHint);
 export const useCaptureEditorActions = () => useCaptureEditorStore((s) => s.actions);
 

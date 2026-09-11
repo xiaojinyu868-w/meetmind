@@ -53,6 +53,14 @@ const {
   isLikelyHallucination,
 } = require('./server/asr/text-utils');
 const { buildQwenAsrFinishEvent, buildQwenAsrSessionConfig } = require('./server/asr/qwen-session');
+// 一条客户端连接的链路守护：重连后的课堂时间轴偏移、上游就绪超时、客户端存活判定（2026-09-11）
+const {
+  UPSTREAM_READY_TIMEOUT_MS,
+  CLIENT_LIVENESS_CHECK_INTERVAL_MS,
+  parseTimelineOffsetMessage,
+  shiftSpan,
+  isClientIdle,
+} = require('./server/asr/session-link');
 // 新一代 Qwen-Audio-3.0-ASR / Fun-ASR 的 duplex 任务协议（与旧 Omni Realtime 协议按模型族分派）
 const {
   isDuplexAsrModel,
@@ -493,6 +501,26 @@ app.prepare().then(() => {
     let lastSentenceEndTime = 0;
     let currentSpeechStartMs = null;
     let lastSpeechEndMs = 0;
+    // 课堂时间轴偏移：客户端重连后上游任务的时间戳从 0 重新计起，客户端在连接建立时告诉代理
+    // 这条连接第一帧音频在整节课的哪一毫秒；上游 / 墙钟推出来的时间戳都要加上它。
+    // 客户端 VAD 事件（vad-event / vad-timestamp）自带的时间本来就是课堂时间轴，不平移。
+    let timelineOffsetMs = 0;
+    /** 从上游会话开始到现在过了多久，落在课堂时间轴上（墙钟兜底路径用） */
+    const elapsedOnTimeline = () => Date.now() - sessionStartTime + timelineOffsetMs;
+    // 链路守护：上游不 ready 到点就放弃这条连接（客户端会重连）；客户端长时间没消息就当半开终止
+    let upstreamReadyTimer = null;
+    let lastClientMessageAt = Date.now();
+    let clientLivenessTimer = null;
+    const clearLinkGuards = () => {
+      if (upstreamReadyTimer) {
+        clearTimeout(upstreamReadyTimer);
+        upstreamReadyTimer = null;
+      }
+      if (clientLivenessTimer) {
+        clearInterval(clientLivenessTimer);
+        clientLivenessTimer = null;
+      }
+    };
 
     let hasAudioAppended = false;
     let hasFinishedSession = false;
@@ -703,11 +731,12 @@ app.prepare().then(() => {
     }
 
     function resolveTimestamp(msg) {
-      const currentElapsedMs = Date.now() - sessionStartTime;
+      const currentElapsedMs = elapsedOnTimeline();
       let beginTime = 0;
       let endTime = 0;
 
       if (currentSpeechStartMs !== null) {
+        // 客户端 VAD 给的已经是课堂时间轴
         beginTime = currentSpeechStartMs;
         endTime = lastSpeechEndMs > currentSpeechStartMs ? lastSpeechEndMs : currentElapsedMs;
         currentSpeechStartMs = null;
@@ -720,8 +749,8 @@ app.prepare().then(() => {
           const serverBegin = extractServerTimestamp(msg, 'begin');
           const serverEnd = extractServerTimestamp(msg, 'end');
           if (serverBegin !== null && serverEnd !== null) {
-            beginTime = serverBegin;
-            endTime = serverEnd;
+            // 上游相对本次任务的时间戳 → 平移回课堂时间轴
+            ({ beginTime, endTime } = shiftSpan({ beginTime: serverBegin, endTime: serverEnd }, timelineOffsetMs));
           } else {
             beginTime = lastSentenceEndTime;
             endTime = currentElapsedMs;
@@ -743,8 +772,8 @@ app.prepare().then(() => {
      */
     function resolveDuplexTimestamps(sentence, rawMsg) {
       if (typeof sentence.beginTime === 'number' && typeof sentence.endTime === 'number') {
-        const beginTime = sentence.beginTime;
-        const endTime = Math.max(sentence.endTime, beginTime);
+        // 上游句级时间戳相对本次任务的第一帧音频；重连后要平移回课堂时间轴
+        const { beginTime, endTime } = shiftSpan(sentence, timelineOffsetMs);
         lastSentenceEndTime = Math.max(lastSentenceEndTime, endTime);
         return { beginTime, endTime };
       }
@@ -759,6 +788,10 @@ app.prepare().then(() => {
         case 'task-started':
           isSessionReady = true;
           sessionStartTime = Date.now();
+          if (upstreamReadyTimer) {
+            clearTimeout(upstreamReadyTimer);
+            upstreamReadyTimer = null;
+          }
           sendClientEvent({ event: 'ready' });
           flushAudioQueue();
           break;
@@ -775,7 +808,7 @@ app.prepare().then(() => {
               text: sentence.text,
               stableText: '',
               unstableText: sentence.text,
-              beginTime: typeof sentence.beginTime === 'number' ? sentence.beginTime : undefined,
+              beginTime: typeof sentence.beginTime === 'number' ? sentence.beginTime + timelineOffsetMs : undefined,
             };
             const state = upsertInterimState(itemId, payload);
             const now = Date.now();
@@ -827,7 +860,7 @@ app.prepare().then(() => {
     }
 
     function upsertInterimState(itemId, payload) {
-      const currentElapsedMs = Date.now() - sessionStartTime;
+      const currentElapsedMs = elapsedOnTimeline();
       const prev = interimByItemId.get(itemId) || {
         text: '',
         stableText: '',
@@ -929,6 +962,29 @@ app.prepare().then(() => {
         },
       });
 
+      // 上游在这个窗口里没 ready（DashScope 冷启动 / 网络卡住）就放弃这条连接：
+      // 之前会无限悬挂——客户端 15s 后放弃了，这里的上游会话和 audioQueue 却留着。
+      // 关闭码 1011 让客户端按"会话断线"重连，而不是当作正常结束。
+      upstreamReadyTimer = setTimeout(() => {
+        upstreamReadyTimer = null;
+        if (isSessionReady || stopRequestedByClient) return;
+        console.warn(`[ASR-Proxy] upstream not ready within ${UPSTREAM_READY_TIMEOUT_MS}ms, dropping connection for client retry`);
+        sendClientEvent({ event: 'error', error: '识别服务连接超时，正在重试' });
+        try {
+          if (dashscopeWs && dashscopeWs.readyState !== WebSocket.CLOSED) dashscopeWs.terminate();
+        } catch { /* ignore */ }
+        if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1011, 'upstream not ready');
+      }, UPSTREAM_READY_TIMEOUT_MS);
+
+      // 客户端存活：浏览器每 15s ping 一次；换网 / 页面被系统回收时 TCP 可能几分钟才超时，
+      // 期间上游会话空转计费。60s 没任何消息就终止，让 close 逻辑收尾上游。
+      clientLivenessTimer = setInterval(() => {
+        if (clientWs.readyState !== WebSocket.OPEN) return;
+        if (!isClientIdle({ lastClientMessageAt, now: Date.now() })) return;
+        console.warn('[ASR-Proxy] client silent for too long, terminating half-open connection');
+        try { clientWs.terminate(); } catch { /* ignore */ }
+      }, CLIENT_LIVENESS_CHECK_INTERVAL_MS);
+
       dashscopeWs.on('open', () => {
         initialSessionUpdateTimer = setTimeout(() => {
           sendSessionUpdate('initial');
@@ -955,18 +1011,22 @@ app.prepare().then(() => {
             case 'session.updated':
               isSessionReady = true;
               sessionStartTime = Date.now();
+              if (upstreamReadyTimer) {
+                clearTimeout(upstreamReadyTimer);
+                upstreamReadyTimer = null;
+              }
               sendClientEvent({ event: 'ready' });
               flushAudioQueue();
               break;
 
             case 'input_audio_buffer.speech_started':
               if (currentSpeechStartMs === null) {
-                currentSpeechStartMs = Math.max(lastSentenceEndTime, Date.now() - sessionStartTime);
+                currentSpeechStartMs = Math.max(lastSentenceEndTime, elapsedOnTimeline());
               }
               break;
 
             case 'input_audio_buffer.speech_stopped':
-              lastSpeechEndMs = Math.max(lastSpeechEndMs, Date.now() - sessionStartTime);
+              lastSpeechEndMs = Math.max(lastSpeechEndMs, elapsedOnTimeline());
               break;
 
             case 'conversation.item.created': {
@@ -979,7 +1039,7 @@ app.prepare().then(() => {
                     stableText: '',
                     unstableText: '',
                     beginTime: currentSpeechStartMs ?? Math.max(0, lastSentenceEndTime),
-                    endTime: Date.now() - sessionStartTime,
+                    endTime: elapsedOnTimeline(),
                     lastSentAt: 0,
                     lastSentText: '',
                   });
@@ -1091,12 +1151,18 @@ app.prepare().then(() => {
       dashscopeWs.on('close', (code, reason) => {
         console.log('[ASR-Proxy] DashScope closed:', code, String(reason || ''));
         isSessionReady = false;
+        if (upstreamReadyTimer) {
+          clearTimeout(upstreamReadyTimer);
+          upstreamReadyTimer = null;
+        }
 
         if (clientWs.readyState === WebSocket.OPEN) {
           sendClientFinished(code);
-          // 仅异常断开时主动关闭客户端（code 1000 = 正常关闭，由客户端 stop 触发）
-          if (code !== 1000 && !stopRequestedByClient) {
-            clientWs.close(1000, 'DashScope disconnected unexpectedly');
+          // 客户端没要求停止而上游走了（不论 1000 还是异常码）：这条连接后面的音频只会被静默丢掉，
+          // 关掉它让客户端按"会话断线"重连。之前只在 code !== 1000 时关，上游正常收尾（长静音 /
+          // 任务自然结束）后客户端会一直往一条没有上游的连接里灌音频。
+          if (!stopRequestedByClient) {
+            clientWs.close(1011, 'upstream closed mid-session');
           }
         }
       });
@@ -1109,6 +1175,7 @@ app.prepare().then(() => {
 
     clientWs.on('message', (data, isBinary) => {
       const dataLen = data.length || data.byteLength || 0;
+      lastClientMessageAt = Date.now();
 
       if (isBinary) {
         receivedBinaryChunks += 1;
@@ -1142,6 +1209,15 @@ app.prepare().then(() => {
 
         if (msg.type === 'ping') {
           sendClientEvent({ event: 'pong', at: msg.at || Date.now() });
+          return;
+        }
+
+        const offsetMs = parseTimelineOffsetMessage(msg);
+        if (offsetMs !== null) {
+          // 重连后的连接：之后所有上游 / 墙钟时间戳都平移到课堂时间轴；尾句基线也从这里起算
+          timelineOffsetMs = offsetMs;
+          if (finalSegmentsSent === 0) lastSentenceEndTime = Math.max(lastSentenceEndTime, offsetMs);
+          if (offsetMs > 0) console.log(`[ASR-Proxy] timeline offset set to ${offsetMs}ms (client reconnect)`);
           return;
         }
 
@@ -1220,8 +1296,9 @@ app.prepare().then(() => {
     });
 
     clientWs.on('close', () => {
+      clearLinkGuards();
       console.log(
-        `[ASR-Proxy] Client disconnected, recvChunks=${receivedBinaryChunks}, recvBytes=${receivedBinaryBytes}, appended=${appendedChunks}, queue=${audioQueue.length}, upstreamResults=${upstreamResultEvents}, finalSent=${finalSegmentsSent}`
+        `[ASR-Proxy] Client disconnected, recvChunks=${receivedBinaryChunks}, recvBytes=${receivedBinaryBytes}, appended=${appendedChunks}, queue=${audioQueue.length}, upstreamResults=${upstreamResultEvents}, finalSent=${finalSegmentsSent}, timelineOffset=${timelineOffsetMs}`
       );
 
       // 积分 Phase 2：只结算真正有音频流过的连接（空连接/秒断不计分钟）。

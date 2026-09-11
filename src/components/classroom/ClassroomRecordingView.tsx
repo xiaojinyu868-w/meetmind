@@ -24,7 +24,7 @@ import { buildLiveTranslationRows } from '@/lib/utils/live-translation-rows';
 import { stitchLiveSentences } from '@/lib/utils/stitch-live-sentences';
 import { cycleTranslationMode, resolveSessionTranslationMode } from './ClassroomRecordingView.model';
 import { COPY } from '@/lib/ui/copy';
-import type { RecorderAudioSource } from '@/stores/capture-editor-store';
+import { useLiveAsrLink, type RecorderAudioSource } from '@/stores/capture-editor-store';
 
 export interface LiveConcept {
   id: string;
@@ -130,6 +130,16 @@ function LiveTranscriptPanel({
   );
   const translateEnabled = translationMode !== 'off';
   const hasDraftRow = rows.some((row) => row.id === 'live-interim');
+  // 实时字幕链路：断了在重连 / 本节课不会再有实时字幕 → 占用这一行状态，恢复后自动回到正常状态字。
+  // 试听课没有 ASR 链路，不看这个。
+  const liveAsrLink = useLiveAsrLink();
+  const liveCaptionsNotice = !isDemoPlayback && listening
+    ? (liveAsrLink === 'reconnecting'
+        ? COPY.recording.liveCaptionsReconnecting
+        : liveAsrLink === 'offline'
+          ? COPY.recording.liveCaptionsOffline
+          : null)
+    : null;
   const activeDirection: Exclude<TranslationMode, 'off'> = translationMode === 'zh-en' ? 'zh-en' : 'en-zh';
   const { request, lookup } = useEnToZhTranslation(translateEnabled, activeDirection);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -288,8 +298,10 @@ function LiveTranscriptPanel({
                     {audioSource === 'mixed' ? <Monitor size={11} strokeWidth={2} /> : null}
                   </span>
                 ) : null}
-                <p className="truncate text-[12.5px] text-ink-secondary">
-                  {hasDraftRow ? (
+                <p className="truncate text-[12.5px] text-ink-secondary" data-testid="live-status-line">
+                  {liveCaptionsNotice ? (
+                    <span data-testid="live-captions-notice">{liveCaptionsNotice}</span>
+                  ) : hasDraftRow ? (
                     <span className="text-pine/85">{COPY.recording.listeningSentence}</span>
                   ) : stableSentenceCount > 0 ? (
                     <span className="tabular-nums">{COPY.recording.recordedSentences(stableSentenceCount)}</span>
