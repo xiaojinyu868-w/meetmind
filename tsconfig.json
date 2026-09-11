@@ -43,7 +43,8 @@
     ".next-staging/types/**/*.ts",
     ".next-attr/types/**/*.ts",
     ".next-preview/types/**/*.ts",
-    ".next-dev-polish/types/**/*.ts"
+    ".next-dev-polish/types/**/*.ts",
+    ".next-dev-zhihu/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

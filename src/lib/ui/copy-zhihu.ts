@@ -1,0 +1,87 @@
+/**
+ * 知乎线（/apps/zhihu：用知乎登录 → 选一个收藏夹 → 开成一节课 → 讲完就考 → 继续看）文案。
+ * 口吻同 copy.ts：安静、有根、不播报、不催；不出现内部词（接入 / 引擎 / 生成 / 材料包）。
+ * 用户看到的词：连接知乎 / 收藏夹 / 收下 / 开课 / 同学 / 考一考 / 继续看。
+ */
+export const ZHIHU_COPY = {
+  title: '从一个收藏夹开始',
+  subtitle: '你在知乎收藏过的，让同学讲给你听。讲完考一考，没稳的再去知乎上接着看。',
+  back: '回到 MeetMind',
+
+  /** 连接 */
+  loginWithZhihu: '用知乎登录',
+  loginOther: '用 MeetMind 账号登录',
+  connect: '连接知乎',
+  reconnect: '重新连接知乎',
+  connectHint: '只读取你的收藏夹、创作与关注，不会替你发布任何内容。',
+  connected: '知乎已连接',
+  createdAccount: '欢迎。已经用你的知乎身份建好了账号。',
+  expired: '知乎的授权只保留一小时，已经过期了——重新连接一次就好。',
+  notConnected: '还没连接知乎。',
+  disabled: '这条线还没开放。',
+  connecting: '正在去知乎…',
+
+  /** 授权失败（zhihu_error 机器码 → 人话） */
+  errors: {
+    state_missing: '这次授权没有对上发起它的浏览器，请重新点一次。',
+    state_invalid: '这次授权没有对上发起它的浏览器，请重新点一次。',
+    state_expired: '授权页停留太久了，请重新点一次。',
+    state_mismatch: '这次授权没有对上发起它的浏览器，请重新点一次。',
+    code_missing: '知乎没有把授权码带回来，请重新点一次。',
+    exchange_failed: '知乎那边没有接受这次授权，请稍后再试。',
+    identity_unavailable: '知乎没有给出可用的身份信息，暂时不能用它直接登录。请先用 MeetMind 账号登录，再在这里连接知乎。',
+    user_unavailable: '这个账号暂时不可用。',
+    not_configured: '这条线还没开放。',
+    unknown: '没连上，请再试一次。',
+  } as Record<string, string>,
+
+  /** 收藏夹 */
+  favlistsTitle: '选一个收藏夹',
+  favlistsHint: '同学会把里面的回答和文章读一遍，再讲给你听。',
+  favlistsEmpty: '这个知乎账号还没有公开的收藏夹。',
+  favlistsLoading: '正在看你的收藏夹…',
+  favlistPrivate: '私密',
+  favlistPublic: '公开',
+  startLesson: '开课',
+  importing: '正在收下…',
+  imported: (count: number): string => `已收下 ${count} 条`,
+  reading: (count: number): string => `正在读 ${count} 篇…`,
+  opening: '同学准备开讲',
+  selfMode: '演示账号',
+  quotaExceeded: '知乎接口今天的额度用完了，明天再来。',
+  upstreamDown: '知乎暂时没有响应，稍后再试。',
+  nothingToTeach: '这个收藏夹里没有可以讲的正文——都是视频或想法。',
+  emptyFavlist: '这个收藏夹是空的。',
+
+  /** 课堂页 */
+  leave: '离开课堂',
+  railToggle: '材料 · 考一考',
+  tabMaterials: '材料',
+  tabQuiz: '考一考',
+  tabContinue: '继续看',
+  materialsTitle: (count: number): string => `同学读了这 ${count} 篇`,
+  materialsFull: '正文完整',
+  materialsSummary: '只有摘要',
+  materialsSkipped: (count: number): string => `另有 ${count} 篇没进这节课`,
+  openOriginal: '在知乎看原文',
+  quizIntro: '讲完了？用这几篇材料考一考，看哪些真的会了。',
+  makeQuiz: '出一套题',
+  makeFlashcards: '做几张闪卡',
+  making: '同学在出题…',
+  makingCards: '同学在做卡…',
+  quizFailed: '这次没出出来，再试一次。',
+  notReady: '材料还太少，不够出题。',
+  backToSource: '回到知乎原文',
+  continueIntro: '考完会在这里告诉你哪里还没稳，以及知乎上讲得最清楚的那几条。',
+  continueWeak: (concepts: string[]): string => `还没稳的：${concepts.join('、')}`,
+  continueLoading: '正在知乎上找…',
+  continueEmpty: '这几处知乎上暂时没找到更好的讲法。',
+  continueAllGood: '这一轮都稳了。',
+  continueReason: '为什么是它',
+  authorityHint: (level: number | null): string => (level === 4 ? '领域内公认' : level === 3 ? '高权威作者' : level === 2 ? '有一定权威' : ''),
+
+  /** 通用 */
+  loginFirst: '先登录，才能保存这节课。',
+  retry: '再试一次',
+  loading: '稍等…',
+} as const;

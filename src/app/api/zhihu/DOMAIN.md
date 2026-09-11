@@ -21,3 +21,14 @@
 | `/api/zhihu/continue` | POST `{concepts[≤5], threadId?, topic?, perConcept?}` | 考后补货：还没稳的概念 → 站内搜索（每概念 1 次，≤3 次）→ 按权威 / 赞同 / 有反方评论排序，排除材料包里已有链接 → `{ groups:[{concept, candidates[]}] }`；检索失败返回空组不报错 |
 
 讲完就考没有新路由：课堂页把材料包变成伪转录直接调既有 `/api/apps/execute`（quiz / flashcards），assessment 走既有 `/api/memory/events`。
+
+## 页面（`src/app/apps/zhihu/`，逻辑在 `src/components/zhihu/`）
+
+| 路径 | 组件 | 说明 |
+|---|---|---|
+| `/apps/zhihu` | `ZhihuEntry` | 三种状态各一句人话：未登录（用知乎登录 / 用 MeetMind 账号登录）→ 已登录未连接 / 已过期 / 未开放 → 已连接（收藏夹列表，每个一颗「开课」= 导入 → 抽正文 → 跳课堂页，三行进度）。授权回来的 `?zhihu=` / `?zhihu_error=` 提示一次就从地址栏清掉 |
+| `/apps/zhihu/lesson/[threadId]` | `ZhihuLesson` | 舞台原样复用 teach-live 的 `LiveStage` + `useLiveLesson`；进来先 `openLesson`，事件日志为空就替学生发「开始上课」；右侧可收起的栏三页：材料（同学读了哪几篇 / 正文状态 / 原文）、考一考（测验 / 闪卡：`zhihu-lesson-model` 把材料包变伪转录喂既有 `/api/apps/execute`，`QuizWindow` / `FlashcardsWindow` 原样复用，「回到原话」= 打开知乎原文）、继续看（交卷后 assessment 进 `/api/memory/events`，没稳的概念 → `/api/zhihu/continue`）|
+
+文案 `src/lib/ui/copy-zhihu.ts`；浏览器端 fetch 封装 `components/zhihu/zhihu-api-client.ts`（错误统一 `ZhihuClientError{code,message,status}`）。
+验证：`make smoke-zhihu-lesson`（不需知乎凭证：合成账户 → 3 条正文完整的收藏 → 开课 → 老师口播命中材料概念 → 伪转录出题 → continue → 清理；`SMOKE_BROWSER=chromium` 截三张图）。
+

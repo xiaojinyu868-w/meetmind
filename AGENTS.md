@@ -45,7 +45,7 @@
 | 改桌面壳 / 口袋 | `desktop/DOMAIN.md` + `docs/plans/2026-09-09-pocket-capture.md`；改 `desktop/package.json` version 才会触发老用户更新提示 |
 | 新增模型 provider、默认模型、API key、环境变量 | `src/lib/config/DOMAIN.md` + `.env.example`（涉 Tutor 再加 `docs/TUTOR_AGENT.md`） |
 | 改 Tutor / ASR / teach / fenshen / 记忆 主链路 | 对应 `DOMAIN.md` + `docs/TUTOR_AGENT.md` / `docs/ASR_PIPELINE.md` / `docs/TEACH_TUTOR_ENGINE.md` |
-| 改用户面文案或设置项 | `src/lib/ui/copy.ts`（按体积拆出的域文件同一口吻规则：`copy-landing` 营销页 / `copy-apps` 应用窗口 / `copy-global-ask` 问同学 / `copy-intent` / `copy-settings` / `copy-share` / `copy-fenshen` / `copy-pocket` 口袋 / `copy-teach-live` 上课舞台）或设置页说明 + 偏好 key 所在 `DOMAIN.md` |
+| 改用户面文案或设置项 | `src/lib/ui/copy.ts`（按体积拆出的域文件同一口吻规则：`copy-landing` 营销页 / `copy-apps` 应用窗口 / `copy-global-ask` 问同学 / `copy-intent` / `copy-settings` / `copy-share` / `copy-fenshen` / `copy-pocket` 口袋 / `copy-teach-live` 上课舞台 / `copy-zhihu` 知乎线）或设置页说明 + 偏好 key 所在 `DOMAIN.md` |
 | 交付里程碑 | `CHANGELOG.md` 一条（可追到 commit）+ `make ledger` |
 
 ---

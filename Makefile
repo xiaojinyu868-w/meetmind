@@ -67,6 +67,10 @@ smoke-pocket: ## 口袋闭环：合成账户 → /api/workspace/clip（ChatGPT �
 smoke-zhihu: ## 知乎接入 smoke（只读、不起服务）：本人模式走搜索 / 收藏夹 / 近期收藏 → Firecrawl 抽一条正文 → 去杂质；需 .env 的 ZHIHU_ACCESS_SECRET（SMOKE_ZHIHU_URL 指定要抽的链接）
 	@npx tsx tests/smoke/smoke-zhihu.ts
 
+.PHONY: smoke-zhihu-lesson
+smoke-zhihu-lesson: ## 收藏夹开课闭环（不需知乎凭证）：合成账户 → 3 条正文完整的收藏 → /api/zhihu/lesson → 老师开讲命中材料概念 → 伪转录出题 → continue → 清理；SMOKE_BASE 指服务（默认 3106），SMOKE_BROWSER=chromium 截图，SMOKE_SKIP_LLM=1 不花模型钱
+	@SMOKE_BASE=$${SMOKE_BASE:-http://localhost:3106} npx tsx tests/smoke/smoke-zhihu-lesson.ts
+
 .PHONY: test-desktop
 test-desktop: ## 桌面壳纯逻辑单测（口袋：选区读取 / 来源解析 / 离线队列；不需要 Electron）
 	@node --test ./desktop/pocket/pocket.test.js
