@@ -1,14 +1,17 @@
 import type { AppExecutionResult } from '@/lib/ai-native/types';
+import { joinMultipleSelection, parseMultipleAnswer, sameOptionSet, splitMultipleSelection } from '@/lib/ai-native/quiz-answer';
 
 export interface QuizQuestion {
   id: string;
   title?: string;
   stem: string;
-  /** single | judge | fill | short。空选项即主观题。 */
+  /** single | multiple | judge | fill | short。空选项即主观题；multiple 的 answer 是 "A、C" 字母契约（quiz-answer.ts）。 */
   type: string;
   options: string[];
   answer: string;
   explanation?: string;
+  /** 这道题检验的那个点（插件 v0.3 起有；旧结果没有） */
+  concept?: string;
   evidence?: {
     startMs: number;
     snippet?: string;
@@ -20,6 +23,31 @@ export const QUIZ_SELF_WRONG = '__self_wrong__';
 
 export function isSubjectiveQuizQuestion(question: QuizQuestion): boolean {
   return question.options.length < 2;
+}
+
+/** 多选题：type=multiple 且至少三个选项、答案能解析出两个以上正确项（否则按单选处理，别让学生多选一个对不上的集合） */
+export function isMultipleQuizQuestion(question: QuizQuestion): boolean {
+  return question.type === 'multiple' && question.options.length >= 3 && parseMultipleAnswer(question.answer, question.options).length >= 2;
+}
+
+/** 这道题的正确选项（单选一个、多选多个、主观题空） */
+export function correctOptionsOf(question: QuizQuestion): string[] {
+  if (isSubjectiveQuizQuestion(question)) return [];
+  if (isMultipleQuizQuestion(question)) return parseMultipleAnswer(question.answer, question.options);
+  return [normalizeQuizAnswer(question.answer, question.options)];
+}
+
+/** 学生在 selected 里记的作答 → 选项数组（多选按连接符拆，单选就是那一个） */
+export function selectedOptionsOf(question: QuizQuestion, selectedValue: string | undefined): string[] {
+  if (!selectedValue) return [];
+  return isMultipleQuizQuestion(question) ? splitMultipleSelection(selectedValue) : [selectedValue];
+}
+
+/** 多选题点一个选项：在 / 不在集合里切换，返回新的 selected 值（空集合返回 undefined 让主按钮禁用） */
+export function toggleMultipleSelection(selectedValue: string | undefined, option: string): string | undefined {
+  const current = splitMultipleSelection(selectedValue);
+  const next = current.includes(option) ? current.filter((item) => item !== option) : [...current, option];
+  return next.length > 0 ? joinMultipleSelection(next) : undefined;
 }
 
 /**
@@ -61,6 +89,7 @@ export function normalizeQuizQuestions(result: AppExecutionResult | null): QuizQ
             explanation: typeof item.explanation === 'string'
               ? sanitizeQuizExplanation(item.explanation)
               : '',
+            concept: typeof item.concept === 'string' && item.concept.trim() ? item.concept.trim() : undefined,
             evidence: citation ? { startMs: citation.startMs, snippet: citation.snippet } : undefined,
           };
         })
@@ -83,6 +112,7 @@ export function normalizeQuizQuestions(result: AppExecutionResult | null): QuizQ
       explanation: typeof card.meta?.explanation === 'string'
         ? sanitizeQuizExplanation(card.meta.explanation)
         : '',
+      concept: typeof card.meta?.concept === 'string' && card.meta.concept.trim() ? card.meta.concept.trim() : undefined,
       evidence: card.citations?.[0]
         ? { startMs: card.citations[0].startMs, snippet: card.citations[0].snippet }
         : undefined,
@@ -121,11 +151,19 @@ export function normalizeQuizAnswer(answer: string, options: string[]): string {
 export function isQuizAnswerCorrect(question: QuizQuestion, selectedValue: string | undefined): boolean {
   if (!selectedValue) return false;
   if (isSubjectiveQuizQuestion(question)) return selectedValue === QUIZ_SELF_CORRECT;
+  if (isMultipleQuizQuestion(question)) return sameOptionSet(splitMultipleSelection(selectedValue), correctOptionsOf(question));
   return selectedValue === normalizeQuizAnswer(question.answer, question.options);
 }
 
 export function stripQuizOptionPrefix(text: string): string {
   return text.replace(/^[A-Za-z][.、)\s]+/, '').trim() || text;
+}
+
+/** 给人看的正确答案：单选一句、多选用「、」连起来（去掉选项自带的字母前缀） */
+export function formatQuizAnswerForDisplay(question: QuizQuestion): string {
+  const correct = correctOptionsOf(question);
+  if (correct.length === 0) return question.answer;
+  return correct.map(stripQuizOptionPrefix).join('、');
 }
 
 export function formatQuizEvidenceTime(startMs: number): string {
