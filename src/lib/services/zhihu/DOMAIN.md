@@ -64,7 +64,8 @@ Access Secret 在 developer.zhihu.com/profile 自助申请，一个账号最多 
 |---|---|---|
 | `zhihu-open-client.ts` | 上表全部端点 + OAuth 三步的类型化客户端；字段归一 camelCase、字符串数字转数字；`fetch` / 时间源可注入 | 直连 HTTP 不依赖 CLI；`Code≠0` 一律抛 `ZhihuApiError`（kind：param / auth / rate_limit / quota / server / network / timeout / protocol / oauth，`retryable` 只对 network / timeout / server 为 true）；日志只记 endpoint 与错误码，**不记 query、凭证、响应正文**；缺 Access Secret 不出网 |
 | `zhihu-page-clean.ts` | 抓回来的回答页 / 专栏页 / 问题页去杂质，纯函数 | 找不到结构标记就走保守清洗并 `confident=false`，导入层据此标注"正文可能含页面杂质"，**不装干净**；正文以外的元数据（作者 / 编辑时间 / 赞同 / 评论）只从页脚取 |
-| `*.test.ts` | 客户端夹具测试（官方文档响应示例）+ 去杂质夹具（实测页面结构逐行还原） | 夹具是文档与实测的快照；线上形状变了先改 DOMAIN.md 再改夹具 |
+| `zhihu-auth-service.ts` | 知乎 OAuth 登录 / 绑定：`beginZhihuOAuth`（nonce + 绑定用户 + 回跳路径 HMAC 签进 cookie）、`completeZhihuOAuth`（cookie 对账 → 换 token → `/user` → bound / logged_in / error 三种 outcome，路由层据此 302）、`getZhihuIdentityForUser`（导入层取该用户的 OAuth token 与过期状态）、`unlinkZhihu` | 知乎实测不回传 state → CSRF 靠 cookie 对账，回传了就顺带比对；稳定身份 = `/user` 主页链接的 url_token，**拿不到只允许绑定不允许登录**（否则每次授权长出一个新用户）；token 3600 s 无 refresh，过期如实说「重新连接知乎」不静默降级；零 schema 改动（token 存现有 `AuthProvider(provider='zhihu')`，types/user.ts 的 `AuthProvider` 联合类型加了 `'zhihu'`） |
+| `*.test.ts` | 客户端夹具测试（官方文档响应示例）+ 去杂质夹具（实测页面结构逐行还原）+ OAuth 状态签名与四种 outcome 的注入测试 | 夹具是文档与实测的快照；线上形状变了先改 DOMAIN.md 再改夹具 |
 
 配套：`src/lib/config/zhihu.config.ts`（五个 env，`redirectUri` 非 https 启动即报错）；`tests/smoke/smoke-zhihu.ts`（`make smoke-zhihu`，只读、不起服务、本人模式真实请求 + 抽一条正文）。
 

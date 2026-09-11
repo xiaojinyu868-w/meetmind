@@ -56,7 +56,7 @@ export type UserStatus = 'active' | 'inactive' | 'suspended' | 'pending';
 /**
  * 登录方式
  */
-export type AuthProvider = 'local' | 'wechat' | 'google' | 'apple';
+export type AuthProvider = 'local' | 'wechat' | 'google' | 'apple' | 'zhihu';
 
 /**
  * 用户基本信息

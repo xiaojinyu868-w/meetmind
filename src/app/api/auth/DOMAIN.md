@@ -26,6 +26,8 @@ auth route.ts ❌ 不能 import api/ 下其他 routes
 | `/api/auth/send-code` | POST | 发送邮箱验证码 |
 | `/api/auth/wechat` | GET | 获取微信 OAuth 跳转 URL |
 | `/api/auth/wechat/callback` | GET | 微信 OAuth 回调（换取 code） |
+| `/api/auth/zhihu/start` | GET | 发起知乎 OAuth：前端 fetch（可带 Bearer = 绑定当前账号，不带 = 用知乎登录）拿 `{url, mode}`；一次性 nonce + 绑定用户 + 回跳路径签进 HttpOnly cookie `mm_zhihu_oauth`（10 分钟，path `/api/auth/zhihu`）；`?next=` 站内回跳，`?redirect=1` 直接 302。未开启 / 凭证不齐 503 |
+| `/api/auth/zhihu/callback` | GET | 知乎回调（顶层导航无 Bearer）：cookie 对账补知乎不回传 state 的缺口 → 换 token → `/user` 取 url_token 作稳定身份 → 绑定 或 登录（找已绑定用户 / 新建 `zhihu_<token>` 用户 + 默认工作区）→ 302 到 next：`?zhihu=connected|created` + 登录时 `?session=<临时会话>`（复用微信的临时会话交换，useAuth 零改动）；失败 `?zhihu_error=<code>`。逻辑全在 `services/zhihu/zhihu-auth-service.ts` |
 
 ## 文件清单
 

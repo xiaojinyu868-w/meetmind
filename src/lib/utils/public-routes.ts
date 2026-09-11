@@ -14,6 +14,8 @@ const PUBLIC_ROUTES = [
   '/api/auth/wechat',
   '/api/auth/wechat/callback',
   '/api/auth/wechat/qr',
+  // 知乎 OAuth：start 由前端 fetch（可选 Bearer，路由内自读决定登录 / 绑定）；callback 是知乎发起的顶层导航，没有 Bearer
+  '/api/auth/zhihu/*',
   '/api/wechat/mp',
   // 微信支付结果回调：微信服务器无 Bearer，APIv3 平台证书验签是唯一防线
   '/api/wechat/pay-notify',
