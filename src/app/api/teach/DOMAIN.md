@@ -30,6 +30,9 @@
 {type:'usage',inputTokens,outputTokens,costCny,ms,model}   **仅 live 线程**：每轮用量与估算费用
 ```
 
+**只落事件日志、不走 SSE 的两种行**（`TeachLogEvent` = 契约事件 + 这两种；`/events` 接口原样返回，前端 reducer 认得）：
+`{type:'student-message',text}` 学生消息（turn 的输入，订阅者就是发的人）；`{type:'draw-fix',segmentId,script,error}` **仅 live**：`<draw>` 某段脚本被自愈替换（`draw-fix` 路由验证通过时写入），回看 / 恢复时替换该段正文——否则重放的是当年跑不通的原脚本；`live-history` 拼模型历史时忽略它。
+
 **tool-call name 双词表**（按线程引擎归属各出一套，前端 boardEffectOf 双分支）：
 - codex：write / circle / underline / arrow / mark / new_column / image /
   flip_page / pause / ref / finish（`teach-agent/tools.ts` 11 工具集）

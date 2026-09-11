@@ -22,7 +22,8 @@
 ```
 
 - **纯函数、零 DOM**：可在 Worker 里跑，也可在单测里跑。安全边界（超时 / 无网络）由调用方（`draw-worker.ts`）负责；本模块只把语法 / 运行错误变成结构化结果，永不抛出。
-- **into 追加同布局**：首块算出的 `transform`（缩放 / 平移）传回给后续 chunk，只输出 `fromChunk` 之后的新 drawable；越界时 viewBox 外扩（图不会因为追加而跳动）。
+- **into 追加同布局**：首块算出的 `transform`（缩放 / 平移）传回给后续 chunk，只输出 `fromChunk` 之后的新 drawable；小幅越界时 viewBox 外扩（图不会因为追加而跳动）；撑大超过 15% 由调用方 `DrawBlock` 整图重新取景（refit），运行时本身不管。
+- **输入宽容优先于自愈**：API 按老师最自然的写法收（`[x, y]` 即点、`'label', { style }` 并存、hidden 点、不给色就轮换），误用才抛带修法的 TypeError。自愈是兜底：修复模型和讲课模型写法一样，API 窄了它也修不回来（2026-09-11 线性代数那节 5 修 4 败全是这个原因）。
 - **非严格模式执行**：老师偶发 `l = lineThrough(P, 100)` 忘了 const，严格模式会 ReferenceError；宽松模式下成了隐式全局，跑完把新冒出来的全局删掉。`point(2, 3, 'Q')` 会把合法标识符的点名暴露成变量，老师常写完点就直接用 `Q`。
 
 ## 文件
@@ -35,8 +36,8 @@
 | `render.ts` | 场景图 → SVG 标记：`fitTransform`（几何图保形铺满；带 `axes` 的函数图 x / y 各自铺满——y = x² 从来不是等比画的；**`tightenView`**：老师给的坐标范围在两个方向都比内容大一倍以上时收紧到内容附近（留 35%、保留原点、不超出老师范围），`axes({ lock: true })` 关掉——单位正方形不再是 [-4,4]² 大画框里的一粒芝麻；采用的范围放在 `Transform.view`，时间轴各帧共用）、**上板顺序 `orderForPaint`**（同一段里坐标系与带填充的面先上，其余按老师写的顺序；段间不重排）、直线 / 射线裁剪到画布、标签避让（点标签沿远离重心方向放，占位盒碰撞就换方向）、角标 / 直角标、箭头 marker、面积填充、坐标轴与网格（`data-draw="fade"` 让前端整体淡入）、`trace` → `<mpath>` 引用形状的 `<path>`；所有可当运动路径的形状都渲染成 `<path>`；元素 id = `${idPrefix}${localId}` + `data-name`（激光笔 `point at="fig#AB"` 靠它命中） |
 | `timeline.ts` | **时间原语的编译器**（Manim 的 ValueTracker + updater 搬进浏览器）：脚本调 `time(dur)` 后，运行时按 10 帧/秒（12–40 帧）采样执行，每帧都是精确几何；`compileTimeline` 把 K 帧标记解析成树、按 id / data-for / 位置对齐，数值属性差异写成 `<animate values keyTimes>`（d / points 结构一致时线性插值，否则离散），颜色 / 显隐离散，文字内容变化按连续相同段复制 `<text>` 用 opacity 轮播（≤ 40 段 × 4 个读数）；`loop: 'pingpong'` 镜像 values、dur 翻倍。浏览器原生播放：无逐帧脚本、回放零成本、rough 对带 SMIL 的元素保持工整 |
 | `layout-critic.ts` | **代码版 Critic**：渲染后扫一遍所有 `<text>`，按中文 1 em / 西文 0.56 em 估框，重叠就把后画的（可挪的）沿重叠更小的轴推开 + 4px，最多 6 轮；网格刻度、轴名、defs 里的是障碍但不动。毫秒级、不进关键路径——Code2Video / TheoremExplainAgent 用 VLM 干这件事要几十秒 |
-| `runtime.ts` | `runDraw(chunks, options)`：`cleanScript`（剥 ```js 围栏 / `<script>`）→ 注入 API 执行 → render；`console.log` 收进 `log` 返回。**能画多少画多少**：运行期报错（未定义变量等）时把报错前登记的对象照常渲染，结果 `ok: true` 带 `error` / `errorChunk`；只有语法错误（一个对象都没登记）才 `ok: false` |
-| `__tests__/draw-runtime.test.ts` | 严谨性单测：切线垂直半径、外点切线真的相切、三种交点、外接圆 / 内切圆、squareOn 朝向；脚本 → SVG（稳定 id、直角标、into 复用 transform、切线斜率、面积 / 根 / 极值、滑块、结构化错误、全局遮蔽）；`{{ }}` 内联计算 |
+| `runtime.ts` | `runDraw(chunks, options)`：`cleanScript`（剥 ```js 围栏 / `<script>`）→ 注入 API 执行 → render；`console.log` 收进 `log` 返回。**能画多少画多少**：运行期报错（未定义变量等）时把报错前登记的对象照常渲染，结果 `ok: true` 带 `error` / `errorChunk`；只有语法错误（一个对象都没登记）才 `ok: false`。时间轴路径用全部帧的 union 场景算一次 transform（`equalAxes` / `viewLocked` 一并继承），各帧共用 |
+| `__tests__/draw-runtime.test.ts` | 严谨性单测：切线垂直半径、外点切线真的相切、三种交点、外接圆 / 内切圆、squareOn 朝向；脚本 → SVG（稳定 id、直角标、into 复用 transform、切线斜率、面积 / 根 / 极值、滑块、结构化错误、全局遮蔽）；`{{ }}` 内联计算；**老师最自然的写法**（线性代数那节的原始脚本：数组点、label + 样式、hidden 点、箭头轮换色）；`view3d`；`tightenView` / `lock`；上板顺序 |
 
 ## 站在谁的肩膀上（2026-09-11 下午调研，详见 `docs/TEACH_TUTOR_ENGINE.md` §12.6）
 

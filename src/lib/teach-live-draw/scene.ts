@@ -4,6 +4,13 @@
  * 脚本里每个全局函数都在这里定义：几何对象与构造（geometry.ts）、分析（analysis.ts）、
  * 标注、动画、参数。调用即登记 drawable，渲染交给 render.ts（自动铺满、标签避让）。
  * 纯数据、零 DOM：在 Worker 里执行，输出 SVG 标记字符串。
+ *
+ * 输入宽容（2026-09-11）：点认 {x, y} 也认 [x, y]；'label' 与 { style } 两个尾参同时认；这是老师最自然的写法，
+ * 之前一律 TypeError 整图丢掉，自愈也修不回来（修复模型照样这么写）。
+ *
+ * 超出 500 行预算（≈640）暂不拆：所有 API 是同一个闭包共享 `scene` 与彼此（view3d 用 point / arrow，polygon 用 named），
+ * 拆开要么传一包依赖要么复制 opts / toPt。清楚的缝是 view3d（三维投影）与 分析类（curve / area / roots …）各成一个 `createXxxApi(scene, base)`，
+ * 下次加大块能力时随手拆。
  */
 
 import * as G from './geometry';

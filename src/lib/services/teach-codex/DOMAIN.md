@@ -38,8 +38,8 @@
 | `codex-app-server.ts` | app-server 进程封装：stdio JSON-RPC 客户端 + 每线程注册表 + 空闲回收（TeachConfig.idleMs，默认 15min）+ 崩溃标记（下次用线程自动重启 + thread/resume） |
 | `shim-translate.ts` | Responses→Chat 纯翻译（零 IO 可单测）：请求消息/工具翻译 + 流式状态机（chat chunk → Responses 事件） |
 | `shim-server.ts` | shim HTTP 服务（Next 进程内单例，127.0.0.1；端口占用则 /health 复用已有实例） |
-| `event-bus.ts` | 按线程 pub/sub + 契约事件类型（SSE 唯一事实源） |
-| `thread-store.ts` | TeachThread prisma CRUD + 事件日志落盘/读取（data/teach-events/*.jsonl） |
+| `event-bus.ts` | 按线程 pub/sub + 契约事件类型（SSE 唯一事实源）；`TeachLogEvent` = 契约事件 + 只落盘不广播的 `student-message` / live 线的 `draw-fix`（类型本体在 `types/teach-live.ts` 的 `LiveEvent` 联合里） |
+| `thread-store.ts` | TeachThread prisma CRUD + 事件日志落盘/读取（data/teach-events/*.jsonl）；`appendThreadEvent` 按线程串行排队（live 线一轮上千条 delta 曾乱序把 draw 脚本写坏） |
 | `board-env.ts` | 按线程 BoardEnv：工具描述导出（z.toJSONSchema）、参数校验执行、事件日志重放恢复 |
 | `image-backfill.ts` | 插图回填：扫事件日志挑缺配图的 image tool-call → 后台 dashscope 生图（复用 `dashscope-image-service`，与旧 teach-agent 线同 provider）→ 落盘 `public/uploads/teach/`（sha1(callId) 前 16 位命名，同旧线风格）→ 发 `image-ready` 事件（SSE + 日志追加）。触发点：turn 收尾（teach-session-service）与事件日志回放路由；三层去重（已有 image-ready / inflight 占位 / 失败 10min 冷却），任何路径不抛异常（生图失败不毁课，画布留占位） |
 | `internal-auth.ts` | 内部回调共享令牌（进程内随机生成，经 codex config.toml mcp env 下发） |

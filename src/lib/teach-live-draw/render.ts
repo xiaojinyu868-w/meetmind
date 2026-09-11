@@ -6,6 +6,11 @@
  * - 每个元素带 id（`${idPrefix}${localId}`）与 data-name（localId），老师的 point at="fig#AB" 靠 data-name 命中。
  * - `into` 追加：传入首块算好的 transform，只输出 fromChunk 之后的 drawable；越界时 viewBox 外扩。
  * - 辅助元素（坐标轴 / 网格）标 data-draw="fade"，前端描画时整体淡入而不是一根根描。
+ * - 取景：老师给的坐标范围比内容大太多时 `tightenView` 收紧（保留原点、不出老师范围；axes({ lock }) 关）；采用的范围放进 Transform.view，时间轴各帧共用。
+ * - 上板顺序 `orderForPaint`：同一段里坐标系与带填充的面先上，其余按老师写的顺序；段间不重排。
+ *
+ * 超出 500 行预算（≈670）暂不拆：取景（computeBounds / contentBounds / tightenView / fitTransform，约 110 行）是清楚的一块，
+ * 下次动到布局就提成 viewport.ts；元素绘制的大 switch 与标签避让共享 placer / emit 状态，不值得为行数拆。
  */
 
 import * as G from './geometry';
