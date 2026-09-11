@@ -148,6 +148,8 @@ src/components/apps/windows/
 
 ### QuizWindow（课堂测验）
 
+**2026-09-11 内容层（题怎么出）**：题目由 `quiz.plugin` v0.3 出——为这个人出的（掌握轨迹进 prompt）、题型按内容选、每题必有先对后错的解析，见 `src/lib/ai-native/plugins/DOMAIN.md`。窗口侧两处跟着变：**多选题**（`type=multiple`，`isMultipleQuizQuestion` 要求 ≥3 个选项且答案能解析出 ≥2 个正确项，否则按单选处理）点选项是切换不是替换（`toggleMultipleSelection`，选中集合存在同一个 `selected` 字段里用 `QUIZ_MULTI_SEPARATOR` 连接），交卷时集合完全一致才算对（`correctOptionsOf` / `sameOptionSet`），题号旁一枚「多选」小字是唯一形态提示，揭示时正确项全绿、选错的红；**题干 / 选项 / 解析 / 答案行走 `MathText`**（v2 prompt 允许数学题用 $…$ 行内 TeX，此前只有闪卡渲染公式，测验会把 `$f \circ g$` 原样显示——真课实测撞上）。`QuizQuestion.concept`（这道题检验的点）随 payload 带到窗口，暂无消费方。
+
 **2026-09-10 交互打磨**：题间两段式切换（离场 150ms → 换题 → 进场 220ms，换轮同样重新进场、进度线过渡着归零）；交卷揭示先染红错的、正确项 90ms 后浮出、勾 / 叉用 `QuizOptionMark` 一笔画出；1–4 / 回车 / 空格一路不碰鼠标（`app-keys.resolveQuizKey`），快捷键提示只出现一次；选项行 `mm-press` 按下 0.98、hover 底色只给有 hover 的设备、整行 ≥52px；触屏左右滑走 `swipe-model` + `use-swipe`（`useQuizNavigation` 只剩键盘与分页）；「确认答案」按不了时 title 说「先选一个答案」；结束页圆环与三个数字从 0 长到终值（`useCountUp`），全卷题号与错题行可点回看那一题（只读 + 回到结果），三块内容 `mm-stagger` 依次浮出。
 
 **2026-09-09 重做成一份试卷**：顶部一条细进度线 + 小字 N/M；题号 + 题干大字号；选项是整行可点面（细线分隔，字母圈选中后实心），选中 / 正确 / 错误三态用 ink / pine / vermilion，动效克制（`animate-slide-up` 出解析）；「确认答案」紧跟选项后面而不是沉到底栏；底栏只剩上一题 / 下一题文字 + 进度点；**键盘 1–4 选、Enter 确认 / 下一题**（`primaryRef`）；解析用细线分隔的纯文字。结束页 `QuizReport`：答稳率圆环 + 计数 + 错题回看。
@@ -165,6 +167,8 @@ quiz-observation.ts 为提交动作附加完整 practice.attempt 观察：保留
 - 解析里不得显示“段002 / 片段003”等内部索引；旧结果由 `sanitizeQuizExplanation` 防御性清洗，真实证据统一由可回跳 citation 承接。
 
 ### FlashcardsWindow（闪卡）
+
+**2026-09-11 内容层：卡怎么出 + 跨会话间隔复习**。卡由 `flashcards.plugin` v0.5 出（正面是提示不是标题、一卡一个问号、正面不泄答、背面两行内、掌握轨迹决定哪些点该有卡），见 `src/lib/ai-native/plugins/DOMAIN.md`。**间隔复习**是闪卡作为产品的核心，此前只有会话内"没记住的再来一遍"：现在牌堆的顺序由 `useFlashcardsReview`（`src/hooks/`）按 `lib/learning/spaced-review-model` 的到期模型决定——到期的（上次没记住的在前、越过期越前）→ 上次没记住还没到期的 → 新卡 → 记住了还没到期的；进入态在牌上方一句 `APPS_COPY.flashcards.entryMissedFirst / entryDue`（「上次没记住的 N 张先来」/「今天到期 N 张」，全是新卡时不说，`data-testid=flashcards-review-notice`）。规则：没记住 → 明天到期；记住 → 第一次 1 天、之后翻倍（上限 60 天）；同一坐 4 小时内再记住不算隔了一次。历史来源：登录用户以服务端 assessment 事件为源（`/api/context/v1/learner-context` 点名这叠卡的正面），访客用本机 `mm-review-outcomes:*`。顺序只在用户还没开始翻牌时应用（`deckOrder` 冻结；服务端历史晚到不重排正在翻的牌），「重练全部」按此刻的计划重新排。到期匹配按**正面原文**：同一叠牌（缓存命中重开）能对上，「再做一版」生成的新卡是新卡——那时不稳的概念已经通过掌握轨迹进了 prompt，由模型换角度再出。课后学习页闪卡路径卡副题跟着走（`APPS_COPY.path.outcome.flashcardsDue / flashcardsMissedFirst`，`WorkshopYellowPage` 读缓存里的牌堆算）。不做打卡 / 连胜。窗口新增 `sessionId` prop（AppRenderSurface 传）。
 
 **2026-09-10 交互打磨**：打分只让顶牌飞出（记住 = 右 / pine，没记住 = 左 / vermilion，不翻回），牌堆原地不动、新顶牌从牌堆位置升起（`mm-card-rise`）；拖动跟手（阻尼 + 轻旋转，翻开的牌按进度染色预告结果），松手按 `swipe-model` 判定——成立飞出、不成立 320ms 回弹，竖向滑动让给页面；翻面到一半牌抬起 1.035 倍、投影层散开又收回（Web Animations）；正反两面放同一格 grid（牌高取较高者），长卡面按字数自动缩字（`flashcard-deck-model.faceFontSize` 21 → 14px），牌面走 `MathText`；键盘：空格翻、翻开后 1 / 2 或 ←→ 打分、没翻开 ←→ 换牌、**Z 撤销上一张**（`applyScore` / `undoScore`）；结束页圆环与数字从 0 长起，「只练没记住的」换轮重新进场。
 
@@ -292,6 +296,8 @@ quiz-observation.ts 为提交动作附加完整 practice.attempt 观察：保留
 - `mindmap-layout.test.ts` — 布局、短标签与完整标题保留
 - `infographic-window-data.test.ts` — 首次先取智能草案、已有结果不重复生成、旧调用方 fallback
 - `flashcards-window-model.test.ts` / `quiz-window-model.test.ts` / `podcast-window-model.test.ts` — 三类结果正规化与失败清洗
+- `src/lib/learning/spaced-review-model.test.ts` — 到期模型：没记住 → 明天、记住翻倍、同一坐不翻倍、忘一次归零、顺序与进入态那一句
+- `src/lib/ai-native/quiz-answer.test.ts` — 多选答案解析 / 字母契约 / 作答连接符
 - `cheatsheet-window-model.test.ts` — 偏好读写、topicsOf 新旧契约折叠、栏容量、Markdown 导出连续编号
 - `podcast-window-model.test.ts` — 失败章节过滤 + splitPodcastSections（简介提取 / 轮次去重）
 - `mindmap-tree.test.ts`（`src/lib/ai-native/plugins/`）— flattenInlineTex：TeX → Unicode
