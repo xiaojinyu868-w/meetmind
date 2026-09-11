@@ -15,6 +15,8 @@
  *   - Tutor: pass rate 不能低于 baseline - 0.05（5pp 容忍）
  *   - Teach: pass rate 与判分准确率（gradingAccuracy，逐题 score 平均）
  *     均不能低于 baseline - 0.05（5pp 容忍）
+ *   - Apps（测验 / 闪卡产物质量，2026-09-11）: pass rate 与 avgScore（软硬项通过比例平均）
+ *     均不能低于 baseline - 0.05（5pp 容忍）；dry-run 用冻结的模型输出，测的是生产后处理 + 产物契约
  */
 
 import { writeFileSync, existsSync, readdirSync, mkdirSync, createReadStream } from 'node:fs';
@@ -49,6 +51,15 @@ interface TeachBaseline {
   updatedAt: string;
 }
 
+interface AppsBaseline {
+  passRate: number;
+  quizPassRate: number | null;
+  flashcardsPassRate: number | null;
+  /** 各 case 软硬项通过比例的平均（有梯度的数，软项退化也看得见） */
+  avgScore: number | null;
+  updatedAt: string;
+}
+
 // ──────────────────────────────────────────────────────────────
 // 配置：baseline 文件与容忍度
 // ──────────────────────────────────────────────────────────────
@@ -57,14 +68,17 @@ const BASELINES_DIR = resolve(__dirname, 'baselines');
 const ASR_BASELINE_FILE = resolve(BASELINES_DIR, 'asr.json');
 const TUTOR_BASELINE_FILE = resolve(BASELINES_DIR, 'tutor.json');
 const TEACH_BASELINE_FILE = resolve(BASELINES_DIR, 'teach.json');
+const APPS_BASELINE_FILE = resolve(BASELINES_DIR, 'apps.json');
 
 const ASR_RUNS_DIR = resolve(__dirname, 'asr', 'runs');
 const TUTOR_RUNS_DIR = resolve(__dirname, 'tutor', 'runs');
 const TEACH_RUNS_DIR = resolve(__dirname, 'teach', 'runs');
+const APPS_RUNS_DIR = resolve(__dirname, 'apps', 'runs');
 
 const ASR_CER_TOLERANCE = 1.1; // current <= baseline * 1.1
 const TUTOR_PASS_TOLERANCE = 0.05; // current >= baseline - 0.05
 const TEACH_PASS_TOLERANCE = 0.05; // current >= baseline - 0.05（passRate 与 gradingAccuracy 同容忍）
+const APPS_PASS_TOLERANCE = 0.05; // current >= baseline - 0.05（passRate 与 avgScore 同容忍）
 
 // ──────────────────────────────────────────────────────────────
 // 读 run 文件
@@ -118,6 +132,25 @@ interface TeachRecord {
   scores: {
     quizLoop?: { pass: boolean };
     gradingAccuracy?: { pass: boolean; score: number };
+  };
+}
+
+interface AppsRecord {
+  id: string;
+  app: 'quiz' | 'flashcards';
+  pass: boolean;
+  score: number;
+}
+
+function summarizeApps(records: AppsRecord[]): AppsBaseline | null {
+  if (records.length === 0) return null;
+  const rate = (items: AppsRecord[]) => (items.length === 0 ? null : items.filter((r) => r.pass).length / items.length);
+  return {
+    passRate: records.filter((r) => r.pass).length / records.length,
+    quizPassRate: rate(records.filter((r) => r.app === 'quiz')),
+    flashcardsPassRate: rate(records.filter((r) => r.app === 'flashcards')),
+    avgScore: records.reduce((sum, r) => sum + (Number.isFinite(r.score) ? r.score : 0), 0) / records.length,
+    updatedAt: new Date().toISOString(),
   };
 }
 
@@ -280,6 +313,36 @@ async function main() {
         `[teach] ${mark} pass ${fmt(current.passRate)} (baseline ${fmt(baseline.passRate)} - ${TEACH_PASS_TOLERANCE * 100}pp) | grading-accuracy ${fmt(current.gradingAccuracy)} (baseline ${fmt(baseline.gradingAccuracy)} - ${TEACH_PASS_TOLERANCE * 100}pp)`,
       );
       if (!passOk || !gradingOk) exitCode = 1;
+    }
+  }
+
+  // ─ Apps（测验 / 闪卡产物质量）
+  const appsRuns = await readLatestRun(APPS_RUNS_DIR);
+  if (!appsRuns) {
+    report.push('[apps] no runs found; skipping (run `make eval-apps` first)');
+  } else {
+    const current = summarizeApps(appsRuns as AppsRecord[]);
+    const baseline = await readBaseline<AppsBaseline>(APPS_BASELINE_FILE);
+    const fmt = (x: number | null) => (x === null ? 'n/a' : `${(x * 100).toFixed(1)}%`);
+
+    if (!current) {
+      report.push('[apps] empty run file');
+    } else if (update || !baseline) {
+      writeBaseline(APPS_BASELINE_FILE, current);
+      report.push(
+        `[apps] ${baseline ? 'updated' : 'created'} baseline → pass=${fmt(current.passRate)} | avg-score ${fmt(current.avgScore)}`,
+      );
+    } else {
+      const passOk = current.passRate >= baseline.passRate - APPS_PASS_TOLERANCE;
+      const scoreOk =
+        current.avgScore === null ||
+        baseline.avgScore === null ||
+        current.avgScore >= baseline.avgScore - APPS_PASS_TOLERANCE;
+      const mark = passOk && scoreOk ? '✓' : '✗';
+      report.push(
+        `[apps] ${mark} pass ${fmt(current.passRate)} (baseline ${fmt(baseline.passRate)} - ${APPS_PASS_TOLERANCE * 100}pp) | avg-score ${fmt(current.avgScore)} (baseline ${fmt(baseline.avgScore)} - ${APPS_PASS_TOLERANCE * 100}pp)`,
+      );
+      if (!passOk || !scoreOk) exitCode = 1;
     }
   }
 
