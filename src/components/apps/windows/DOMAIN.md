@@ -60,7 +60,7 @@ src/components/apps/windows/
 ├── app-keys.ts                  # 快捷键映射纯函数（有单测）：resolveQuizKey（1–4 / 回车 / 空格）、resolvePlayerKey（空格 K 播放暂停、←→ J L 步进）
 ├── keyboard-hints.ts            # 快捷键提示只出现一次（localStorage 记住；触屏不出）
 ├── swipe-model.ts / use-swipe.ts # 滑动手势判定（阈值 / 取消 / 快甩，有单测）+ 指针捕获 hook（>6px 才捕获，点击照常派发）；测验与闪卡共用
-├── MathText.tsx                 # 牌面 / 短文本里的 $…$ 行内公式渲染
+├── MathText.tsx                 # 牌面 / 短文本里的 $…$ 行内公式渲染（切分在 lib/utils/math-text.ts，与 teach-live 字幕 / 提问卡 / 课堂记录及朗读转换共用；2026-09-11 起也认没写 $ 的裸 LaTeX、不再把 $5 当公式）
 ├── QuizOptionMark.tsx           # 交卷揭示：勾 / 叉用 SVG 一笔画出（mm-draw 260ms），不是换字符
 ├── flashcard-deck-model.ts      # 闪卡状态机纯函数（有单测）：applyScore / undoScore（Z 撤销）/ faceFontSize（长卡面 21 → 14px 自动缩字）
 ├── podcast-player-model.ts      # 播放器纯函数（有单测）：scrub 落点 / 时间格式 / 步进 / shouldResumeFollow（用户上滚后当前句回到视口中段才恢复跟随）/ 章节比例定位

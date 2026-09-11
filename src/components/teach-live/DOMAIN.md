@@ -20,12 +20,12 @@ Director ──► TeachSpeechPlayer（/api/teach/tts 按句合成、预取两�
 | 文件 | 职责 |
 |---|---|
 | `live-model.ts` | 纯 reducer：`LessonState`（pages / blocks / labels / transcript / stagePageId vs currentPageId / sceneQueue / pendingAsk / usage 累计）。`scene` 到达时只建页并排队，Director 演到才推进 `stagePageId`；`svg` / `draw` 的 `into=` 作为同类目标块的新 segment；ask 既是口播又是提问卡；`replay=true` 全部直接 revealed；`reveal-all`（回看被打断） |
-| `director.ts` | `Director`（beat 队列 + 代数作废；beat 多一种 `student`——回看时学生当年的话演到才进记录）、`SentenceCutter`（中日英句末标点切句）、`cleanSpeechText`（口播里的标签 / markdown 记号不念）、`estimateSpeechMs` |
+| `director.ts` | `Director`（beat 队列 + 代数作废；beat 多一种 `student`——回看时学生当年的话演到才进记录）、`SentenceCutter`（中日英句末标点切句）、`cleanSpeechText`（口播里的标签 / markdown 记号不念；**公式先经 `lib/utils/math-text.speakableText` 变成能念的中文**——`$\mathbf{u}\cdot\nabla\mathbf{u}$` 念「u 点乘 纳布拉 u」）、`estimateSpeechMs` |
 | `useLiveLesson.ts` | 会话 hook：SSE → rAF 批量喂 reducer + 生成 beats；`PlayerSpeechPort` 把 TeachSpeechPlayer 的 onSentenceStart 变成 `speak()` 的 resolve；`startLesson`（建线程 + 发「开始上课」不进记录）/ `openLesson(id, 'resume' | 'replay')`（resume = 日志终态再订阅；replay = 日志整段喂 Director 按当年节奏 + 声音重放，学生的话演到才进记录，中途开口即 `reveal-all` 而非丢弃——那是历史不是未来）/ `send`（生成中 → interrupt 附文字，否则直接发；带引用时发「学生指着板上的「X」问：…」，记录只记原话；顺带把 draw 报错作 `boardNote` 交给老师）/ `hush` / `setRate`（语速）/ `replayLesson`；断线重连整体按日志重建 |
 | `live-client.ts` | `/api/teach/*` 收口：列表（`?engine=live`）/ 建课（body.engine='live' + 本机 learner 切片）/ 事件 / 发消息 / 打断 / EventSource 订阅（onOpen 区分首连与重连） |
 | `svg-draw.ts` | 让 SVG 一笔一笔长出来：`splitTopLevelSvgChildren`（流式正文切成已闭合的顶层元素）、`mountSvgChildren`（剥 `<style>`/`<script>`：内联 SVG 的 style 会泄漏整页）、`animateDrawIn`（描边按路径长度 stroke-dashoffset 描画 → 填充淡入；文字上浮；`<g>` 递归错开；>6 个子元素或 `data-draw="fade"` 的组整体淡入）、`createPen`（琥珀色笔尖沿正在画的路径走） |
 | `plot-dsl.ts` | `<plot>` 声明式语法 → SVG 标记（纯函数）：手写 shunting-yard 表达式求值（无 eval；隐式乘法 2x）、nice 刻度、原点穿轴、断点 / 越界裁剪、曲线尾部标签；grid / ticks / legend 标 `data-draw="fade"` 快速淡入，曲线描画 |
-| `blocks/ProgressiveSvg.tsx` | 增量 DOM：按 segment 记已挂元素数，只挂新闭合的、只描新挂的；不重渲染整张图（那会让动画重放）。读 `LiveStyleContext.rough`：开着就先经 `svg-rough.ts` 换成手绘笔迹再描画 |
+| `blocks/ProgressiveSvg.tsx` | 增量 DOM：按 segment 记已挂元素数，只挂新闭合的、只描新挂的；不重渲染整张图（那会让动画重放）。读 `LiveStyleContext.rough`：开着就先经 `svg-rough.ts` 换成手绘笔迹再描画；**切换手绘 / 工整时清空重挂已画的（终态直出）**——此前只影响之后的新笔，看起来像没反应（2026-09-11 用户反馈） |
 | `draw/DrawBlock.tsx` | `<draw>` 块：**计算与展示分开**——段一闭合就在 Worker 里跑（LiveBlockView 对未揭示的 draw 块也挂载它，返回 null），揭示时才描画；结果按「前缀文本」缓存（修第 3 段不重算 1、2 段）。报错：先渲染报错前算好的部分，同时向 `draw-fix` 要修正（每段一次），服务端验证过的脚本替换该段重算；修不好显示一句人话并经 `onIssue` 记入会话。首段决定布局，`into` 段沿用；`param()` 滑块拖动整图重算瞬时替换 |
 | `draw/draw-runtime-client.ts` | 主线程侧：一个共享 Worker + 请求队列 + 2s 超时（死循环 → terminate 重建）；Worker 不可用回退主线程执行 |
 | `draw/draw-worker.ts` | Worker 入口：拆掉 fetch / XHR / WebSocket / importScripts / indexedDB 等全局后执行 `lib/teach-live-draw/runtime.runDraw` |
@@ -40,6 +40,7 @@ Director ──► TeachSpeechPlayer（/api/teach/tts 按句合成、预取两�
 | `live-stage.test.ts` | 用真解析器 + reducer + Director（假语音口）走一遍课：到达时页 / 演出时页、揭示顺序、into 追加、highlight、ask、打断丢弃、回放终态；Director 辅助函数 |
 
 文案：`src/lib/ui/copy-teach-live.ts`（`TEACH_LIVE_COPY`）。
+公式显示：字幕 / 提问卡 / 课堂记录用 `components/apps/windows/MathText`（闪卡同款，KaTeX 行内），要点走 react-markdown + remark-math——老师把 `$…$` 或裸 LaTeX 写进口播时屏幕上是渲染好的公式、耳朵里是中文。
 
 ## 视觉与交互约定（Taste 宪法在这一屏的落点）
 

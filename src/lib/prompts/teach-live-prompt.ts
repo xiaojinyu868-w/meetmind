@@ -57,7 +57,7 @@ export const DRAW_API = `# draw 脚本怎么写（坐标是数学坐标，y 向�
   circle(O, r)  circle(O, P)  arc(O, r, fromDeg, toDeg)
   polygon([A, B, C], { color: 'pine', label: 'S' })   多边形（默认淡填充）
   angle(A, B, C, 'θ')                     B 处的角标；直角自动画小方块
-  label(P, '文字')  text(x, y, '文字')  arrow(A, B, 'v')  vector(A, dx, dy, 'v')
+  label(P, '文字')  text(x, y, '文字')  arrow(A, B, 'v') 或 arrow(A, dx, dy, 'v')  vector(A, dx, dy, 'v')
 构造线 / 圆（算出来就画出来；只想算不想画传 { hidden: true }）：
   tangentAt(c, P)  perpendicular(l, P)  parallel(l, P)  perpBisector(A, B)  bisector(A, B, C)  lineThrough(P, deg)
   circumcircle(A, B, C)  incircle(A, B, C)

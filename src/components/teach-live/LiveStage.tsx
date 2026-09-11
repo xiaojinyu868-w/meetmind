@@ -12,6 +12,7 @@
 import * as React from 'react';
 import { ArrowLeft, Gauge, ListTree, PenLine, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 import { TEACH_LIVE_COPY } from '@/lib/ui/copy-teach-live';
+import { MathText } from '@/components/apps/windows/MathText';
 import { LiveBlockView } from './blocks/LiveBlockView';
 import { LiveComposer } from './LiveComposer';
 import { LivePointer } from './LivePointer';
@@ -209,7 +210,9 @@ export function LiveStage({ lesson, live, onLeave }: LiveStageProps) {
                 .map((t) => (
                   <div key={t.id} className={`live-drawer-item${t.role === 'student' ? ' is-student' : ''}${t.kind === 'ask' ? ' is-ask' : ''}`}>
                     <span className="who">{t.role === 'student' ? TEACH_LIVE_COPY.transcriptYou : TEACH_LIVE_COPY.transcriptTeacher}</span>
-                    <span className="what">{t.text}</span>
+                    <span className="what">
+                      <MathText text={t.text} />
+                    </span>
                   </div>
                 ))}
               {state.usage.turns > 0 ? (
@@ -227,7 +230,9 @@ export function LiveStage({ lesson, live, onLeave }: LiveStageProps) {
             <img src={avatarSrc} alt="" />
           </div>
           {caption ? (
-            <div className={`live-caption-text${caption.phase === 'pending' ? ' is-pending' : ''}${caption.ask ? ' is-ask' : ''}`}>{caption.text}</div>
+            <div className={`live-caption-text${caption.phase === 'pending' ? ' is-pending' : ''}${caption.ask ? ' is-ask' : ''}`}>
+              <MathText text={caption.text} />
+            </div>
           ) : (
             <div className="live-caption-idle">{statusText ?? (state.error ? TEACH_LIVE_COPY.errorGeneric : '')}</div>
           )}

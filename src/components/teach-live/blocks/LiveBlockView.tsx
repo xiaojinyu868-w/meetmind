@@ -24,6 +24,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { ChatCodeBlock } from '@/components/chat/ChatCodeBlock';
+import { MathText } from '@/components/apps/windows/MathText';
 import { TEACH_LIVE_COPY } from '@/lib/ui/copy-teach-live';
 import type { LiveBlock } from '../live-model';
 import { revealedBody } from '../live-model';
@@ -218,7 +219,9 @@ function AskBlock({ body }: { body: string }) {
   return (
     <div className="live-ask live-fade-in">
       <div className="live-ask-eyebrow">{TEACH_LIVE_COPY.askEyebrow}</div>
-      <div className="live-ask-body">{body}</div>
+      <div className="live-ask-body">
+        <MathText text={body} />
+      </div>
     </div>
   );
 }

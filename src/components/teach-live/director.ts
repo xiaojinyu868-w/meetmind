@@ -13,6 +13,7 @@
  */
 
 import type { LiveAttrs, LiveCueName } from '@/types/teach-live';
+import { speakableText } from '@/lib/utils/math-text';
 
 export type Beat =
   | { kind: 'speech'; blockId: string; text: string; ask: boolean }
@@ -169,10 +170,9 @@ export class SentenceCutter {
   }
 }
 
-/** 口播里偶发的标签 / markdown 记号，读出来会怪 */
+/** 口播里偶发的标签 / markdown 记号 / LaTeX，读出来会怪：公式先换成能念的中文，再剥记号 */
 export function cleanSpeechText(text: string): string {
-  return text
-    .replace(/<[^>]+>/g, '')
+  return speakableText(text.replace(/<[^>]+>/g, ''))
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/==([^=]+)==/g, '$1')
     .replace(/[`#*_]/g, '')

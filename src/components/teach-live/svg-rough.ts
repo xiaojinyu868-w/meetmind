@@ -9,7 +9,8 @@
  * - 半径 < 6 的小圆（点）也保持工整——太小的形状抖起来像噪点。
  * - 原元素的 id / data-* / class / 虚线 / 透明度 / marker / transform 原样搬到替换后的 <g> 或其 path 上，
  *   所以激光笔 point at="fig#hyp"、描画动画、into 追加都不受影响。
- * - roughness 压得很低（0.55）：要的是"有人手在画"，不是"画歪了"。seed 由 id 决定，同一张图每次一样。
+ * - roughness 0.85 / bowing 1：看得出是手画的，但几何仍然可信（0.55 时与工整几乎分不出来，2026-09-11 用户反馈）。
+ *   seed 由 id 决定，同一张图每次一样。
  */
 
 import rough from 'roughjs';
@@ -58,8 +59,8 @@ function roughOptions(el: Element, seedKey: string): Options {
   const width = num(el, 'stroke-width', 2);
   const dash = el.getAttribute('stroke-dasharray');
   const opts: Options = {
-    roughness: 0.55,
-    bowing: 0.7,
+    roughness: 0.85,
+    bowing: 1,
     seed: hashSeed(seedKey),
     stroke: stroke === 'none' ? 'none' : stroke,
     strokeWidth: width,

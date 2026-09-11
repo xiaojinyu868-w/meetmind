@@ -47,6 +47,7 @@
 1. **部分渲染**：报错前算好的对象照常上板（见 runtime 行）。
 2. **自愈**：`components/teach-live/draw/DrawBlock.tsx` 在段闭合时（不等揭示）就预跑；报错 → `POST /api/teach/threads/[id]/draw-fix`（`services/teach-live/draw-repair.ts`：只给模型 API 说明 + 全部段 + 错误，要它只输出修正后的那一段，服务端复跑验证）→ 替换该段重算。几百 token、1–2 秒，藏在老师念前面几句话的时间里，学生看不到过程。每段只试一次、每线程限 40 次。
 3. **最后兜底**：修不好才显示「这张图老师没画出来」，并经 `onIssue` 在学生下次开口时以 `boardNote` 告诉老师。
+4. **误用给能修的错误，不给 NaN**：`segment / line / circle / polygon / arrow` 的点参数经 `expectPt` 校验，不是点就抛 `TypeError: arrow() 的 终点 需要一个点（{x, y}），收到 number`——这句话正好能让自愈把脚本改对；`arrow` 同时接受 `(A, B)` 与 `(A, dx, dy)`（NS 方程那节老师把两种签名混用，24 个箭头全是 `LNaN NaN`）；render 的 `emit` 最后再兜一层：含 NaN 的元素不上板。
 
 ## 边界
 

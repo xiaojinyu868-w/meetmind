@@ -45,11 +45,22 @@ export const ProgressiveSvg = React.memo(function ProgressiveSvg({ attrs, segmen
   /** segmentId → 已挂上的顶层元素数 */
   const mountedRef = React.useRef<Map<string, number>>(new Map());
   const { viewBox, ratio } = React.useMemo(() => parseViewBox(attrs), [attrs]);
+  /** 手绘 / 工整切换：已经画在板上的也要换风格——清空重挂（不重放描画） */
+  const roughAppliedRef = React.useRef(useRough);
 
   React.useEffect(() => {
     const svg = svgRef.current;
     if (!svg) return;
     if (animate && !penRef.current) penRef.current = createPen(svg);
+    let restyled = false;
+    if (roughAppliedRef.current !== useRough) {
+      roughAppliedRef.current = useRough;
+      for (const child of Array.from(svg.children)) {
+        if (!child.classList.contains('live-pen')) child.remove();
+      }
+      mountedRef.current.clear();
+      restyled = true;
+    }
     let grew = false;
     let batch: Element[] = [];
     for (const segment of segments) {
@@ -67,12 +78,13 @@ export const ProgressiveSvg = React.memo(function ProgressiveSvg({ attrs, segmen
       }
     }
     if (batch.length) {
-      if (animate) animateDrawIn(batch, { pen: penRef.current });
+      // 换风格重挂：直接终态，不再一笔笔描
+      if (animate && !restyled) animateDrawIn(batch, { pen: penRef.current });
       // 笔尖始终在最上层
       const pen = svg.querySelector(':scope > g.live-pen');
       if (pen) svg.appendChild(pen);
     }
-    if (grew) onGrow?.();
+    if (grew && !restyled) onGrow?.();
   }, [segments, animate, onGrow, useRough]);
 
   React.useEffect(() => {

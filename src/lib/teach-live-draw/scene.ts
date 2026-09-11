@@ -132,6 +132,16 @@ function safeName(s: string | undefined): string | undefined {
   return clean || undefined;
 }
 
+/** 参数不是点时给一句能修的错误，而不是让 NaN 流进 SVG（老师把 arrow(A, dx, dy) 写成 arrow(A, B) 之类） */
+function expectPt(p: unknown, fn: string, arg: string): Pt {
+  const ok = !!p && typeof p === 'object' && Number.isFinite((p as Pt).x) && Number.isFinite((p as Pt).y);
+  if (!ok) {
+    const got = p === undefined ? 'undefined' : p === null ? 'null' : typeof p === 'object' ? 'object' : typeof p;
+    throw new TypeError(`${fn}() 的 ${arg} 需要一个点（{x, y}），收到 ${got}`);
+  }
+  return p as Pt;
+}
+
 /** 脚本的全局环境。返回 { name → value }，运行时用 new Function(...names) 注入。 */
 export function createApi(scene: Scene): Record<string, unknown> {
   let curveColorIdx = 0;
@@ -168,6 +178,8 @@ export function createApi(scene: Scene): Record<string, unknown> {
 
   const lineLike = (type: Ln['type']) => (a: NamedPt, b: NamedPt, o?: string | Style): Ln & { id: string } => {
     const st = opts(o);
+    expectPt(a, type, 'A');
+    expectPt(b, type, 'B');
     const l: Ln = { a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y }, type };
     const autoName = a.name && b.name ? `${a.name}${b.name}` : undefined;
     const id = scene.nextId(type === 'segment' ? 's' : type === 'ray' ? 'ray' : 'l', st.id ?? autoName);
@@ -177,7 +189,9 @@ export function createApi(scene: Scene): Record<string, unknown> {
 
   const circle = (o: NamedPt, rOrP: number | Pt, st?: string | Style): Circ & { id: string } => {
     const s = opts(st);
-    const r = typeof rOrP === 'number' ? rOrP : G.dist(o, rOrP);
+    expectPt(o, 'circle', '圆心');
+    const r = typeof rOrP === 'number' ? rOrP : G.dist(o, expectPt(rOrP, 'circle', '半径或圆上一点'));
+    if (!Number.isFinite(r) || r <= 0) throw new TypeError(`circle() 的半径需要是正数，收到 ${String(rOrP)}`);
     const c: Circ = { c: { x: o.x, y: o.y }, r };
     const id = scene.nextId('c', s.id ?? (o.name ? `circle${o.name}` : undefined));
     scene.add({ kind: 'circle', id, chunk: scene.chunk, style: s, label: s.label, c });
@@ -203,6 +217,7 @@ export function createApi(scene: Scene): Record<string, unknown> {
       pts = (hasOpts ? args.slice(0, -1) : args) as NamedPt[];
       st = opts(hasOpts ? (last as string | Style) : undefined);
     }
+    pts.forEach((p, i) => expectPt(p, 'polygon', `第 ${i + 1} 个点`));
     const autoName = pts.every((p) => p.name) ? pts.map((p) => p.name).join('') : undefined;
     const id = scene.nextId('poly', st.id ?? autoName);
     scene.add({ kind: 'polygon', id, name: autoName, chunk: scene.chunk, style: st, label: st.label, pts: pts.map((p) => ({ x: p.x, y: p.y })) });
@@ -240,13 +255,27 @@ export function createApi(scene: Scene): Record<string, unknown> {
 
   const text = (x: number, y: number, str: string, o?: Style) => label([x, y], str, { labelPos: 'center', ...(o ?? {}) });
 
-  const arrow = (a: Pt, b: Pt, o?: string | Style) => {
-    const st = opts(o);
+  /** arrow(A, B, opts) 或 arrow(A, dx, dy, opts)——老师两种都会写，都认 */
+  const arrow = (a: Pt, b: Pt | number, o?: string | Style | number, o2?: string | Style) => {
+    expectPt(a, 'arrow', '起点');
+    let to: Pt;
+    let st: Style;
+    if (typeof b === 'number') {
+      const dy = typeof o === 'number' ? o : NaN;
+      if (!Number.isFinite(b) || !Number.isFinite(dy)) throw new TypeError('arrow(A, dx, dy) 的 dx / dy 需要是数字');
+      to = { x: a.x + b, y: a.y + dy };
+      st = opts(o2);
+    } else {
+      expectPt(b, 'arrow', '终点');
+      to = { x: b.x, y: b.y };
+      st = opts(typeof o === 'number' ? undefined : o);
+    }
+    if (G.dist(a, to) < G.EPS) return scene.nextId('arrow', st.id); // 零长度箭头不画
     const id = scene.nextId('arrow', st.id);
-    scene.add({ kind: 'arrow', id, chunk: scene.chunk, style: st, label: st.label, from: { x: a.x, y: a.y }, to: { x: b.x, y: b.y } });
+    scene.add({ kind: 'arrow', id, chunk: scene.chunk, style: st, label: st.label, from: { x: a.x, y: a.y }, to });
     return id;
   };
-  const vector = (a: Pt, dx: number, dy: number, o?: string | Style) => arrow(a, { x: a.x + dx, y: a.y + dy }, o);
+  const vector = (a: Pt, dx: number, dy: number, o?: string | Style) => arrow(a, dx, dy, o);
 
   // ---------- 分析 ----------
 

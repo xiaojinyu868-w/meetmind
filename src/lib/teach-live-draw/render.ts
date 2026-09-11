@@ -312,6 +312,8 @@ export function render(
   const children = (d: Drawable) => (animsByTarget.get(d.id) ?? []).join('');
   const emit = (d: Drawable, s: string) => {
     names.push(d.id);
+    // 兜底：任何算出 NaN 的元素不上板（上板就是浏览器报错 + 一条看不见的线）
+    if (/NaN/.test(s)) return;
     if (d.chunk >= fromChunk) out.push(s);
   };
   const labelFor = (d: Drawable, anchor: Pt, pref: Pt | null, text: string | undefined, mode: NonNullable<Style['labelPos']> = 'auto') => {

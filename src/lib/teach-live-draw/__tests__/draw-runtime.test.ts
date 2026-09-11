@@ -188,3 +188,21 @@ describe('runDraw partial rendering（模型笔误不再让整张图消失）', 
     expect(r.error).toMatch(/P0 is not defined/);
   });
 });
+
+describe('API 对误用给出能修的错误，而不是 NaN', () => {
+  it('arrow accepts both (A, B) and (A, dx, dy); a vector field never emits NaN', () => {
+    const r = runDraw(["axes({ x: [-1, 5], y: [-1, 4] });\nfor (let i = 0; i < 3; i++) arrow(point(i, 1), 0.5, 0.3, '');\narrow(pt(0,0), pt(1,1), 'v');"]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.error).toBeUndefined();
+    expect(r.markup).not.toMatch(/NaN/);
+    expect((r.markup.match(/marker-end/g) ?? []).length).toBe(4);
+  });
+  it('segment with a non-point argument throws a TypeError naming the argument (repairable)', () => {
+    const r = runDraw(["const A = point(0, 0, 'A');\nsegment(A, 3);"]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.error).toMatch(/segment\(\) 的 B 需要一个点/);
+    expect(r.drawables).toBe(1);
+  });
+});
