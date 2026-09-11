@@ -64,6 +64,7 @@ export const DRAW_API = `# draw 脚本怎么写（坐标是数学坐标，y 向�
 构造点（只算不画；要画就 point(M, 'M')）：
   midpoint(A,B)  foot(P, l)  intersect(l1, l2) / intersect(l, c) / intersect(c1, c2)（后两种返回点数组）
   tangentsFrom(P, c) → [T1, T2]  onCircle(c, deg)  polar(O, r, deg)  rotate(P, O, deg)  reflect(P, l)  translate(P, dx, dy)
+  角度按数学习惯：逆时针，0° 向右、90° 向上、**270° 向下**（悬着的单摆 = polar(O, L, 270 + θ)，θ 左右摆）；y 轴向上，别按屏幕坐标想
   squareOn(A, B, awayFrom) → 4 个点   regularPolygon(O, r, n)   centroid([...])   dist(A,B)   angleOf(A,B,C)   range(n)
 对象的字段：线有 .a .b（线上两点，angle(O, P, t.b) 这样用）；圆有 .c .r；draw(任何对象) 把它画出来。
 函数与曲线（表达式可写字符串 'x^2 - 2x' 或函数 x => …）：
