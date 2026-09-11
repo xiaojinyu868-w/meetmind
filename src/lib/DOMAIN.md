@@ -22,8 +22,9 @@
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `logger.ts` | ~50 | 统一日志工具（替代 console.log） |
+| `prisma.ts` | ~45 | Prisma 客户端单例（better-sqlite3 adapter）。数据库路径优先读 `DATABASE_URL`（`file:` 绝对或相对 cwd），没有才退回 `cwd/prisma/meetmind.db`——2026-09-11 生产改从专用检出目录运行，各 worktree 靶同一份库靠 .env 里的绝对路径（此前不读 env，换目录会静默新建空库） |
 | `server-failover.ts` | ~60 | 服务端 failover（主/备服务器切换） |
-| `ui/copy.ts` | ~200 | 用户面文案唯一真相源 |
+| `ui/copy.ts` + `ui/copy-*.ts` | ~1500 | 用户面文案唯一真相源；按域拆出 landing / apps / global-ask / intent / settings / share / fenshen / pocket 同一口吻规则（首屏用不到的域不进 /app 首包） |
 | `ui/user-facing-jargon-guard.test.ts` | — | 高频 UI 用户面黑话护栏 |
 
 ## 依赖方向
