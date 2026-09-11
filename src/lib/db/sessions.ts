@@ -234,6 +234,28 @@ export async function setSessionSyncState(
   });
 }
 
+/**
+ * 登录迁移成功推送后记下这节课当时的证据签名（2026-09-11）：下次只推签名变了的课。
+ * 迁移成功 = 服务端已有这节课，此前没有 syncState 的（访客 / 旧数据）顺手标 synced；
+ * pending / failed 不动——那是结束时那条 live 写入的状态，由 sync-pending-recordings 负责。
+ */
+export async function markSessionsMigrated(
+  entries: Array<{ sessionId: string; signature: string }>,
+): Promise<void> {
+  const now = new Date();
+  await Promise.all(entries.map(async (entry) => {
+    if (!isValidSessionIdKey(entry.sessionId)) return;
+    await db.audioSessions.where('sessionId').equals(entry.sessionId).modify((row) => {
+      row.migrationSignature = entry.signature;
+      row.migratedAt = now;
+      if (!row.syncState) {
+        row.syncState = 'synced';
+        row.syncedAt = now;
+      }
+    });
+  }));
+}
+
 /** 更新会话标题/主题；lock=true 表示用户手动改名（自动标题系统不再覆盖） */
 export async function updateSessionTopic(
   sessionId: string,

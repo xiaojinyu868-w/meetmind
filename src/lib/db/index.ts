@@ -25,6 +25,7 @@ export {
   markSessionCheckpoint,
   listUnfinishedRecordings,
   setSessionSyncState,
+  markSessionsMigrated,
   updateSessionTopic,
   getTodaySessions,
   cleanOldData,
