@@ -50,7 +50,9 @@ output 1–2.4k tokens，TTFT 0.8–1.1s（百炼 GLM-5.3-Flash 实测 2026-09-1
 | `draw-repair.ts` | `<draw>` 脚本自愈：`repairDrawScript(threadId, chunks, index, error)` → generateText（live provider，temperature 0.2，≤1500 tokens）→ `extractScript`（`<draw>…</draw>` 取内部、剥围栏与解释句；模型常把修正段又包一层标签，之前直接 `SyntaxError: Unexpected token '<'`）→ 服务端 `runDraw` 复跑验证 → `{ script, verified }`；每线程 40 次上限。日志 `teach-live-repair` 带 `reported`（前端报上来的原始错误）——这是「模型最常写错什么」的第一手数据，2026-09-11 的「数组当点 / label+样式四参数」两类就是从这里发现后改宽 API 的 |
 | `inline-math-stream.ts` | 流式 `{{ }}` 求值（`lib/utils/safe-math`）：未闭合的 `{{` 扣住等下一 chunk，块闭合 flush |
 | `live-image.ts` | `<image prompt>` 异步生图（dashscope-image-service，落 `public/uploads/teach-live/`，sha1(thread:block) 命名）→ image-ready；inflight 去重 + 失败 10 分钟冷却；历史回放自愈 `scheduleMissingLiveImages` |
+| `live-materials.ts` | 学生自带材料开课（2026-09-12，知乎线首用）：`LiveMaterialPack` 落盘 `data/teach-materials/<threadId>.json`（`TeachConfig.materialsDir`；文件即事实，不改 schema），`ensureSession` 建会话时 `readLiveMaterialsBlock` 拼进 system prompt 的「材料」段（`buildTeachLivePrompt` 第三参数；没有材料一字不加）。段里写清讲法：从材料讲不另讲一套、分歧点名对比、口播说「材料 1」板书写 [A1]、只有摘要的只当线索、课题从共同主题起。谁来挑材料 / 抽正文是来源方的事（`services/zhihu/zhihu-lesson-service.ts`） |
 | `__tests__/live-markup-parser.test.ts` | 解析器：结构 / 分块不变性（1–7 字符切片同构）/ 隐式 say / 前缀扣留 / 原文模式 / 截断 / 围栏 / 大小写 / 属性 |
+| `__tests__/live-materials.test.ts` | 材料包落盘 / 读回 / 路径字符净化 / 格式化段的约束句 / 损坏文件当没有 |
 
 配套：`src/lib/prompts/teach-live-prompt.ts`（教学大脑：协议 + 视觉物理约束 + 节奏 + 一段示范）、
 `src/lib/config/teach.config.ts`（`glm-flash-dashscope` provider、`resolveTeachLiveProvider`、`TeachConfig.liveMaxOutputTokens/liveTemperature`）。
@@ -84,3 +86,4 @@ text-delta / turn-complete / interrupted / error / image-ready   不变；studen
 - 模型作图质量：坐标偶发重叠（prompt 已约束，svg 历史保留让 `into` 追加时知道旧元素位置）；SMIL 动画偶发让点离开曲线（prompt 已提示用 animateMotion）。
 - `<widget>` 在 `sandbox="allow-scripts"` 里跑模型写的 JS：无 same-origin、无网络；高度靠 postMessage 自报（≤560px）。
 - learner 读槽同前两线：开课时快照 `TeachThread.learnerJson` → prompt「关于这位学生」段。
+- 材料段是会话建立时读一次的快照（同 learner）：材料包在会话存活期间改了不会生效，重启后生效。材料按预算切节选（前 3 篇 ≤1800 字），每轮 system 多 ≈4–6k tokens，成本行里能看见。

@@ -185,7 +185,9 @@ segment(B, C, 'c', { color: 'amber' });
 <say>a 的平方加 b 的平方，正好等于 c 的平方。比如 a 是 3、b 是 4，那 c 的平方就是 {{ 3^2 + 4^2 }}，c 就是 {{ sqrt(3^2 + 4^2) }}。</say>
 <ask>先别急着背。你猜猜，这里的"平方"在图上会是什么东西？</ask>`;
 
-export function buildTeachLivePrompt(topic: string, learnerFacts?: string): string {
+export function buildTeachLivePrompt(topic: string, learnerFacts?: string, materialsBlock?: string): string {
+  // materialsBlock：学生自带材料（teach-live/live-materials.ts 格式化好的「材料」段）；空串 = 一字不加
+  const materials = materialsBlock?.trim() ? `\n\n${materialsBlock.trim()}` : '';
   return `你是「小板老师」，正在给一位学生一对一上课。这节课的课题是：${topic}${buildTeachLearnerSection(learnerFacts)}
 
 你面前有一块会自己长出图形的白板，和一位真人般会说话的声音。你的每一句话学生都实时听到，你写的每一笔学生都实时看到。你要做的，是把一位顶尖老师站在黑板前那种「边说边画、随手一指、画着画着一个想法就长出来了」的临场感，完整地做出来——并且用这块板做到人手做不到的事：图一笔一笔准确地长出来，函数曲线一秒画好，过程会动，参数能拉。
@@ -198,7 +200,7 @@ ${VISUAL_STYLE}
 
 ${RHYTHM}
 
-${EXAMPLE}`;
+${EXAMPLE}${materials}`;
 }
 
 /**

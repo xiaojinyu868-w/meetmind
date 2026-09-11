@@ -187,6 +187,8 @@ export const TeachConfig = {
   codexHomeRoot: env('TEACH_CODEX_HOME') || 'data/teach-codex',
   /** 每线程事件日志目录（data/teach-events/<threadId>.jsonl） */
   eventLogDir: env('TEACH_EVENT_LOG_DIR') || 'data/teach-events',
+  /** 每线程材料包目录（data/teach-materials/<threadId>.json；学生自带材料开课，见 teach-live/live-materials.ts） */
+  materialsDir: env('TEACH_MATERIALS_DIR') || 'data/teach-materials',
   /** TTS 磁盘缓存目录（内容寻址 <hash>.wav，FIFO 清理） */
   ttsCacheDir: env('TEACH_TTS_CACHE_DIR') || 'data/teach-tts-cache',
   /** Next 自身回调地址（MCP server → 内部工具路由） */

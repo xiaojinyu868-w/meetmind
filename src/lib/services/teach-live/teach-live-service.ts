@@ -20,6 +20,7 @@
 import { createLogger } from '@/lib/logger';
 import { liveCostCny, resolveTeachLiveProvider, teachProviderApiKey, TeachConfig, type TeachProviderConfig } from '@/lib/config/teach.config';
 import { buildTeachLivePrompt } from '@/lib/prompts/teach-live-prompt';
+import { readLiveMaterialsBlock } from './live-materials';
 import { createOpenAI } from '@ai-sdk/openai';
 import { streamText, type LanguageModel } from 'ai';
 import { LIVE_SPEECH_KINDS, type LiveBlockKind, type LiveEvent } from '@/types/teach-live';
@@ -118,7 +119,8 @@ async function ensureSession(row: store.TeachThreadRow): Promise<LiveSession> {
     const session: LiveSession = {
       threadId: row.id,
       topic: row.topic,
-      systemPrompt: buildTeachLivePrompt(row.topic, store.learnerFactsFromRow(row)),
+      // 学生自带材料（收藏夹开课）：有则拼「材料」段，没有一字不加（live-materials.ts）
+      systemPrompt: buildTeachLivePrompt(row.topic, store.learnerFactsFromRow(row), await readLiveMaterialsBlock(row.id)),
       history,
       turnActive: false,
       abortController: null,
