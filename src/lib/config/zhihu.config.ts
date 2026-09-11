@@ -27,6 +27,12 @@ export interface ZhihuConfig {
   timeoutMs: number;
   /** 直答（检索增强生成，慢）超时 */
   zhidaTimeoutMs: number;
+  /**
+   * 「本人模式」白名单：这些 MeetMind 用户在没绑定知乎时，用户数据接口不带 X-OAuth-Token，
+   * 读到的是 Access Secret 所属知乎账号本人——给演示 / smoke 用的兜底，OAuth 凭证晚到也能走通全流程。
+   * 其他用户没绑定就是没绑定，不会静默读到别人的收藏。
+   */
+  selfModeUserIds: string[];
 }
 
 export function getZhihuConfig(env: NodeJS.ProcessEnv = process.env): ZhihuConfig {
@@ -47,6 +53,10 @@ export function getZhihuConfig(env: NodeJS.ProcessEnv = process.env): ZhihuConfi
     oauthBaseUrl: 'https://openapi.zhihu.com',
     timeoutMs: 15_000,
     zhidaTimeoutMs: 120_000,
+    selfModeUserIds: (env.ZHIHU_SELF_MODE_USER_IDS ?? '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
   };
 }
 

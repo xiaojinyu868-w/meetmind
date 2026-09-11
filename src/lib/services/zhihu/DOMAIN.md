@@ -65,13 +65,13 @@ Access Secret 在 developer.zhihu.com/profile 自助申请，一个账号最多 
 | `zhihu-open-client.ts` | 上表全部端点 + OAuth 三步的类型化客户端；字段归一 camelCase、字符串数字转数字；`fetch` / 时间源可注入 | 直连 HTTP 不依赖 CLI；`Code≠0` 一律抛 `ZhihuApiError`（kind：param / auth / rate_limit / quota / server / network / timeout / protocol / oauth，`retryable` 只对 network / timeout / server 为 true）；日志只记 endpoint 与错误码，**不记 query、凭证、响应正文**；缺 Access Secret 不出网 |
 | `zhihu-page-clean.ts` | 抓回来的回答页 / 专栏页 / 问题页去杂质，纯函数 | 找不到结构标记就走保守清洗并 `confident=false`，导入层据此标注"正文可能含页面杂质"，**不装干净**；正文以外的元数据（作者 / 编辑时间 / 赞同 / 评论）只从页脚取 |
 | `zhihu-auth-service.ts` | 知乎 OAuth 登录 / 绑定：`beginZhihuOAuth`（nonce + 绑定用户 + 回跳路径 HMAC 签进 cookie）、`completeZhihuOAuth`（cookie 对账 → 换 token → `/user` → bound / logged_in / error 三种 outcome，路由层据此 302）、`getZhihuIdentityForUser`（导入层取该用户的 OAuth token 与过期状态）、`unlinkZhihu` | 知乎实测不回传 state → CSRF 靠 cookie 对账，回传了就顺带比对；稳定身份 = `/user` 主页链接的 url_token，**拿不到只允许绑定不允许登录**（否则每次授权长出一个新用户）；token 3600 s 无 refresh，过期如实说「重新连接知乎」不静默降级；零 schema 改动（token 存现有 `AuthProvider(provider='zhihu')`，types/user.ts 的 `AuthProvider` 联合类型加了 `'zhihu'`） |
-| `*.test.ts` | 客户端夹具测试（官方文档响应示例）+ 去杂质夹具（实测页面结构逐行还原）+ OAuth 状态签名与四种 outcome 的注入测试 | 夹具是文档与实测的快照；线上形状变了先改 DOMAIN.md 再改夹具 |
+| `zhihu-import-service.ts` | 收藏夹 → 收集流：`resolveZhihuIdentity`（oauth / 本人模式 / reconnect / not_connected）、`listFavlistsForUser`、`importFavlist`（翻页 ≤100 条 → 每条 `upsertCaptureForUser`）、`listZhihuCaptures`、`materializeCaptures`（按需抽正文 + 去杂质 → 重新 upsert 成 complete；并发 ≤5） | sourceKey = `zhihu:<uid>:<sha1(canonical URL)>`（同一用户同一条收藏只一行；`upsertCaptureForUser` 还会按 canonical URL 合并用户以前手动贴过的同一条）；导入只有摘要 → `provenance.contentState='partial'` + `metadata.zhihu.body='summary'`，正文真用到才抽；抽不到留摘要并把失败写进 `metadata.zhihu.extractFailedAt/extractError`，不装满；视频 / 想法不抽（无可讲正文）；OAuth 过期报 reconnect 不静默切本人模式 |
+| `*.test.ts` | 客户端夹具测试（官方文档响应示例）+ 去杂质夹具（实测页面结构逐行还原）+ OAuth 状态签名与四种 outcome 的注入测试 + 导入 / 物化的注入测试（翻页、去 utm、partial→complete、失败留痕） | 夹具是文档与实测的快照；线上形状变了先改 DOMAIN.md 再改夹具 |
 
 配套：`src/lib/config/zhihu.config.ts`（五个 env，`redirectUri` 非 https 启动即报错）；`tests/smoke/smoke-zhihu.ts`（`make smoke-zhihu`，只读、不起服务、本人模式真实请求 + 抽一条正文）。
 
-后续文件（按北极星分组落地，落一个补一行）：`zhihu-auth-service.ts`（G2：cookie HMAC nonce 补 state 缺口；token 存 `AuthProvider(provider='zhihu')`）、
-`zhihu-import-service.ts`（G3：收藏 → `WorkspaceCapture`，canonical URL 去 utm 作 `sourceKey`，摘要先进、正文按需抽）、
-`zhihu-lesson-service.ts`（G5：材料包组装，Top-K + 预算 + `[A1]` 引用 id）、`feed-retrieval-service` 的 zhihu provider（G6）。
+后续文件（按北极星分组落地，落一个补一行）：`zhihu-lesson-service.ts`（G5：材料包组装，Top-K + 预算 + `[A1]` 引用 id，喂 teach-live）、`feed-retrieval-service` 的 zhihu provider（G6）。
+路由层：`src/app/api/zhihu/DOMAIN.md`（status / favlists / import / materialize / captures）。
 
 ## 三、边界
 
