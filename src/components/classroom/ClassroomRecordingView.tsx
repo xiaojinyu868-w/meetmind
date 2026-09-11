@@ -300,7 +300,7 @@ function LiveTranscriptPanel({
                 ) : null}
                 <p className="truncate text-[12.5px] text-ink-secondary" data-testid="live-status-line">
                   {liveCaptionsNotice ? (
-                    <span data-testid="live-captions-notice">{liveCaptionsNotice}</span>
+                    <span data-testid="live-captions-notice" title={liveCaptionsNotice}>{liveCaptionsNotice}</span>
                   ) : hasDraftRow ? (
                     <span className="text-pine/85">{COPY.recording.listeningSentence}</span>
                   ) : stableSentenceCount > 0 ? (

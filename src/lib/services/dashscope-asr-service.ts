@@ -531,6 +531,8 @@ export class DashScopeASRClient {
           this.sessionStartTime = Date.now();
           this.updateStatus('transcribing');
           this.callbacks.onTaskStarted?.();
+          // 队头还是同一帧：再发一次偏移（onopen 那次可能落在代理挂处理器之前），紧接着补送音频
+          this.sendTimelineOffset();
           this.flushAudioQueue();
           break;
 

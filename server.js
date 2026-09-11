@@ -401,6 +401,15 @@ app.prepare().then(() => {
   asrWss.on('connection', async (clientWs, request) => {
     console.log('[ASR-Proxy] Client connected');
 
+    // 下面要先 await 额度预检（一次 HTTP）再挂 message 处理器；客户端在 onopen 里立刻发的
+    // context-hint / timeline-offset 会落在这个窗口里——ws 没有监听器的事件直接丢。
+    // 先收进缓冲，处理器就位后按序回放（2026-09-11 修：此前登录用户的热词 / 重连时间轴偏移经常静默丢失）。
+    const earlyClientMessages = [];
+    const bufferEarlyClientMessage = (data, isBinary) => {
+      earlyClientMessages.push([data, isBinary]);
+    };
+    clientWs.on('message', bufferEarlyClientMessage);
+
     // 积分 Phase 2：连接级结算标识。token 来自前端 WS URL 的 ?token= 查询参数
     //（浏览器 WebSocket 不能带 Authorization 头）；匿名连接只记影子流水不扣分。
     const asrConnectionQuery = parse(request?.url || '', true).query;
@@ -1173,7 +1182,7 @@ app.prepare().then(() => {
       return;
     }
 
-    clientWs.on('message', (data, isBinary) => {
+    const handleClientMessage = (data, isBinary) => {
       const dataLen = data.length || data.byteLength || 0;
       lastClientMessageAt = Date.now();
 
@@ -1293,7 +1302,15 @@ app.prepare().then(() => {
         // 文本消息 JSON 解析失败，记录警告并忽略（不当作音频处理）
         console.warn('[ASR-Proxy] Ignoring non-JSON text message, length:', dataLen);
       }
-    });
+    };
+
+    // 处理器就位：先回放预检期间攒下的消息，再接管后续
+    clientWs.off('message', bufferEarlyClientMessage);
+    clientWs.on('message', handleClientMessage);
+    for (const [earlyData, earlyIsBinary] of earlyClientMessages) {
+      handleClientMessage(earlyData, earlyIsBinary);
+    }
+    earlyClientMessages.length = 0;
 
     clientWs.on('close', () => {
       clearLinkGuards();
