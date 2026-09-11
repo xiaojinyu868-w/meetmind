@@ -133,7 +133,7 @@ function AppSurfaceBody({
   }
 
   if (appKey === 'flashcards') {
-    return <FlashcardsWindow result={result} transcript={transcript} onSeek={onSeek} onLearningActivity={onLearningActivity} onAssessment={onAssessment} nextStep={nextStep} />;
+    return <FlashcardsWindow result={result} transcript={transcript} sessionId={sessionId} onSeek={onSeek} onLearningActivity={onLearningActivity} onAssessment={onAssessment} nextStep={nextStep} />;
   }
 
   if (appKey === 'quiz') {

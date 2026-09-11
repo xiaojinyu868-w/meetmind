@@ -50,6 +50,8 @@ import {
   summarizeSessionOutcomes,
 } from './lesson-path-model';
 import { useSessionOutcomes } from './review-session-outcomes';
+import { normalizeFlashcards } from './windows/flashcards-window-model';
+import { useFlashcardsReview } from '@/hooks/useFlashcardsReview';
 import { useWorkshopReadiness } from './hooks/useWorkshopReadiness';
 import { AdminAiInspectorLink } from '@/components/admin/AdminAiInspectorLink';
 import { ClassroomFlowMatrixEntry } from './ClassroomFlowArtifact';
@@ -408,6 +410,17 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
   const sessionOutcomes = useSessionOutcomes(sessionId);
   const outcomeSummary = useMemo(() => summarizeSessionOutcomes(sessionOutcomes), [sessionOutcomes]);
   const hasAnyOutcome = sessionOutcomes.length > 0;
+  // 闪卡路径卡的副题：已有牌堆里有到期 / 上次没记住的卡时写到期数（跨会话间隔复习），否则沿用「N 张记住 M」
+  const flashcardsDeck = useMemo(
+    () => (generatedMap.flashcards ? normalizeFlashcards(readCachedAppResult(sessionId, 'flashcards')) : []),
+    [generatedMap.flashcards, sessionId],
+  );
+  const flashcardsReview = useFlashcardsReview(flashcardsDeck, sessionId);
+  const flashcardsDueLine = flashcardsReview.notice
+    ? flashcardsReview.notice.kind === 'due'
+      ? APPS_COPY.path.outcome.flashcardsDue(flashcardsReview.notice.count)
+      : APPS_COPY.path.outcome.flashcardsMissedFirst(flashcardsReview.notice.count)
+    : undefined;
   const generatedSet = useMemo(
     () => new Set(visibleApps.filter((app) => generatedMap[app.key]).map((app) => app.key)),
     [generatedMap, visibleApps],
@@ -1025,7 +1038,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         stepLabel={APPS_COPY.path.stepLabels[app.key]}
         recommended={isRecommended}
         recommendationReason={isRecommended ? recommendationReason : undefined}
-        outcomeLine={formatOutcomeLine(app.key, outcomeSummary)}
+        outcomeLine={app.key === 'flashcards' && flashcardsDueLine ? flashcardsDueLine : formatOutcomeLine(app.key, outcomeSummary)}
         redoHint={generated && outcomeAnchorCount > 0 ? APPS_COPY.path.redoWithOutcomes(outcomeAnchorCount) : undefined}
         progressLabel={dockTask ? <ElapsedTimer startMs={dockTask.startedAt} /> : undefined}
         onStart={() => startAndOpen(app)}

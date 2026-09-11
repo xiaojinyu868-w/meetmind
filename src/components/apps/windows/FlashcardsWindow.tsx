@@ -16,6 +16,10 @@
  * - 键盘：空格翻、翻开后 1 / 2 或 ←→ 打分、没翻开 ←→ 换牌、Z 撤销上一张（app-keys.resolveFlashcardKey）
  * - 快捷键提示只在第一次进入出现一次（keyboard-hints）
  * 判分、记忆观测、访客分享逻辑沿用 flashcards-window-model / assessment-events。
+ *
+ * 跨会话间隔复习（2026-09-11 内容层）：牌堆的顺序由 useFlashcardsReview 的计划决定——到期的（上次没记住的在前）
+ * → 上次没记住还没到期的 → 新卡 → 记住了还没到期的；进入态在牌上方说一句「上次没记住的 N 张先来」/「今天到期 N 张」。
+ * 顺序只在用户还没开始翻牌时应用（服务端历史晚到不重排正在翻的牌）；「重练全部」按当时的计划重新排。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -31,6 +35,7 @@ import { formatFlashcardActivity, formatFlashcardCompleteActivity } from '@/comp
 import { getFlashcardsFallbackMessage, normalizeFlashcards } from './flashcards-window-model';
 import { buildFlashcardsAssessment, type AssessmentDraft } from './assessment-events';
 import { NextStepCard, type NextStepCardProps } from './NextStepCard';
+import { useFlashcardsReview } from '@/hooks/useFlashcardsReview';
 import { FlashcardDeck, type DeckLeaving } from './FlashcardDeck';
 import { FlashcardsSummary } from './FlashcardsSummary';
 import { applyScore, flyDirectionOf, undoScore, type MasteryScore, type RoundState } from './flashcard-deck-model';
@@ -43,6 +48,8 @@ import { MOTION, prefersReducedMotion } from './app-motion';
 interface FlashcardsWindowProps {
   result: AppExecutionResult | null;
   transcript: TranscriptSegment[];
+  /** 当前课堂（到期模型向服务端点名这叠卡的历史时带上；不传也能算，只用本机） */
+  sessionId?: string;
   onSeek?: (startMs: number) => void;
   onLearningActivity?: (line: string) => void;
   /** 全部打完分时把每张卡的 got / missed + 证据交给记忆（结构化） */
@@ -72,19 +79,33 @@ function ProgressRing({ got, missed, total }: { got: number; missed: number; tot
   );
 }
 
-export function FlashcardsWindow({ result, transcript, onSeek, onLearningActivity, onAssessment, nextStep }: FlashcardsWindowProps) {
+export function FlashcardsWindow({ result, transcript, sessionId, onSeek, onLearningActivity, onAssessment, nextStep }: FlashcardsWindowProps) {
   const cards = useMemo(() => normalizeFlashcards(result), [result]);
   const fallbackMessage = useMemo(() => getFlashcardsFallbackMessage(result), [result]);
   const [reviewCardIds, setReviewCardIds] = useState<string[] | null>(null);
-  const activeCards = useMemo(
-    () => reviewCardIds ? cards.filter((card) => reviewCardIds.includes(card.id)) : cards,
-    [cards, reviewCardIds],
-  );
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [leaving, setLeaving] = useState<DeckLeaving | null>(null);
   const [round, setRound] = useState<RoundState>(EMPTY_ROUND);
+  // 跨会话复习计划：到期的先来。顺序在开始翻牌前冻结（deckOrder），之后历史再变也不重排
+  const review = useFlashcardsReview(cards, sessionId);
+  const [deckOrder, setDeckOrder] = useState<string[] | null>(null);
+  const untouched = round.history.length === 0 && Object.keys(round.scores).length === 0 && index === 0 && !flipped && reviewCardIds === null;
+  useEffect(() => {
+    if (!untouched) return;
+    const order = review.plan.order;
+    setDeckOrder((current) => (current && current.length === order.length && current.every((id, i) => id === order[i]) ? current : order));
+  }, [review.plan.order, untouched]);
+  const orderedCards = useMemo(() => {
+    if (!deckOrder) return cards;
+    const rank = new Map(deckOrder.map((id, i) => [id, i] as const));
+    return [...cards].sort((a, b) => (rank.get(a.id) ?? cards.length) - (rank.get(b.id) ?? cards.length));
+  }, [cards, deckOrder]);
+  const activeCards = useMemo(
+    () => reviewCardIds ? orderedCards.filter((card) => reviewCardIds.includes(card.id)) : orderedCards,
+    [orderedCards, reviewCardIds],
+  );
   const [sharingTrial, setSharingTrial] = useState(false);
   const isGuestDemoResult = useMemo(() => isGuestDemoFlashcardsResult(result), [result]);
   const timer = useRef<ReturnType<typeof setTimeout>>();
@@ -228,6 +249,8 @@ export function FlashcardsWindow({ result, transcript, onSeek, onLearningActivit
     setShowHint(false);
     setLeaving(null);
     setRound(EMPTY_ROUND);
+    // 重练全部：按此刻的计划重新排（刚没记住的这一轮已经写进历史，会排到前面）
+    if (ids === null) setDeckOrder(review.plan.order);
   };
 
   if (allDone) {
@@ -245,6 +268,10 @@ export function FlashcardsWindow({ result, transcript, onSeek, onLearningActivit
 
   const hintVisible = showKeyboardHint && index === 0 && !reviewCardIds && Object.keys(scores).length === 0;
   const canUndo = round.history.length > 0;
+  // 进入态那一句：还没开始翻、且这叠卡有到期 / 上次没记住的
+  const entryNotice = untouched && review.notice
+    ? review.notice.kind === 'missed' ? APPS_COPY.flashcards.entryMissedFirst(review.notice.count) : APPS_COPY.flashcards.entryDue(review.notice.count)
+    : null;
 
   return (
     <div
@@ -272,6 +299,10 @@ export function FlashcardsWindow({ result, transcript, onSeek, onLearningActivit
           <ProgressRing got={gotCount} missed={missedCount} total={activeCards.length} />
         </div>
       </div>
+
+      {entryNotice ? (
+        <p className="mm-app-enter flex-shrink-0 px-5 pt-3 text-center text-[12.5px] text-ink-muted md:px-10" data-testid="flashcards-review-notice">{entryNotice}</p>
+      ) : null}
 
       {/* 牌：拖动区域是整块牌面所在区，竖向滚动仍交给页面 */}
       <div
