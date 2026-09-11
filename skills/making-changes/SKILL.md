@@ -82,6 +82,10 @@ Intelligence**（`项目开发文档/提示词设计哲学.md`）——它对你
 - **需要明确指令才做**：推送或合并到 `main`、force-push、改写已推送历史、删除远端分支、
   开 PR 合并。
 - 会话结束前工作树必须干净；确实不能提交的部分，在最终汇报里写明是什么、为什么。
+- **多人并行（2026-09-11 起，`docs/RELEASE_FLOW.md`）**：一个会话一个 worktree 一个分支。只 `git add <路径>` /
+  `git commit -- <路径>`，禁 `git add -A`、`commit -a`、`git stash`——共享机器上另一个会话的改动可能已暂存在索引里，
+  一次 `-A` 就把它带进你的提交（9-10 实际发生过三次）。不进别人的目录执行 git。上线 = 合进 `release/prod`
+  再 `make deploy`（固定在 `/mnt/meetmind-prod` 构建），开发目录永远不是运行目录。
 
 ## 特殊场景
 
