@@ -59,6 +59,8 @@ ${targetLines || '（由你们边听边判断这节课的核心内容）'}
 export interface TeachBackPanelUserInput {
   /** 课堂原文（已按预算裁剪） */
   transcriptContext: string;
+  /** 给的是与刚讲这段相关的节选（整节课没全给）——评委不该把"原文里没有"当成"老师没讲" */
+  transcriptWindowed?: boolean;
   /** 本场至今的记录（已裁剪；不含 latestSegment） */
   history: TeachBackTurn[];
   /** 他刚讲完的这一段（回合文本） */
@@ -85,7 +87,10 @@ export function buildTeachBackPanelUserPrompt(input: TeachBackPanelUserInput): s
     ? `他讲完上一段后已经安静了约 40 秒，没有再开口。也许在想，也许讲完了。真人评委这时候会轻轻问一句——要不要先到这儿，还是还有哪一点想接着讲——而不是接着追问内容；也可以继续等（none）。`
     : `他刚讲完的这一段：
 「${input.latestSegment}」`;
-  return `课堂原文（正确性的唯一依据）：
+  const transcriptLabel = input.transcriptWindowed
+    ? '课堂原文（正确性的唯一依据；这里是与他刚讲这段相关的节选，节选之外的内容不要断言老师没讲过）：'
+    : '课堂原文（正确性的唯一依据）：';
+  return `${transcriptLabel}
 ${input.transcriptContext}
 
 本场至今（「他：」是正在讲的同学；其余是评委说过的话）：

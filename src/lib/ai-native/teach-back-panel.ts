@@ -155,21 +155,125 @@ export class JudgeStreamParser {
 export const JUDGE_SAY_MAX_CHARS = 90;
 
 /**
- * 给模型看的本场记录：按字数预算从最近往前保留，至少保留最后两条用户发言。
+ * 给模型看的本场记录：按字数预算从最近往前保留，至少保留最后两条用户发言；
+ * `maxUserTurns` 再从回合数上封顶（评委席只看最近两回合——它回应的是刚讲的这段，不翻旧账）。
  */
-export function trimPanelHistory(turns: TeachBackTurn[], maxChars = 6_000): TeachBackTurn[] {
+export function trimPanelHistory(turns: TeachBackTurn[], maxChars = 6_000, maxUserTurns = Number.POSITIVE_INFINITY): TeachBackTurn[] {
   const kept: TeachBackTurn[] = [];
   let used = 0;
   let userKept = 0;
   for (let index = turns.length - 1; index >= 0; index -= 1) {
     const turn = turns[index];
     const length = turn.text.length + 4;
+    if (userKept >= maxUserTurns) break; // 再往前的评委发言回应的是更早的回合
     if (used + length > maxChars && userKept >= 2) break;
     kept.unshift(turn);
     used += length;
     if (turn.role === 'user') userKept += 1;
   }
   return kept;
+}
+
+export interface TranscriptWindowSegment {
+  text: string;
+  startMs: number;
+  endMs: number;
+}
+
+export interface TranscriptWindowOptions {
+  /** 总字数预算 */
+  maxChars?: number;
+  /** 命中的段带前后各几段邻居（老师讲一个概念不会只在一句里） */
+  neighbors?: number;
+}
+
+export interface TranscriptWindow {
+  segments: TranscriptWindowSegment[];
+  /** 是节选（有段被略去）还是整节课都给了 */
+  windowed: boolean;
+}
+
+const QUERY_STOP_CHARS = /[\s，。！？；、,.!?;:：""''「」『』（）()《》〈〉【】\-—…·]/g;
+
+/** 讲述文本 → 匹配用的特征：汉字二元组 + 拉丁 / 数字整词（"f""Rf""x²"这类符号在数学课里是关键词） */
+export function transcriptQueryFeatures(text: string): Set<string> {
+  const features = new Set<string>();
+  const cleaned = text.replace(QUERY_STOP_CHARS, ' ');
+  for (const token of cleaned.split(' ')) {
+    if (!token) continue;
+    const latin = token.match(/[A-Za-z0-9²³⁻¹]+/g) ?? [];
+    for (const word of latin) features.add(word.toLowerCase());
+    const cjk = token.replace(/[A-Za-z0-9²³⁻¹]+/g, '');
+    for (let i = 0; i + 1 < cjk.length; i += 1) features.add(cjk.slice(i, i + 2));
+  }
+  return features;
+}
+
+/**
+ * 评委看的原文窗口：不是整节课，是"与他刚讲这段最相关的几段（带邻居）+ 目标点的证据段"，按课堂顺序拼、总字数 ≤ maxChars。
+ * 相关度 = 讲述特征（transcriptQueryFeatures）在段里命中的个数。整节课装得下就原样全给；
+ * 什么都对不上（讲的与这节课无关）→ 退回开头的几段——评委仍要知道这节课在讲什么，沉默才有依据。
+ * 为什么不逐段压缩（buildPromptTranscriptContext 超预算时的做法）：每段都剩半截，老师的每句话都被截断，评委反而没法核对。
+ */
+export function selectRelevantTranscript(
+  transcript: TranscriptWindowSegment[],
+  segment: string,
+  targets: Array<{ evidence?: { startMs: number; endMs: number } | null }> = [],
+  options: TranscriptWindowOptions = {},
+): TranscriptWindow {
+  const maxChars = Math.max(200, options.maxChars ?? 5_000);
+  const neighbors = Math.max(0, options.neighbors ?? 1);
+  const total = transcript.reduce((sum, item) => sum + item.text.length, 0);
+  if (total <= maxChars) return { segments: transcript, windowed: false };
+
+  const features = transcriptQueryFeatures(segment);
+  const scores = transcript.map((item) => {
+    let hits = 0;
+    const lower = item.text.toLowerCase();
+    // 单个字母（f / g / x / y）满课都是，只算四分之一票；一段至少要凑够一票才算相关
+    for (const feature of features) if (lower.includes(feature)) hits += feature.length >= 2 ? 1 : 0.25;
+    return hits >= 1 ? hits : 0;
+  });
+
+  const picked = new Set<number>();
+  let used = 0;
+  const tryAdd = (index: number): boolean => {
+    if (index < 0 || index >= transcript.length || picked.has(index)) return true;
+    const length = transcript[index].text.length;
+    if (used + length > maxChars) return false;
+    picked.add(index);
+    used += length;
+    return true;
+  };
+
+  // 目标点的证据段先进（手卡上那几点是这一场要覆盖的）
+  for (const target of targets) {
+    const evidence = target.evidence;
+    if (!evidence) continue;
+    transcript.forEach((item, index) => {
+      if (item.endMs >= evidence.startMs && item.startMs <= evidence.endMs) tryAdd(index);
+    });
+  }
+
+  const order = scores
+    .map((score, index) => ({ score, index }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+  for (const { index } of order) {
+    if (!tryAdd(index)) break;
+    for (let offset = 1; offset <= neighbors; offset += 1) {
+      tryAdd(index - offset);
+      tryAdd(index + offset);
+    }
+  }
+
+  // 一段都没对上：给开头，让评委至少知道这节课讲什么
+  if (order.length === 0) {
+    for (let index = 0; index < transcript.length; index += 1) if (!tryAdd(index)) break;
+  }
+
+  const segments = [...picked].sort((a, b) => a - b).map((index) => transcript[index]);
+  return { segments, windowed: segments.length < transcript.length };
 }
 
 /** 最近开口过的评委（新→旧），供 prompt 提示"刚说过话的人"与 fallback 归属 */
