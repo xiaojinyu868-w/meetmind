@@ -19,6 +19,10 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 
 `context/DOMAIN.md`：通用跨应用 Context 服务，保存原始观察、应用授权及可靠投递状态；记忆处理由 Hindsight 完成。现有课堂、全局对话与应用活动按 CONTEXT_ENABLED 选择新旧管道；旧画像不自动迁移。实际实现和验收限制见 docs/plans/CONTEXT_M1_DELIVERY.md。
 
+### 知乎接入
+
+`zhihu/DOMAIN.md`：知乎开放平台只读接口（搜索 / 热榜 / 直答 / 本人或 OAuth 用户的创作·关注·收藏）的类型化客户端 + 抓回页面的去杂质；知乎登录、收藏夹进收集流、收藏夹开课（teach-live）、知乎搜索补货都从这里出发。独立子域名部署，`ZHIHU_ENABLED` 灰度；北极星 `docs/plans/2026-09-12-zhihu-line.md`。
+
 `learning-observation-service.ts`：服务端生产者（课后理解、/api/memory/events）的统一落点，**双写**（2026-09-09）：`LearningEvent` 表始终写（掌握轨迹 / P0 画像的原料），`CONTEXT_ENABLED` 时同一份观察再经 education-adapter 进 `ContextEvent` 由 worker 投给 Hindsight；只等待落库，Context 侧失败不回滚事实表。课后标题/摘要/精选仍先完成。
 
 ### 🎙️ ASR 转录

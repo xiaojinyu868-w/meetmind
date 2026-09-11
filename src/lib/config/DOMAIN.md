@@ -14,6 +14,7 @@ Context 独立服务的 server-only 配置在 `context.ts`（不导出给浏览�
 | `app.config.ts` | ~360 | 配置定义 + 环境变量映射（含 StepFun / DeepSeek / DashScope / Ark / Relay 模型） |
 | `pricing.ts` | ~230 | 模型定价表（积分影子计量唯一数值真相源）：每模型输入/输出毫元每百万 token，估算值以控制台价目校准；未知模型 fallback 2000/4000 并 warn；Phase 2 价目（POINTS_CONFIG / Tutor / 应用执行 / RECHARGE_PACKS 充值包）与订阅会员档（MEMBERSHIP_PLANS：pro ¥39 / max ¥79，配额+deep 解锁+折扣；getPayableItem 统一解析积分包/会员档）也在此 |
 | `teach.config.ts` | ~180 | teach/fenshen 线独立配置（不走 app.config）：provider 注册表（TEACH_PROVIDER 一行切换）、codex 底座（shim 端口/CODEX_HOME/事件日志目录）、TTS 注册表 + **按句音色白名单** `TEACH_TTS_VOICE_ALLOWLIST` / `resolveTeachTtsProviderFor({ voice, instruct })`（2026-09-10：/api/teach/tts 接受调用方指定音色，讲给同桌听三位评委三种声音；不在名单回落默认音色）、新引擎开关（TEACH_ENGINE=codex/engine/live、TEACH_SKILLS_DIR、TEACH_ENGINE_MAX_OUTPUT_TOKENS、TEACH_ACTIONS_FULL）——引擎语义见 `src/lib/services/teach-engine/DOMAIN.md`；live 舞台引擎独立 provider `resolveTeachLiveProvider()`（`TEACH_LIVE_PROVIDER` 默认 `glm-flash-dashscope` = 百炼 GLM-5.3-Flash + `reasoning_effort=low`，该模型不可关思考，low 实测把推理压到 0）、`TEACH_LIVE_MODEL` / `TEACH_LIVE_MAX_OUTPUT_TOKENS` / `TEACH_LIVE_TEMPERATURE`——见 `src/lib/services/teach-live/DOMAIN.md`。讲给同桌听评委席模型 `TEACH_BACK_PANEL_MODEL`（默认 `ModelDefaults.workshop`）在 `teach-back-panel-service.ts` 里读，不进注册表 |
+| `zhihu.config.ts` | ~55 | 知乎开放平台接入（server-only）：`ZHIHU_ENABLED` 产品面开关、`ZHIHU_ACCESS_SECRET`（Bearer）、`ZHIHU_OAUTH_APP_ID` / `_APP_KEY` / `_REDIRECT_URI`（三凭证别串位，见 `services/zhihu/DOMAIN.md`）；redirectUri 非 https 启动即报错 |
 | `index.ts` | 16 | barrel 导出 |
 
 ## 配置结构

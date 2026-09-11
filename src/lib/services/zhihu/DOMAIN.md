@@ -1,0 +1,83 @@
+# zhihu/ —— 知乎开放平台接入（知乎登录 · 收藏夹进收集流 · 收藏夹开课 · 知乎搜索补货）
+
+> 北极星：`docs/plans/2026-09-12-zhihu-line.md`。这条线独立部署在 `zhihu.meetmind.online`（分支 `feat/zhihu-hackathon`），
+> 与生产同库同数据目录，`ZHIHU_ENABLED=false` 时对产品零影响。
+> 本文件前半是「知乎到底给了什么」的事实清单（契约事实源：官方 zhihu skill v0.2.1 的 `references/{http-api,user-api,oauth}.md`，
+> 2026-07 核验；线上形状以 `make smoke-zhihu` 实测为准），后半是本目录服务的边界。
+
+## 一、知乎给了什么：全部只读
+
+### 鉴权（所有 developer.zhihu.com 接口通用）
+
+`Authorization: Bearer <Access Secret>` + `X-Request-Timestamp: <秒级 Unix 时间戳>`（+ GET 也带 `Content-Type: application/json`）。
+Access Secret 在 developer.zhihu.com/profile 自助申请，一个账号最多 20 个、共享同一额度池、拥有完整权限、删除不可恢复。
+业务错误经常包在 **HTTP 200** 里：外层 `{Code, Message, Data}`，`Code≠0` 即失败——`0` 成功 / `10001` 参数 / `20001` 鉴权 /
+`30001` 频率（停止重试）/ `30002` 当日配额耗尽（该能力全账号不可用）/ `90001` 内部错误。
+
+### 内容接口（额度 = 邀测免费额度 / 天）
+
+| 接口 | 端点 | 入参约束 | 返回（原字段名） | 额度 |
+|---|---|---|---|---|
+| 站内搜索 | `GET /api/v1/content/zhihu_search` | `Query` 必填；`Count` 1–10（≤0 回默认 10，>10 截到 10） | `HasMore`（固定 false）/ `SearchHashId` / `EmptyReason?` / `Items[]`：`Title` `ContentType`（Answer / Article…首字母大写）`ContentID` `ContentText`（**摘要**，`<em>` 高亮）`Url`（带 utm）`CommentCount` `VoteUpCount` `AuthorName`（匿名 = 知乎用户）`AuthorAvatar` `AuthorBadge` `AuthorBadgeText` `EditTime`（秒）`CommentInfoList[{Content}]`（精选评论）`AuthorityLevel`（字符串 "1"–"4"：低 / 中 / 高 / 超高）`RankingScore` | 5,000 |
+| 全网搜索 | `GET /api/v1/content/global_search` | `Count` 1–20；`Filter`（`host=="x.com"`、`publish_time>=<秒>`，`AND`/`OR` 大写，可加括号；**不能**用 host 限定 zhihu.com）；`SearchDB` all / realtime / static | 同上（无 RankingScore 保证） | 5,000 |
+| 热榜 | `GET /api/v1/content/hot_list` | `Limit` 1–30（越界回 30） | `Total` / `Items[]`：`Title` `Url` `ThumbnailUrl`（可空串）`Summary`（可空串）；只有问题与文章两类 | 100 |
+| 直答 | `POST /v1/chat/completions` | 只保证 `model` / `messages` / `stream` 三字段；`model` ∈ `zhida-fast-1p5` / `zhida-thinking-1p5` / `zhida-agent`；多轮 messages 只有前两档支持 | OpenAI Chat Completions 形状（含 `reasoning_content`）；流式 SSE 有 `: keep-alive` 心跳；错误是 `{error:{message,type,param,code}}` | 100 |
+
+### 用户数据接口（同一组接口两种身份）
+
+不带 `X-OAuth-Token` = **Access Secret 所属账号本人**（演示与 smoke 的「本人模式」）；带 `X-OAuth-Token: <用户 OAuth access_token>` = 该授权用户。
+全部 `GET`；分页接口用 `Offset` / `Limit`，响应 `Paging{IsEnd, NextOffset(字符串!), Totals}`，下一页把 `NextOffset` **原样**回传为 `Offset`；
+`NextOffset` 不是十进制数字串按协议错误处理，不静默截断。用户接口额度**未公布**。
+
+| 接口 | 端点 | 入参 | `Items[]` 字段 |
+|---|---|---|---|
+| 我的创作 | `/api/v1/user/contents` | `ContentType` **必填** all / answer / article / zvideo / pin / question；`SortField` like_count / ts；`SortOrder`；`Limit` ≤50 | `ContentType`（**小写**）`Url` `CreatedAt` `LikeCount` `CommentCount` `FavoriteCount` `Title` `Summary`（摘要） |
+| 我的关注 | `/api/v1/user/followees` | `Offset` / `Limit` ≤50 | `Fullname` `UrlToken` `Url` `AvatarUrl` `Headline` `Gender`（0 未知 / 1 女 / 2 男）`FollowerCount` |
+| 收藏夹列表 | `/api/v1/user/favlists` | `Limit` ≤50；**无分页，服务端忽略 Offset** | `UrlToken`（Int64，查内容时回传）`Url` `Title` `Description` `IsPublic` |
+| 收藏夹内容 | `/api/v1/user/favlist_contents` | `FavlistUrlToken` 必填；分页 | 创作字段 + `FavTime`（收藏时间）+ `Favlists[{UrlToken,Title,Url}]` + `Author?{Name,UrlToken,Url,Gender,Headline}`（下游没给就没有） |
+| 近期收藏 | `/api/v1/user/collections` | `Limit` ≤50；**无 Offset 无 Paging**，只是最近一批 | 同收藏夹内容 |
+
+### OAuth（`openapi.zhihu.com`；`app_id` / `app_key` 由黑客松平台建项目发放，或邮件 product-platform@zhihu.com 申请）
+
+1. 授权页 `GET /authorize?redirect_uri=&app_id=&response_type=code[&state=]`
+2. 回调 `{redirect_uri}?authorization_code=…`（实测参数名是 `authorization_code`，兼容 `code`；**实测不回传 `state`**）
+3. 换 token `POST /access_token`，表单 `app_id` / `app_key` / `grant_type=authorization_code`（固定枚举值）/ `redirect_uri` / `code`（承载回调里的 authorization_code）→ `{access_token, token_type, expires_in: 3600}`，可能包在 `data` / `Data` 里，业务码 `20000` = 成功
+4. `GET /user`（双凭证：Bearer Access Secret + X-OAuth-Token）取昵称头像——**没有正式 schema**，字段名不可依赖
+5. 缺：refresh token、scope、PKCE、撤销 / 解绑、拒绝授权回调、过期错误协议
+
+### 明确没有的（所有方案都得绕着走）
+
+**正文**（三类接口都只有摘要 → 正文靠抓页面，Firecrawl 对回答 / 专栏实测 4/4 拿到全文）；**写接口**（不能代发回答 / 评论 / 收藏 / 关注）；
+**他人数据**（只有本人或授权用户）；**问题详情 / 某问题下的回答列表 / 某用户公开主页**。CLI 只有 macOS / Windows 包，服务器直接打 HTTP。
+
+### 页面结构（Firecrawl `onlyMainContent` Markdown，2026-09-09 实测）
+
+回答页（短链 `/answer/<id>` 与规范链 `/question/<q>/answer/<a>` 同形）：logo → [话题链接]* → `# 问题标题` → 问题描述`显示全部` → 关注者 / 被浏览 / 登录墙（"登录后你可以 不限量看优质回答…"）→
+`[查看全部 N 个回答](问题链接)` → 作者卡（`[![名](头像)](people)` → `[名](people)` → 签名 → `​关注`；匿名只有 `![匿名用户]` + `匿名用户`）→ **正文** →
+`[编辑于 YYYY-MM-DD HH:MM](回答链接)・地区` / `阅读全文` → `​赞同 N​​M 条评论` → 分享 / 收起 / 查看全部。
+专栏页：`![](专栏自链)`? → logo → `![标题](封面)`? → **正文** → [话题链接]* → `​赞同 N​​M 条评论` → 申请转载 → `关于作者` → 作者卡。
+正文里两类链接要处理：直答实体链接 `[词](https://zhida.zhihu.com/search?…)` 只留词；外链 `https://link.zhihu.com/?target=<urlencoded>` 解包。
+
+## 二、本目录
+
+| 文件 | 职责 | 不变量 |
+|---|---|---|
+| `zhihu-open-client.ts` | 上表全部端点 + OAuth 三步的类型化客户端；字段归一 camelCase、字符串数字转数字；`fetch` / 时间源可注入 | 直连 HTTP 不依赖 CLI；`Code≠0` 一律抛 `ZhihuApiError`（kind：param / auth / rate_limit / quota / server / network / timeout / protocol / oauth，`retryable` 只对 network / timeout / server 为 true）；日志只记 endpoint 与错误码，**不记 query、凭证、响应正文**；缺 Access Secret 不出网 |
+| `zhihu-page-clean.ts` | 抓回来的回答页 / 专栏页 / 问题页去杂质，纯函数 | 找不到结构标记就走保守清洗并 `confident=false`，导入层据此标注"正文可能含页面杂质"，**不装干净**；正文以外的元数据（作者 / 编辑时间 / 赞同 / 评论）只从页脚取 |
+| `*.test.ts` | 客户端夹具测试（官方文档响应示例）+ 去杂质夹具（实测页面结构逐行还原） | 夹具是文档与实测的快照；线上形状变了先改 DOMAIN.md 再改夹具 |
+
+配套：`src/lib/config/zhihu.config.ts`（五个 env，`redirectUri` 非 https 启动即报错）；`tests/smoke/smoke-zhihu.ts`（`make smoke-zhihu`，只读、不起服务、本人模式真实请求 + 抽一条正文）。
+
+后续文件（按北极星分组落地，落一个补一行）：`zhihu-auth-service.ts`（G2：cookie HMAC nonce 补 state 缺口；token 存 `AuthProvider(provider='zhihu')`）、
+`zhihu-import-service.ts`（G3：收藏 → `WorkspaceCapture`，canonical URL 去 utm 作 `sourceKey`，摘要先进、正文按需抽）、
+`zhihu-lesson-service.ts`（G5：材料包组装，Top-K + 预算 + `[A1]` 引用 id）、`feed-retrieval-service` 的 zhihu provider（G6）。
+
+## 三、边界
+
+- 依赖方向：`app/api/zhihu | app/api/auth/zhihu → services/zhihu → lib/config, lib/logger, lib/db`；本目录**不 import** teach / ai-native / feed 的内部——材料包由 API 层组装后递给消费方，不让接入层反向依赖消费方。
+- 隐私：知乎导入的收藏、创作、关注、画像全部是**个人上下文**——默认私有，永不进 `SharedAgent` 快照，分享态不带。
+- 安静：同步 / 导入不弹通知，不催；同学读完以回声形式出现。
+- 有根 + 诚实：每条材料带来源（平台 / 作者 / 发布时间 / 收藏时间 / 赞同 / 权威等级）；正文状态三档（只有摘要 / 正文完整 / 正文可能含杂质）如实标注；只有摘要时 AI 不猜原文。
+- 成本：Firecrawl ≈1 credit / 页，一个用户几百条收藏，所以正文**按需**抽（开课 / 情报真用到才抽），不整夹全抽。
+- 直答不进主循环（100 次/天、不可控）；热榜结果缓存 ≥10 分钟。
+- OAuth token 1 小时且无 refresh：所有需要用户身份的同步都在用户在场时触发；过期如实提示「重新连接知乎」，不静默切到本人模式。

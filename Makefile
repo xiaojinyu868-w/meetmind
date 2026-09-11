@@ -63,6 +63,10 @@ smoke-context-live: ## 本地应用 + 真实 Hindsight + Tutor + 浏览器验收
 smoke-pocket: ## 口袋闭环：合成账户 → /api/workspace/clip（ChatGPT 形状 HTML）→ /pocket 读到 → 撤销 → 清理；SMOKE_BROWSER=chromium 加截图
 	@SMOKE_BASE=$${SMOKE_BASE:-http://localhost:3101} npx tsx tests/smoke/smoke-pocket.ts
 
+.PHONY: smoke-zhihu
+smoke-zhihu: ## 知乎接入 smoke（只读、不起服务）：本人模式走搜索 / 收藏夹 / 近期收藏 → Firecrawl 抽一条正文 → 去杂质；需 .env 的 ZHIHU_ACCESS_SECRET（SMOKE_ZHIHU_URL 指定要抽的链接）
+	@npx tsx tests/smoke/smoke-zhihu.ts
+
 .PHONY: test-desktop
 test-desktop: ## 桌面壳纯逻辑单测（口袋：选区读取 / 来源解析 / 离线队列；不需要 Electron）
 	@node --test ./desktop/pocket/pocket.test.js
