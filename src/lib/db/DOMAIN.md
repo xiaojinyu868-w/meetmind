@@ -35,7 +35,7 @@ hooks/services → lib/db → types
 ### 录课不丢的会话字段（v10 起，非索引字段，旧行为 undefined）
 
 `audioSessions` 上新增：`checkpointAt / lastCheckpointDurationMs`（录课中检查点心跳，恢复条据此说「已录 N 分钟」、判断 >6h 自动收尾）、
-`syncState: pending | synced | failed` + `syncError / syncedAt`（这节课的服务端 capture 同步状态，仅登录用户；failed / 卡住的 pending 由 `sync-pending-recordings` 补传）、
+`syncState: pending | synced | failed` + `syncError / syncedAt`（这节课的服务端 capture 同步状态，仅登录用户；failed / 卡住的 pending 由 `sync-pending-recordings` 补传）、`migrationSignature / migratedAt`（登录迁移上次成功推送时的证据签名，2026-09-11；只推签名变了的课，`markSessionsMigrated` 写回）、
 `remoteRecordingState / remoteCheckpointAt`（另一台设备正在录这节课，服务端 `metadata.recordingState` 回填；列表显示「录制中 · 已 N 分钟」）。
 `status='recording'` 的行不再在挂载时被强制改成 completed：它们是「没结束的课」，由 `useUnfinishedRecordings` 承接。
 

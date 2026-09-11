@@ -23,8 +23,9 @@
 
 - **长音频分片缝合**（600s 分片 + 2s overlap + LCS 缝合 `stitchSegmentsWithOverlap` / `findOverlapLength`）在 `server/` 与 `src/lib/longcut/`。
 - **Contextual biasing**（`buildASRContextHint` 注入 courseTitle / subject / participants / 词汇等 6 字段）在 `src/lib/services/` 相关 service。
-- **WebSocket 稳定性**（`reconnecting-websocket` + `p-retry` Full Jitter 退避 + audioQueue 跨重连保留）在消费端 hook。
+- **WebSocket 稳定性**在 `src/lib/services/dashscope-asr-service.ts`（`DashScopeASRClient`，2026-09-11 连接状态机重写）：首连与会话断线同一条退避循环（候选地址按轮数轮转、握手 / 就绪超时随轮数增长、Full Jitter），`connectAttempts` / `maxReconnectAttempts` 分开配（课堂 Recorder 传 Infinity，短用途默认一轮不通即失败）；额度 / 密钥类终态不重连；45s 无入站消息判半开；上游 finished 非用户 stop 主动重连；重连时向代理发 `timeline-offset` 让句级时间戳接续在课堂时间轴上；`onLinkStateChange` 给 UI 一行状态。同名 `.test.ts` 用可控的假 WebSocket 覆盖这些路径。策略总图见 `docs/ASR_PIPELINE.md` T2.2。
 - `DashScopeASRClient` 对待发送 PCM 强制 FIFO，且为远端 segment/item ID 添加连接命名空间，防止重连时发生 ID 碰撞。
+- 代理侧链路守护（上游就绪超时、客户端存活、时间轴偏移平移、预检期间消息缓冲）在 `server.js` + `server/asr/session-link.js`（`make test-server`）。
 - 2026-08：腾讯 `/api/asr-stream-speaker` 实时分人实验链路已整体拆除（server.js 代理 + 前端 `speakerDiarization` 开关一并移除），实时转录只有 Qwen 单一路径。课后是否展示“发言者 A / B”由 `assessDiarizationEvidence` 决定（手动精转时），短噪声形成的伪第二人必须隐藏。
 - **热词聚合**（`AsrCorrection` 表 + `onRecordingStop` 触发 `/api/asr/corrections/aggregate`）走 Prisma + `/api/asr-config/`。
 

@@ -15,6 +15,8 @@
 | `qwen-session.test.js` | 旧族语种自动识别、上下文与 VAD 协议回归测试 |
 | `duplex-session.js` | 新族 Qwen-Audio-3.0-ASR / Fun-ASR 的 duplex 任务协议：模型族分派、上游 URL 解析、run-task / continue-task / finish-task 构造、result-generated 解析 |
 | `duplex-session.test.js` | 新族协议构造与解析、按族分派回归测试 |
+| `session-link.js` | 一条客户端连接的链路守护纯函数（2026-09-11）：`timeline-offset` 消息解析、上游 / 墙钟时间戳平移回课堂时间轴（`shiftSpan`）、上游就绪超时 20s 与客户端存活 60s 的阈值与判定 |
+| `session-link.test.js` | 偏移解析 / 平移 / 存活判定回归测试 |
 
 ## 协议分派（按模型族）
 
@@ -22,6 +24,8 @@
 - 模型名以 `qwen3-asr` 开头 → **旧 Omni Realtime 协议**：`/api-ws/v1/realtime?model=`，base64 JSON 帧 + `session.update` / `session.finish`。
 - 参数映射（旧 → 新）：`input_audio_transcription.corpus.text` → `input.context`（input_text 消息，每条 ≤400 字、最多 5 条）；`turn_detection.silence_duration_ms` → `parameters.max_sentence_silence`（[200,6000]，默认 1300）；`language` → `parameters.language_hints`（数组，auto 省略）；`turn_detection.threshold` 无对应参数，不映射。新协议固定开 `heartbeat: true`（防连续静音 60s 被断连），任务进行中可用 `continue-task` 更新上下文。
 - 新协议定稿时间戳优先用服务端 `begin_time` / `end_time`，缺失才回退客户端 VAD 猜测（`resolveTimestamp`）。
+- **重连后的时间轴**（2026-09-11）：客户端断线重连 = 新的上游任务，时间戳从 0 重新计起。客户端在连接 `open` 与 `ready` 时发 `{type:'timeline-offset', offsetMs}`，代理把**上游 / 墙钟推出来的**时间戳（duplex 句级、旧协议 server timestamp、`Date.now() - sessionStartTime` 兜底、interim 的 begin/end）都加上偏移；客户端 VAD 事件（`vad-event` / `vad-timestamp`）自带课堂时间轴，不平移。
+- **链路守护**：连接一进来先缓冲客户端消息、预检与会话就位后回放（`await precheckAsrAllowance()` 窗口里到达的 `context-hint` / `timeline-offset` 此前被 ws 静默丢掉）；上游 20s 不 ready → 给客户端一条错误并 close(1011) 让它重连；客户端 60s 没任何消息（浏览器 15s 一次 ping）→ terminate 半开连接、收尾上游；上游关闭而客户端未要求停止 → 一律 close(1011)（此前上游 1000 正常收尾时不关客户端，音频被静默吞掉）。
 
 ## 边界
 

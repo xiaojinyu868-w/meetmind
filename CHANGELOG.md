@@ -5,6 +5,22 @@
 
 ---
 
+## 2026-09-11 — 课堂线可靠性：实时字幕断了会自己接回来、Recorder 被卸载不丢课、登录迁移只推变过的课
+
+「录课不丢」审计（`/tmp/mm-sync/FINDINGS.md`）列出的割裂点里影响课堂体验的一批。方法同上一轮：源码逆推 + 生产库只读 + Playwright 在 dev 3107 上用合成账户实测（脚本、截图与逐秒采样在 `/tmp/mm-rel/`）。每项一个原子提交（`feat/reliability`）：
+
+- **实时字幕断连治理**（`dashscope-asr-service.ts` 连接状态机重写 + `server.js` / `server/asr/session-link.js`）：此前首次连接只把候选地址各试一次、握手超时 5s，不通就 `start()` 返回 false → Recorder 把 client 置 null → 整节课零实时字幕全靠课后兜底。现在一轮 = 候选地址按轮数轮转各试一次，握手 8s→20s / 就绪 15s→30s 随轮数增长，整轮失败 Full Jitter 退避再来；课堂 Recorder 首连与会话断线都重连到停录为止（`connectAttempts` / `maxReconnectAttempts` = Infinity；语音输入等短用途保持一轮不通即失败的旧语义）；额度 / 密钥 / 未配置是终态不重连；45s 无入站消息判半开主动重连；上游中途自己收尾（finished 非用户 stop）主动断开重连。**时间轴接续**：客户端每条连接建立与 ready 时发 `timeline-offset`（队头音频在课堂时间轴的位置），代理把上游 / 墙钟时间戳平移回整节课，客户端 VAD 时间不平移。代理侧：上游 20s 不 ready 断连让客户端重连；客户端 60s 无消息终止半开连接；上游关闭而客户端未要求停止一律 close(1011)；**预检期间到达的客户端消息先缓冲再回放**（此前 context-hint 热词与 timeline-offset 落在 `await precheckAsrAllowance()` 窗口里被 ws 静默丢掉，实测发现）。录课界面：转录卡头部与移动端录课页那一行状态在断连时说「实时字幕暂时断开，录音仍在继续」，恢复后自动消失（`capture-editor-store.liveAsrLink`）。实测：注入首连失败 ×2 → 录音 0.9s 时接上（提示 4.2s）；live 21s 切断 → 1.2s 重连 + 1.0s 缓冲补送（提示 1.6s），offset 20962ms，80s 录音 7 段字幕时间轴单调、原声 652KB 完整、服务端一行。
+- **Recorder 被卸载不再只停录音**：桌面 Recorder 只挂在课堂 tab / 收集 tab 录音条里，切 tab / 站内链接 / 视口跨断点都会卸掉它，此前 cleanup 只 `mediaRecorder.stop()`，录到一半的内容在内存里丢掉、store 里还亮着「正在录音」。现在卸载时走 `stopMediaRecorderSafely`（最后一片经 onAudioChunk 交出）→ 新回调 `onRecordingInterrupted` → `useRecordingCheckpoint.handleRecordingInterrupted` 先落盘分片 + 字幕快照 + 服务端最后一次检查点，再把 isRecording 置回 false；这节课留成「没结束」交给恢复条（继续录 / 就到这里），不出理解、不跳复习。离开前一句确认：`handleViewModeChange` 桌面录课中切 tab 先 confirm；`useRecordingLeaveGuard` 拦站内 `a[href]` 点击。实测：24s 录课切「收集」→ 24 片 + 2 段落盘、toast 一句、无「正在录音」残留；回课堂 14s 内恢复条出现 → 就到这里 → 分片拼回 194KB 原声、completed、synced、服务端一行 2 段。
+- **登录迁移只推变过的课**（`lib/services/local-workspace-migration.ts`，从 `useAuth.tsx` 抽出 ~280 行）：此前每次页面加载全量重推全部 audioSessions（同一用户一天 8 轮 × 2-3 批全量转录）。现在每节课算证据签名（用户 + 转录 / 锚点 / 摘要 / 精选 / 笔记 / 对话的数量与最后更新时刻 + 会话元数据），只推签名 ≠ `audioSessions.migrationSignature` 的课，成功即写回；正在录的课不推。实测：登录后第 1 次加载 1 次 POST 3 节 → 第 2 次 0 次 → 给一节加笔记 → 第 3 次 1 次只含那一节；服务端 3 行、每节课一行；live 行 + 迁移同 sessionId 仍只留一行（3 段不翻倍，笔记 artifact 上去了）。
+- **访客的安静入口**：`useGuestSyncHint` + `GuestSyncHint`——访客本机有录好的课时，课堂列表恢复条旁 / 手机首页顶部一行「登录后，这节课会跟着你到任何设备 · 登录」（→ `/login?next=/app`），不弹窗；登录后消失、迁移照旧。
+- **useLiveQuery deps 复查**：全仓 22 处没有需要修的 `[]` 用法；`dexie-react-hooks` 内部 `deps || []`，"不传 deps 修 StrictMode 双挂载空数组"是误判，注释与 `hooks/DOMAIN.md` 改为唯一规则（querier 用到的每个外部值都进 deps）。
+- **已知问题登记**（`prisma/DOMAIN.md` 新建）：`PointAccount.userId` 无外键、删用户留孤儿（生产只读统计 8 行）；`userId` 承载 `guest_{ip}` / `anonymous` 所以不能直接加 `@relation`，需单独决定。不改 schema。
+- 验证：`make check`；改过文件 eslint 零新增；`make test` 1705 例全绿（新增 dashscope-asr-service 状态机 13 例、local-workspace-migration 6 例、useRecordingLeaveGuard 3 例）；`make test-server` 63 例（新增 session-link 8 例）。
+- 顺手发现（未改）：`src/lib/prisma.ts` 不读 `DATABASE_URL`，按 `process.cwd()/prisma/meetmind.db` 开库——worktree 里会静默新建一个空库（本轮在 worktree 放了指向共享库的软链，gitignored）；登录迁移 summary 的 created/updated 按 `local-session:` 键查已有行，复用 live 行时会记成 created（只是日志口径）。
+- 没做的：Recorder 的录音状态外提成不随视图卸载的引擎（2000 行组件的重构，本轮选了"卸载时收尾 + 可恢复"）；断连超过 120s 缓冲预算丢掉的那段音频不会回补字幕（原声完整，需要按时间切片的补转写）；`history.pushState` 程序化跳转不拦。
+
+---
+
 ## 2026-09-10 — AI 家教第三代引擎 live stage：边说边画、图一笔一笔长出来、会动、能拉
 
 用户原话：「真正的老师给人讲课的那个效果……AI 老师可以给多模态的输出，除了文字还有基于代码的表现方式例如 SVG、各种基于代码的动画，还可以调用生图模型……力求实时流式输出……真人老师 1/4 的价格、相近甚至更好的效果……现在的形态我非常不满意……用 GLM 5.3 Flash。」重新审视了 teach 线的前代决策（`docs/TEACH_TUTOR_ENGINE.md` §12），在 codex / engine 之外开第三条线，前两条不拆作对照。

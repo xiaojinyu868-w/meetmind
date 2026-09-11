@@ -60,7 +60,7 @@ components/
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `Recorder.tsx` | 1694 | 录音主组件（采集/实时转录/暂停/恢复；实时 final 进入 `recorder-utils.mergeRealtimeTranscriptSegment` 去重/修时间戳）；首屏静态挂载以保留首次录音的用户手势与冷启动 ASR，子模块在 `recorder/` |
+| `Recorder.tsx` | ~2080 | 录音主组件（采集/实时转录/暂停/恢复；实时 final 进入 `recorder-utils.mergeRealtimeTranscriptSegment` 去重/修时间戳）；首屏静态挂载以保留首次录音的用户手势与冷启动 ASR，子模块在 `recorder/`。**2026-09-11**：ASR client 首连与断线都自愈（`connectAttempts` / `maxReconnectAttempts` = Infinity），暂停恢复不再拆了重建 client；链路状态经 `onLinkStateChange` 写 `capture-editor-store.liveAsrLink`；**录音中被卸载**（切到没有挂载点的布局 / 路由离开）走 `stopMediaRecorderSafely` 交出最后一片 → `onRecordingInterrupted(meta)` 让外层落盘留成「没结束」，不再只 `mediaRecorder.stop()`。三处挂载点都要接 `onAudioChunk` + `onRecordingInterrupted` |
 | `TranscriptFlowView.tsx` | 778 | 转录内容流式视图；v7 引用资产化：段落章标与悬停时刻统一 `.cite-ts`，搜索命中高亮用 `.mark-vermilion`，全部 v7 token（无 v6 直写 hex） |
 | `LessonDigestCard.tsx` | ~220 | 课堂结构化笔记纯展示组件（飞书妙记式分段总结 + 图片内联 + 时间戳跳转 + 原文折叠 + 长按标记困惑；桌面移动共用）；标题不再叠加“课堂总结”等重复说明，降级路径不向用户暴露 LLM 等内部术语 |
 | `SharedWorkspacePanel.tsx` | ~90 | 课后中间学习工作区分发：应用矩阵、独立应用结果，以及录课时已生成的课堂脉络复习工作区；脉络时间戳沿用统一 onSeek 回到课堂原话 |

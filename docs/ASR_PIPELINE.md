@@ -26,7 +26,8 @@
   ├→ MediaRecorder 每 1s 一片 → useRecordingCheckpoint 每 5s 批量追加 IndexedDB.recordingChunks（正常结束后由最终 blob 取代并删除）
   ├→ 已定稿实时字幕每 5s 整段快照覆盖 IndexedDB.transcripts（不改 transcriptionStatus）+ audioSessions.checkpointAt
   ├→ 登录用户：开始即打、开头 15s 一次、之后 60s 一次 POST /api/workspace/recording-checkpoint（recordingState=recording，另一设备列表显示「录制中」）
-  └→ 关页 / 崩溃 / 被系统回收 → 下次打开首页「有一节课没结束」：继续录 / 就到这里（分片拼回原声 + 字幕 + 服务端 + 课后理解）；>6h 自动收尾
+  ├→ 关页 / 崩溃 / 被系统回收 → 下次打开首页「有一节课没结束」：继续录 / 就到这里（分片拼回原声 + 字幕 + 服务端 + 课后理解）；>6h 自动收尾
+  └→ Recorder 随布局卸载被打断（桌面切 tab / 站内路由离开，2026-09-11）→ 先 confirm 一句；卸载时最后一片原声交出、分片 + 字幕快照 + 服务端检查点落盘，这节课留成「没结束」交给同一条恢复条
 
 结束这节课
   ├→ 新协议发送 finish-task / 旧协议 server_vad 会话发送 session.finish（不是 manual-only commit）
@@ -109,15 +110,20 @@
 - 分块失败时 offset 按**定义的段边界**累加（不依赖实际输出长度）
 - `failedIndices` 显式返回给上层
 
-### T2.2 WebSocket 自动重连
-`DashScopeASRClient`：
-- `userStopRequested` flag 区分主动停止 vs 意外断开
-- `onclose` 意外断开 → `scheduleReconnect` → Full Jitter 退避重连
-- `audioQueue` **跨重连保留**，重连成功后 `flushAudioQueue`
-- flush 期间的新 PCM 继续进入同一 FIFO，禁止绕过旧缓冲直发；浏览器、Qwen proxy、腾讯 speaker proxy 三层规则一致
-- 每次 WebSocket 连接的 segment/item ID 带连接命名空间，避免重连或切换引擎后的 `seg-0` 冲突被误去重
-- max 8 次尝试可配（`maxReconnectAttempts`）
-- 首次连接也不阻塞录音：PCM 先进队列，MediaRecorder 先收原声，避免弱网开头吞字。
+### T2.2 WebSocket 连接与重连（2026-09-11 重写）
+`DashScopeASRClient` 的连接状态机（首连与会话断线走同一条循环）：
+- **一轮** = 候选地址（`ws-url.ts`：同源 + wss 时 `:8443`）按失败轮数**轮转**各试一次；握手（CONNECTING）超时 `8s + 4s × 轮数`（封顶 20s），连上代理到收到 `ready` 的超时 `15s + 5s × 轮数`（封顶 30s）——弱网首次握手慢不再等同于"整节课没字幕"。
+- 整轮失败按 **Full Jitter** 退避再来一轮。上限分开配：`connectAttempts`（首次 ready 前的轮数，默认 1——语音输入 / 讲给同桌听保持"一轮不通就失败"的旧语义）与 `maxReconnectAttempts`（会话断线后，默认 8）；**课堂 Recorder 两者都传 Infinity**（base 800ms / cap 15s），录到结束为止一直试。
+- **终态**不重连：4401 / `auth_failed` / `ASR_QUOTA_EXCEEDED` / `GUEST_DAILY_ASR_CAP` / `API Key 未配置`；`start()` 返回 false，链路 `offline`。
+- 会话断线判定：`onclose`（非用户 stop）、上游 `finished` / `closed` 而非用户 stop（主动关连接）、**45s 无任何入站消息**（代理每 15s 回 pong；半开连接靠 TCP 超时要几分钟）。
+- `audioQueue` **跨重连保留**（预算 `reconnectAudioBufferMs` 默认 120s，超出丢最旧帧并 `onAudioDropped` 上报），重连 ready 后按序 flush；flush 期间的新 PCM 继续进入同一 FIFO，禁止绕过旧缓冲直发；浏览器与代理两层规则一致。
+- **时间轴接续**：重连后上游任务的句级时间戳从 0 重新计起。客户端在每条连接 `open` 与 `ready` 时发 `{type:'timeline-offset', offsetMs}`（= 已入队音频 − 仍在队列的音频 = 队头那一帧在课堂时间轴的位置；丢帧只丢队头，队列永远是时间轴连续的尾段），代理把上游 / 墙钟时间戳平移回整节课（`server/asr/session-link.js`）；客户端 VAD 事件自带的时间不平移。
+- 每次连接的 segment/item ID 带连接命名空间，避免重连后的 `seg-0` 冲突被误去重。
+- 首次连接不阻塞录音：PCM 先进队列，MediaRecorder 先收原声。
+- 对外链路状态 `onLinkStateChange`：`connecting`（首连中，正常一两秒不打扰）→ `live` → `reconnecting`（首连失败过 / 断线重试中）→ `live` / `offline`。Recorder 写进 `capture-editor-store.liveAsrLink`，课堂转录卡头部与移动端录课页那一行状态据此说「实时字幕暂时断开，录音仍在继续」，恢复后自动消失。
+- **代理侧守护**（`server.js`）：上游 20s 不 ready → 断连（1011）让客户端重连；客户端 60s 无消息 → 终止半开连接并收尾上游会话；上游关闭而客户端未要求停止 → 一律 close(1011)（此前 1000 不关，客户端往没有上游的连接里灌音频）；连接进来先缓冲客户端消息、预检与会话就位后回放（此前 `context-hint` / `timeline-offset` 落在 `await precheckAsrAllowance()` 窗口被丢）。
+- 实测（2026-09-11，dev 注入故障）：首连失败 ×2 → 0.9s 接上；live 中切断 → 1.2s 重连 + 1.0s 缓冲补送，字幕时间轴跨断点单调连续（详见 CHANGELOG）。
+- 仍有的限制：断连超过缓冲预算丢掉的那段音频只在原声里，不会回补字幕（需要按时间切片的补转写，未做）。
 
 ### 录课会话隔离
 
