@@ -38,7 +38,9 @@ import type { CompanionMode } from './classroom';
 import { useClassroomLessons } from '@/hooks/useClassroomLessons';
 import { useClassroomCompanion } from '@/hooks/useClassroomCompanion';
 import { useUnfinishedRecordings } from '@/hooks/useUnfinishedRecordings';
+import { useGuestSyncHint } from '@/hooks/useGuestSyncHint';
 import { UnfinishedLessonBar } from '@/components/classroom/UnfinishedLessonBar';
+import { GuestSyncHint } from '@/components/classroom/GuestSyncHint';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { isPlaceholderLessonTitle } from '@/lib/learning/lesson-title-generic';
 import { announceLessonEnd } from '@/components/classroom/LessonEndRitual';
@@ -607,20 +609,27 @@ export function ClassroomView({
     activeRecordingSessionId: isRecording ? activeSessionId : null,
     onStartRecording: handleStartRecording,
   });
+  // 访客本机有录好的课：恢复条旁一句「登录后，这节课会跟着你到任何设备」（不弹窗）
+  const showGuestSyncHint = useGuestSyncHint(isAuthenticated);
   const unfinishedNotice = useMemo(
-    () => (unfinishedLessons.length > 0 ? (
-      <UnfinishedLessonBar
-        // 标题与列表卡片同一套推导（用户命名 → 转录首句 → 时间），恢复条和卡片说的是同一节课
-        lessons={unfinishedLessons.map((item) => {
-          const derived = lessons.find((lesson) => lesson.id === item.sessionId)?.title;
-          return { ...item, title: derived && !isPlaceholderLessonTitle(derived) ? derived : item.title };
-        })}
-        busySessionId={unfinishedBusyId}
-        onResume={(id) => { void resumeUnfinished(id); }}
-        onFinish={(id) => { void finishUnfinished(id); }}
-      />
+    () => (unfinishedLessons.length > 0 || showGuestSyncHint ? (
+      <>
+        {unfinishedLessons.length > 0 ? (
+          <UnfinishedLessonBar
+            // 标题与列表卡片同一套推导（用户命名 → 转录首句 → 时间），恢复条和卡片说的是同一节课
+            lessons={unfinishedLessons.map((item) => {
+              const derived = lessons.find((lesson) => lesson.id === item.sessionId)?.title;
+              return { ...item, title: derived && !isPlaceholderLessonTitle(derived) ? derived : item.title };
+            })}
+            busySessionId={unfinishedBusyId}
+            onResume={(id) => { void resumeUnfinished(id); }}
+            onFinish={(id) => { void finishUnfinished(id); }}
+          />
+        ) : null}
+        {showGuestSyncHint ? <GuestSyncHint /> : null}
+      </>
     ) : null),
-    [unfinishedLessons, unfinishedBusyId, resumeUnfinished, finishUnfinished, lessons],
+    [unfinishedLessons, unfinishedBusyId, resumeUnfinished, finishUnfinished, lessons, showGuestSyncHint],
   );
 
   // 结课收尾仪式（合上笔记本）：只在真的有一节课可以合上时放——试听课或正在录的课。

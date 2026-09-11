@@ -68,8 +68,10 @@ export function useUnfinishedRecordings(deps: UseUnfinishedRecordingsDeps) {
   const onStartRecordingRef = useRef(onStartRecording);
   onStartRecordingRef.current = onStartRecording;
 
-  // 不传 deps（与 useClassroomLessons 同一写法）：传 [] 时 React 18 开发态 StrictMode 双挂载下，
-  // 挂载前已存在的行只有一次初始 emission，落在被丢弃的第一次订阅里，组件永远拿到 []（实测复现）。
+  // 查询闭包不引用任何 props / state，deps 省略（dexie-react-hooks 内部 `deps || []`，与传 [] 完全等价——
+  // 此前注释说"传 [] 在 StrictMode 双挂载下永远拿到空数组"是误判：liveQuery 每次 subscribe 都重新执行 querier，
+  // 第二次订阅有自己的 emission）。真正的规则只有一条：querier 里用到的每个外部值都必须进 deps，
+  // 否则值变了查询不重跑（2026-09-11 全仓复查，见 hooks/DOMAIN.md）。
   const rows = useLiveQuery(
     () => db.audioSessions.where('status').equals('recording').toArray(),
   ) ?? [];

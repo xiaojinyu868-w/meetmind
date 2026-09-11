@@ -56,6 +56,8 @@ components/hooks → stores → types
 ### capture-editor-store（15 个）— Phase 1 新增
 `segments`, `anchors`, `timeline`, `actionItems`, `audioBlob`, `audioUrl`, `videoSource`, `notes`, `confusionChatAnchor`, `videoInsightItems`, `activeVideoInsightId`, `extractedTermsHint`, `recorderAutoStartSignal`, `recorderAudioSource`（类型 `RecorderAudioSource = 'mic' | 'system' | 'mixed'`，默认 `'mic'`；课堂页订阅并透传给 `Recorder`，收集页不订阅永远走默认）
 
+后续追加：`liveInterimText`（Recorder 的 interim 跟读文本）、`classroomASRContextHint`（课堂 ASR 热词）、`liveAsrLink`（2026-09-11，类型 `LiveAsrLinkState = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'offline'`；Recorder 的 `onLinkStateChange` 写入，`useLiveAsrLink` 供课堂转录卡头部 / 移动端录课页那一行状态说「实时字幕暂时断开，录音仍在继续」，停录 / 卸载回 idle）
+
 ### 仍在 page.tsx 中的局部状态
 
 以下状态保留在 page.tsx，因为它们是纯局部 UI 或与 ref 紧耦合：

@@ -39,6 +39,8 @@ import { MobileFirstLearningScreen } from './MobileFirstLearningScreen';
 import { selectDemoLiveSegments } from '@/components/classroom/DemoLessonLoader';
 import { GUEST_DEMO_LESSON_TITLE } from '@/components/classroom/guest-demo-entry';
 import { UnfinishedLessonBar } from '@/components/classroom/UnfinishedLessonBar';
+import { GuestSyncHint } from '@/components/classroom/GuestSyncHint';
+import { useGuestSyncHint } from '@/hooks/useGuestSyncHint';
 import type { UnfinishedLesson } from '@/hooks/useUnfinishedRecordings';
 import { useAdminLens } from '@/components/admin/AdminLensProvider';
 import {
@@ -176,6 +178,7 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
   const { push } = useMobileNav();
   const { enabled: adminLensEnabled } = useAdminLens();
   const learning = useLearningContext();
+  const showGuestSyncHint = useGuestSyncHint(p.isAuthenticated);
   const echo = p.workspaceEchoes[0];
   const [flashPhoto, setFlashPhoto] = useState<{ url: string; time: string } | null>(null);
   const [flash, setFlash] = useState(false);
@@ -277,6 +280,8 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
             }}
           />
         ) : null}
+        {/* 访客本机有录好的课：恢复条旁一句「登录后，这节课会跟着你到任何设备」，不弹窗 */}
+        {showGuestSyncHint ? <GuestSyncHint /> : null}
         <MobileLearningCommandCenter
           onStartRecording={() => {
             void p.onStartRecording().then((started) => {
@@ -482,6 +487,15 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
     ? selectDemoLiveSegments(p.currentTime / 1000)
     : allSegments;
   const liveInterimText = useCaptureEditorStore(s => s.liveInterimText);
+  // 实时字幕链路断了在重连 / 已停下：把「待整理」占位卡那一句换成链路状态，恢复后自动换回；录音不受影响
+  const liveAsrLink = useCaptureEditorStore(s => s.liveAsrLink);
+  const liveCaptionsNotice = !p.demoMode
+    ? (liveAsrLink === 'reconnecting'
+        ? COPY.recording.liveCaptionsReconnecting
+        : liveAsrLink === 'offline'
+          ? COPY.recording.liveCaptionsOffline
+          : null)
+    : null;
   const sessionPhotos = useCollectionStore(s => s.sourceItems).filter(i => (
     i.type === 'image' && i.role === 'support' && Boolean(p.sessionId) && i.sessionId === p.sessionId
   ));
@@ -746,7 +760,9 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
                 <span className="font-mono text-[9px] font-semibold text-ink-muted bg-paper-warm px-1.5 py-0.5 rounded">待整理</span>
                 <span className="font-mono text-[9px] text-ink-muted ml-auto">{fmtSec(elapsedSeconds)}</span>
               </div>
-              <p className="text-[11px] text-ink-muted leading-relaxed">这段老师还在讲，课后整理笔记时会补上。</p>
+              <p className="text-[11px] text-ink-muted leading-relaxed" data-testid="mobile-live-status-line">
+                {liveCaptionsNotice ?? '这段老师还在讲，课后整理笔记时会补上。'}
+              </p>
             </div>
             <div className="h-20" />
           </div>

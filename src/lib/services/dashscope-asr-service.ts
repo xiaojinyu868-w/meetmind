@@ -27,6 +27,23 @@ export interface ASRInterim {
   endTime?: number;
 }
 
+/**
+ * 实时字幕链路的对外状态（给录课界面的一行状态用，与内部 status 解耦）：
+ *   connecting   首次连接中，还没失败过——正常一两秒，不打扰用户
+ *   live         已就绪，字幕在流
+ *   reconnecting 首次连接失败过 / 会话中断线，正在按退避重试；录音不受影响
+ *   offline      终态失败（密钥失效、额度用完、重试次数用尽），本节课不会再有实时字幕
+ */
+export type ASRLinkState = 'connecting' | 'live' | 'reconnecting' | 'offline';
+
+export interface ASRLinkInfo {
+  state: ASRLinkState;
+  /** 连续失败的连接轮数（live 时为 0） */
+  attempts: number;
+  /** 这次断开（或首次连接开始）的时刻；live 时 undefined */
+  downSince?: number;
+}
+
 export interface DashScopeASRCallbacks {
   onSentence?: (sentence: ASRSentence) => void;
   onInterim?: (interim: ASRInterim) => void;
@@ -34,6 +51,8 @@ export interface DashScopeASRCallbacks {
   onStatusChange?: (status: 'connecting' | 'connected' | 'transcribing' | 'stopped' | 'error') => void;
   onTaskStarted?: () => void;
   onTaskFinished?: () => void;
+  /** 实时字幕链路状态变化（connecting → live → reconnecting → live / offline） */
+  onLinkStateChange?: (info: ASRLinkInfo) => void;
   /**
    * 断连缓冲溢出导致音频帧被丢弃时上报（累计值，含代理侧）。
    * 单遍化架构下 realtime 即定稿，丢帧 = 这节课永久少一段——绝不能静默。
@@ -48,8 +67,12 @@ export interface DashScopeASROptions {
   language?: string[];
   initialContextHint?: string;
   initialLanguageMode?: 'auto' | 'zh' | 'en';
-  // M2 T2.2: WebSocket 自动重连配置
-  /** 允许重连的最大次数，默认 5 */
+  /**
+   * 首次 ready 之前允许的连接轮数（每轮把所有候选地址各试一次）。默认 1：一轮不通 `start()` 就返回 false，
+   * 适合语音输入 / 讲给同桌听这类短用途。课堂 Recorder 传 Infinity——录音已经在进行，字幕晚到总比整节课没有好。
+   */
+  connectAttempts?: number;
+  /** 会话中断线后允许的重连轮数，默认 8；课堂 Recorder 传 Infinity（录到结束为止一直试） */
   maxReconnectAttempts?: number;
   /** 重连的 base 延迟（ms），Full Jitter 的底数。默认 500 */
   reconnectBaseMs?: number;
@@ -57,7 +80,39 @@ export interface DashScopeASROptions {
   reconnectCapMs?: number;
   /** 重连期间允许保留的音频上限（ms）；超过则丢弃最早的帧并通过 onAudioDropped 上报。默认 120000（2 分钟，覆盖锁屏/电梯/隧道场景） */
   reconnectAudioBufferMs?: number;
+  /** WebSocket 握手（CONNECTING）超时基数，随失败轮数增长，默认 8000 → 上限 20000 */
+  handshakeTimeoutMs?: number;
+  /** 握手成功到收到 ready（代理连上上游）的超时基数，随失败轮数增长，默认 15000 → 上限 30000 */
+  readyTimeoutMs?: number;
 }
+
+type ConnectOutcome = 'ready' | 'failed' | 'terminal';
+
+/** 连接握手超时：第 n 轮 = base + n × 4s，封顶 20s（弱网首次握手慢不该等同于"整节课没字幕"） */
+export function resolveHandshakeTimeoutMs(round: number, baseMs = 8_000): number {
+  return Math.min(20_000, baseMs + Math.max(0, round) * 4_000);
+}
+
+/** 连上代理到上游就绪的超时：第 n 轮 = base + n × 5s，封顶 30s */
+export function resolveReadyTimeoutMs(round: number, baseMs = 15_000): number {
+  return Math.min(30_000, baseMs + Math.max(0, round) * 5_000);
+}
+
+/** 候选地址按轮数轮转：主地址若一直握手挂起，下一轮先试备用端口，而不是每轮都先在主地址上耗满超时 */
+export function rotateCandidates<T>(candidates: T[], round: number): T[] {
+  if (candidates.length <= 1) return candidates;
+  const shift = Math.max(0, round) % candidates.length;
+  return [...candidates.slice(shift), ...candidates.slice(0, shift)];
+}
+
+/** 这些错误重连没有意义：额度 / 密钥 / 服务未配置，立刻终止并把原因交给 UI */
+export function isTerminalAsrError(message: string): boolean {
+  return /ASR_QUOTA_EXCEEDED|GUEST_DAILY_ASR_CAP|API Key 未配置|密钥失效/i.test(message);
+}
+
+/** 存活判定：代理每 15s 回一次 pong，超过这个时长一条消息都没有就当作半开连接主动重连 */
+const LINK_IDLE_TIMEOUT_MS = 45_000;
+const KEEP_ALIVE_INTERVAL_MS = 15_000;
 
 export class DashScopeASRClient {
   private callbacks: DashScopeASRCallbacks;
@@ -70,6 +125,8 @@ export class DashScopeASRClient {
   private isReady = false;
   private audioQueue: ArrayBuffer[] = [];
   private audioQueueBytes = 0;
+  /** 本会话累计送进来的 PCM 字节数（含已丢弃的）：课堂时间轴上"现在录到哪了" */
+  private enqueuedAudioBytes = 0;
   // 断连丢帧统计：本地队列与代理侧队列分开记，合计对外上报。
   private localDroppedAudioMs = 0;
   private proxyDroppedAudioMs = 0;
@@ -110,11 +167,30 @@ export class DashScopeASRClient {
     return Math.round(this.localDroppedAudioMs + this.proxyDroppedAudioMs);
   }
 
+  /**
+   * 当前队列头那一帧在课堂时间轴上的位置（ms）。
+   * 重连后上游任务的时间戳从 0 重新计起，客户端在连接建立时把这个偏移告诉代理，
+   * 代理把句级时间戳平移回整节课的时间轴（丢帧只从队头丢，所以队列永远是时间轴上连续的尾段）。
+   */
+  private timelineOffsetMs(): number {
+    return Math.max(0, Math.round((this.enqueuedAudioBytes - this.audioQueueBytes) / this.bytesPerMs()));
+  }
+
   private sessionStartTime = 0;
 
-  // M2 T2.2: 重连状态
+  // ── 连接状态机 ──
   private userStopRequested = false;
-  private reconnectAttempts = 0;
+  /** 终态：密钥 / 额度 / 重试次数用尽，不再重连 */
+  private terminal = false;
+  private started = false;
+  private startResolver: ((ok: boolean) => void) | null = null;
+  /** 连续失败的连接轮数（ready 后清零） */
+  private connectRound = 0;
+  /** 本会话是否曾经 ready 过（决定用 connectAttempts 还是 maxReconnectAttempts 作上限） */
+  private hasBeenReady = false;
+  private downSince = 0;
+  private lastInboundAt = 0;
+  private linkState: ASRLinkState | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   private stopFinishedResolver: (() => void) | null = null;
@@ -154,179 +230,289 @@ export class DashScopeASRClient {
     return /session already started or finished or failed/i.test(error);
   }
 
+  /**
+   * 开始连接。resolve(true) = 首次 ready；resolve(false) = 终态失败或在 ready 前被 stop()。
+   * 首次连接失败不再直接放弃：按 connectAttempts 轮数退避重试，期间 PCM 继续有界排队。
+   */
   async start(): Promise<boolean> {
-    return this.startInternal({ isReconnect: false });
+    if (this.started) {
+      log.warn('[DashScopeASR] Already started');
+      return this.hasBeenReady && !this.terminal;
+    }
+    this.started = true;
+    this.userStopRequested = false;
+    this.terminal = false;
+    this.connectRound = 0;
+    this.hasBeenReady = false;
+    this.sentenceIndex = 0;
+    this.audioQueue = [];
+    this.audioQueueBytes = 0;
+    this.enqueuedAudioBytes = 0;
+    this.sessionStartTime = 0;
+    this.downSince = Date.now();
+
+    const promise = new Promise<boolean>((resolve) => {
+      this.startResolver = resolve;
+    });
+    this.updateStatus('connecting');
+    this.setLink('connecting');
+    void this.runConnectRound();
+    return promise;
   }
 
-  private async startInternal(opts: { isReconnect: boolean }): Promise<boolean> {
-    if (this.ws) {
-      log.warn('[DashScopeASR] Already connected');
-      return true;
-    }
+  private settleStart(ok: boolean): void {
+    const resolve = this.startResolver;
+    this.startResolver = null;
+    resolve?.(ok);
+  }
 
-    if (!opts.isReconnect) {
-      // 首次 start：清全部状态
-      this.userStopRequested = false;
-      this.reconnectAttempts = 0;
-      this.sentenceIndex = 0;
-      this.audioQueue = [];
-      this.sessionStartTime = 0;
-    }
-    // 重连路径：保留 audioQueue / reconnectAttempts / sentenceIndex / sessionStartTime
-    this.isReady = false;
-    this.connectionGeneration += 1;
-
-    return new Promise((resolve) => {
-      try {
-        this.updateStatus('connecting');
-
-        const candidateUrls = buildAsrWebSocketCandidates(window.location.href);
-        // M13-fix: 默认重连次数从 30 降到 8。
-        // 30 次（指数退避到 ~10s 上限）= 最长重试 ~80s，对真·鉴权失败/服务异常场景毫无意义，
-        // 反而堆出几十条同样的报错刷爆日志。8 次（~30s）足够覆盖瞬时网络波动，重大故障应该让用户感知。
-        const maxAttempts = this.options.maxReconnectAttempts ?? 8;
-
-        const tryConnect = (urlIndex: number) => {
-          if (urlIndex >= candidateUrls.length) {
-            this.updateStatus('error');
-            this.callbacks.onError?.('所有连接端口均失败');
-            resolve(false);
-            return;
-          }
-
-          const wsUrl = candidateUrls[urlIndex];
-          // 积分 Phase 2：浏览器 WebSocket 不能带 Authorization 头，
-          // JWT 走 ?token= 查询参数；server.js 在连接关闭结算时原样回传。
-          // 未登录（guest）不带 token，服务端只记影子流水不扣分。
-          const authToken = typeof window !== 'undefined'
-            ? window.localStorage.getItem('meetmind_access_token') || window.localStorage.getItem('auth_token')
-            : null;
-          const wsUrlWithAuth = authToken
-            ? `${wsUrl}${wsUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(authToken)}`
-            : wsUrl;
-          const ws = new WebSocket(wsUrlWithAuth);
-          this.ws = ws;
-
-          const connectionTimeout: NodeJS.Timeout = setTimeout(() => {
-            if (this.ws === ws && ws.readyState === WebSocket.CONNECTING) {
-              ws.close();
-              this.ws = null;
-              tryConnect(urlIndex + 1);
-            }
-          }, 5000);
-
-          let settled = false;
-          let connected = false;
-          const settle = (ok: boolean) => {
-            if (settled) return;
-            settled = true;
-            resolve(ok);
-          };
-
-          ws.onopen = () => {
-            if (this.ws !== ws) return;
-            clearTimeout(connectionTimeout);
-            connected = true;
-            this.updateStatus('connected');
-            this.startKeepAlive();
-            this.sendContextHint(
-              this.options.initialContextHint || '',
-              this.options.initialLanguageMode || 'auto'
-            );
-          };
-
-          ws.onmessage = (event) => {
-            if (this.ws !== ws) return;
-            this.handleMessage(event.data);
-            if (this.isReady && !settled) {
-              settle(true);
-            }
-          };
-
-          ws.onerror = (error) => {
-            if (this.ws !== ws) return;
-            clearTimeout(connectionTimeout);
-            // M7-fix7: 三种情况静默——
-            //   1. 用户主动停止（destroy / unmount）
-            //   2. 连接已经 resolve 过（重复 onerror）
-            //   3. 浏览器 page-unload 导致的 CLOSING/CLOSED（真·不是我们的错）
-            const currentWs = this.ws;
-            const browserAborted =
-              currentWs &&
-              (currentWs.readyState === WebSocket.CLOSING ||
-                currentWs.readyState === WebSocket.CLOSED);
-            if (this.userStopRequested || settled || browserAborted) {
-              return;
-            }
-            log.error(`[DashScopeASR] Connection error: ${wsUrl}`, error);
-            if (!connected && urlIndex < candidateUrls.length - 1) {
-              this.ws = null;
-              tryConnect(urlIndex + 1);
-            }
-          };
-
-          ws.onclose = (event) => {
-            if (this.ws !== ws) return;
-            clearTimeout(connectionTimeout);
-            this.stopKeepAlive();
-            this.ws = null;
-            this.resolveStopFinished();
-
-            // M13-fix: 4401 = 服务端标记的鉴权失败，重连无意义，立刻给用户清晰提示
-            if (event.code === 4401) {
-              this.userStopRequested = true;
-              if (this.reconnectTimer) {
-                clearTimeout(this.reconnectTimer);
-                this.reconnectTimer = null;
-              }
-              this.updateStatus('error');
-              this.callbacks.onError?.('实时转写服务密钥失效，请联系管理员更新 DashScope 密钥后重试');
-              settle(false);
-              return;
-            }
-
-            if (!connected) {
-              if (urlIndex < candidateUrls.length - 1) {
-                tryConnect(urlIndex + 1);
-                return;
-              }
-              this.updateStatus(opts.isReconnect ? 'connecting' : 'error');
-              if (!opts.isReconnect) this.callbacks.onError?.('WebSocket 连接错误');
-              settle(false);
-              return;
-            }
-
-            const shouldAttemptReconnect =
-              !this.userStopRequested &&
-              this.reconnectAttempts < maxAttempts;
-
-            if (shouldAttemptReconnect) {
-              this.scheduleReconnect(event.code, event.reason);
-              return;
-            }
-
-            if (this.status !== 'stopped') {
-              this.updateStatus('stopped');
-            }
-            settle(false);
-          };
-        };
-
-        tryConnect(0);
-
-        setTimeout(() => {
-          if (!this.isReady) {
-            if (!opts.isReconnect) this.callbacks.onError?.('连接超时');
-            resolve(false);
-          }
-        }, 15000);
-      } catch (error) {
-        log.error('[DashScopeASR] Failed to connect:', error);
-        this.updateStatus('error');
-        this.callbacks.onError?.('连接失败');
-        resolve(false);
-      }
+  private setLink(state: ASRLinkState): void {
+    if (this.linkState === state && state !== 'reconnecting') return;
+    this.linkState = state;
+    this.callbacks.onLinkStateChange?.({
+      state,
+      attempts: this.connectRound,
+      downSince: state === 'live' ? undefined : (this.downSince || undefined),
     });
+  }
+
+  /** 一轮连接：把候选地址按轮数轮转后依次试；整轮失败按 Full Jitter 退避再来一轮 */
+  private async runConnectRound(): Promise<void> {
+    if (this.userStopRequested || this.terminal) return;
+    const round = this.connectRound;
+    const candidates = rotateCandidates(buildAsrWebSocketCandidates(window.location.href), round);
+    const handshakeTimeoutMs = resolveHandshakeTimeoutMs(round, this.options.handshakeTimeoutMs);
+    const readyTimeoutMs = resolveReadyTimeoutMs(round, this.options.readyTimeoutMs);
+
+    for (const url of candidates) {
+      if (this.userStopRequested || this.terminal) return;
+      let outcome: ConnectOutcome;
+      try {
+        outcome = await this.openSocket(url, { handshakeTimeoutMs, readyTimeoutMs });
+      } catch (error) {
+        log.error('[DashScopeASR] Failed to open socket:', error);
+        outcome = 'failed';
+      }
+      if (outcome === 'ready' || outcome === 'terminal') return;
+    }
+    if (this.userStopRequested || this.terminal) return;
+
+    // 整轮都没连上
+    this.connectRound += 1;
+    const limit = this.hasBeenReady
+      ? (this.options.maxReconnectAttempts ?? 8)
+      : (this.options.connectAttempts ?? 1);
+    if (this.connectRound >= limit) {
+      this.failTerminal(
+        this.hasBeenReady ? '实时转写连接断开，请重新开始录音。' : '所有连接端口均失败',
+        this.hasBeenReady ? 'RECONNECT_EXHAUSTED' : 'CONNECT_EXHAUSTED',
+      );
+      return;
+    }
+    const delay = fullJitterDelay(
+      this.connectRound - 1,
+      this.options.reconnectBaseMs ?? 500,
+      this.options.reconnectCapMs ?? 10000,
+    );
+    // 前几轮逐条记，之后每 5 轮记一次：长时间断网时不用几十条同样的日志刷屏
+    if (this.connectRound <= 3 || this.connectRound % 5 === 0) {
+      log.warn(`[DashScopeASR] connect round ${this.connectRound} failed, retrying in ${delay}ms`, {
+        hasBeenReady: this.hasBeenReady,
+        downForMs: this.downSince ? Date.now() - this.downSince : 0,
+      });
+    }
+    this.updateStatus('connecting');
+    this.setLink('reconnecting');
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.runConnectRound();
+    }, delay);
+  }
+
+  /** 打开一条 WebSocket 并等到 ready / 失败 / 终态。会话中断线在这里的 onclose 里转入重连。 */
+  private openSocket(
+    wsUrl: string,
+    timeouts: { handshakeTimeoutMs: number; readyTimeoutMs: number },
+  ): Promise<ConnectOutcome> {
+    return new Promise<ConnectOutcome>((resolve) => {
+      // 积分 Phase 2：浏览器 WebSocket 不能带 Authorization 头，
+      // JWT 走 ?token= 查询参数；server.js 在连接关闭时结算原样回传。
+      // 未登录（guest）不带 token，服务端只记影子流水不扣分。
+      const authToken = typeof window !== 'undefined'
+        ? window.localStorage.getItem('meetmind_access_token') || window.localStorage.getItem('auth_token')
+        : null;
+      const wsUrlWithAuth = authToken
+        ? `${wsUrl}${wsUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(authToken)}`
+        : wsUrl;
+
+      this.isReady = false;
+      this.connectionGeneration += 1;
+      const ws = new WebSocket(wsUrlWithAuth);
+      this.ws = ws;
+
+      let settled = false;
+      let becameReady = false;
+      let handshakeTimer: ReturnType<typeof setTimeout> | null = null;
+      let readyTimer: ReturnType<typeof setTimeout> | null = null;
+      const clearTimers = () => {
+        if (handshakeTimer) { clearTimeout(handshakeTimer); handshakeTimer = null; }
+        if (readyTimer) { clearTimeout(readyTimer); readyTimer = null; }
+      };
+      const settle = (outcome: ConnectOutcome) => {
+        if (settled) return;
+        settled = true;
+        clearTimers();
+        resolve(outcome);
+      };
+      const closeQuietly = () => {
+        try { ws.close(); } catch { /* ignore */ }
+      };
+
+      // 握手挂起（弱网 / 代理对同一 endpoint 的连接锁）：到点关掉换下一个候选，不再是死等 5s 后整体放弃
+      handshakeTimer = setTimeout(() => {
+        if (this.ws === ws && ws.readyState === WebSocket.CONNECTING) {
+          log.warn(`[DashScopeASR] handshake timeout after ${timeouts.handshakeTimeoutMs}ms: ${wsUrl}`);
+          closeQuietly();
+        }
+      }, timeouts.handshakeTimeoutMs);
+      // 连上代理但上游一直不就绪（DashScope 慢 / 额度预检卡住）：同样算这次失败
+      readyTimer = setTimeout(() => {
+        if (this.ws === ws && !becameReady) {
+          log.warn(`[DashScopeASR] ready timeout after ${timeouts.readyTimeoutMs}ms: ${wsUrl}`);
+          closeQuietly();
+        }
+      }, timeouts.readyTimeoutMs);
+
+      ws.onopen = () => {
+        if (this.ws !== ws) return;
+        this.lastInboundAt = Date.now();
+        this.updateStatus('connected');
+        // 先告诉代理这条连接的音频从课堂时间轴的哪一毫秒开始（重连后上游时间戳从 0 计起）
+        this.sendTimelineOffset();
+        this.sendContextHint(
+          this.options.initialContextHint || '',
+          this.options.initialLanguageMode || 'auto'
+        );
+      };
+
+      ws.onmessage = (event) => {
+        if (this.ws !== ws) return;
+        this.lastInboundAt = Date.now();
+        const wasReady = this.isReady;
+        this.handleMessage(event.data);
+        if (this.terminal) {
+          settle('terminal');
+          return;
+        }
+        if (!wasReady && this.isReady) {
+          becameReady = true;
+          this.onReady();
+          settle('ready');
+        }
+      };
+
+      ws.onerror = () => {
+        // onclose 一定跟着来，重试决策在那里做；这里不刷日志
+      };
+
+      ws.onclose = (event) => {
+        if (this.ws === ws) this.ws = null;
+        clearTimers();
+        this.stopKeepAlive();
+        this.isReady = false;
+        this.resolveStopFinished();
+
+        // 4401 = 服务端标记的鉴权失败，重连无意义，立刻给用户清晰提示
+        if (event.code === 4401) {
+          this.failTerminal('实时转写服务密钥失效，请联系管理员更新 DashScope 密钥后重试', 'AUTH_FAILED');
+          settle('terminal');
+          return;
+        }
+        if (this.terminal) {
+          settle('terminal');
+          return;
+        }
+        if (this.userStopRequested) {
+          if (this.status !== 'stopped') this.updateStatus('stopped');
+          settle('failed');
+          return;
+        }
+        if (becameReady) {
+          // 会话中断线：这条 promise 早已 resolve('ready')，这里转入重连
+          this.onSessionDropped(event.code, event.reason);
+          return;
+        }
+        settle('failed');
+      };
+    });
+  }
+
+  private onReady(): void {
+    const wasDown = this.hasBeenReady && this.downSince > 0;
+    const downForMs = this.downSince > 0 ? Date.now() - this.downSince : 0;
+    this.hasBeenReady = true;
+    this.connectRound = 0;
+    this.downSince = 0;
+    this.startKeepAlive();
+    this.setLink('live');
+    this.settleStart(true);
+    if (wasDown) {
+      log.info('[DashScopeASR] Reconnected, replaying buffered audio', {
+        downForMs,
+        bufferedChunks: this.audioQueue.length,
+        bufferedMs: Math.round(this.audioQueueBytes / this.bytesPerMs()),
+        droppedMs: this.getDroppedAudioMs(),
+      });
+      track({
+        kind: 'asr.success',
+        mode: 'realtime-reconnect',
+        sessionId: this.sessionId,
+        durationMs: downForMs,
+      });
+    }
+  }
+
+  /** 会话中断线（曾 ready 过）：立刻按退避重连；音频继续在有界队列里等 */
+  private onSessionDropped(code: number, reason: string): void {
+    if (this.userStopRequested || this.terminal) return;
+    this.downSince = this.downSince || Date.now();
+    this.connectRound = 0;
+    log.warn(`[DashScopeASR] Unexpected close (code=${code}, reason=${reason || '-'}), reconnecting`);
+    this.updateStatus('connecting');
+    this.setLink('reconnecting');
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    const delay = fullJitterDelay(0, this.options.reconnectBaseMs ?? 500, this.options.reconnectCapMs ?? 10000);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.runConnectRound();
+    }, delay);
+  }
+
+  private failTerminal(message: string, errorCode: string): void {
+    if (this.terminal) return;
+    this.terminal = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.stopKeepAlive();
+    this.isReady = false;
+    if (this.ws) {
+      try { this.ws.close(); } catch { /* ignore */ }
+      this.ws = null;
+    }
+    track({
+      kind: 'asr.fail',
+      mode: this.hasBeenReady ? 'realtime-reconnect' : 'realtime-connect',
+      sessionId: this.sessionId,
+      durationMs: this.downSince ? Date.now() - this.downSince : 0,
+      errorCode,
+      errorMsg: message,
+    });
+    this.updateStatus('error');
+    this.setLink('offline');
+    this.callbacks.onError?.(message);
+    this.settleStart(false);
   }
 
   private handleMessage(data: string): void {
@@ -335,16 +521,7 @@ export class DashScopeASRClient {
 
       if (msg.error) {
         const errorMessage = this.normalizeErrorMessage(msg.error);
-        if (this.isIgnorableStopError(errorMessage)) {
-          log.warn('[DashScopeASR] Ignore stop-time commit error:', errorMessage);
-          return;
-        }
-        if (this.isIgnorableSessionUpdateError(errorMessage)) {
-          log.warn('[DashScopeASR] Ignore session update error (non-fatal):', errorMessage);
-          return;
-        }
-        this.callbacks.onError?.(errorMessage);
-        this.updateStatus('error');
+        this.handleErrorMessage(errorMessage);
         return;
       }
 
@@ -354,20 +531,15 @@ export class DashScopeASRClient {
           this.sessionStartTime = Date.now();
           this.updateStatus('transcribing');
           this.callbacks.onTaskStarted?.();
+          // 队头还是同一帧：再发一次偏移（onopen 那次可能落在代理挂处理器之前），紧接着补送音频
+          this.sendTimelineOffset();
           this.flushAudioQueue();
           break;
 
-        // M13-fix: 服务端检测到 DashScope 401/403 时下发 auth_failed
-        // 鉴权失败重连无意义——立刻终止，给用户清晰提示
+        // 服务端检测到 DashScope 401/403 时下发 auth_failed：鉴权失败重连无意义，立刻终止
         case 'auth_failed': {
-          this.userStopRequested = true; // 关掉重连闸门
-          if (this.reconnectTimer) {
-            clearTimeout(this.reconnectTimer);
-            this.reconnectTimer = null;
-          }
           const reason = typeof msg.error === 'string' ? msg.error : '识别服务密钥失效';
-          this.callbacks.onError?.(`${reason}（请联系管理员更新 DashScope 密钥）`);
-          this.updateStatus('error');
+          this.failTerminal(`${reason}（请联系管理员更新 DashScope 密钥）`, 'AUTH_FAILED');
           break;
         }
 
@@ -393,9 +565,16 @@ export class DashScopeASRClient {
         }
 
         case 'finished':
-          this.updateStatus('stopped');
-          this.callbacks.onTaskFinished?.();
-          this.resolveStopFinished();
+          if (this.userStopRequested) {
+            this.updateStatus('stopped');
+            this.callbacks.onTaskFinished?.();
+            this.resolveStopFinished();
+          } else {
+            // 不是我们要求的结束：上游任务自己收尾了（长静音 / 上游异常），这条连接后面的音频只会被代理丢掉。
+            // 主动关掉，onclose 会按会话断线重连，队列里的音频重连后补送。
+            log.warn('[DashScopeASR] upstream finished mid-session, forcing reconnect');
+            this.forceReconnect('upstream-finished');
+          }
           break;
 
         // 代理侧（proxy→DashScope 段）缓冲溢出丢帧：取代理上报的累计值
@@ -410,26 +589,48 @@ export class DashScopeASRClient {
 
         case 'error': {
           const errorMessage = this.normalizeErrorMessage(msg.error ?? msg.message);
-          if (this.isIgnorableStopError(errorMessage)) {
-            break;
-          }
-          if (this.isIgnorableSessionUpdateError(errorMessage)) {
-            log.warn('[DashScopeASR] Ignore session update error in event:', errorMessage);
-            break;
-          }
-          this.callbacks.onError?.(errorMessage);
-          this.updateStatus('error');
+          this.handleErrorMessage(errorMessage);
           break;
         }
 
         case 'closed':
-          this.updateStatus('stopped');
-          this.resolveStopFinished();
+          if (this.userStopRequested) {
+            this.updateStatus('stopped');
+            this.resolveStopFinished();
+          } else if (this.isReady) {
+            this.forceReconnect('upstream-closed');
+          }
           break;
       }
     } catch (error) {
       log.error('[DashScopeASR] Failed to parse message:', error);
     }
+  }
+
+  private handleErrorMessage(errorMessage: string): void {
+    if (this.isIgnorableStopError(errorMessage)) {
+      log.warn('[DashScopeASR] Ignore stop-time commit error:', errorMessage);
+      return;
+    }
+    if (this.isIgnorableSessionUpdateError(errorMessage)) {
+      log.warn('[DashScopeASR] Ignore session update error (non-fatal):', errorMessage);
+      return;
+    }
+    if (isTerminalAsrError(errorMessage)) {
+      this.failTerminal(errorMessage, 'TERMINAL_ERROR');
+      return;
+    }
+    // 瞬时错误（上游连接错误 / task-failed）：告诉 UI，但不进终态——代理随后会关连接，onclose 走重连
+    log.warn('[DashScopeASR] transient error:', errorMessage);
+    this.callbacks.onError?.(errorMessage);
+  }
+
+  /** 连接名义上还开着但已经没用了（上游收尾 / 长时间无消息）：关掉让 onclose 走正常重连 */
+  private forceReconnect(reason: string): void {
+    const ws = this.ws;
+    if (!ws) return;
+    log.warn(`[DashScopeASR] force reconnect (${reason})`);
+    try { ws.close(); } catch { /* ignore */ }
   }
 
   private handleResult(
@@ -493,6 +694,8 @@ export class DashScopeASRClient {
   }
 
   private sendAudioBuffer(buffer: ArrayBuffer): void {
+    if (this.terminal || this.userStopRequested) return;
+    this.enqueuedAudioBytes += buffer.byteLength;
     // ready/reconnect 后旧缓冲会分批回放。新音频必须继续排在旧缓冲后面，
     // 否则上游收到乱序 PCM，表现为重复、吞字或时间轴倒退。
     if (!this.isReady || this.isFlushing || this.audioQueue.length > 0) {
@@ -551,6 +754,14 @@ export class DashScopeASRClient {
     setTimeout(() => this.flushNextAudioBatch(), DashScopeASRClient.FLUSH_INTERVAL_MS);
   }
 
+  /** 连接建立时告诉代理：这条连接第一帧音频在课堂时间轴上的位置（首次连接为 0） */
+  private sendTimelineOffset(): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const offsetMs = this.timelineOffsetMs();
+    if (offsetMs <= 0) return;
+    this.ws.send(JSON.stringify({ type: 'timeline-offset', offsetMs }));
+  }
+
   /**
    * Send initial context hint (hot words, course topic, references) to server
    * before audio starts flowing. The server injects this into DashScope session.
@@ -607,12 +818,18 @@ export class DashScopeASRClient {
     this.stopKeepAlive();
     this.keepAliveTimer = setInterval(() => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+      // 半开连接（换网 / 代理被杀而 TCP 还没超时）：浏览器不会触发 onclose，靠"多久没收到任何消息"判死
+      if (this.lastInboundAt > 0 && Date.now() - this.lastInboundAt > LINK_IDLE_TIMEOUT_MS) {
+        log.warn(`[DashScopeASR] no inbound message for ${LINK_IDLE_TIMEOUT_MS}ms, treating link as dead`);
+        this.forceReconnect('idle-timeout');
+        return;
+      }
       try {
         this.ws.send(JSON.stringify({ type: 'ping', at: Date.now() }));
       } catch {
         /* connection close will trigger reconnect */
       }
-    }, 15_000);
+    }, KEEP_ALIVE_INTERVAL_MS);
   }
 
   private stopKeepAlive(): void {
@@ -629,12 +846,14 @@ export class DashScopeASRClient {
       this.reconnectTimer = null;
     }
     this.stopKeepAlive();
+    const wasReady = this.isReady;
     this.isReady = false;
     this.updateStatus('stopped');
+    this.settleStart(false);
 
     if (!this.ws) return;
 
-    // M7-fix7: CONNECTING 状态也要主动 close，否则 WS 留在后台，
+    // CONNECTING 状态也要主动 close，否则 WS 留在后台，
     // 浏览器最终会自己 abort 并报 "closed before established"
     if (this.ws.readyState === WebSocket.CONNECTING) {
       try {
@@ -647,6 +866,12 @@ export class DashScopeASRClient {
     }
 
     if (this.ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    // 还没 ready 的连接上没有音频在飞，直接关，不用等上游收尾
+    if (!wasReady) {
+      this.closeConnection();
       return;
     }
 
@@ -680,79 +905,6 @@ export class DashScopeASRClient {
     resolve?.();
   }
 
-  // M2 T2.2: 重连机制
-  // 触发条件：WebSocket 非用户主动关闭，且曾经 connected 成功过。
-  // 策略：AWS Full Jitter 退避；在 maxReconnectAttempts 之内反复尝试。
-  // 音频缓冲：audioQueue 在整个重连窗口期保留；重连成功后 flushAudioQueue 一次吐回。
-  private scheduleReconnect(code: number, reason: string): void {
-    this.reconnectAttempts += 1;
-    const delay = fullJitterDelay(
-      this.reconnectAttempts - 1,
-      this.options.reconnectBaseMs ?? 500,
-      this.options.reconnectCapMs ?? 10000,
-    );
-    log.warn(
-      `[DashScopeASR] Unexpected close (code=${code}, reason=${reason || '-'}), reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`,
-    );
-    // 保持 "connecting" 状态给 UI 一个提示
-    this.updateStatus('connecting');
-
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      void this.doReconnect(code, reason);
-    }, delay);
-  }
-
-  private async doReconnect(lastCloseCode: number, lastCloseReason: string): Promise<void> {
-    if (this.userStopRequested) return;
-
-    try {
-      const attemptsBefore = this.reconnectAttempts;
-      const ok = await this.startInternal({ isReconnect: true });
-      if (ok) {
-        // 重连成功：把断线期缓存的音频重放，transcriber 继续。
-        this.flushAudioQueue();
-        log.info('[DashScopeASR] Reconnected successfully, audio buffer flushed', {
-          attempts: attemptsBefore,
-          bufferedChunks: this.audioQueue.length,
-        });
-        track({
-          kind: 'asr.success',
-          mode: 'realtime-reconnect',
-          sessionId: this.sessionId,
-          durationMs: 0,
-        });
-      } else {
-        track({
-          kind: 'asr.fail',
-          mode: 'realtime-reconnect',
-          sessionId: this.sessionId,
-          durationMs: 0,
-          errorCode: 'RECONNECT_START_FAILED',
-          errorMsg: `lastCloseCode=${lastCloseCode} reason=${lastCloseReason}`,
-        });
-        const maxAttempts = this.options.maxReconnectAttempts ?? 8;
-        if (!this.userStopRequested && this.reconnectAttempts < maxAttempts) {
-          this.scheduleReconnect(lastCloseCode, lastCloseReason);
-        } else {
-          this.updateStatus('error');
-          this.callbacks.onError?.('实时转写连接断开，请重新开始录音。');
-        }
-      }
-    } catch (err) {
-      log.error('[DashScopeASR] Reconnect threw', err);
-      track({
-        kind: 'asr.fail',
-        mode: 'realtime-reconnect',
-        sessionId: this.sessionId,
-        durationMs: 0,
-        errorCode: 'RECONNECT_EXCEPTION',
-        errorMsg: (err as Error).message,
-      });
-    }
-  }
-
   private closeConnection(): void {
     this.stopKeepAlive();
     this.resolveStopFinished();
@@ -770,6 +922,16 @@ export class DashScopeASRClient {
 
   getStatus(): string {
     return this.status;
+  }
+
+  /** 对外链路状态（录课界面的一行状态用） */
+  getLinkState(): ASRLinkState | null {
+    return this.linkState;
+  }
+
+  /** 已进终态（密钥 / 额度 / 重试用尽）：重建 client 也不会好，UI 不必再试 */
+  isTerminated(): boolean {
+    return this.terminal;
   }
 
   isConnected(): boolean {

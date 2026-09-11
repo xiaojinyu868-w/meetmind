@@ -48,6 +48,14 @@ export interface AudioSession {
   syncError?: string;
   syncedAt?: Date;
   /**
+   * 登录迁移（/api/workspace/local-migration）上次成功推送时这节课证据的签名（2026-09-11）。
+   * 签名 = 用户 + 转录 / 锚点 / 摘要 / 精选 / 笔记 / 对话的数量与最后更新时刻 + 会话元数据的短哈希；
+   * 下次页面加载只推签名变了的课，不再每次全量重推（此前一个用户一天 8 轮 × 全部课堂的全量转录）。
+   * 非索引字段，Dexie 不需要升版本。
+   */
+  migrationSignature?: string;
+  migratedAt?: Date;
+  /**
    * 另一台设备正在录这节课（服务端 capture metadata.recordingState 回填）：
    * 列表显示「录制中 · 已 N 分钟」而不是「正在整理」；服务端翻成 completed 后清掉。
    */

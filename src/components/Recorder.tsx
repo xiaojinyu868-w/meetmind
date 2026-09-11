@@ -3,7 +3,7 @@
 import { forwardRef, useState, useRef, useCallback, useEffect, useImperativeHandle } from 'react';
 import { Mic } from 'lucide-react';
 import type { TranscriptSegment } from '@/types';
-import { DashScopeASRClient, type DashScopeASRCallbacks, type DashScopeASROptions } from '@/lib/services/dashscope-asr-service';
+import { DashScopeASRClient, type ASRLinkInfo, type DashScopeASRCallbacks, type DashScopeASROptions } from '@/lib/services/dashscope-asr-service';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { TranscriptFlowView } from './TranscriptFlowView';
 import { TranscriptEnhanceManager, type EnhancedTranscriptSegment } from '@/lib/services/transcript-enhancer';
@@ -42,6 +42,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   onRecordingStart,
   onRecordingStop,
   onAudioChunk,
+  onRecordingInterrupted,
   onTranscriptionError,
   onTranscriptUpdate,
   onTranscriptTextUpdate,
@@ -59,6 +60,11 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   audioSource = 'mic',
 }: RecorderProps, ref) {
   const [status, setStatus] = useState<RecorderStatus>('idle');
+  // 卸载 cleanup 只能读到首次渲染的闭包：状态与中断回调都走 ref 镜像
+  const statusRef = useRef<RecorderStatus>('idle');
+  statusRef.current = status;
+  const onRecordingInterruptedRef = useRef(onRecordingInterrupted);
+  onRecordingInterruptedRef.current = onRecordingInterrupted;
   const [elapsedMs, setElapsedMs] = useState(0);
   const [level, setLevel] = useState(0);
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
@@ -94,7 +100,9 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   useEffect(() => {
     return () => {
       // 组件卸载时清空，避免残留
-      useCaptureEditorStore.getState().actions.setLiveInterimText('');
+      const editorActions = useCaptureEditorStore.getState().actions;
+      editorActions.setLiveInterimText('');
+      editorActions.setLiveAsrLink('idle');
     };
   }, []);
   const [transcribeMode, setTranscribeMode] = useState<TranscribeMode>('streaming');
@@ -136,6 +144,8 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   const processedSentenceIdsRef = useRef<Set<string>>(new Set());
   const noiseFloorRef = useRef(0.02);
   const [asrReconnecting, setAsrReconnecting] = useState(false);
+  /** 最近一条来自实时字幕链路的错误：链路恢复（live）时只清它，不动别处写进 error 的内容 */
+  const asrLinkErrorRef = useRef<string | null>(null);
   const [droppedAudioMs, setDroppedAudioMs] = useState(0);
   const pauseTimestampRef = useRef<number>(0);
   
@@ -256,21 +266,38 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         enhanceManagerRef.current.updateActivity();
       }
     },
-    onError: (err) => setError(err),
+    onError: (err) => {
+      asrLinkErrorRef.current = err;
+      setError(err);
+    },
     onAudioDropped: ({ droppedMsTotal }) => setDroppedAudioMs(droppedMsTotal),
     onStatusChange: (newStatus) => {
       if (newStatus === 'transcribing') setServiceStatus('available');
     },
+    // 实时字幕链路状态 → 本组件的重连态 + 全局 store（课堂录课视图的一行状态据此说
+    // 「实时字幕暂时断开，录音仍在继续」，恢复后自动消失）
+    onLinkStateChange: (info: ASRLinkInfo) => {
+      setAsrReconnecting(info.state === 'reconnecting');
+      useCaptureEditorStore.getState().actions.setLiveAsrLink(info.state);
+      if (info.state === 'live' && asrLinkErrorRef.current) {
+        const staleLinkError = asrLinkErrorRef.current;
+        asrLinkErrorRef.current = null;
+        setError((prev) => (prev === staleLinkError ? null : prev));
+      }
+    },
   }), [getCallbackMeta, onTranscriptUpdate]);
 
   // ASR options 工厂——三处共用。
+  // 录音已经在进行，字幕晚到总比整节课没有好：首连失败和会话断线都一直按 Full Jitter 退避重试
+  // （800ms 起、封顶 15s），直到用户停止；密钥失效 / 额度用完这类终态错误由 client 自己判定并停下。
   const buildAsrOptions = useCallback((): DashScopeASROptions => ({
     model: wsModel,
     sampleRate: wsSampleRate,
     format: 'pcm',
     initialContextHint: contextHint.trim(),
     initialLanguageMode: languageMode,
-    maxReconnectAttempts: 8,
+    connectAttempts: Number.POSITIVE_INFINITY,
+    maxReconnectAttempts: Number.POSITIVE_INFINITY,
     reconnectBaseMs: 800,
     reconnectCapMs: 15_000,
   }), [wsModel, wsSampleRate, contextHint, languageMode]);
@@ -809,34 +836,24 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
     mediaRecorderRef.current.resume();
 
-    // Check if ASR WebSocket is still alive
-    const asrAlive = asrClientRef.current?.isConnected();
+    // 暂停期间 client 自己会按退避重连（半开连接靠 45s 无消息判死），不用在这里拆了重建——
+    // 重建会把它排队里的音频一起丢掉。只有 client 已经不在（首连终态失败后被置 null）才试着新建一个。
     const pauseDurationMs = Date.now() - pauseTimestampRef.current;
-
-    if (!asrAlive && effectiveTranscribeMode === 'streaming' && streamingAvailable && apiKey) {
-      console.warn(`[Recorder] ASR disconnected during pause (${(pauseDurationMs / 1000).toFixed(1)}s). Reconnecting...`);
+    if (!asrClientRef.current && effectiveTranscribeMode === 'streaming' && streamingAvailable) {
+      console.warn(`[Recorder] no live ASR client after pause (${(pauseDurationMs / 1000).toFixed(1)}s). Creating a new one...`);
       setAsrReconnecting(true);
-      setError(null);
-
-      // Stop old client gracefully
-      if (asrClientRef.current) {
-        try { await asrClientRef.current.stop(); } catch { /* ignore */ }
-        asrClientRef.current = null;
-      }
-
-      // Create new ASR client with same callbacks
-      asrClientRef.current = new DashScopeASRClient(apiKey, createAsrCallbacks(), buildAsrOptions());
-
-      const started = await asrClientRef.current.start();
-      if (started) {
-        // Rebuild PCM pipeline
-        rebuildPcmPipeline();
-      } else {
-        console.error('[Recorder] ASR reconnect failed - recording continues without live transcription');
-        setError('\u5b9e\u65f6\u8f6c\u5199\u91cd\u8fde\u5931\u8d25\uff0c\u5f55\u97f3\u4ecd\u5728\u7ee7\u7eed\uff0c\u97f3\u9891\u4e0d\u4f1a\u4e22\u5931\u3002');
-        asrClientRef.current = null;
-      }
-      setAsrReconnecting(false);
+      const asrClient = new DashScopeASRClient(apiKey, createAsrCallbacks(), buildAsrOptions());
+      asrClientRef.current = asrClient;
+      void asrClient.start().then((started) => {
+        if (asrClientRef.current !== asrClient) return;
+        if (started) {
+          void rebuildPcmPipeline();
+        } else {
+          console.error('[Recorder] ASR reconnect failed - recording continues without live transcription');
+          asrClientRef.current = null;
+        }
+        setAsrReconnecting(false);
+      });
     }
 
     if (effectiveTranscribeMode === 'streaming') {
@@ -1111,6 +1128,8 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       asrClientRef.current = null;
       pendingAsrClientRef.current = null;
     }
+    setAsrReconnecting(false);
+    useCaptureEditorStore.getState().actions.setLiveAsrLink('idle');
 
     try {
       pcmCaptureRef.current?.stop();
@@ -1342,6 +1361,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     audioChunksRef.current = [];
     setError(null);
     setAsrReconnecting(false);
+    useCaptureEditorStore.getState().actions.setLiveAsrLink('idle');
     setDroppedAudioMs(0);
     setStatus('idle');
     // Use microtask to let React flush the idle state, then start
@@ -1372,12 +1392,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       pcmCaptureRef.current?.stop();
       pcmCaptureRef.current = null;
       pcmResamplerRef.current = null;
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-      }
-      if (audioContextRef.current) audioContextRef.current.close().catch(() => {});
-      sourceNodeRef.current = null;
       if (asrClientRef.current) {
         asrClientRef.current.stop();
         asrClientRef.current = null;
@@ -1387,13 +1401,58 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         pendingAsrClientRef.current = null;
       }
       if (enhanceManagerRef.current) enhanceManagerRef.current.dispose();
-      // acquireAudioStream cleanup——卸载时兜底释放采集资源
-      if (audioCleanupRef.current) {
-        try { audioCleanupRef.current(); } catch { /* ignore */ }
-        audioCleanupRef.current = null;
+
+      const releaseAudioResources = () => {
+        if (audioContextRef.current) audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
+        sourceNodeRef.current = null;
+        // acquireAudioStream cleanup——卸载时兜底释放采集资源
+        if (audioCleanupRef.current) {
+          try { audioCleanupRef.current(); } catch { /* ignore */ }
+          audioCleanupRef.current = null;
+        }
+        releaseScreenTrack();
+      };
+
+      const recorder = mediaRecorderRef.current;
+      const wasRecording = statusRef.current === 'recording' || statusRef.current === 'paused';
+      if (!recorder || recorder.state === 'inactive' || !wasRecording) {
+        if (recorder && recorder.state !== 'inactive') {
+          recorder.stop();
+          recorder.stream.getTracks().forEach((track) => track.stop());
+        }
+        releaseAudioResources();
+        return;
       }
-      releaseScreenTrack();
+
+      // 录音中被卸载（切到没有挂载点的布局 / 客户端路由离开）：不能只 stop 了事。
+      // 走 stopMediaRecorderSafely 让最后一片原声先经 ondataavailable → onAudioChunk 交给外层，
+      // 再通知外层「录音被打断」——外层把分片与字幕快照落盘，这节课留成「没结束」交给恢复条。
+      const meta: RecorderCallbackMeta = {
+        recordingId: recordingIdRef.current,
+        sessionId: sessionIdRef.current,
+        durationMs: startTimeRef.current > 0 ? Math.max(0, Date.now() - startTimeRef.current) : 0,
+      };
+      console.warn('[Recorder] unmounted while recording — handing the lesson over as unfinished', {
+        sessionId: meta.sessionId,
+        durationMs: meta.durationMs,
+        chunks: audioChunksRef.current.length,
+      });
+      void stopMediaRecorderSafely()
+        .catch((error) => {
+          console.error('[Recorder] stopMediaRecorderSafely on unmount failed:', error);
+          return null;
+        })
+        .then(() => {
+          releaseAudioResources();
+          try {
+            onRecordingInterruptedRef.current?.(meta);
+          } catch (error) {
+            console.error('[Recorder] onRecordingInterrupted failed:', error);
+          }
+        });
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isRecording = status === 'recording';
@@ -1848,7 +1907,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         }`}>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 border-2 border-[#1C1B19] border-t-transparent rounded-full animate-spin" />
-            <span>正在重新接上文字...</span>
+            <span>{COPY.recording.liveCaptionsReconnecting}</span>
           </div>
         </div>
       )}

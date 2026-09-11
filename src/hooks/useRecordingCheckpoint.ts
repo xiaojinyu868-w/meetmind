@@ -16,10 +16,14 @@
  *
  * 正常结束时 handleRecordingStop 写最终 blob 与转录并删掉分片；这里在录音结束时只丢掉迟到的分片缓冲，
  * 不再写任何东西。所有失败只 console.warn，录音本身永不受影响。
+ *
+ * 录音引擎被卸载打断（2026-09-11，切到没有挂载点的布局 / 客户端路由离开）：`handleRecordingInterrupted`
+ * 先把分片与字幕快照落盘 + 服务端最后一次检查点，再把 isRecording 置回 false，这节课留成「没结束」交给恢复条。
  */
 
 import { useCallback, useEffect, useRef } from 'react';
 import type { MutableRefObject } from 'react';
+import { toast } from 'sonner';
 import {
   appendRecordingChunks,
   markSessionCheckpoint,
@@ -27,7 +31,10 @@ import {
   ANONYMOUS_USER_ID,
 } from '@/lib/db';
 import { buildLiveRecordingTitle } from '@/lib/capture/live-recording-capture';
-import type { RecorderAudioChunkMeta } from '@/components/recorder/recorder-types';
+import { useSessionStore } from '@/stores/session-store';
+import { useUIStore } from '@/stores/ui-store';
+import { COPY } from '@/lib/ui/copy';
+import type { RecorderAudioChunkMeta, RecorderCallbackMeta } from '@/components/recorder/recorder-types';
 import type { TranscriptSegment } from '@/types';
 
 export const LOCAL_CHECKPOINT_INTERVAL_MS = 5_000;
@@ -258,5 +265,28 @@ export function useRecordingCheckpoint(
     };
   }, [isRecording, sessionId, flushLocal, sendServerCheckpoint, liveSegmentsRef]);
 
-  return { handleAudioChunk };
+  // ── 录音引擎随布局卸载被打断（2026-09-11）──
+  // Recorder 已把最后一片原声经 onAudioChunk 交出、ASR 与采集已停。这里把分片与字幕快照落盘、
+  // 给服务端最后一次检查点，然后才把 isRecording 置回 false（顺序很重要：置 false 会让上面的
+  // effect 丢掉这个 session 的 pending 分片）。这节课留在 status='recording'：8s 宽限后由
+  // useUnfinishedRecordings 的恢复条接手（继续录 / 就到这里），不像正常停录那样出理解、跳复习。
+  const handleRecordingInterrupted = useCallback((meta: RecorderCallbackMeta) => {
+    const targetSessionId = meta.sessionId || activeSessionRef.current;
+    void (async () => {
+      try {
+        if (targetSessionId) {
+          await flushLocal(targetSessionId);
+          await sendServerCheckpoint(targetSessionId, 'checkpoint', { force: true, keepalive: true });
+        }
+      } catch (error) {
+        console.warn('[recording-checkpoint] interrupted flush failed:', error);
+      } finally {
+        useSessionStore.getState().actions.setIsRecording(false);
+        useUIStore.getState().actions.setShowMobileRecorder(false);
+        toast(COPY.recording.unfinished.interrupted, { duration: 6000 });
+      }
+    })();
+  }, [flushLocal, sendServerCheckpoint]);
+
+  return { handleAudioChunk, handleRecordingInterrupted };
 }

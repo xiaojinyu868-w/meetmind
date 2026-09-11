@@ -43,6 +43,7 @@ import { useTutorLauncher } from '@/hooks/useTutorLauncher';
 import { useTranscriptIngest } from '@/hooks/useTranscriptIngest';
 import { useRecordingLifecycle } from '@/hooks/useRecordingLifecycle';
 import { useRecordingCheckpoint } from '@/hooks/useRecordingCheckpoint';
+import { useRecordingLeaveGuard } from '@/hooks/useRecordingLeaveGuard';
 import { useUnfinishedRecordings } from '@/hooks/useUnfinishedRecordings';
 import { useTranscriptHandlers } from '@/hooks/useTranscriptHandlers';
 import { useAudioMessagePlayback } from '@/hooks/useAudioMessagePlayback';
@@ -849,10 +850,13 @@ function StudentAppContent({
 
   // ── Recording Checkpoint Hook（录课中持续落盘 + 服务端「录制中」检查点）──────
   // 关页 / 崩溃 / 被系统回收时，音频分片与实时字幕已在 IndexedDB，另一台设备也已看到这节课在录。
-  const { handleAudioChunk } = useRecordingCheckpoint(
+  const { handleAudioChunk, handleRecordingInterrupted } = useRecordingCheckpoint(
     { isRecording, sessionId, userId: user?.id, accessToken, isAuthenticated },
     { liveSegmentsRef },
   );
+  // 录课中点站内链接离开 /app（侧栏 / 顶栏）：一句确认。离开 = Recorder 被卸载 → 上面的
+  // handleRecordingInterrupted 把录到这里的内容落盘、这节课留成「没结束」
+  useRecordingLeaveGuard(isRecording, COPY.recording.leaveConfirm);
 
   // 移动端首页的「有一节课没结束」恢复条（桌面课堂 tab 由 ClassroomView 自己挂）；
   // 「继续录」只负责收好前半段，开新一段由 MobileAppShell 走它自己的 onStartRecording
@@ -864,6 +868,11 @@ function StudentAppContent({
   });
 
   const handleViewModeChange = useCallback(async (newMode: 'record' | 'review' | 'classroom') => {
+    // 桌面端 Recorder 只挂在课堂 tab（sr-only）/ 收集 tab 的录音条里：录课中切 tab = 引擎被卸载，
+    // 录到这里的内容会落盘留成「没结束」，但要先问一句。移动端 Recorder 挂在壳里不随 tab 卸载，不问。
+    if (isRecording && !isMobile && newMode !== useUIStore.getState().viewMode) {
+      if (!window.confirm(COPY.recording.leaveConfirm)) return;
+    }
     // 试听旅程出口：用户在示例课上下文里主动切课堂/收集 tab = 明确要离开试听。
     // 消费掉 entry=demo，课堂 tab 回到真实课堂列表（可录自己的课），示例课可从列表 hero 重新进入。
     if ((newMode === 'classroom' || newMode === 'record') && autoLoadDemo && !demoEntryConsumed && !isRecording) {
@@ -914,7 +923,7 @@ function StudentAppContent({
         console.error('Failed to load demo data:', err);
       }
     }
-  }, [hasCollectionContext, segments.length, sessionId, isGuestFastEntry, autoLoadDemo, demoEntryConsumed, isRecording, consumeDemoEntry]);
+  }, [hasCollectionContext, segments.length, sessionId, isGuestFastEntry, autoLoadDemo, demoEntryConsumed, isRecording, isMobile, consumeDemoEntry]);
 
   useEffect(() => {
     if (!forceMobilePreview || !initialMobileSubPage) return;
@@ -1926,6 +1935,7 @@ function StudentAppContent({
               onRecordingStart={handleRecordingStart}
               onRecordingStop={handleRecordingStop}
               onAudioChunk={handleAudioChunk}
+              onRecordingInterrupted={handleRecordingInterrupted}
               onTranscriptionError={handleRecordingTranscriptionError}
               onTranscriptUpdate={handleTranscriptUpdate}
               onTranscriptTextUpdate={handleTranscriptTextUpdate}
@@ -2280,6 +2290,7 @@ function StudentAppContent({
               onRecordingStart={handleRecordingStart}
               onRecordingStop={handleRecordingStop}
               onAudioChunk={handleAudioChunk}
+              onRecordingInterrupted={handleRecordingInterrupted}
               onTranscriptionError={handleRecordingTranscriptionError}
               onTranscriptUpdate={handleTranscriptUpdate}
               onTranscriptTextUpdate={handleTranscriptTextUpdate}
@@ -2464,6 +2475,7 @@ function StudentAppContent({
               onRecordingStart={handleRecordingStart}
               onRecordingStop={handleRecordingStop}
               onAudioChunk={handleAudioChunk}
+              onRecordingInterrupted={handleRecordingInterrupted}
               onTranscriptionError={handleRecordingTranscriptionError}
               onTranscriptUpdate={handleTranscriptUpdate}
               onTranscriptTextUpdate={handleTranscriptTextUpdate}

@@ -7,11 +7,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, createContext, useContext, ReactNode } from 'react';
-import { db, ANONYMOUS_USER_ID } from '@/lib/db';
-import { runMemoryMigration } from '@/lib/services/memory-migration';
 import { scheduleTokenRefresh } from '@/lib/hooks/token-refresh-scheduler';
+import { runLocalWorkspaceMigration } from '@/lib/services/local-workspace-migration';
 import type { User, Permission, AuthResponse, LoginRequest, RegisterRequest, LearnerProfile } from '@/types/user';
-import type { LocalWorkspaceMigrationPayload } from '@/lib/services/workspace-context-types';
 
 // ==================== 类型定义 ====================
 
@@ -79,285 +77,6 @@ function setStoredToken(token: string | null): void {
 /** 扫码登录等同源认证流程成功后写入统一 access token。 */
 export function writeStoredAccessToken(token: string): void {
   setStoredToken(token);
-}
-
-function normalizeText(value: string | null | undefined, limit?: number): string | undefined {
-  const normalized = (value || '').replace(/\s+/g, ' ').trim();
-  if (!normalized) return undefined;
-  if (typeof limit === 'number' && normalized.length > limit) {
-    return `${normalized.slice(0, Math.max(0, limit - 3))}...`;
-  }
-  return normalized;
-}
-
-function inferLocalCaptureContentType(session: {
-  sourceType?: string;
-  mimeType?: string;
-  videoUrl?: string;
-  videoEmbedUrl?: string;
-  videoProvider?: string;
-}): string {
-  if (session.videoUrl || session.videoEmbedUrl || session.videoProvider) return 'video';
-  if (session.sourceType === 'video-link' || session.sourceType === 'video-file') return 'video';
-  if (session.mimeType?.startsWith('audio/')) return 'audio';
-  if (session.sourceType === 'recording' || session.sourceType === 'upload') return 'audio';
-  return 'text';
-}
-
-function buildLocalSessionTitle(session: {
-  topic?: string;
-  subject?: string;
-  sourceType?: string;
-}): string {
-  return (
-    normalizeText(session.topic, 80) ||
-    normalizeText(session.subject, 80) ||
-    (session.sourceType === 'video-link' || session.sourceType === 'video-file'
-      ? '导入课堂视频'
-      : session.sourceType === 'upload'
-        ? '导入课堂音频'
-        : '课堂录音')
-  );
-}
-
-async function buildLocalWorkspaceMigrationPayload(userId: string): Promise<LocalWorkspaceMigrationPayload | null> {
-  await runMemoryMigration();
-
-  const [allSessions, allTranscripts, allAnchors, allSummaries, allHighlights, allNotes, allConversations] = await Promise.all([
-    db.audioSessions.toArray(),
-    db.transcripts.toArray(),
-    db.anchors.toArray(),
-    db.classSummaries.toArray(),
-    db.highlightTopics.toArray(),
-    db.notes.toArray(),
-    db.conversationHistory.toArray(),
-  ]);
-
-  const sessions = allSessions
-    .filter((item) => !item.userId || item.userId === ANONYMOUS_USER_ID || item.userId === userId)
-    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-
-  if (sessions.length === 0) {
-    return null;
-  }
-
-  const sessionIds = new Set(sessions.map((item) => item.sessionId));
-  const transcriptBySession = new Map<string, typeof allTranscripts>();
-  const anchorBySession = new Map<string, typeof allAnchors>();
-  const summaryBySession = new Map<string, (typeof allSummaries)[number]>();
-  const highlightBySession = new Map<string, typeof allHighlights>();
-  const noteBySession = new Map<string, typeof allNotes>();
-  const conversationBySession = new Map<string, typeof allConversations>();
-
-  for (const transcript of allTranscripts) {
-    if (!sessionIds.has(transcript.sessionId)) continue;
-    const bucket = transcriptBySession.get(transcript.sessionId) || [];
-    bucket.push(transcript);
-    transcriptBySession.set(transcript.sessionId, bucket);
-  }
-
-  for (const anchor of allAnchors) {
-    if (!sessionIds.has(anchor.sessionId)) continue;
-    const bucket = anchorBySession.get(anchor.sessionId) || [];
-    bucket.push(anchor);
-    anchorBySession.set(anchor.sessionId, bucket);
-  }
-
-  for (const summary of allSummaries) {
-    if (!sessionIds.has(summary.sessionId)) continue;
-    summaryBySession.set(summary.sessionId, summary);
-  }
-
-  for (const highlight of allHighlights) {
-    if (!sessionIds.has(highlight.sessionId)) continue;
-    const bucket = highlightBySession.get(highlight.sessionId) || [];
-    bucket.push(highlight);
-    highlightBySession.set(highlight.sessionId, bucket);
-  }
-
-  for (const note of allNotes) {
-    if (!sessionIds.has(note.sessionId)) continue;
-    if (note.studentId && note.studentId !== ANONYMOUS_USER_ID && note.studentId !== userId) continue;
-    const bucket = noteBySession.get(note.sessionId) || [];
-    bucket.push(note);
-    noteBySession.set(note.sessionId, bucket);
-  }
-
-  for (const conversation of allConversations) {
-    if (!conversation.sessionId || !sessionIds.has(conversation.sessionId)) continue;
-    if (conversation.userId && conversation.userId !== ANONYMOUS_USER_ID && conversation.userId !== userId) continue;
-    const bucket = conversationBySession.get(conversation.sessionId) || [];
-    bucket.push(conversation);
-    conversationBySession.set(conversation.sessionId, bucket);
-  }
-
-  const migratedSessions = sessions
-    .map((session) => {
-      const transcripts = (transcriptBySession.get(session.sessionId) || []).sort((a, b) => a.startMs - b.startMs);
-      const anchors = (anchorBySession.get(session.sessionId) || []).sort((a, b) => a.timestamp - b.timestamp);
-      const summary = summaryBySession.get(session.sessionId);
-      const highlights = (highlightBySession.get(session.sessionId) || []).sort(
-        (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
-      );
-      const notes = (noteBySession.get(session.sessionId) || []).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-      const conversations = (conversationBySession.get(session.sessionId) || []).sort(
-        (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
-      );
-
-      const transcriptText = normalizeText(
-        transcripts
-          .map((item) => item.text)
-          .filter(Boolean)
-          .join(' '),
-        8000,
-      );
-      const highlightText = normalizeText(
-        highlights
-          .map((item) => [item.title, item.description, item.quote?.text].filter(Boolean).join('：'))
-          .filter(Boolean)
-          .join('；'),
-        2000,
-      );
-      const noteText = normalizeText(notes.map((item) => item.text).filter(Boolean).join('；'), 2000);
-      const anchorText = normalizeText(
-        anchors
-          .map((item) => item.note || item.aiExplanation)
-          .filter(Boolean)
-          .join('；'),
-        1200,
-      );
-      const conversationText = normalizeText(
-        conversations
-          .map((item) => item.lastMessage || item.title)
-          .filter(Boolean)
-          .join('；'),
-        1000,
-      );
-
-      const summaryTakeaways = summary?.takeaways
-        ?.map((item) => `${item.label}：${item.insight}`)
-        .filter(Boolean)
-        .join('；');
-      const summaryStructure = summary?.structure?.filter(Boolean).join('、');
-      const summaryDifficulty = summary?.keyDifficulties?.filter(Boolean).join('；');
-
-      const tutorContext = normalizeText(
-        [
-          summary?.overview ? `课堂概览：${summary.overview}` : '',
-          summaryTakeaways ? `关键收获：${summaryTakeaways}` : '',
-          summaryDifficulty ? `主要难点：${summaryDifficulty}` : '',
-          summaryStructure ? `课堂结构：${summaryStructure}` : '',
-          highlightText ? `精选片段：${highlightText}` : '',
-          anchorText ? `困惑锚点：${anchorText}` : '',
-          noteText ? `我的笔记：${noteText}` : '',
-          conversationText ? `同学对话：${conversationText}` : '',
-        ]
-          .filter(Boolean)
-          .join('\n\n'),
-        12000,
-      );
-
-      const previewText =
-        normalizeText(summary?.overview, 220) ||
-        noteText ||
-        highlightText ||
-        transcriptText ||
-        anchorText;
-
-      const title = buildLocalSessionTitle(session);
-
-      if (!previewText && !tutorContext && !transcriptText && !session.mediaUrl && !session.videoUrl) {
-        return null;
-      }
-
-      return {
-        sessionId: session.sessionId,
-        title,
-        contentType: inferLocalCaptureContentType(session),
-        role: 'primary',
-        previewText,
-        normalizedText: transcriptText,
-        tutorContext,
-        sourceUrl: session.videoUrl || undefined,
-        mediaUrl: session.mediaUrl || session.videoEmbedUrl || undefined,
-        occurredAt: session.createdAt.toISOString(),
-        metadata: {
-          sessionId: session.sessionId,
-          sourceType: session.sourceType || 'recording',
-          mimeType: session.mimeType,
-          duration: session.duration,
-          topic: session.topic,
-          subject: session.subject,
-          transcriptCount: transcripts.length,
-          anchorCount: anchors.length,
-          highlightCount: highlights.length,
-          noteCount: notes.length,
-          conversationCount: conversations.length,
-          importSourceMode: session.importSourceMode,
-          thumbnailUrl: session.thumbnailUrl,
-          // 跨设备可恢复包：保留课堂证据的结构，不再只上传 8000 字拼接文本。
-          // 上送按 session 分批（20/批，413 自动降级到 5/批，服务端上限 8MB/50 sessions），
-          // 单 session 内不再硬截断证据：transcriptSegments 上限 10000（与服务端证据表
-          // 防呆上限一致，句级密度约 12 段/分钟 ≈ 13 小时课，实际不会触顶）。
-          transcriptSegments: transcripts.slice(0, 10000).map((item) => ({
-            text: item.text,
-            startMs: item.startMs,
-            endMs: item.endMs,
-            speakerId: item.speakerId,
-            confidence: item.confidence,
-            isFinal: item.isFinal,
-          })),
-          anchors: anchors.slice(0, 1000).map((item) => ({
-            timestamp: item.timestamp,
-            type: item.type,
-            status: item.status,
-            note: item.note,
-            aiExplanation: item.aiExplanation,
-            createdAt: item.createdAt.toISOString(),
-            resolvedAt: item.resolvedAt?.toISOString(),
-          })),
-          classSummary: summary ? {
-            summaryId: summary.summaryId,
-            overview: summary.overview,
-            takeaways: summary.takeaways,
-            keyDifficulties: summary.keyDifficulties,
-            structure: summary.structure,
-            createdAt: summary.createdAt.toISOString(),
-            updatedAt: summary.updatedAt.toISOString(),
-          } : undefined,
-          highlightTopics: highlights.slice(0, 500).map((item) => ({
-            topicId: item.topicId,
-            title: item.title,
-            description: item.description,
-            importance: item.importance,
-            duration: item.duration,
-            segments: item.segments,
-            keywords: item.keywords,
-            quote: item.quote,
-            createdAt: item.createdAt.toISOString(),
-            updatedAt: item.updatedAt.toISOString(),
-          })),
-          notes: notes.slice(0, 200).map((item) => ({
-            noteId: item.noteId,
-            source: item.source,
-            sourceId: item.sourceId,
-            text: item.text,
-            metadata: item.metadata,
-            createdAt: item.createdAt.toISOString(),
-            updatedAt: item.updatedAt.toISOString(),
-          })),
-        },
-      };
-    })
-    .filter((item): item is NonNullable<typeof item> => Boolean(item));
-
-  if (migratedSessions.length === 0) {
-    return null;
-  }
-
-  return {
-    sessions: migratedSessions,
-  };
 }
 
 // ==================== Provider ====================
@@ -523,71 +242,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false;
 
-    void (async () => {
-      try {
-        const payload = await buildLocalWorkspaceMigrationPayload(userId);
-        if (!payload || payload.sessions.length === 0) {
-          return;
-        }
-
-        // 分批推送：避免单次 payload 过大导致 nginx/Node 拒绝（服务端上限 8MB / 50 sessions）
-        // 这里按 session 数切片，每批 20，体积一般稳在 2-4MB 内
-        const BATCH_SIZE = 20;
-        const sessions = payload.sessions;
-        let success = true;
-
-        for (let i = 0; i < sessions.length; i += BATCH_SIZE) {
-          if (cancelled) break;
-          const batch = sessions.slice(i, i + BATCH_SIZE);
-          try {
-            const response = await fetch('/api/workspace/local-migration', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify({ sessions: batch }),
-            });
-
-            if (!response.ok) {
-              success = false;
-              // 413（payload 过大）说明单批仍然太大，进一步降级到每批 5
-              if (response.status === 413 && BATCH_SIZE > 5) {
-                for (let j = 0; j < batch.length; j += 5) {
-                  if (cancelled) break;
-                  const smaller = batch.slice(j, j + 5);
-                  try {
-                    await fetch('/api/workspace/local-migration', {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${accessToken}`,
-                      },
-                      body: JSON.stringify({ sessions: smaller }),
-                    });
-                  } catch {
-                    // 单批降级也失败，记下后继续，不阻断整体
-                  }
-                }
-              }
-              // 其他错误不中断，继续下一批
-            }
-          } catch {
-            success = false;
-            // 网络错误或进程重启造成的中断，继续下一批，下次登录会重试
-          }
-        }
-
-        if (!success && !cancelled) {
-          // 整体没全部成功，下次登录允许重试
+    // 本机课堂历史 → 账号：只推证据签名变过的课（抽到 local-workspace-migration service，2026-09-11）。
+    // 此前每次页面加载全量重推全部 audioSessions；现在推成功的课记签名，下次加载没变化就零请求。
+    void runLocalWorkspaceMigration({ userId, accessToken, isCancelled: () => cancelled })
+      .then((result) => {
+        if (cancelled) return;
+        // 有失败的批（网络 / 5xx）：允许下次登录态就绪时重试；全部成功或无需推送则本次会话不再跑
+        if (result.failed > 0) {
           localWorkspaceMigrationRef.current = null;
         }
-      } catch {
+      })
+      .catch(() => {
         if (!cancelled) {
           localWorkspaceMigrationRef.current = null;
         }
-      }
-    })();
+      });
 
     return () => {
       cancelled = true;
