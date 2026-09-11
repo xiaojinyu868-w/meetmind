@@ -17,7 +17,7 @@ apps/
 ├── lesson-path-model.ts     # 课后学习页纯函数：LEARNING_PATH 四步、summarizeSessionOutcomes（每应用最近一次结果）、formatOutcomeLine、recommendNextStep（结果驱动的「先做这一件」+ 学生能核对的理由）、buildOutcomeAnchors（结果 → 合成困惑锚点进下一步 prompt）、formatLessonMeta
 ├── review-session-outcomes.ts # 会话内应用结果存储（localStorage 按 sessionId + useSyncExternalStore）：窗口 onAssessment → recordSessionAssessment；路径卡与应用执行都从这里读。会话层记忆，不替代 LearningEvent
 ├── hooks/
-│   ├── useAppExecution.ts   # 应用执行 hook（SSE 流/超时/状态管理；2026-09-08 起写缓存时派发同页事件 `meetmind:app-cache-changed`——浏览器 storage 事件只发给其他 tab，课后学习页后台生成、已打开的窗口靠它刷新；hook 自己的写入带 origin 不重读，内存里的完整结果不被缓存里剥了内联图的副本覆盖）
+│   ├── useAppExecution.ts   # 应用执行 hook（SSE 流/超时/状态管理；2026-09-11 起自动执行等 `isCheckingAuth` 落地——本机有 token 但 /api/auth/me 没回来时不发请求，否则请求不带 Bearer、服务端当访客：没有这个人的掌握轨迹、不按登录用户计费（真课实测 transcript 从 IndexedDB 读出比鉴权快就撞上）；2026-09-08 起写缓存时派发同页事件 `meetmind:app-cache-changed`——浏览器 storage 事件只发给其他 tab，课后学习页后台生成、已打开的窗口靠它刷新；hook 自己的写入带 origin 不重读，内存里的完整结果不被缓存里剥了内联图的副本覆盖）
 │   └── useWorkshopReadiness.ts # 调用内容适配判断；客观证据控制空内容底线，模型只控制推荐
 ├── evidence/
 │   ├── EvidenceChip.tsx      # 证据标签芯片

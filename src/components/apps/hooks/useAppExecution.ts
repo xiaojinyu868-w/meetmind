@@ -324,7 +324,7 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
     autoRun = true,
     contextPack,
   } = params;
-  const { accessToken } = useAuth();
+  const { accessToken, isCheckingAuth } = useAuth();
   const instanceId = useRef(`exec-${Math.random().toString(36).slice(2)}`).current;
   const [result, setResult] = useState<AppExecutionResult | null>(null);
   const [taskState, setTaskState] = useState<AppTaskState>(() => nowTaskState('idle'));
@@ -523,6 +523,10 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
   useEffect(() => {
     if (!hydrated) return;
     if (!autoRun) return;
+    // 本机有 token 但 /api/auth/me 还没回来：等它。否则自动执行的请求不带 Bearer，服务端当访客——
+    // 没有这个人的掌握轨迹（"为这个人出的题"整条链路失效）、也不按登录用户计费（2026-09-11 真课实测撞上：transcript 从
+    // IndexedDB 读出比鉴权快，trace 里 learner_context=local:0）。访客 isCheckingAuth 一开始就是 false，不受影响。
+    if (isCheckingAuth) return;
     if (result) return;
     // 失败后不自动重跑，避免限流/失败循环。用户需要主动点"重试"。
     if (taskState.status === 'error') return;
@@ -530,7 +534,7 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
       taskState.status === 'running' && Date.now() - taskState.updatedAt > APP_RUNNING_TASK_STALE_MS;
     if (taskState.status === 'running' && !staleRunningTask) return;
     void executeInternal(false);
-  }, [autoRun, executeInternal, hydrated, result, taskState.status, taskState.updatedAt]);
+  }, [autoRun, executeInternal, hydrated, isCheckingAuth, result, taskState.status, taskState.updatedAt]);
 
   const execute = useCallback(() => executeInternal(false), [executeInternal]);
   const rerun = useCallback(() => executeInternal(true), [executeInternal]);
