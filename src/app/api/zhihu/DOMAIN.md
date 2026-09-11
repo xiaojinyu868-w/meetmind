@@ -18,4 +18,6 @@
 | `/api/zhihu/lesson` | POST `{favlistUrlToken? │ captureIds?, topic?, maxItems?}` | 把一个收藏夹开成一节 live 课：挑材料（按赞同，≤8 篇有正文可讲的）→ 只给进材料包的几篇抽正文 → 建 `engine=live` 的 TeachThread + 材料包落盘（`teach-live/live-materials.ts`）；learner 读槽与 `/api/teach/threads` 同款。返回 `{ thread:{id,title,topic}, pack, materialized }`；前端拿 thread.id 去 `/apps/zhihu/lesson/<id>` 开讲（首条学生消息「开始上课」由课堂页发，与 /teach/live 一致）。teach-live 未配置 503 `teach_live_unavailable` |
 | `/api/zhihu/lesson/[threadId]` | GET | 这节课的材料包 + 线程元信息（课堂页右侧「这节课的材料」、课后出题 / 继续看用）；不是从收藏夹开的课 404 |
 
-后续（G6–G7）：`/api/zhihu/continue`（考后弱概念 → 知乎搜索「继续看」）。
+| `/api/zhihu/continue` | POST `{concepts[≤5], threadId?, topic?, perConcept?}` | 考后补货：还没稳的概念 → 站内搜索（每概念 1 次，≤3 次）→ 按权威 / 赞同 / 有反方评论排序，排除材料包里已有链接 → `{ groups:[{concept, candidates[]}] }`；检索失败返回空组不报错 |
+
+讲完就考没有新路由：课堂页把材料包变成伪转录直接调既有 `/api/apps/execute`（quiz / flashcards），assessment 走既有 `/api/memory/events`。

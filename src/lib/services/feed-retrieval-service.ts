@@ -11,6 +11,7 @@ import { createLogger } from '@/lib/logger';
 import type { FeedContentKind, FeedPerspective } from '@/types';
 import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { webSearchExact } from './web-search-service';
+import { isZhihuSearchEnabled, searchZhihuCandidates } from './zhihu/zhihu-discovery-service';
 
 const log = createLogger('feed-retrieval');
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -138,8 +139,14 @@ export async function retrieveExternalCandidates(
       return settled.flatMap((result) => result.status === 'fulfilled' ? result.value : []);
     }));
 
+  // 知乎站内搜索作为并列 provider（2026-09-12）：有作者、有权威分级、有赞同、有精选评论的中文一手经验，
+  // 补"不同视角 / 亲历者"那一格；两种策略下都追加，未配置 ZHIHU_ACCESS_SECRET 时为空数组零开销。
+  const zhihuGroups = isZhihuSearchEnabled()
+    ? await Promise.all(activeDiscoveries.map((discovery) => searchZhihu(discovery)))
+    : [];
+
   const seen = new Set<string>();
-  const candidates = groups.flat()
+  const candidates = [...groups.flat(), ...zhihuGroups.flat()]
     .filter((candidate) => candidate.title && candidate.snippet && isHttpUrl(candidate.url))
     .sort((a, b) => {
       if (a.preRanked && b.preRanked) {
@@ -162,6 +169,23 @@ export async function retrieveExternalCandidates(
     candidates: candidates.length,
   });
   return candidates;
+}
+
+async function searchZhihu(discovery: ExternalDiscoveryBrief): Promise<ExternalFeedCandidate[]> {
+  const items = await searchZhihuCandidates(discovery.query, { count: 6 });
+  return items.map((item) => ({
+    title: item.title,
+    url: item.url,
+    snippet: item.snippet,
+    sourceLabel: item.author ? `知乎 · ${item.author}` : '知乎',
+    contentKind: 'web' as const,
+    author: item.author ? [item.author] : undefined,
+    publishedAt: item.editTime ? new Date(item.editTime * 1000).toISOString() : undefined,
+    discovery,
+    sourceScore: item.score,
+    qualityReason: item.reason,
+    retrievalProvider: 'direct' as const,
+  }));
 }
 
 async function searchWeb(discovery: ExternalDiscoveryBrief): Promise<ExternalFeedCandidate[]> {

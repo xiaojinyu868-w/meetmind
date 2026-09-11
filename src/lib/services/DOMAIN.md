@@ -82,7 +82,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `teach-agent/` | ~640 | agent 驱动板书课（v28，"课 = agent 工具调用轨迹"，详见子域 DOMAIN.md）：tools.ts 11 个原子板书工具 + BoardEnv 环境反馈；to-board-script.ts 把 AI SDK 原生 messages 装配成 BoardScript；teach-agent-service.ts streamText loop + SSE 事件流 + dashscope 生图回填；system prompt 在 `skills/board-teaching.md`（磁盘技能，可独立迭代） |
 | `teach-live/` | ~700 | AI 家教「上课」线第三代引擎（live stage，2026-09-10，详见子域 DOMAIN.md）：模型直出「标签流」（say / scene / note / math / svg / plot / diagram / code / anim / widget / image / ask / point / highlight），`live-markup-parser` 增量解析 → 复用 teach-codex 事件总线与日志落盘；`live-history` 事件 ⇄ 模型历史（重块压占位）；`live-image` 异步生图。一轮一次 streamText（GLM-5.3-Flash，reasoning_effort=low，TTFT ~0.9s），无工具 loop 无子进程；前端 `components/teach-live/` 按语音节奏演出 |
 | `web-search-service.ts` | 381 | 服务端通用联网搜索（Bing/SerpAPI/DuckDuckGo HTML + Instant Answer fallback）；`webSearchExact` 仅在 `FEED_SEARCH_MODE=direct` 时为今日情报提供真实结果 |
-| `feed-retrieval-service.ts` | ~330 | 今日情报外部检索层：`auto` 在配置 `DASHSCOPE_API_KEY` 时优先调用国内可达的百炼原生 `qwen-plus` turbo 搜索，一次流式请求返回真实来源与简介，最多并行 3 个发现方向；结果已按搜索相关性排序，不再二次调用 LLM。无 DashScope 或显式 `direct` 时才使用网页搜索 + Semantic Scholar + Open Library |
+| `feed-retrieval-service.ts` | ~330 | 今日情报外部检索层：`auto` 在配置 `DASHSCOPE_API_KEY` 时优先调用国内可达的百炼原生 `qwen-plus` turbo 搜索，一次流式请求返回真实来源与简介，最多并行 3 个发现方向；结果已按搜索相关性排序，不再二次调用 LLM。无 DashScope 或显式 `direct` 时才使用网页搜索 + Semantic Scholar + Open Library；2026-09-12 起知乎站内搜索作为并列 provider（`zhihu/zhihu-discovery-service`，有作者 / 权威分级 / 赞同 / 精选评论，未配 Secret 零开销） |
 
 ### 📦 Workspace 数据管线
 
