@@ -9,8 +9,9 @@
  * 事——语法 / 运行错误变成结构化结果返回，永不抛出。
  */
 
-import { createApi, Scene } from './scene';
-import { render, type Transform } from './render';
+import { createApi, Scene, type TimelineSpec } from './scene';
+import { fitTransform, render, type Transform } from './render';
+import { compileTimeline, sampleCount } from './timeline';
 
 export interface RunOptions {
   params?: Record<string, number>;
@@ -35,6 +36,8 @@ export type RunResult =
        */
       error?: string;
       errorChunk?: number;
+      /** 脚本用了 time()：这段标记里带 SMIL 动画 */
+      timeline?: TimelineSpec;
     }
   | { ok: false; error: string; chunk: number };
 
@@ -48,8 +51,16 @@ export function cleanScript(src: string): string {
     .trim();
 }
 
-export function runDraw(chunks: string[], options: RunOptions = {}): RunResult {
-  const scene = new Scene(options.params ?? {});
+interface ExecResult {
+  scene: Scene;
+  logs: string[];
+  error: string | null;
+  chunk: number;
+}
+
+/** 执行一遍脚本（now = 采样时刻），返回场景与错误；不渲染 */
+function execute(chunks: string[], params: Record<string, number>, now: number): ExecResult {
+  const scene = new Scene(params, now);
   const api = createApi(scene);
   const names = Object.keys(api);
   const values = Object.values(api);
@@ -59,12 +70,9 @@ export function runDraw(chunks: string[], options: RunOptions = {}): RunResult {
     warn: (...args: unknown[]) => logs.push(args.map(String).join(' ')),
     error: (...args: unknown[]) => logs.push(args.map(String).join(' ')),
   };
-  const setChunk = (i: number) => {
-    scene.chunk = i;
-  };
   const body = chunks.map((c, i) => `__chunk(${i});\n${cleanScript(c)}`).join('\n');
   let currentChunk = 0;
-  let scriptError: string | null = null;
+  let error: string | null = null;
   // 非严格模式：老师偶发写 `l = lineThrough(P, 100)` 忘了 const，严格模式会直接 ReferenceError；
   // 宽松模式下它成了隐式全局——跑完把新冒出来的全局删掉，图与图之间不串。
   const globalObj = globalThis as unknown as Record<string, unknown>;
@@ -74,13 +82,11 @@ export function runDraw(chunks: string[], options: RunOptions = {}): RunResult {
     const fn = new Function(...names, 'console', '__chunk', body);
     fn.call(undefined, ...values, fakeConsole, (i: number) => {
       currentChunk = i;
-      setChunk(i);
+      scene.chunk = i;
     });
   } catch (err) {
     const e = err as Error;
-    scriptError = `${e?.name ?? 'Error'}: ${e?.message ?? String(err)}`;
-    // 语法错误：一个对象都没登记，只能整块失败；运行期报错：把报错前算好的画出来
-    if (scene.drawables.length === 0) return { ok: false, error: scriptError, chunk: currentChunk };
+    error = `${e?.name ?? 'Error'}: ${e?.message ?? String(err)}`;
   } finally {
     for (const key of Object.keys(globalObj)) {
       if (!before.has(key)) {
@@ -92,17 +98,87 @@ export function runDraw(chunks: string[], options: RunOptions = {}): RunResult {
       }
     }
   }
+  return { scene, logs, error, chunk: currentChunk };
+}
+
+function unionViewBox(boxes: string[]): string {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const b of boxes) {
+    const [x, y, w, h] = b.split(/\s+/).map(Number);
+    if (![x, y, w, h].every(Number.isFinite)) continue;
+    x0 = Math.min(x0, x);
+    y0 = Math.min(y0, y);
+    x1 = Math.max(x1, x + w);
+    y1 = Math.max(y1, y + h);
+  }
+  if (!Number.isFinite(x0)) return boxes[0] ?? '0 0 800 450';
+  const f = (n: number) => (Math.round(n * 10) / 10).toString();
+  return `${f(x0)} ${f(y0)} ${f(x1 - x0)} ${f(y1 - y0)}`;
+}
+
+export function runDraw(chunks: string[], options: RunOptions = {}): RunResult {
+  const params = options.params ?? {};
+  const base = execute(chunks, params, 0);
+  const { scene, logs } = base;
+  const scriptError = base.error;
+  // 语法错误：一个对象都没登记，只能整块失败；运行期报错：把报错前算好的画出来
+  if (scriptError && scene.drawables.length === 0) return { ok: false, error: scriptError, chunk: base.chunk };
+
+  const renderOpts = { idPrefix: options.idPrefix, transform: options.transform, fromChunk: options.fromChunk };
   try {
-    const r = render(scene, { idPrefix: options.idPrefix, transform: options.transform, fromChunk: options.fromChunk });
+    // 时间轴：按帧采样 → 同一 transform 渲染每帧 → 差分编译成 SMIL
+    if (scene.timeline && !scriptError) {
+      const spec = scene.timeline;
+      const K = sampleCount(spec.dur);
+      const frames: Scene[] = [scene];
+      let frameError: string | null = null;
+      for (let k = 1; k < K; k++) {
+        const r = execute(chunks, params, (spec.dur * k) / (K - 1));
+        if (r.error) {
+          frameError = r.error;
+          break;
+        }
+        frames.push(r.scene);
+      }
+      if (!frameError) {
+        const union = new Scene(params, 0);
+        union.view = scene.view;
+        union.size = scene.size;
+        union.drawables = frames.flatMap((f) => f.drawables);
+        const transform = options.transform ?? fitTransform(union);
+        const rendered = frames.map((f) => render(f, { ...renderOpts, transform }));
+        const { markup, animated } = compileTimeline(
+          rendered.map((r) => r.markup),
+          spec,
+        );
+        return {
+          ok: true,
+          markup,
+          viewBox: unionViewBox(rendered.map((r) => r.viewBox)),
+          transform,
+          params: rendered[0].params,
+          names: rendered[0].names,
+          log: [...logs, `timeline: ${K} frames, ${animated} animated attributes`],
+          drawables: scene.drawables.length,
+          timeline: spec,
+        };
+      }
+      logs.push(`timeline 采样报错，退回静态图：${frameError}`);
+    }
+
+    const r = render(scene, renderOpts);
     return {
       ok: true,
       ...r,
       log: logs,
       drawables: scene.drawables.length,
-      ...(scriptError ? { error: scriptError, errorChunk: currentChunk } : {}),
+      ...(scriptError ? { error: scriptError, errorChunk: base.chunk } : {}),
     };
   } catch (err) {
     const e = err as Error;
-    return { ok: false, error: `render: ${e?.message ?? String(err)}`, chunk: currentChunk };
+    return { ok: false, error: `render: ${e?.message ?? String(err)}`, chunk: base.chunk };
   }
 }

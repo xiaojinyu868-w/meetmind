@@ -31,10 +31,19 @@
 |---|---|
 | `geometry.ts` | 几何内核：点 / 线（line·ray·segment 共用两点表示）/ 圆；`angleOf` `foot` `bisector` `reflect` `intersectLines` `intersectLineCircle` `intersectCircles` `tangentAt`（过切点垂直半径）`tangentPoints`（外点切线：解直角三角形）`circumcircle` `incircle` `centroid` `polygonArea` `squareOn`（勾股：边上外侧正方形）`regularPolygon` `distToSegment`。一切都是计算，不是画 |
 | `analysis.ts` | 分析内核：`toFn`（字符串表达式走 `lib/utils/safe-math`，无 eval）、`sample`、`derivative` / `secondDerivative`（中心差分）、`integral`（Simpson）、`roots`（扫描 + 二分）、`extrema`、`tangentSegment` / `normalSegment`、`sampleParametric` / `samplePolar`、`intersections` |
-| `scene.ts` | 脚本可见的 API（`createApi`）与场景图（`Scene`）：对象类（point / segment / line / ray / circle / arc / polygon / angle / label / text / arrow / vector）调用即登记 drawable；构造类（midpoint / intersect / perpendicular / parallel / perpBisector / foot / bisector / tangentAt / tangentsFrom / onCircle / polar / rotate / reflect / translate / lineThrough / circumcircle / incircle / squareOn / regularPolygon / centroid）返回数学对象，线与圆算出来就画（`{ hidden: true }` 只算不画）；分析类（curve / parametric / polarCurve / axes / view / size / tangentLine / normalLine / area / roots / extrema / intersections / derivative / integral）；动画与交互（`trace` 沿线运动——路径就是形状本身，永不偏离；`animate` 属性动画；`param` 登记滑块）。色板 `PALETTE`（与 prompt / tokens 同源）。直角自动检测（89.5°–90.5° 画小方块） |
+| `scene.ts` | 脚本可见的 API（`createApi`）与场景图（`Scene`）：`time(dur, {loop})` / `progress()` / `smooth(u)` / `lerp`（时间）；`note('文字', 'top-right')`（画布九区域批注，不算坐标，同区域自动往下叠、自动换行）；`axes({ equal: true })`（带坐标系也保形；有圆 / 弧 / 角标时自动保形）；对象类（point / segment / line / ray / circle / arc / polygon / angle / label / text / arrow / vector）调用即登记 drawable；构造类（midpoint / intersect / perpendicular / parallel / perpBisector / foot / bisector / tangentAt / tangentsFrom / onCircle / polar / rotate / reflect / translate / lineThrough / circumcircle / incircle / squareOn / regularPolygon / centroid）返回数学对象，线与圆算出来就画（`{ hidden: true }` 只算不画）；分析类（curve / parametric / polarCurve / axes / view / size / tangentLine / normalLine / area / roots / extrema / intersections / derivative / integral）；动画与交互（`trace` 沿线运动——路径就是形状本身，永不偏离；`animate` 属性动画；`param` 登记滑块）。色板 `PALETTE`（与 prompt / tokens 同源）。直角自动检测（89.5°–90.5° 画小方块） |
 | `render.ts` | 场景图 → SVG 标记：`fitTransform`（几何图保形铺满；带 `axes` 的函数图 x / y 各自铺满——y = x² 从来不是等比画的）、直线 / 射线裁剪到画布、标签避让（点标签沿远离重心方向放，占位盒碰撞就换方向）、角标 / 直角标、箭头 marker、面积填充、坐标轴与网格（`data-draw="fade"` 让前端整体淡入）、`trace` → `<mpath>` 引用形状的 `<path>`；所有可当运动路径的形状都渲染成 `<path>`；元素 id = `${idPrefix}${localId}` + `data-name`（激光笔 `point at="fig#AB"` 靠它命中） |
+| `timeline.ts` | **时间原语的编译器**（Manim 的 ValueTracker + updater 搬进浏览器）：脚本调 `time(dur)` 后，运行时按 10 帧/秒（12–40 帧）采样执行，每帧都是精确几何；`compileTimeline` 把 K 帧标记解析成树、按 id / data-for / 位置对齐，数值属性差异写成 `<animate values keyTimes>`（d / points 结构一致时线性插值，否则离散），颜色 / 显隐离散，文字内容变化按连续相同段复制 `<text>` 用 opacity 轮播（≤ 40 段 × 4 个读数）；`loop: 'pingpong'` 镜像 values、dur 翻倍。浏览器原生播放：无逐帧脚本、回放零成本、rough 对带 SMIL 的元素保持工整 |
+| `layout-critic.ts` | **代码版 Critic**：渲染后扫一遍所有 `<text>`，按中文 1 em / 西文 0.56 em 估框，重叠就把后画的（可挪的）沿重叠更小的轴推开 + 4px，最多 6 轮；网格刻度、轴名、defs 里的是障碍但不动。毫秒级、不进关键路径——Code2Video / TheoremExplainAgent 用 VLM 干这件事要几十秒 |
 | `runtime.ts` | `runDraw(chunks, options)`：`cleanScript`（剥 ```js 围栏 / `<script>`）→ 注入 API 执行 → render；`console.log` 收进 `log` 返回。**能画多少画多少**：运行期报错（未定义变量等）时把报错前登记的对象照常渲染，结果 `ok: true` 带 `error` / `errorChunk`；只有语法错误（一个对象都没登记）才 `ok: false` |
 | `__tests__/draw-runtime.test.ts` | 严谨性单测：切线垂直半径、外点切线真的相切、三种交点、外接圆 / 内切圆、squareOn 朝向；脚本 → SVG（稳定 id、直角标、into 复用 transform、切线斜率、面积 / 根 / 极值、滑块、结构化错误、全局遮蔽）；`{{ }}` 内联计算 |
+
+## 站在谁的肩膀上（2026-09-11 下午调研，详见 `docs/TEACH_TUTOR_ENGINE.md` §12.6）
+
+- **Manim**：`time(t)` = ValueTracker + updater；`nextTo/arrange` 那类相对布局我们用自动铺满 + 标签避让 + `note` 区域替代。
+- **Code2Video（NUS，2025-10）**：Visual Anchor Prompting（6×6 格子替代像素，Element Layout 0.59→0.91）→ 我们给自由 `<svg>` 的 prompt 加了同样的格子；Critic 看图改布局 → 我们先做零延迟的代码版（本目录 `layout-critic.ts`）；ScopeRefine 局部修复 → 我们的自愈只修出错的那一段。
+- **TheoremExplainAgent（ACL 2025）**：AI 教学动画的头号顽疾是元素重叠（EL ≈ 0.6），人对一瞬间的遮挡都极敏感——所以 critic 与 note 区域优先于任何"舞台式"外层布局。
+- **OpenMAIC**：白板动作是模型写像素坐标 + 三种形状，无几何真值、无内容动画——正是我们用 `<draw>` 替掉的那一层。
 
 ## 与其它块的关系
 

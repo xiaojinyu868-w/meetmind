@@ -27,6 +27,19 @@
 
 ---
 
+## 2026-09-11 — 上课舞台第三轮：画面本身的上限——时间原语、布局先验、代码版 Critic
+
+用户把优先级钉死在画面：随手问一个数学 / 物理问题，10 秒内看到的要像专业教学动画；外层布局与交互都往后放。先对照了前沿（OpenMAIC / TheoremExplainAgent / Code2Video，`docs/TEACH_TUTOR_ENGINE.md` §12.6），拿了三样：
+
+- **`time(t)` 时间原语**（`lib/teach-live-draw/timeline.ts`）：Manim 的 ValueTracker + updater 搬进浏览器——整张图写成 t 的函数，运行时按帧采样精确几何，编译成 SMIL 属性插值（d / points 结构一致线性插值，颜色 / 显隐离散，读数文字按段复制轮播，`pingpong` 来回）。切线跟着圆上的点永远相切地转、割线随 `smooth(t)` 滑成切线、角度读数逐帧变；圆带坐标系自动保形（此前拉成椭圆）。6 例单测 + 真浏览器验证动点位置随时间变化。
+- **布局先验**：`note('…', 'top-right')` 九区域批注不算坐标（同区域叠放、自动换行）；`axes({ equal })`；自由 `<svg>` 的 prompt 给 6×6 锚点格（Code2Video 实测 EL 0.59→0.91 的做法）+ 语义 class（`pine / stroke-3 / soft-pine / label / glow`…）+ 每张图预注入五色箭头 marker / 发光 / 渐变 defs；draw 标签自带纸色晕边。
+- **代码版 Critic**（`layout-critic.ts`）：渲染后文字框重叠自动把后画的挪开（刻度轴名作障碍不动），毫秒级零延迟——前沿用 VLM 干这件事要几十秒。
+- **公式编排**：`<math into="eq">` 逐行长出带进场动效；`\pine{a^2}` 等颜色宏与图同色（送入 KaTeX 前文本展开——KaTeX macros 遇到 `#2F6B55` 会当参数记号，字符串宏与函数宏都实测报错）；`\htmlId{ca}{c^2}` 让 `point at="eq#ca"` 指到具体一项。
+- prompt：time / note / equal / 6×6 格与 class 词表 / 公式逐行同色 / 「每 15 秒画面必有可见变化」的构图纪律 + 两个新示例。实测导数课模型首次见到就用 `time(5, { loop: 'pingpong' })` 让割线滑成切线并用 `note` 打出 h 与斜率读数；圆的切线课用 `time(6)` 让切点转动直角不变。
+- 有意不做：舞台式主画面 + 公式栏的外层布局（会加一层状态机，不长智能）。
+
+---
+
 ## 2026-09-11 — 上课舞台第二轮：精确图形的通用解法（代码即意图）+ 课堂手势收口
 
 用户追问：切线 / 圆 / 函数图像这类严谨内容出错不可接受，应在代码层定义而不是用坐标画；几个原语堵不住所有情形，要通用；任何方案不能伤低延迟与音画同步。决策与推理见 `docs/TEACH_TUTOR_ENGINE.md` §12.4。回滚基线 tag `teach-live-v1`。

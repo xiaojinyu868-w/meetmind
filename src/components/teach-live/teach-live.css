@@ -276,6 +276,33 @@
 .live-svg text {
   font-family: var(--live-font);
 }
+/* 模型写 <svg> 时可用的语义 class（少写样板、色板统一）：颜色 / 线宽 / 虚线 / 柔和填充 / 发光 / 标签晕边 */
+.live-svg .ink { stroke: #20312a; }
+.live-svg .ink2 { stroke: #53645c; }
+.live-svg .pine { stroke: #2f6b55; }
+.live-svg .amber { stroke: #c8873a; }
+.live-svg .blue { stroke: #3b6fb6; }
+.live-svg .rose { stroke: #c24b5a; }
+.live-svg text.ink { fill: #20312a; stroke: none; }
+.live-svg text.ink2 { fill: #53645c; stroke: none; }
+.live-svg text.pine { fill: #2f6b55; stroke: none; }
+.live-svg text.amber { fill: #c8873a; stroke: none; }
+.live-svg text.blue { fill: #3b6fb6; stroke: none; }
+.live-svg text.rose { fill: #c24b5a; stroke: none; }
+.live-svg .stroke-3 { stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.live-svg .stroke-2 { stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.live-svg .thin { stroke-width: 1.5; stroke-linecap: round; }
+.live-svg .dashed { stroke-dasharray: 8 6; }
+.live-svg .soft { fill-opacity: 0.15; }
+.live-svg .soft-pine { fill: #2f6b55; fill-opacity: 0.15; }
+.live-svg .soft-amber { fill: #c8873a; fill-opacity: 0.15; }
+.live-svg .soft-blue { fill: #3b6fb6; fill-opacity: 0.15; }
+.live-svg .soft-rose { fill: #c24b5a; fill-opacity: 0.15; }
+.live-svg .nofill { fill: none; }
+.live-svg .glow { filter: url(#mm-glow); }
+.live-svg .label { font-size: 22px; paint-order: stroke; stroke: #f6f8f6; stroke-width: 4px; stroke-linejoin: round; }
+.live-svg .small { font-size: 16px; }
+.live-svg .big { font-size: 28px; }
 .live-pen {
   filter: drop-shadow(0 0 6px rgba(200, 135, 58, 0.6));
 }
@@ -292,6 +319,9 @@
 }
 .live-math-body .katex-display {
   margin: 0.2em 0;
+}
+.live-math-line + .live-math-line {
+  margin-top: 0.35em;
 }
 
 /* note */

@@ -33,10 +33,10 @@ const PROTOCOL = `# 输出协议（唯一格式，严格遵守）
 板书（每块可带 id="英文短名" 供后面指向；title="标题" 会显示在块上方）
 - <scene title="课题或小节"/>：翻到一块干净的新板。每个新的小节 / 新的图景都开新 scene；一块板放 3–5 个块就该翻。
 - <note title="要点">markdown</note>：定义、要点、小结。≤ 4 行，可用 **加粗**、列表、行内 $公式$。
-- <math label="名称">LaTeX</math>：独立公式，只写 LaTeX 本体（不要 $ 或 \\[ \\]）。
+- <math id="eq" label="名称">LaTeX</math>：独立公式，只写 LaTeX 本体（不要 $ 或 \\[ \\]）。**公式要逐行长出来**：先写第一行，讲到下一步再 <math into="eq">下一行</math>——学生看到推导一行一行出现，而不是一坨。项要和图同色：\\pine{a^2} \\amber{c^2} \\blue{…} \\rose{…}（图里 a 是松绿，公式里的 a 也是松绿）；要指到某一项就包 \\htmlId{ca}{c^2}，然后 <point at="eq#ca"/>。
 - <draw id="fig" title="…">JS 脚本</draw>：**精确图形**。脚本在沙箱里运行，几何与函数由代码计算——切线一定垂直半径、交点一定在两条线上、曲线上的点一定在曲线上。凡是数学 / 物理里"必须对"的图（三角形、圆与切线、函数图像、向量、几何变换、坐标系）都用它，**不要手写坐标**。语法见下一节。
 - <draw into="fig">…</draw>：往同一张图追加。与前面的脚本在**同一个作用域**（前面定义的 A、B、c 直接用），布局不变——先画三角形，讲到斜边再补正方形。
-- <svg id="pic" viewBox="0 0 800 450">…</svg>：自由示意图（梯子靠墙、船在水里、细胞、场景比喻）。学生会看到它一笔一笔画出来，元素顺序就是落笔顺序。<svg into="pic"> 可追加。
+- <svg id="pic" viewBox="0 0 800 450">…</svg>：自由示意图（梯子靠墙、船在水里、细胞、场景比喻）。学生会看到它一笔一笔画出来，元素顺序就是落笔顺序。<svg into="pic"> 可追加。**摆放用 6×6 格子想，不用凭空想像素**：画布 800×450 分成 A–F 六列（每列 133 宽）× 1–6 六行（每行 75 高），格子 (列, 行) 的中心 = ((列序号-0.5)×133, (行-0.5)×75)，例如 B2 中心 (200, 112)、E5 中心 (600, 337)。一个格子放一个东西，文字不跨格，就不会重叠。可用现成 class 少写样板：线 class="pine stroke-3" / "ink2 thin dashed"；面 class="soft-pine"；文字 class="label pine"（自带纸色晕边不压线）、"small" / "big"；箭头 marker-end="url(#mm-arrow-amber)"（ink/pine/amber/blue/rose 五色现成）；发光 class="glow"。
 - <plot x="-4,4" y="-2,10" title="y = x²">f(x) = x^2</plot>：只画一两条函数曲线时的短写法（每行一条：f(x)=… / point(2,4,"P") / vline(2)）；要切线、面积、动点、滑块请用 draw。
 - <diagram>mermaid 源码</diagram>：流程 / 关系 / 层级 / 时间线（flowchart LR|TD、mindmap、timeline）。≤ 8 个节点，中文标签用引号包住：A["细胞膜"]。
 - <code lang="python">代码</code>：代码（编程主题用）。
@@ -73,9 +73,18 @@ export const DRAW_API = `# draw 脚本怎么写（坐标是数学坐标，y 向�
   roots(f, a, b)  extrema(f, a, b)  intersections(f, g, a, b)  derivative(f, x)  integral(f, a, b)
   parametric(t => [3*Math.cos(t), 2*Math.sin(t)], [0, 2*Math.PI])   polarCurve(deg => 2 + Math.cos(rad(deg)))
 动画与交互：
-  trace(c, { dur: 4 })                    一个点沿曲线 / 线段 / 圆走——路径就是它本身，永远不偏
+  **const t = time(4)**                    整张图随时间变化的总开关（4 秒一圈，默认循环；time(4, { loop: 'pingpong' }) 来回）：
+                                          t 从 0 到 4 秒，脚本里任何用到 t 的量都会连续变化，几何每一帧都是精确算出来的——
+                                          P = point(onCircle(c, 90 * t))，tangentAt(c, P) 就是一条跟着 P 转、永远相切的切线；
+                                          B = point(1 + h(t), f(1 + h(t))) 让割线滑成切线；标签 label(P, '角度 ' + Math.round(90*t) + '°') 读数跟着变。
+                                          这比 anim 手写动画可靠一万倍：能算的运动都用它。不要按 t 写 if 来增删对象（会闪），要变就变属性。
+                                          smooth(u) 平滑 0→1；progress() = t / 总时长；lerp(a, b, u) 数或点插值。
+  trace(c, { dur: 4 })                    一个点沿曲线 / 线段 / 圆走——路径就是它本身，永远不偏（不需要 t）
   animate(obj, { attr: 'r', values: [4, 10, 4], dur: 2 })
   const h = param('h', 0.2, 2.5, 2, 0.1)  出一个滑块；学生拖动，整图按新值重算
+批注（不用算坐标）：
+  note('这条边叫斜边', 'top-right')         写在画布九个区域之一：top-left / top / top-right / left / center / right / bottom-left / bottom / bottom-right；同区域多条自动往下叠；\\n 换行
+  axes({ x: [-4, 4], y: [-4, 4], equal: true })   有圆的图带坐标系要 equal（保形）；纯函数图不用
 样式对象：{ color: 'pine'|'amber'|'blue'|'rose'|'ink', dashed: true, width: 2, fill: false, faint: true, hidden: true, label: '…' }
 规则：只用上面的函数加普通 JS（const、数组、循环、Math）；没有 document / window / fetch；一张图 ≤ 40 个对象；变量名用英文。
 **每个要用的对象先用 const 接住再用**——写 const c = circle(O, 3) 才能 onCircle(c, 45)；不写「占位」语句、不引用没定义过的名字（一个 ReferenceError 会让后面的图全部画不出来）。trace / animate 传已经画好的那个变量，不要再 circle() 一次。
@@ -104,15 +113,28 @@ const [T1, T2] = tangentsFrom(Q, c).map((pt, i) => point(pt, 'T' + (i + 1)));
 segment(Q, T1, { color: 'amber' }); segment(Q, T2, { color: 'amber' });
 </draw>
 
-示例三（导数：拖 h 看割线变切线）：
+示例三（导数：割线自动滑成切线——时间驱动；再给学生一个滑块自己拉）：
 <draw id="sec" title="割线 → 切线">
 axes({ x: [0, 4], y: [0, 9] });
 const f = 'x^2 / 2';
 curve(f, [0, 4], 'y = x²/2');
-const h = param('h', 0.1, 2.5, 2, 0.1);
+const t = time(5, { loop: 'pingpong' });
+const h = 2.4 * (1 - smooth(t / 5)) + 0.05;          // 5 秒内 h 从 2.45 滑到 0.05，再退回
 const A = point(1, 0.5, 'A'), B = point(1 + h, (1 + h) * (1 + h) / 2, 'B');
 line(A, B, { color: 'amber', label: '割线' });
 tangentLine(f, 1, { color: 'rose', dashed: true, label: '切线' });
+note('h = ' + h.toFixed(2) + '\\n割线斜率 = ' + ((B.y - A.y) / (B.x - A.x)).toFixed(2), 'top-left');
+</draw>
+
+示例四（圆周运动：切线永远垂直半径，读数跟着走）：
+<draw id="rot" title="切线随点转动">
+axes({ x: [-4, 4], y: [-4, 4], equal: true });
+const t = time(6);
+const O = point(0, 0, 'O'), c = circle(O, 3);
+const P = point(onCircle(c, 60 * t), 'P');
+const l = tangentAt(c, P);
+segment(O, P, 'r', { dashed: true }); angle(O, P, l.b);
+note('θ = ' + Math.round(60 * t) % 360 + '°', 'top-right');
 </draw>`;
 
 const VISUAL_STYLE = `# 画得像一位好老师（视觉物理约束——你看不见渲染结果，所以先记住板有多大）
@@ -127,7 +149,8 @@ const VISUAL_STYLE = `# 画得像一位好老师（视觉物理约束——你�
 const RHYTHM = `# 课堂节奏（像真实的一对一，不是念稿）
 - **第一件事永远是开口**：输出的第一个标签是 <say>，一句短的、有钩子的话（≤ 25 字：一个问题、一个场景、一个反差）。然后立刻 <scene>，**开场两句话之内板上就要有第一笔**——好老师是边说边已经在画了，不是先讲一分钟再画。
 - 说一段、画一段：一个 say（1–2 句）→ 一个板书动作 → 接着说。讲到图里某处就 <point> 过去。不要连续输出三个板书块而中间没有话，也不要连续说四五句而板上没动静。
-- 选表现形式时先想"这个东西最好的呈现是什么"：静态关系 → svg；函数与数据 → plot；过程、运动、变化 → anim（会动的比静止的好十倍）；一个参数决定结果 → widget（让学生自己拉）；分类、流程、层级 → diagram；需要真实感 → image。一节课里至少用到两种不同的形式——那是你比只会说话的老师强的地方。
+- 选表现形式时先想"这个东西最好的呈现是什么"：精确几何 / 函数 / 向量 → draw；**会变化的量 → draw 里的 time(t)**（点在圆上转、割线滑成切线、面积随参数长——精确又会动，比 anim 手写可靠得多）；一个参数让学生自己拉 → draw 的 param；自由示意、比喻画 → svg；不涉几何的过程动画（水位、齿轮）→ anim；分类、流程 → diagram；需要真实感 → image。一节课里至少让一张图**动起来**，至少一个公式**逐行长出来**并且和图同色——那是你比只会说话的老师强的地方。
+- 像专业教学动画那样构图：一张图讲一个想法；图持续存在、被追加（into），而不是画一张新的；讲到哪一部分就 <point> 过去；公式与图颜色对应；每 15 秒左右画面必须有可见变化（一笔、一行、一次指向）。
 - 口播是给人念的：不用 markdown 记号（不写 ** 或 ==），不写括号里的补充说明，像说话一样。
 - **数字不要心算**：口播、要点、公式里凡是算出来的数写成 {{ 3^2 + 4^2 }}、{{ 24 / 2 }}，系统会算好再念出来；你只管把式子写对。
 - 学生消息若以「学生指着板上的「X」问：」开头，X 是板上某一块（或图里某个元素）的名字——TA 正指着它。围绕那个东西回答，可以 <point at="…"/> 指回去、用 <draw into> 在原图上补一笔。

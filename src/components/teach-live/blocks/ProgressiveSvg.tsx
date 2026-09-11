@@ -13,6 +13,22 @@ import * as React from 'react';
 import type { LiveAttrs } from '@/types/teach-live';
 import type { LiveSegment } from '../live-model';
 import { animateDrawIn, createPen, mountSvgChildren, splitTopLevelSvgChildren, type PenController } from '../svg-draw';
+
+/**
+ * 每张图预注入的公共 defs：箭头 marker（五色）、发光 filter、柔和渐变。
+ * 模型写 <svg> 时直接 marker-end="url(#mm-arrow-pine)"、filter="url(#mm-glow)"，不用自己定义；
+ * 同 id 在多张图里重复定义没关系——形状一样，浏览器取文档里第一个。
+ */
+const DEFAULT_DEFS = (() => {
+  const colors: Record<string, string> = { ink: '#20312A', pine: '#2F6B55', amber: '#C8873A', blue: '#3B6FB6', rose: '#C24B5A' };
+  const markers = Object.entries(colors)
+    .map(([name, hex]) => `<marker id="mm-arrow-${name}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0.5 L10 5 L0 9.5 Z" fill="${hex}"/></marker>`)
+    .join('');
+  const gradients = Object.entries(colors)
+    .map(([name, hex]) => `<linearGradient id="mm-soft-${name}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${hex}" stop-opacity="0.28"/><stop offset="1" stop-color="${hex}" stop-opacity="0.06"/></linearGradient>`)
+    .join('');
+  return `<defs data-mm-defaults="1">${markers}${gradients}<filter id="mm-glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><filter id="mm-shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#20312A" flood-opacity="0.18"/></filter></defs>`;
+})();
 import { roughenElements } from '../svg-rough';
 import { LiveStyleContext } from '../live-style-context';
 
@@ -51,12 +67,13 @@ export const ProgressiveSvg = React.memo(function ProgressiveSvg({ attrs, segmen
   React.useEffect(() => {
     const svg = svgRef.current;
     if (!svg) return;
+    if (!svg.querySelector(':scope > defs[data-mm-defaults]')) mountSvgChildren(svg, DEFAULT_DEFS);
     if (animate && !penRef.current) penRef.current = createPen(svg);
     let restyled = false;
     if (roughAppliedRef.current !== useRough) {
       roughAppliedRef.current = useRough;
       for (const child of Array.from(svg.children)) {
-        if (!child.classList.contains('live-pen')) child.remove();
+        if (!child.classList.contains('live-pen') && !(child.tagName.toLowerCase() === 'defs' && child.hasAttribute('data-mm-defaults'))) child.remove();
       }
       mountedRef.current.clear();
       restyled = true;

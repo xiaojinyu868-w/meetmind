@@ -34,19 +34,78 @@ import { DrawBlock } from '../draw/DrawBlock';
 
 // ---------- math ----------
 
-function MathBlock({ body, label }: { body: string; label?: string }) {
-  const html = React.useMemo(() => {
-    const tex = body.replace(/^\s*\$+|\$+\s*$/g, '').replace(/^\\\[|\\\]$/g, '').trim();
-    try {
-      return katex.renderToString(tex, { displayMode: true, throwOnError: false, strict: 'ignore', output: 'html' });
-    } catch {
-      return `<code>${tex}</code>`;
+/**
+ * 公式里的颜色宏：与 draw 色板 / prompt 同源，图里的 a 是松绿，公式里的 a 也是松绿。
+ * 不走 KaTeX 的 macros：宏体里的 `#2F6B55` 会被 TeX 当成参数记号（字符串宏与函数宏都实测出错），
+ * 所以在送进 KaTeX 之前做一次配平花括号的文本替换：\pine{x} → \textcolor{#2F6B55}{x}。
+ */
+const COLOR_MACROS: Record<string, string> = {
+  pine: '#2F6B55',
+  amber: '#C8873A',
+  blue: '#3B6FB6',
+  rose: '#C24B5A',
+  ink: '#20312A',
+  faint: '#819087',
+};
+
+export function expandColorMacros(tex: string): string {
+  let out = '';
+  let i = 0;
+  const re = /\\(pine|amber|blue|rose|ink|faint)\s*\{/g;
+  for (;;) {
+    re.lastIndex = i;
+    const m = re.exec(tex);
+    if (!m) {
+      out += tex.slice(i);
+      break;
     }
-  }, [body]);
+    out += tex.slice(i, m.index);
+    // 找配平的右花括号
+    let depth = 1;
+    let j = m.index + m[0].length;
+    while (j < tex.length && depth > 0) {
+      if (tex[j] === '{') depth++;
+      else if (tex[j] === '}') depth--;
+      j++;
+    }
+    const inner = tex.slice(m.index + m[0].length, depth === 0 ? j - 1 : j);
+    out += `\\textcolor{${COLOR_MACROS[m[1]]}}{${expandColorMacros(inner)}}`;
+    i = j;
+  }
+  return out;
+}
+const KATEX_TRUSTED = new Set(['\\htmlId', '\\htmlClass', '\\textcolor', '\\color']);
+
+function renderTexLine(tex: string): string {
+  const clean = expandColorMacros(tex.replace(/^\s*\$+|\$+\s*$/g, '').replace(/^\\\[|\\\]$/g, '').trim());
+  try {
+    return katex.renderToString(clean, {
+      displayMode: true,
+      throwOnError: false,
+      strict: 'ignore',
+      output: 'html',
+      trust: (ctx) => KATEX_TRUSTED.has(ctx.command),
+    });
+  } catch {
+    return `<code>${clean}</code>`;
+  }
+}
+
+/**
+ * 公式块：每个已揭示的 segment 一行（<math into="eq"> 逐行长出来），新行带进场动效；
+ * 行内可用 \pine{a^2} 等颜色宏与 \htmlId{hyp}{c^2}（point at="eq#hyp" 指到具体一项）。
+ */
+function MathBlock({ block, animate }: { block: LiveBlock; animate: boolean }) {
+  const lines = block.segments.filter((s) => s.revealed && s.text.trim());
+  const htmls = React.useMemo(() => lines.map((s) => ({ id: s.id, html: renderTexLine(s.text) })), [lines.map((s) => `${s.id}:${s.text}`).join('\u0000')]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="live-math">
-      {label ? <div className="live-block-label">{label}</div> : null}
-      <div className="live-math-body" dangerouslySetInnerHTML={{ __html: html }} />
+      {block.attrs.label ? <div className="live-block-label">{block.attrs.label}</div> : null}
+      <div className="live-math-body">
+        {htmls.map((line) => (
+          <div key={line.id} className={`live-math-line${animate ? ' live-enter' : ''}`} dangerouslySetInnerHTML={{ __html: line.html }} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -287,7 +346,7 @@ export const LiveBlockView = React.memo(function LiveBlockView({ block, animate,
       content = <PlotBlock block={block} animate={animate} onGrow={onGrow} />;
       break;
     case 'math':
-      content = <MathBlock body={body} label={block.attrs.label} />;
+      content = <MathBlock block={block} animate={animate} />;
       break;
     case 'note':
       content = <NoteBlock body={body} />;

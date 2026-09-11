@@ -10,7 +10,8 @@
 
 import * as G from './geometry';
 import type { Pt } from './geometry';
-import { PALETTE, type Drawable, type ParamSpec, type Scene, type Style } from './scene';
+import { PALETTE, type Drawable, type NoteRegion, type ParamSpec, type Scene, type Style } from './scene';
+import { resolveTextOverlaps } from './layout-critic';
 
 export interface Transform {
   /** 统一缩放（半径、角标尺寸用它 = min(sx, sy)） */
@@ -136,9 +137,13 @@ export function fitTransform(scene: Scene): Transform {
   const cx = (b.xmin + b.xmax) / 2;
   const cy = (b.ymin + b.ymax) / 2;
   if (scene.view) {
-    // 函数图：x / y 各自铺满（坐标轴刻度会说明比例），四边留刻度与标签的位置
-    const sx = (w - 2 * PAD) / bw;
-    const sy = (h - 2 * PAD) / bh;
+    // 带坐标系：函数图允许 x / y 各自铺满（y = x² 从来不是等比画的，刻度会说明比例）；
+    // 但只要图里有圆 / 弧 / 角标，就必须保形——圆画成椭圆是错的（2026-09-11 实测）；axes({ equal: true }) 也可强制
+    const rawSx = (w - 2 * PAD) / bw;
+    const rawSy = (h - 2 * PAD) / bh;
+    const needsEqual = scene.equalAxes || scene.drawables.some((d) => d.kind === 'circle' || d.kind === 'arc' || d.kind === 'angle');
+    const sx = needsEqual ? Math.min(rawSx, rawSy) : rawSx;
+    const sy = needsEqual ? sx : rawSy;
     const t: Transform = { s: Math.min(sx, sy), sx, sy, ox: w / 2 - sx * cx, oy: h / 2 + sy * cy, w, h };
     t.clip = { x0: PAD - 12, y0: PAD - 12, x1: w - PAD + 12, y1: h - PAD + 12 };
     return t;
@@ -297,6 +302,8 @@ export function render(
   const out: string[] = [];
   const names: string[] = [];
   const arrowColorsDefined = new Set<string>();
+  /** 每个批注区域已经叠到的高度（像素） */
+  const noteCursors: Partial<Record<NoteRegion, number>> = {};
   let minX = 0;
   let minY = 0;
   let maxX = t.w;
@@ -323,7 +330,7 @@ export function render(
     const c = color(d.style.color, d.kind === 'point' ? 'ink' : d.kind === 'label' ? 'ink' : d.style.color ? d.style.color : 'ink');
     if (d.chunk >= fromChunk) {
       out.push(
-        `<text data-for="${esc(d.id)}" x="${f1(box.cx)}" y="${f1(box.cy)}" font-size="${fs}" fill="${c}" text-anchor="middle" dominant-baseline="central"${d.style.faint ? ' fill-opacity="0.7"' : ''}>${esc(text)}</text>`,
+        `<text data-for="${esc(d.id)}" x="${f1(box.cx)}" y="${f1(box.cy)}" font-size="${fs}" fill="${c}" text-anchor="middle" dominant-baseline="central" paint-order="stroke" stroke="#F6F8F6" stroke-width="4" stroke-linejoin="round"${d.style.faint ? ' fill-opacity="0.7"' : ''}>${esc(text)}</text>`,
       );
     }
   };
@@ -519,6 +526,25 @@ export function render(
         names.push(d.id);
         break;
       }
+      case 'note': {
+        const fs = d.style.font ?? 18;
+        const lines = wrapNote(d.text, fs, t.w * 0.3);
+        const lineH = fs * 1.45;
+        const pos = notePosition(d.region, t, noteCursors, lines.length * lineH);
+        const c = color(d.style.color, 'ink2');
+        const anchor = d.region.endsWith('right') ? 'end' : d.region.endsWith('left') ? 'start' : 'middle';
+        const inner = lines
+          .map((line, i) => `<text x="${f1(pos.x)}" y="${f1(pos.y + i * lineH)}" font-size="${fs}" fill="${c}" text-anchor="${anchor}" dominant-baseline="hanging">${esc(line)}</text>`)
+          .join('');
+        emit(d, `<g ${idAttr(d)} class="live-note-text">${inner}</g>`);
+        // 批注占的地方登记给标签避让；viewBox 需要时外扩
+        const width = Math.max(...lines.map((l) => textWidth(l, fs)));
+        const left = anchor === 'end' ? pos.x - width : anchor === 'start' ? pos.x : pos.x - width / 2;
+        placer.boxes.push({ cx: left + width / 2, cy: pos.y + (lines.length * lineH) / 2, w: width, h: lines.length * lineH });
+        extend({ x: left, y: pos.y });
+        extend({ x: left + width, y: pos.y + lines.length * lineH });
+        break;
+      }
       case 'trace': {
         const c = color(d.style.color, 'amber');
         emit(
@@ -541,7 +567,41 @@ export function render(
     extend({ x: b.cx + b.w / 2, y: b.cy + b.h / 2 });
   }
   const viewBox = `${f1(minX)} ${f1(minY)} ${f1(maxX - minX)} ${f1(maxY - minY)}`;
-  return { markup: out.join('\n'), viewBox, transform: t, params: scene.params, names };
+  // 代码版 critic：渲染完再扫一遍文字框重叠，把后画的挪开（零延迟，不用 VLM）
+  const markup = resolveTextOverlaps(out.join('\n'));
+  return { markup, viewBox, transform: t, params: scene.params, names };
+}
+
+// ---------- 批注区域 ----------
+
+const NOTE_PAD = 26;
+
+function wrapNote(text: string, fs: number, maxWidth: number): string[] {
+  const out: string[] = [];
+  for (const para of text.split(/\n/)) {
+    let line = '';
+    for (const ch of para) {
+      if (textWidth(line + ch, fs) > maxWidth && line) {
+        out.push(line);
+        line = ch;
+      } else line += ch;
+    }
+    out.push(line);
+  }
+  return out.filter((l, i, arr) => l !== '' || (i > 0 && arr[i - 1] !== ''));
+}
+
+function notePosition(region: NoteRegion, t: Transform, cursors: Partial<Record<NoteRegion, number>>, blockHeight: number): Pt {
+  const col = region.endsWith('left') ? 0 : region.endsWith('right') ? 2 : 1;
+  const row = region.startsWith('top') ? 0 : region.startsWith('bottom') ? 2 : 1;
+  const x = col === 0 ? NOTE_PAD : col === 2 ? t.w - NOTE_PAD : t.w / 2;
+  const used = cursors[region] ?? 0;
+  let y: number;
+  if (row === 0) y = NOTE_PAD + used;
+  else if (row === 2) y = t.h - NOTE_PAD - blockHeight - used;
+  else y = t.h / 2 - blockHeight / 2 + used;
+  cursors[region] = used + blockHeight + 10;
+  return { x, y };
 }
 
 function collectPoints(scene: Scene): Pt[] {

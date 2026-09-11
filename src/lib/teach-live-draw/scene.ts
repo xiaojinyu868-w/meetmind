@@ -60,12 +60,17 @@ export type Drawable =
   | (Base & { kind: 'polygon'; pts: Pt[] })
   | (Base & { kind: 'angle'; a: Pt; b: Pt; c: Pt; right: boolean })
   | (Base & { kind: 'label'; anchor: Pt; text: string; pos: NonNullable<Style['labelPos']> })
+  /** 画布区域里的批注（像素空间，3×3 区域，同区域自动往下叠）——不用算坐标的"图旁边写一句" */
+  | (Base & { kind: 'note'; region: NoteRegion; text: string })
   | (Base & { kind: 'arrow'; from: Pt; to: Pt })
   | (Base & { kind: 'curve'; pts: Pt[] })
   | (Base & { kind: 'area'; pts: Pt[] })
   | (Base & { kind: 'axes'; grid: boolean; ticks: boolean; xLabel: string; yLabel: string })
   | (Base & { kind: 'trace'; along: string; dur: number; loop: boolean })
   | (Base & { kind: 'animate'; target: string; attr: string; values: string; dur: number; loop: boolean });
+
+export type NoteRegion = 'top-left' | 'top' | 'top-right' | 'left' | 'center' | 'right' | 'bottom-left' | 'bottom' | 'bottom-right';
+export const NOTE_REGIONS: readonly NoteRegion[] = ['top-left', 'top', 'top-right', 'left', 'center', 'right', 'bottom-left', 'bottom', 'bottom-right'];
 
 export interface ParamSpec {
   name: string;
@@ -82,16 +87,33 @@ export interface View {
   ymax: number;
 }
 
+export interface TimelineSpec {
+  /** 秒 */
+  dur: number;
+  loop: boolean | 'pingpong';
+}
+
 export class Scene {
   drawables: Drawable[] = [];
   params: ParamSpec[] = [];
   view: View | null = null;
   size = { w: 800, h: 450 };
   chunk = 0;
+  /** 脚本调过 time()：整张图随 t 变化，运行时按帧采样编译成 SMIL */
+  timeline: TimelineSpec | null = null;
+  /** 当前采样时刻（秒）；静态图恒为 0 */
+  now = 0;
+  /** axes({ equal: true })：带坐标系也保形 */
+  equalAxes = false;
   private counters: Record<string, number> = {};
   private ids = new Set<string>();
 
-  constructor(private readonly paramValues: Record<string, number> = {}) {}
+  constructor(
+    private readonly paramValues: Record<string, number> = {},
+    now = 0,
+  ) {
+    this.now = now;
+  }
 
   nextId(prefix: string, wanted?: string): string {
     if (wanted && !this.ids.has(wanted)) {
@@ -255,6 +277,16 @@ export function createApi(scene: Scene): Record<string, unknown> {
 
   const text = (x: number, y: number, str: string, o?: Style) => label([x, y], str, { labelPos: 'center', ...(o ?? {}) });
 
+  /** note('文字', 'top-right')：写在画布某个区域，不用算坐标；同区域多条自动往下叠；\n 换行 */
+  const note = (str: string, regionOrOpts?: NoteRegion | (Style & { at?: NoteRegion }), o?: Style) => {
+    const at = typeof regionOrOpts === 'string' ? regionOrOpts : regionOrOpts?.at;
+    const st = { ...(typeof regionOrOpts === 'object' ? regionOrOpts : {}), ...(o ?? {}) };
+    const region: NoteRegion = at && (NOTE_REGIONS as readonly string[]).includes(at) ? at : 'top-right';
+    const id = scene.nextId('note', st.id);
+    scene.add({ kind: 'note', id, chunk: scene.chunk, style: st, region, text: String(str) });
+    return id;
+  };
+
   /** arrow(A, B, opts) 或 arrow(A, dx, dy, opts)——老师两种都会写，都认 */
   const arrow = (a: Pt, b: Pt | number, o?: string | Style | number, o2?: string | Style) => {
     expectPt(a, 'arrow', '起点');
@@ -305,7 +337,8 @@ export function createApi(scene: Scene): Record<string, unknown> {
   const polarCurve = (r: (deg: number) => number, range: [number, number] = [0, 360], o?: string | Style) =>
     curve(A.samplePolar(r, range[0], range[1]), o);
 
-  const axes = (o: { x?: [number, number]; y?: [number, number]; grid?: boolean; ticks?: boolean; xLabel?: string; yLabel?: string } = {}) => {
+  const axes = (o: { x?: [number, number]; y?: [number, number]; grid?: boolean; ticks?: boolean; xLabel?: string; yLabel?: string; equal?: boolean } = {}) => {
+    if (o.equal) scene.equalAxes = true;
     if (o.x || o.y) {
       const v = scene.view ?? { xmin: -5, xmax: 5, ymin: -5, ymax: 5 };
       scene.view = {
@@ -434,12 +467,24 @@ export function createApi(scene: Scene): Record<string, unknown> {
     rightAngle: (a: NamedPt, b: NamedPt, c: NamedPt, o?: string | Style) => angle(a, b, c, o),
     label,
     text,
+    note,
     arrow,
     vector,
     pointsOf,
+    // 时间（整张图随 t 变化；运行时采样编译成浏览器原生动画）
+    time: (dur = 4, o: { loop?: boolean | 'pingpong' } = {}): number => {
+      if (!scene.timeline) scene.timeline = { dur: Math.max(0.5, Math.min(30, Number(dur) || 4)), loop: o.loop ?? true };
+      return scene.now;
+    },
+    progress: (): number => (scene.timeline ? scene.now / scene.timeline.dur : 0),
+    smooth: (u: number): number => {
+      const x = Math.max(0, Math.min(1, u));
+      return x * x * (3 - 2 * x);
+    },
     // 构造（返回数学对象，不自动画；要画就交给 segment/line/circle/point）
     midpoint: (a: Pt, b: Pt) => named(G.midpoint(a, b)),
-    lerp: (a: Pt, b: Pt, t: number) => named(G.lerp(a, b, t)),
+    lerp: (a: Pt | number, b: Pt | number, t: number): NamedPt | number =>
+      typeof a === 'number' && typeof b === 'number' ? a + (b - a) * t : named(G.lerp(a as Pt, b as Pt, t)),
     intersect: (u: Ln | Circ, v: Ln | Circ): NamedPt | NamedPt[] | null => {
       const isCirc = (o: Ln | Circ): o is Circ => 'r' in o;
       if (!isCirc(u) && !isCirc(v)) {

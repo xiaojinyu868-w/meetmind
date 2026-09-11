@@ -454,7 +454,7 @@ function openBlock(state: LessonState, ev: Extract<TeachStreamEvent, { type: 'bl
 
   let attrs = ev.attrs;
   // svg / draw 的 into="label"：作为同类目标块的新 segment（目标不存在则降级成一张新图）
-  if ((ev.kind === 'svg' || ev.kind === 'draw') && attrs.into) {
+  if ((ev.kind === 'svg' || ev.kind === 'draw' || ev.kind === 'math' || ev.kind === 'note') && attrs.into) {
     const into = attrs.into;
     const targetId = state.labels[into] ?? (state.blocks[into] ? into : undefined);
     const target = targetId ? state.blocks[targetId] : undefined;
