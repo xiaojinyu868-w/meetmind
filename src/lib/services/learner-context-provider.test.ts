@@ -51,3 +51,19 @@ describe('buildLearnerContextFromStore（服务端供给方）', () => {
     expect(ctx.mastery).toEqual([]);
   });
 });
+
+describe('selectMasteryEntries（2026-09-11：点名的概念不占 limit，其余 状态 → 本课 → 最近）', () => {
+  it('concepts 点名的全部保留；其余还没稳在前、同状态本课优先、再按时间', async () => {
+    findMany.mockResolvedValue([
+      ev('e1', t(0), 'flashcards', [{ concept: '别的课·稳', outcome: 'got' }, { concept: '别的课·稳', outcome: 'got' }], 'other'),
+      ev('e2', t(1), 'quiz', [{ concept: '别的课·不稳', outcome: 'wrong' }], 'other'),
+      ev('e3', t(2), 'quiz', [{ concept: '本课·不稳', outcome: 'wrong' }, { concept: '本课·稳', outcome: 'correct' }], 's1'),
+      ev('e4', t(3), 'flashcards', [{ concept: '本课·稳', outcome: 'got' }, { concept: '被点名的卡', outcome: 'got' }], 's1'),
+    ]);
+    findUnique.mockResolvedValue({ learnerProfileJson: null });
+    const ctx = await buildLearnerContextFromStore({ v: 1, appId: 'flashcards', learnerId: 'u1', sessionId: 's1', need: ['mastery'], limit: 2, concepts: ['被点名的卡'] });
+    // 点名的先（不占 limit=2），然后 不稳（本课 → 别的课），limit 截断掉两条稳的
+    expect(ctx.mastery.map((m) => m.concept)).toEqual(['被点名的卡', '本课·不稳', '别的课·不稳']);
+    expect(ctx.mastery[1].evidence?.sessionId).toBe('s1');
+  });
+});
