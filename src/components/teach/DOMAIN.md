@@ -21,8 +21,10 @@
 | `TeachThreadList.tsx` | 课程会话列表（桌面左栏 / 移动抽屉），新开一课/删除 |
 | `QuoteAskPopover.tsx` | 划线浮钮「引用提问」（交互复用 WordExplainer 未展开态 + useTextSelection 豁免约定） |
 | `useTeachSpeech.ts` | 讲课声音 hook 封装（从 useTeachSession 拆出）：SentenceSplitter+Player 持有，feedDelta/feedBreak/silence 三个喂口 + speaking/muted/unlockAudio |
-| `speech-pipeline.ts` | 讲课声音前端流水线：SentenceSplitter 按句切分（句末标点；tool-call/turn 结束=自然断句点）→ TeachSpeechPlayer 顺序播放（Audio 元素；播第 i 句时预取 i+1 的合成）；unlock() 在用户手势激活（新开一课/发送）；stopAll=interrupt 立刻闭嘴；合成失败跳过该句不打扰讲课流 |
+| `speech-pipeline.ts` | 讲课声音前端流水线：SentenceSplitter 按句切分（句末标点；tool-call/turn 结束=自然断句点）→ TeachSpeechPlayer 顺序播放（播第 i 句时预取 i+1 的合成）；`fetchAudio` 可以给 Blob（整句 wav → Audio 元素，变速保音高）或 `PcmStreamSource`（流式 PCM → pcm-stream-audio 句柄），播放器不区分；unlock() 在用户手势激活（新开一课/发送）；stopAll=interrupt 立刻闭嘴；合成失败跳过该句不打扰讲课流 |
+| `pcm-stream-audio.ts` | 流式 PCM 的 Web Audio 句柄（2026-09-11，讲给同桌听评委开口用）：/api/teach/tts `stream:true` 的 audio/pcm 分片到一片就 createBuffer + start(nextStart) 首尾相接，首片 ~0.4s 出声；`unlockSpeechAudioContext()` 要在用户手势里调一次；pause = 停止（不回调 onended）；setRate 是 playbackRate 会变音高（评委席语速固定 1） |
 | `speech-pipeline.test.ts` | 切分器 + 播放器（顺序/预取/打断/失败跳过/静音）单测 |
+| `pcm-stream-audio.test.ts` | 流式句柄：分片衔接 / 跨片半样本 / 首片回调 / 晚到的片从现在接 / pause / 自动播放策略挂起 |
 | `teach-stream.test.ts` | teach-events + MockTeachSession 单测 |
 
 页面：`src/app/teach/page.tsx`（布局：顶标题 / 左列表 / 中画布 / 右对话 380px；?pace=N 加速 mock 流）。

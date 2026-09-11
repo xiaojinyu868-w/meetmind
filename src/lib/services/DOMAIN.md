@@ -59,6 +59,9 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `dify-service.ts` | 354 | Dify Agent 集成（提问引导 + 联网检索） |
 | `teaching-suggestion.ts` | 256 | 教学改进建议生成 |
 | `teach-back-respond-service.ts` | ~90 | 半双工语音版「讲给同桌听」的同桌应答：学生每讲完一段调一次，system 用 `buildTeachBackStudentInstructions`（安静学生人设），LLM 输出 `{ say }`；`normalizeTeachBackSay` 纯函数清洗（非字符串/空白/「null」→ null，≤120 字），任何失败收为 null 绝不 throw |
+| `teach-back-panel-service.ts` | ~150 | 连续讲述版评委席回合（`/api/apps/teach-back/turn`，SSE 事件 judge → delta* → done / silent / error）：原文给 `selectRelevantTranscript` 挑的 ≤5k 字相关窗口（2026-09-11 从 9k 逐段压缩改来：整段原话不截半句；qwen3.7-plus 首字对 8k / 5k / 2.5k 不敏感），历史只给最近两回合（≤1.5k 字），`JudgeStreamParser` 边收边解析头行，`JUDGE_SAY_MAX_CHARS` 90 保险丝；模型 `TEACH_BACK_PANEL_MODEL` 默认 workshop（flash 档对照见 windows/DOMAIN.md） |
+| `teach-tts-service.ts` | ~300 | 讲课声音合成（按句）：`synthesizeTeachSentence` 非流式（整句 → 24h URL → 回源 wav）；`streamTeachSentence`（2026-09-11）SSE 流式，首片到手才返回 `{ stream, complete }`（裸 PCM 片流 + 整段收齐的 Promise 供缓存），首片实测 0.4s，之前失败返回 null 让路由退回非流式；上游按自己节奏读完（合成多久占串行闸多久，与客户端是否在读无关），客户端断开就取消上游 |
+| `teach-tts-stream.ts` | ~130 | TTS 流式的纯函数：`parseTtsSseChunk` 增量切 SSE 事件抠 base64 PCM 片（半截事件留 rest）、`pcmToWav` / `wavPcmPayload`（沿 chunk 链找 fmt / data，缓存 wav 也能流式发）；常量 24kHz / 16bit / mono |
 | `gemini-image-service.ts` | 365 | Gemini 图像生成（via undyingapi 代理）；`buildImagePrompt` 是两个 provider 共用的提示词真相源 |
 | `dashscope-image-service.ts` | ~180 | DashScope 图像生成（阿里云百炼）：默认 `qwen-image-3.0-pro`（multimodal-generation 同步接口，邀测中），AccessDenied 自动降级 `qwen-image-plus`（image-synthesis 异步任务）；信息图默认 provider，`IMAGE_PROVIDER=gemini` 可退回 Gemini |
 | `infographic-image-provider.ts` | ~55 | 信息图生图 provider 判定与分发单一真相：`IMAGE_PROVIDER=gemini` 强制 Gemini，否则 DashScope 优先、Gemini 兜底；generate-image 路由与 studio-workshop 插件内联生图共用，杜绝「路由认 DashScope、插件只认 Gemini」的两套判定 |

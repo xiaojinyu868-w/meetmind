@@ -55,7 +55,7 @@ text-delta 流（同一条 SSE 连接，不断线）。image-ready 是异步回�
 | `/api/teach/threads/[id]/messages` | POST | 发学生消息/开课 `{text, boardNote?}`（≤2000字；`boardNote` 仅 live：前端报告的板上情况如 draw 脚本报错，只进模型上下文）→ `{ok:true}`；turn 进行中 409；按 `TeachThread.engine` 分发到 teach-session-service / teach-engine-service / teach-live-service（404/409 语义与响应形状三侧一致） |
 | `/api/teach/threads/[id]/interrupt` | POST | 打断 `{text?, boardNote?}`；附带 text 时 interrupted 落地后同线程续讲；引擎分发同上 |
 | `/api/teach/threads/[id]/draw-fix` | POST | **仅 live**：`<draw>` 脚本自愈 `{chunks, index, error}` → `{script, verified}`（模型只修出错的那一段，服务端复跑验证；不写日志、不进课堂记录；每线程 40 次） |
-| `/api/teach/tts` | POST | 讲课声音合成（按句）：`{text}` ≤300字 → wav 二进制；百炼 qwen3-tts-instruct-flash + Cherry + 教学语气指令（teach.config.ts TTS 注册表，`TEACH_TTS_PROVIDER` 留 MiniMax 切换位）；串行闸 1 路 + 退避重试；两级缓存（进程 LRU 64 + `data/teach-tts-cache/` 200 FIFO）；失败 503 前端跳句 |
+| `/api/teach/tts` | POST | 讲课声音合成（按句）：`{text, voice?, instruct?}` ≤300字 → wav 二进制（audio/wav）；百炼 qwen3-tts-instruct-flash + Cherry + 教学语气指令（teach.config.ts TTS 注册表，`TEACH_TTS_PROVIDER` 留 MiniMax 切换位）；串行闸 1 路 + 退避重试；两级缓存（进程 LRU 64 + `data/teach-tts-cache/` 200 FIFO）；失败 503 前端跳句。**`stream:true`（2026-09-11）**：边合成边发裸 PCM 分片（`Content-Type: audio/pcm`，`X-Teach-Tts-Sample-Rate` 24000 / `-Channels` 1 / `-Bits` 16 头），首片 ~0.4s；缓存命中把 wav 抠成 PCM 同样流式返回；上游流式首片没拿到静默退回 audio/wav 整块——客户端按 Content-Type 分流；整段收齐后包成 wav 进同一缓存。不传 stream 行为不变 |
 | `/api/teach/internal/tools` | GET | MCP server 拉工具描述（`x-teach-internal` 令牌鉴权） |
 | `/api/teach/internal/tool` | POST | MCP server 工具回调 `{threadId,name,args}` → `{result}`（同上鉴权） |
 
