@@ -12,7 +12,8 @@ module.exports = {
     {
       name: 'meetmind',
       script: 'server.js',
-      cwd: '/mnt/meetmind-capture-v1-server-handoff',
+      // 生产专用检出（git worktree，分支 release/prod）；任何人的开发工作树都不再是运行目录（2026-09-11）
+      cwd: '/mnt/meetmind-prod',
       interpreter: '/usr/local/bin/node',
 
       // Environment
@@ -52,7 +53,8 @@ module.exports = {
       name: 'meetmind-context-worker',
       script: 'node_modules/tsx/dist/cli.mjs',
       args: 'src/lib/services/context/worker.ts',
-      cwd: '/mnt/meetmind-capture-v1-server-handoff',
+      // 生产专用检出（git worktree，分支 release/prod）；任何人的开发工作树都不再是运行目录（2026-09-11）
+      cwd: '/mnt/meetmind-prod',
       interpreter: '/usr/local/bin/node',
       env: { NODE_ENV: 'production' },
       instances: 1,

@@ -13,7 +13,8 @@
 #
 set -euo pipefail
 
-PROJECT_DIR="/mnt/meetmind-capture-v1-server-handoff"
+# 生产专用检出（git worktree，分支 release/prod）；开发工作树不再是运行目录——见 docs/RELEASE_FLOW.md
+PROJECT_DIR="${MEETMIND_PROD_DIR:-/mnt/meetmind-prod}"
 APP_NAME="meetmind"
 PORT=3002
 HEALTH_URL="http://127.0.0.1:${PORT}/api/health"
