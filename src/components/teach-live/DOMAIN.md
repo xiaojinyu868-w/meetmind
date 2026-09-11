@@ -26,10 +26,10 @@ Director ──► TeachSpeechPlayer（/api/teach/tts 按句合成、预取两�
 | `svg-draw.ts` | 让 SVG 一笔一笔长出来：`splitTopLevelSvgChildren`（流式正文切成已闭合的顶层元素）、`mountSvgChildren`（剥 `<style>`/`<script>`：内联 SVG 的 style 会泄漏整页）、`animateDrawIn`（描边按路径长度 stroke-dashoffset 描画 → 填充淡入；文字上浮；`<g>` 递归错开；>6 个子元素或 `data-draw="fade"` 的组整体淡入）、`createPen`（琥珀色笔尖沿正在画的路径走） |
 | `plot-dsl.ts` | `<plot>` 声明式语法 → SVG 标记（纯函数）：手写 shunting-yard 表达式求值（无 eval；隐式乘法 2x）、nice 刻度、原点穿轴、断点 / 越界裁剪、曲线尾部标签；grid / ticks / legend 标 `data-draw="fade"` 快速淡入，曲线描画 |
 | `blocks/ProgressiveSvg.tsx` | 增量 DOM：按 segment 记已挂元素数，只挂新闭合的、只描新挂的；不重渲染整张图（那会让动画重放）。读 `LiveStyleContext.rough`：开着就先经 `svg-rough.ts` 换成手绘笔迹再描画 |
-| `draw/DrawBlock.tsx` | `<draw>` 块：脚本 → `draw-runtime-client` → 编译好的 SVG 走 ProgressiveSvg（首段决定布局，`into` 段沿用；`param()` 登记的参数在图下出滑块，拖动整图重算瞬时替换）；脚本报错显示一句人话并经 `onIssue` 记入会话（下次开口带给老师） |
+| `draw/DrawBlock.tsx` | `<draw>` 块：**计算与展示分开**——段一闭合就在 Worker 里跑（LiveBlockView 对未揭示的 draw 块也挂载它，返回 null），揭示时才描画；结果按「前缀文本」缓存（修第 3 段不重算 1、2 段）。报错：先渲染报错前算好的部分，同时向 `draw-fix` 要修正（每段一次），服务端验证过的脚本替换该段重算；修不好显示一句人话并经 `onIssue` 记入会话。首段决定布局，`into` 段沿用；`param()` 滑块拖动整图重算瞬时替换 |
 | `draw/draw-runtime-client.ts` | 主线程侧：一个共享 Worker + 请求队列 + 2s 超时（死循环 → terminate 重建）；Worker 不可用回退主线程执行 |
 | `draw/draw-worker.ts` | Worker 入口：拆掉 fetch / XHR / WebSocket / importScripts / indexedDB 等全局后执行 `lib/teach-live-draw/runtime.runDraw` |
-| `svg-rough.ts` | 手绘笔迹：把刚挂上的几何元素换成 rough.js 的 `<g>`（roughness 0.55、单笔、保留 id / data-* / 虚线 / 透明度 / marker）；文字、`data-draw="fade"` 的网格刻度、带 SMIL 子元素的形状、半径 < 6 的点保持工整 |
+| `svg-rough.ts` | 手绘笔迹：把刚挂上的几何元素换成 rough.js 的 `<g>`（roughness 0.55、单笔、保留 id / data-* / 虚线 / 透明度 / marker）；文字、`data-draw="fade"` 的网格刻度、带 SMIL 子元素的形状、半径 < 6 的点保持工整。每次替换后 `retargetMotionPaths`：`<mpath href>` 指到的形状变成 `<g>` 后运动路径会失效（动点停在原点，2026-09-11 实测），把它重指到 `<g>` 里的描边 path |
 | `live-style-context.ts` | 舞台级视觉开关（手绘 / 工整），默认开，localStorage 记住 |
 | `blocks/LiveBlockView.tsx` | 按 kind 分发：svg / plot（编译后走 ProgressiveSvg）/ math（KaTeX）/ note（react-markdown + gfm + math）/ code（ChatCodeBlock）/ diagram（mermaid lazy，失败回退源码）/ anim（无脚本 iframe srcdoc：SVG 的 style 与 SMIL 只作用于自己那格）/ widget（allow-scripts 沙箱 + postMessage 自报高度 ≤560）/ image（占位卡 → image-ready 淡入）/ ask（提问卡）。只渲染有 revealed segment 的块 |
 | `LiveStage.tsx` | 上课屏：顶栏（课名 / 页签：有内容或正在演的页才出现，学生手动翻页后出「回到老师那页」/ 手绘开关 / 语速 1×·1.25×·1.5× / 回看这节课 / 课堂记录 / 声音）→ 板（只展示 activePage；最新块 `scrollIntoView nearest`；**点任何一块或图里带名字的部分 = 指着它**，输入框出引用 chip）→ 字幕（pending 半透明 / speaking 全亮；上一句还在播时下一句的 pending 不抢；Octo Buddy 头像三态：想 / 讲 / 等）→ 输入。课堂记录抽屉底部一行本节课累计 token 与估算费用 |

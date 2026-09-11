@@ -177,5 +177,36 @@ export function roughenElements(svg: SVGSVGElement, elements: Element[]): Elemen
     el.replaceWith(replacement);
     return replacement;
   };
-  return elements.map(visit);
+  const out = elements.map(visit);
+  retargetMotionPaths(svg);
+  return out;
+}
+
+/**
+ * <animateMotion><mpath href="#shape"/> 只能指向 path 类元素。形状被换成手绘 <g> 后 id 落在 <g> 上，
+ * 运动路径失效、动点会停在原点——把 mpath 重新指到 <g> 里的描边 path（给它一个派生 id）。
+ * 动点可能比路径先挂上、路径也可能后被手绘化，所以每次手绘 pass 之后整张图扫一遍。
+ */
+export function retargetMotionPaths(svg: SVGSVGElement): void {
+  for (const mpath of Array.from(svg.querySelectorAll('mpath'))) {
+    const href = mpath.getAttribute('href') ?? mpath.getAttribute('xlink:href');
+    if (!href || !href.startsWith('#')) continue;
+    const targetId = href.slice(1);
+    const target = findById(svg, targetId);
+    if (!target || target.getAttribute('data-rough') !== '1') continue;
+    const stroke =
+      Array.from(target.querySelectorAll('path')).find((p) => (p.getAttribute('fill') ?? 'none') === 'none') ??
+      target.querySelector('path');
+    if (!stroke) continue;
+    if (!stroke.id) stroke.id = `${targetId}__stroke`;
+    mpath.setAttribute('href', `#${stroke.id}`);
+    mpath.removeAttribute('xlink:href');
+  }
+}
+
+function findById(svg: SVGSVGElement, id: string): Element | null {
+  const own = (svg as SVGSVGElement & { getElementById?: (id: string) => Element | null }).getElementById?.(id);
+  if (own) return own;
+  for (const el of Array.from(svg.querySelectorAll('[id]'))) if (el.id === id) return el;
+  return null;
 }

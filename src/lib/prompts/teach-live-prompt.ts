@@ -50,7 +50,7 @@ const PROTOCOL = `# 输出协议（唯一格式，严格遵守）
 - <erase id="fig"/>：擦掉某块。`;
 
 
-const DRAW_API = `# draw 脚本怎么写（坐标是数学坐标，y 向上；画布自动铺满、标签自动避让，你只管构造）
+export const DRAW_API = `# draw 脚本怎么写（坐标是数学坐标，y 向上；画布自动铺满、标签自动避让，你只管构造）
 对象（调用即画出）：
   point(x, y, 'A')                        点，名字既是标签也是 id（point at="fig#A"）
   segment(A, B, 'a')  line(A, B)  ray(A, B)   线段 / 直线 / 射线；第三参可为样式对象
@@ -78,6 +78,7 @@ const DRAW_API = `# draw 脚本怎么写（坐标是数学坐标，y 向上；�
   const h = param('h', 0.2, 2.5, 2, 0.1)  出一个滑块；学生拖动，整图按新值重算
 样式对象：{ color: 'pine'|'amber'|'blue'|'rose'|'ink', dashed: true, width: 2, fill: false, faint: true, hidden: true, label: '…' }
 规则：只用上面的函数加普通 JS（const、数组、循环、Math）；没有 document / window / fetch；一张图 ≤ 40 个对象；变量名用英文。
+**每个要用的对象先用 const 接住再用**——写 const c = circle(O, 3) 才能 onCircle(c, 45)；不写「占位」语句、不引用没定义过的名字（一个 ReferenceError 会让后面的图全部画不出来）。trace / animate 传已经画好的那个变量，不要再 circle() 一次。
 
 示例一（几何，分步）：
 <draw id="tri" title="直角三角形">
@@ -171,4 +172,20 @@ ${VISUAL_STYLE}
 ${RHYTHM}
 
 ${EXAMPLE}`;
+}
+
+/**
+ * draw 脚本自愈：前端预跑报错 → 服务端让模型只修这一段。不进课堂、不进历史，几百 token，1–2 秒。
+ * 只给它 API 说明 + 全部 chunk（出错的那段标出）+ 错误信息，要求只输出修正后的那一段。
+ */
+export function buildDrawRepairPrompt(chunks: string[], index: number, error: string): { system: string; user: string } {
+  const system = `你在修一段课堂白板的 draw 脚本（下面是它能用的全部 API）。只输出修正后的脚本正文：不要解释、不要 markdown 围栏、不要 <draw> 标签。
+修法原则：改动最小；未定义的变量若显然是前面某个构造的结果就补上 const 定义（例如 circle(O, 3) 忘了接住 → const c = circle(O, 3)）；删掉「占位」类无意义语句；不要改变图的意图。
+
+${DRAW_API}`;
+  const listing = chunks
+    .map((c, i) => `${i === index ? `【出错的这段 · 第 ${i + 1} 段】` : `【第 ${i + 1} 段（上下文，不用改）】`}\n${c.trim()}`)
+    .join('\n\n');
+  const user = `${listing}\n\n运行错误：${error}\n\n请只输出修正后的第 ${index + 1} 段脚本。`;
+  return { system, user };
 }

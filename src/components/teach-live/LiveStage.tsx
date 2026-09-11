@@ -184,7 +184,17 @@ export function LiveStage({ lesson, live, onLeave }: LiveStageProps) {
                 {page.blockIds.map((id) => {
                   const block = state.blocks[id];
                   if (!block) return null;
-                  return <LiveBlockView key={id} block={block} animate={live} onGrow={onGrow} onIssue={reportBoardIssue} quoted={quote?.blockId === id} />;
+                  return (
+                    <LiveBlockView
+                      key={id}
+                      block={block}
+                      animate={live}
+                      onGrow={onGrow}
+                      onIssue={reportBoardIssue}
+                      quoted={quote?.blockId === id}
+                      threadId={state.threadId}
+                    />
+                  );
                 })}
               </div>
               <LivePointer target={pointer} containerRef={boardInnerRef} />

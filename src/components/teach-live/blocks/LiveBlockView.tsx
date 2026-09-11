@@ -254,12 +254,18 @@ interface LiveBlockViewProps {
   onGrow?: () => void;
   /** 板上出了问题（draw 脚本报错）→ 会话层记下，下次学生开口时告诉老师 */
   onIssue?: (blockId: string, message: string) => void;
+  /** draw 块自愈要向服务端要修正脚本 */
+  threadId?: string | null;
   /** 学生正指着这一块 */
   quoted?: boolean;
 }
 
-export const LiveBlockView = React.memo(function LiveBlockView({ block, animate, onGrow, onIssue, quoted }: LiveBlockViewProps) {
+export const LiveBlockView = React.memo(function LiveBlockView({ block, animate, onGrow, onIssue, quoted, threadId }: LiveBlockViewProps) {
   const revealed = block.segments.some((s) => s.revealed);
+  // draw 块未揭示也先挂载：脚本在到达时就开始算（必要时自愈），揭示那一刻直接描画
+  if (!revealed && block.kind === 'draw') {
+    return <DrawBlock block={block} animate={animate} revealed={false} threadId={threadId} onIssue={onIssue} />;
+  }
   if (!revealed) return null;
   const body = revealedBody(block);
   const complete = block.segments.filter((s) => s.revealed).every((s) => s.complete);
@@ -272,7 +278,7 @@ export const LiveBlockView = React.memo(function LiveBlockView({ block, animate,
       content = <ProgressiveSvg attrs={block.attrs} segments={block.segments} animate={animate} onGrow={onGrow} className="live-svg" />;
       break;
     case 'draw':
-      content = <DrawBlock block={block} animate={animate} onGrow={onGrow} onIssue={onIssue} />;
+      content = <DrawBlock block={block} animate={animate} revealed threadId={threadId} onGrow={onGrow} onIssue={onIssue} />;
       break;
     case 'plot':
       content = <PlotBlock block={block} animate={animate} onGrow={onGrow} />;

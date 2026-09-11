@@ -73,6 +73,22 @@ export async function livePostInterrupt(threadId: string, text?: string, boardNo
   );
 }
 
+/** <draw> 脚本自愈：让模型只修出错的那一段（服务端复跑验证）。失败抛错，调用方回退到「没画出来」提示。 */
+export async function liveFixDraw(
+  threadId: string,
+  chunks: string[],
+  index: number,
+  error: string,
+): Promise<{ script: string; verified: boolean; error?: string }> {
+  return readJson(
+    await fetch(`/api/teach/threads/${encodeURIComponent(threadId)}/draw-fix`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chunks, index, error }),
+    }),
+  );
+}
+
 export interface LiveSubscription {
   close(): void;
 }

@@ -135,9 +135,14 @@ describe('runDraw（脚本 → SVG）', () => {
     const bad = runDraw(['const A = point(0, 0; ']);
     expect(bad.ok).toBe(false);
     if (!bad.ok) expect(bad.error).toMatch(/SyntaxError/);
+    // 运行期错误发生在已有对象之后：部分渲染（ok + error），出错段是第 2 段
     const rt = runDraw(['point(0,0,"A");', 'nope();']);
-    expect(rt.ok).toBe(false);
-    if (!rt.ok) expect(rt.chunk).toBe(1);
+    expect(rt.ok).toBe(true);
+    if (rt.ok) {
+      expect(rt.error).toMatch(/nope/);
+      expect(rt.errorChunk).toBe(1);
+      expect(rt.drawables).toBe(1);
+    }
     const fenced = runDraw(['```js\npoint(1, 1, "P");\n```']);
     expect(fenced.ok).toBe(true);
   });
@@ -155,5 +160,31 @@ describe('inline math for speech', () => {
     expect(evaluateInlineMath('{{ 10 / 3 }} 米')).toBe('3.3333 米');
     expect(evaluateInlineMath('{{ 你好 }}')).toBe('你好');
     expect(evaluateArithmetic('2pi')).toBeCloseTo(Math.PI * 2, 9);
+  });
+});
+
+describe('runDraw partial rendering（模型笔误不再让整张图消失）', () => {
+  it('renders the objects computed before a ReferenceError and reports the error', () => {
+    const r = runDraw(["const O = point(0, 0, 'O');\ncircle(O, 3);\nconst P = point(onCircle(c, 45), 'P');\nsegment(O, P, 'r');"]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.error).toMatch(/c is not defined/);
+    expect(r.errorChunk).toBe(0);
+    expect(r.drawables).toBe(2);
+    expect(r.markup).toContain('data-name="O"');
+    expect(r.markup).toContain('<path');
+  });
+
+  it('still fails hard on a syntax error (nothing was computed)', () => {
+    const r = runDraw(['const = point(0, 0);']);
+    expect(r.ok).toBe(false);
+  });
+
+  it('into-chunk error keeps the base figure and reports the failing chunk index', () => {
+    const r = runDraw(["const A = point(0, 0, 'A'), B = point(4, 0, 'B');\nsegment(A, B);", "segment(P0, P0, { hidden: true });\npoint(2, 2, 'C');"], { fromChunk: 1 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.errorChunk).toBe(1);
+    expect(r.error).toMatch(/P0 is not defined/);
   });
 });

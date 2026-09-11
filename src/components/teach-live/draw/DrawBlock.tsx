@@ -3,10 +3,18 @@
 /**
  * DrawBlock —— <draw> 块：老师写的脚本 → 沙箱 Worker 计算 → SVG 上板（逐笔长出）。
  *
- * - 首段脚本决定布局（transform）；`into` 追加段与首段拼成一个作用域再跑，只输出新元素，
- *   沿用首段布局（图不会因为追加而跳动；越界时 viewBox 外扩）。
- * - 脚本里 param() 登记的参数在图下出滑块；改动 → 整图重算（瞬时替换，不重放描画）。
- * - 脚本报错：这块显示一句人话，错误文本经 onIssue 交给会话（下一次学生开口时告诉老师，让它自己改）。
+ * 计算与展示分开：
+ * - **计算在段闭合时就开始**（不等揭示）——LiveBlockView 对 draw 块即使未揭示也挂载本组件（返回 null），
+ *   所以脚本到达到被老师念到之间的几秒到几十秒，足够跑完、甚至修完。
+ * - 展示只在段揭示后：ProgressiveSvg 逐笔描画。
+ *
+ * 自愈：脚本报错（语法 / 未定义变量）→ 先渲染报错前算好的部分（runtime 的 partial），同时向
+ * /api/teach/threads/[id]/draw-fix 要一份修正（每段只试一次）→ 服务端复跑验证过的脚本替换该段重算。
+ * 修不好 → 显示一句人话，并经 onIssue 记入会话（学生下次开口时带给老师，让它自己改）。
+ *
+ * 首段脚本决定布局（transform）；`into` 追加段与首段拼成一个作用域再跑，只输出新元素、沿用首段布局。
+ * 结果按「前缀文本」缓存：修了第 3 段不会让 1、2 段重算重画。
+ * 脚本里 param() 登记的参数在图下出滑块；改动 → 整图重算（瞬时替换，不重放描画）。
  */
 
 import * as React from 'react';
@@ -15,11 +23,15 @@ import type { Transform } from '@/lib/teach-live-draw/render';
 import { TEACH_LIVE_COPY } from '@/lib/ui/copy-teach-live';
 import type { LiveBlock, LiveSegment } from '../live-model';
 import { ProgressiveSvg } from '../blocks/ProgressiveSvg';
+import { liveFixDraw } from '../live-client';
 import { runDrawScript } from './draw-runtime-client';
 
 interface DrawBlockProps {
   block: LiveBlock;
   animate: boolean;
+  /** 至少一个 segment 已揭示：false 时只计算不展示 */
+  revealed: boolean;
+  threadId?: string | null;
   onGrow?: () => void;
   onIssue?: (blockId: string, message: string) => void;
 }
@@ -28,17 +40,26 @@ interface SegmentResult {
   markup: string;
   viewBox: string;
   transform: Transform;
+  /** 部分渲染：脚本在这段中途报错，已画出报错前的对象 */
+  partialError?: string;
 }
 
 type OkResult = Extract<RunResult, { ok: true }>;
 
-export function DrawBlock({ block, animate, onGrow, onIssue }: DrawBlockProps) {
+const SEP = '\u0000';
+
+export function DrawBlock({ block, animate, revealed, threadId, onGrow, onIssue }: DrawBlockProps) {
+  /** segmentId → 修正后的脚本 */
+  const [fixes, setFixes] = React.useState<Record<string, string>>({});
+  /** 前缀文本 → 结果（首段 key = 首段文本；第 i 段 key = 前 i+1 段文本拼接） */
   const [results, setResults] = React.useState<Record<string, SegmentResult>>({});
   const [params, setParams] = React.useState<OkResult['params']>([]);
   const [paramValues, setParamValues] = React.useState<Record<string, number>>({});
   const [full, setFull] = React.useState<{ key: number; markup: string; viewBox: string } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const runningRef = React.useRef<Set<string>>(new Set());
+  const fixTriedRef = React.useRef<Set<string>>(new Set());
+  const reportedRef = React.useRef<Set<string>>(new Set());
   const mountedRef = React.useRef(true);
   React.useEffect(() => {
     mountedRef.current = true;
@@ -48,55 +69,82 @@ export function DrawBlock({ block, animate, onGrow, onIssue }: DrawBlockProps) {
   }, []);
   const idPrefix = `${block.id}-`;
 
-  const ready = block.segments.filter((s) => s.revealed && s.complete);
+  // 计算对象：所有已闭合的段（不管揭示没揭示）
+  const complete = React.useMemo(() => block.segments.filter((s) => s.complete), [block.segments]);
+  const texts = React.useMemo(() => complete.map((s) => fixes[s.id] ?? s.text), [complete, fixes]);
+  const prefixKey = React.useCallback((i: number) => texts.slice(0, i + 1).join(SEP), [texts]);
+  const signature = texts.join(SEP);
 
-  // 按顺序跑每个就绪且未跑过的 segment。
-  // 结果按 segment id 幂等落地，不随 effect 生命周期作废：StrictMode 的双跑 / 依赖抖动只会让 runningRef 去重，不会把结果丢掉。
   React.useEffect(() => {
     const run = async () => {
-      for (let i = 0; i < ready.length; i++) {
-        const seg = ready[i];
-        if (results[seg.id] || runningRef.current.has(seg.id)) continue;
+      for (let i = 0; i < complete.length; i++) {
+        const seg = complete[i];
+        const key = prefixKey(i);
+        if (results[key] || runningRef.current.has(key)) continue;
         // 前一段还没出结果就等下一轮 effect
-        if (i > 0 && !results[ready[i - 1].id]) return;
-        runningRef.current.add(seg.id);
-        const base = results[ready[0].id];
+        const baseKey = prefixKey(0);
+        const prevKey = i > 0 ? prefixKey(i - 1) : null;
+        if (prevKey && !results[prevKey]) return;
+        const base = results[baseKey];
+        runningRef.current.add(key);
         const options: RunOptions = {
           idPrefix,
           params: paramValues,
           ...(i > 0 && base ? { transform: base.transform, fromChunk: i } : {}),
         };
-        const r = await runDrawScript(
-          ready.slice(0, i + 1).map((s) => s.text),
-          options,
-        );
-        runningRef.current.delete(seg.id);
+        const r = await runDrawScript(texts.slice(0, i + 1), options);
+        runningRef.current.delete(key);
         if (!mountedRef.current) return;
+
+        const failure = !r.ok ? r.error : r.error ?? null;
+        if (failure && threadId && !fixTriedRef.current.has(seg.id)) {
+          // 自愈：让模型修这一段；修好了 fixes 变化 → signature 变化 → 本 effect 重跑
+          fixTriedRef.current.add(seg.id);
+          try {
+            const fixed = await liveFixDraw(threadId, texts.slice(0, i + 1), i, failure);
+            if (!mountedRef.current) return;
+            if (fixed.verified && fixed.script.trim()) {
+              setFixes((prev) => ({ ...prev, [seg.id]: fixed.script }));
+              return;
+            }
+          } catch {
+            // 修不好：走下面的兜底
+          }
+        }
+
         if (!r.ok) {
           setError(r.error);
-          onIssue?.(block.id, `${block.attrs.id ? `图「${block.attrs.id}」` : '一张图'}的脚本没跑通：${r.error}`);
+          report(`${describe(block)}的脚本没跑通：${r.error}`);
           return;
         }
-        setError(null);
+        setError(r.error ?? null);
+        if (r.error) report(`${describe(block)}的脚本中途报错（只画出了前半部分）：${r.error}`);
         if (i === 0) setParams(r.params);
-        setResults((prev) => ({ ...prev, [seg.id]: { markup: r.markup, viewBox: r.viewBox, transform: r.transform } }));
+        setResults((prev) => ({
+          ...prev,
+          [key]: { markup: r.markup, viewBox: r.viewBox, transform: r.transform, ...(r.error ? { partialError: r.error } : {}) },
+        }));
         return; // 一次一个，state 落地后 effect 再跑下一段
       }
     };
+    const report = (message: string) => {
+      if (reportedRef.current.has(message)) return;
+      reportedRef.current.add(message);
+      onIssue?.(block.id, message);
+    };
     void run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready.map((s) => s.id).join(','), results, block.id]);
+  }, [signature, results, block.id, threadId]);
 
   // 参数变化：整图重算并瞬时替换
   const rerunWithParams = React.useCallback(
     async (values: Record<string, number>) => {
-      const chunks = ready.map((s) => s.text);
-      if (chunks.length === 0) return;
-      const r = await runDrawScript(chunks, { idPrefix, params: values });
+      if (texts.length === 0) return;
+      const r = await runDrawScript(texts, { idPrefix, params: values });
       if (!r.ok) return;
       setFull((prev) => ({ key: (prev?.key ?? 0) + 1, markup: r.markup, viewBox: r.viewBox }));
     },
-    [ready, idPrefix],
+    [texts, idPrefix],
   );
 
   const onParam = (name: string, value: number) => {
@@ -105,10 +153,21 @@ export function DrawBlock({ block, animate, onGrow, onIssue }: DrawBlockProps) {
     void rerunWithParams(next);
   };
 
-  const segments: LiveSegment[] = full
-    ? [{ id: `${block.id}-full-${full.key}`, text: full.markup, complete: true, revealed: true }]
-    : ready.filter((s) => results[s.id]).map((s) => ({ id: s.id, text: results[s.id].markup, complete: true, revealed: true }));
-  const viewBox = full ? full.viewBox : segments.length ? results[ready[segments.length - 1].id]?.viewBox : undefined;
+  if (!revealed) return null;
+
+  // 展示对象：已揭示且已算出结果的段
+  const shown: LiveSegment[] = [];
+  let lastViewBox: string | undefined;
+  for (let i = 0; i < complete.length; i++) {
+    const seg = complete[i];
+    if (!seg.revealed) break;
+    const r = results[prefixKey(i)];
+    if (!r) break;
+    shown.push({ id: seg.id, text: r.markup, complete: true, revealed: true });
+    lastViewBox = r.viewBox;
+  }
+  const segments: LiveSegment[] = full ? [{ id: `${block.id}-full-${full.key}`, text: full.markup, complete: true, revealed: true }] : shown;
+  const viewBox = full ? full.viewBox : lastViewBox;
 
   if (error && segments.length === 0) {
     return (
@@ -151,4 +210,8 @@ export function DrawBlock({ block, animate, onGrow, onIssue }: DrawBlockProps) {
       ) : null}
     </div>
   );
+}
+
+function describe(block: LiveBlock): string {
+  return block.attrs.id ? `图「${block.attrs.id}」` : block.attrs.title ? `图「${block.attrs.title}」` : '一张图';
 }

@@ -29,6 +29,12 @@ export type RunResult =
       names: string[];
       log: string[];
       drawables: number;
+      /**
+       * 脚本中途报错但已有对象画出来了：能画多少画多少，错误留给调用方（显示一句人话 / 送去自愈）。
+       * 出错所在 chunk 见 errorChunk。
+       */
+      error?: string;
+      errorChunk?: number;
     }
   | { ok: false; error: string; chunk: number };
 
@@ -58,6 +64,7 @@ export function runDraw(chunks: string[], options: RunOptions = {}): RunResult {
   };
   const body = chunks.map((c, i) => `__chunk(${i});\n${cleanScript(c)}`).join('\n');
   let currentChunk = 0;
+  let scriptError: string | null = null;
   // 非严格模式：老师偶发写 `l = lineThrough(P, 100)` 忘了 const，严格模式会直接 ReferenceError；
   // 宽松模式下它成了隐式全局——跑完把新冒出来的全局删掉，图与图之间不串。
   const globalObj = globalThis as unknown as Record<string, unknown>;
@@ -71,7 +78,9 @@ export function runDraw(chunks: string[], options: RunOptions = {}): RunResult {
     });
   } catch (err) {
     const e = err as Error;
-    return { ok: false, error: `${e?.name ?? 'Error'}: ${e?.message ?? String(err)}`, chunk: currentChunk };
+    scriptError = `${e?.name ?? 'Error'}: ${e?.message ?? String(err)}`;
+    // 语法错误：一个对象都没登记，只能整块失败；运行期报错：把报错前算好的画出来
+    if (scene.drawables.length === 0) return { ok: false, error: scriptError, chunk: currentChunk };
   } finally {
     for (const key of Object.keys(globalObj)) {
       if (!before.has(key)) {
@@ -85,7 +94,13 @@ export function runDraw(chunks: string[], options: RunOptions = {}): RunResult {
   }
   try {
     const r = render(scene, { idPrefix: options.idPrefix, transform: options.transform, fromChunk: options.fromChunk });
-    return { ok: true, ...r, log: logs, drawables: scene.drawables.length };
+    return {
+      ok: true,
+      ...r,
+      log: logs,
+      drawables: scene.drawables.length,
+      ...(scriptError ? { error: scriptError, errorChunk: currentChunk } : {}),
+    };
   } catch (err) {
     const e = err as Error;
     return { ok: false, error: `render: ${e?.message ?? String(err)}`, chunk: currentChunk };
