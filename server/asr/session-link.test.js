@@ -5,6 +5,7 @@ const {
   parseTimelineOffsetMessage,
   shiftSpan,
   isClientIdle,
+  resolveTurnTuning,
   CLIENT_IDLE_TIMEOUT_MS,
 } = sessionLink;
 
@@ -46,5 +47,25 @@ describe('isClientIdle', () => {
     expect(isClientIdle({ lastClientMessageAt: now - 30_000, now })).toBe(false);
     expect(isClientIdle({ lastClientMessageAt: now - CLIENT_IDLE_TIMEOUT_MS, now })).toBe(false);
     expect(isClientIdle({ lastClientMessageAt: now - CLIENT_IDLE_TIMEOUT_MS - 1, now })).toBe(true);
+  });
+});
+
+describe('resolveTurnTuning', () => {
+  it('没申明就是课堂默认：静音 1000ms 断句、interim 800ms 一发', () => {
+    expect(resolveTurnTuning({})).toEqual({ turnSilenceMs: 1000, draftFlushMs: 800 });
+    expect(resolveTurnTuning({ query: { token: 'x' } })).toEqual({ turnSilenceMs: 1000, draftFlushMs: 800 });
+  });
+
+  it('env 覆盖默认；查询串（讲给同桌听）再覆盖 env', () => {
+    const env = { DASHSCOPE_ASR_WS_VAD_SILENCE_MS: '1300', ASR_DRAFT_FLUSH_MS: '600' };
+    expect(resolveTurnTuning({ env })).toEqual({ turnSilenceMs: 1300, draftFlushMs: 600 });
+    expect(resolveTurnTuning({ env, query: { vadSilenceMs: '500', draftFlushMs: '250' } })).toEqual({ turnSilenceMs: 500, draftFlushMs: 250 });
+  });
+
+  it('越界钳进区间、非法值回落', () => {
+    expect(resolveTurnTuning({ query: { vadSilenceMs: '50', draftFlushMs: '9999' } })).toEqual({ turnSilenceMs: 200, draftFlushMs: 2500 });
+    expect(resolveTurnTuning({ query: { vadSilenceMs: 'abc', draftFlushMs: '' } })).toEqual({ turnSilenceMs: 1000, draftFlushMs: 800 });
+    expect(resolveTurnTuning({ query: { vadSilenceMs: ['500'] } })).toEqual({ turnSilenceMs: 1000, draftFlushMs: 800 });
+    expect(resolveTurnTuning({ env: { DASHSCOPE_ASR_WS_VAD_SILENCE_MS: 'nope' } })).toEqual({ turnSilenceMs: 1000, draftFlushMs: 800 });
   });
 });

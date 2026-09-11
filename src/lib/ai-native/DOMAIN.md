@@ -36,6 +36,7 @@ page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → r
 | `quiz-answer.ts` | ~110 | 选择题答案解析（随堂检验 / 测验共用）：`resolveAnswerIndex`（字母 / 原文 / 带前缀原文 → 下标，认不出 -1）；**多选契约（2026-09-11）**：`parseMultipleAnswer`（"AC" / "A、C" / "A, C" / "A和C" / 原文都认）→ 选项文本数组，`formatMultipleAnswer` → "A、C" 存进产物，学生作答用 `QUIZ_MULTI_SEPARATOR`（\u001f）连接，`sameOptionSet` 判全对 |
 | `app-prompts.test.ts` | ~150 | 六类应用 Prompt 的证据、认知动作、防泄题、打印 / 手机阅读、音频章节定位与输出格式合同测试 |
 | `tools.ts` | 48 | 插件工具注入 |
+| `teach-back-panel.ts` | ~330 | 「讲给同桌听」评委席纯逻辑（前后端共用）：评委名册与音色、头行解析 `parseJudgeHeader` / 流式 `JudgeStreamParser`、SSE 事件解析、`trimPanelHistory`（字数预算 + `maxUserTurns` 最近两回合封顶）、**`selectRelevantTranscript`（2026-09-11）**：原文超预算时挑与刚讲这段相关的段（汉字二元组 + 拉丁整词命中，单字母只算 1/4 票）带前后邻居 + 目标点证据段、按课堂顺序拼、整段原话不截；对不上退回开头几段；`windowed` 标记给 prompt 用 |
 | `index.ts` | 38 | barrel 导出 |
 
 ### plugins/

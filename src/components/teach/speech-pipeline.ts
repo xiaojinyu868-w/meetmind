@@ -11,7 +11,17 @@
  * 自动播放策略：unlock() 在用户手势（新开一课/发送消息）里调用，之后的
  * 程序化 play() 即被允许；play() 仍被拒时静默跳过（不打扰讲课流）。
  * 历史回放不喂这条管线（replay 事件在 hook 层就被拦住）。
+ *
+ * 两种音频源（fetchAudio 返回哪种由调用方决定）：
+ * - Blob（整句 wav）：HTMLAudio 句柄，语速可变且保音高——/teach、/teach/live 走这条。
+ * - PcmStreamSource（2026-09-11，/api/teach/tts `stream:true` 的 audio/pcm 分片）：Web Audio 句柄，
+ *   首片一到就调度进声卡、后面的片首尾相接——「讲给同桌听」评委开口从"等整句合成完"变成"0.4s 出声"。
+ *   流式句柄的 setRate 是 playbackRate（会变音高），评委席语速固定 1 不受影响。
  */
+
+import { createPcmStreamAudio, isPcmStreamSource, type PcmStreamSource, type SpeechAudioHandle } from './pcm-stream-audio';
+
+export { createPcmStreamAudio, isPcmStreamSource, unlockSpeechAudioContext, type PcmStreamSource } from './pcm-stream-audio';
 
 /** 句末标点（中日英）：这些字符收尾算一句 */
 const SENTENCE_END = /[。！？；!?;]\s*$/;
@@ -51,20 +61,15 @@ export class SentenceSplitter {
   }
 }
 
-export interface SpeechAudioHandle {
-  play(): Promise<void>;
-  pause(): void;
-  /** 播放结束回调（播放器赋值） */
-  onended: (() => void) | null;
-  /** 语速（1 = 原速）；不实现则忽略 */
-  setRate?(rate: number): void;
-}
+export type { SpeechAudioHandle } from './pcm-stream-audio';
+
+export type SpeechAudioSource = Blob | PcmStreamSource;
 
 interface TeachSpeechPlayerOptions {
-  /** 拉一句音频（默认 POST /api/teach/tts → Blob）；null = 该句跳过 */
-  fetchAudio?: (text: string) => Promise<Blob | null>;
+  /** 拉一句音频（默认 POST /api/teach/tts → Blob）；也可以给流式 PCM 源；null = 该句跳过 */
+  fetchAudio?: (text: string) => Promise<SpeechAudioSource | null>;
   /** 构造播放句柄（测试注入假实现）；第二参数是当前语速 */
-  createAudio?: (blob: Blob, rate?: number) => SpeechAudioHandle;
+  createAudio?: (source: SpeechAudioSource, rate?: number) => SpeechAudioHandle;
   /** 状态变化（playing/speaking 指示用） */
   onSpeakingChange?: (speaking: boolean) => void;
   /**
@@ -88,7 +93,9 @@ async function defaultFetchAudio(text: string): Promise<Blob | null> {
   }
 }
 
-function defaultCreateAudio(blob: Blob, rate = 1): SpeechAudioHandle {
+function defaultCreateAudio(source: SpeechAudioSource, rate = 1): SpeechAudioHandle {
+  if (isPcmStreamSource(source)) return createPcmStreamAudio(source, rate);
+  const blob = source;
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
   audio.playbackRate = rate;
@@ -109,14 +116,14 @@ function defaultCreateAudio(blob: Blob, rate = 1): SpeechAudioHandle {
 }
 
 export class TeachSpeechPlayer {
-  private readonly fetchAudio: (text: string) => Promise<Blob | null>;
-  private readonly createAudio: (blob: Blob, rate?: number) => SpeechAudioHandle;
+  private readonly fetchAudio: (text: string) => Promise<SpeechAudioSource | null>;
+  private readonly createAudio: (source: SpeechAudioSource, rate?: number) => SpeechAudioHandle;
   private rate = 1;
   private readonly onSpeakingChange?: (speaking: boolean) => void;
   private readonly onSentenceStart?: (seq: number) => void;
   private queue: Array<{ text: string; seq: number }> = [];
   /** 预取中的下一句（句子文本 → 在飞的合成请求） */
-  private prefetch = new Map<string, Promise<Blob | null>>();
+  private prefetch = new Map<string, Promise<SpeechAudioSource | null>>();
   private current: SpeechAudioHandle | null = null;
   private playing = false;
   private muted = false;
@@ -192,7 +199,7 @@ export class TeachSpeechPlayer {
   }
 
   /** 预取下一句（合成请求与当前播放并行） */
-  private ensurePrefetch(text: string): Promise<Blob | null> {
+  private ensurePrefetch(text: string): Promise<SpeechAudioSource | null> {
     let pending = this.prefetch.get(text);
     if (!pending) {
       pending = this.fetchAudio(text);
@@ -209,15 +216,15 @@ export class TeachSpeechPlayer {
     this.setPlaying(true);
     try {
       // 当前句：吃预取或现取；同时预取后两句（服务端串行闸会排队，但起跑更早，短句之间不留空）
-      const blob = await this.ensurePrefetch(item.text);
+      const source = await this.ensurePrefetch(item.text);
       if (this.queue[0]) void this.ensurePrefetch(this.queue[0].text);
       if (this.queue[1]) void this.ensurePrefetch(this.queue[1].text);
       if (generation !== this.generation || this.muted) return;
       this.prefetch.delete(item.text);
       // 声画联动闸门：句子开始播放（或合成失败被跳过）= 放行锚到这句的板书
       this.onSentenceStart?.(item.seq);
-      if (!blob) return; // 合成失败：跳过这句，继续下一句
-      const handle = this.createAudio(blob, this.rate);
+      if (!source) return; // 合成失败：跳过这句，继续下一句
+      const handle = this.createAudio(source, this.rate);
       this.current = handle;
       const ended = new Promise<void>((resolve) => {
         handle.onended = resolve;

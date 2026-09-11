@@ -5,9 +5,65 @@ import {
   parseJudgeHeader,
   parseSseChunk,
   recentJudgeIds,
+  selectRelevantTranscript,
+  transcriptQueryFeatures,
   trimPanelHistory,
 } from './teach-back-panel';
 import type { TeachBackTurn } from './types';
+
+describe('selectRelevantTranscript', () => {
+  // 每段补到 ~60 字，整节课 ~480 字；预算 200~250 时只装得下三四段
+  const pad = (text: string) => `${text}${'好，我们接着往下讲，大家注意听这里的推导过程和它背后的想法。'.slice(0, Math.max(0, 60 - text.length))}`;
+  const seg = (index: number, text: string) => ({ text: pad(text), startMs: index * 10_000, endMs: index * 10_000 + 9_000 });
+  const lesson = [
+    seg(0, '同学们好，今天我们讲映射与函数。'),
+    seg(1, '先说映射的定义：X 到 Y 的一个对应法则。'),
+    seg(2, '然后是单射：不同的 x 对应不同的 y。'),
+    seg(3, '只有单射才有逆映射，因为反过来每个 y 只能找到一个 x。'),
+    seg(4, '逆映射的定义域是 Rf，不是整个 Y，这一点很多人搞错。'),
+    seg(5, '再讲复合映射 f 圈 g，先做 g 再做 f。'),
+    seg(6, '课间休息一下。'),
+    seg(7, '最后是满射：值域等于整个 Y。'),
+  ];
+  const total = lesson.reduce((sum, item) => sum + item.text.length, 0);
+
+  it('整节课装得下就原样全给', () => {
+    const window = selectRelevantTranscript(lesson, '单射', [], { maxChars: total });
+    expect(window.windowed).toBe(false);
+    expect(window.segments).toHaveLength(lesson.length);
+  });
+
+  it('超预算时挑与刚讲这段最相关的段（带邻居），按课堂顺序拼，不逐段截断', () => {
+    const window = selectRelevantTranscript(lesson, '逆映射的定义域就是原来的值域 Rf，值域是原来的定义域', [], { maxChars: 250, neighbors: 1 });
+    expect(window.windowed).toBe(true);
+    const texts = window.segments.map((item) => item.text);
+    expect(texts).toContain(lesson[4].text);
+    expect(texts.some((text) => text.includes('课间休息'))).toBe(false);
+    expect(window.segments.map((item) => item.startMs)).toEqual([...window.segments.map((item) => item.startMs)].sort((a, b) => a - b));
+    expect(window.segments.reduce((sum, item) => sum + item.text.length, 0)).toBeLessThanOrEqual(250);
+    for (const item of window.segments) expect(lesson.map((l) => l.text)).toContain(item.text);
+  });
+
+  it('目标点的证据段先进窗口', () => {
+    const window = selectRelevantTranscript(lesson, '今天天气不错', [{ evidence: { startMs: 70_000, endMs: 72_000 } }], { maxChars: 200 });
+    expect(window.segments.map((item) => item.text)).toContain(lesson[7].text);
+  });
+
+  it('讲的与这节课无关：退回开头几段，评委至少知道这节课讲什么', () => {
+    const window = selectRelevantTranscript(lesson, '牛顿第二定律 F=ma', [], { maxChars: 200 });
+    expect(window.windowed).toBe(true);
+    expect(window.segments[0].text).toBe(lesson[0].text);
+    expect(window.segments.length).toBeLessThan(lesson.length);
+  });
+
+  it('特征 = 汉字二元组 + 拉丁 / 数字整词', () => {
+    const features = transcriptQueryFeatures('逆映射的定义域是 Rf，x² 不是单射。');
+    expect(features.has('逆映')).toBe(true);
+    expect(features.has('rf')).toBe(true);
+    expect(features.has('x²')).toBe(true);
+    expect(features.has('，x')).toBe(false);
+  });
+});
 
 describe('parseJudgeHeader', () => {
   it('裸代号', () => {
@@ -122,6 +178,12 @@ describe('trimPanelHistory / recentJudgeIds', () => {
 
   it('预算够就全留', () => {
     expect(trimPanelHistory(turns, 10_000)).toHaveLength(5);
+  });
+
+  it('maxUserTurns 封顶回合数：只看最近两回合（连同评委对它们的回应）', () => {
+    const kept = trimPanelHistory(turns, 10_000, 2);
+    expect(kept.map((turn) => turn.text[0])).toEqual(['二', '问', '三']);
+    expect(trimPanelHistory(turns, 10_000, 1).map((turn) => turn.text[0])).toEqual(['三']);
   });
 
   it('最近开口的评委（新→旧）', () => {

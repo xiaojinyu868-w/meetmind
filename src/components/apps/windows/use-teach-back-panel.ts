@@ -25,8 +25,13 @@
  * - 手机切后台：AudioContext 被挂起时回前台 resume；麦克风轨道 ended → 'mic-lost'，一键重新开麦
  *   （会话时钟、已讲的段、反馈流都保留，回合号接着数）。
  *
- * 体积：编排 + 麦克风生命周期 + SSE 回合 + 揭示节奏收在一处（约 600 行）——四段共享同一批 ref，
- * 拆开只会把 ref 传来传去；判断已全部在状态机与 room-model 里。
+ * 像通话（2026-09-11）：你停下 650ms 状态机就发 turn-prefetch，这里把评委请求先发出去、SSE 事件攒着不上屏（gated）；
+ * 到点 turn-commit 文字对得上（prefetchCovers）就 release 回放，对不上重发，接着讲就 abort。TTS 走 /api/teach/tts
+ * `stream:true`（audio/pcm 分片 → PcmStreamSource，首片 ~0.4s 出声），服务端退回 wav 时按 Blob 播。关键时刻打 teach-back:timing 点。
+ *
+ * 体积：编排 + 麦克风生命周期 + SSE 回合（含预热闸门）+ 揭示节奏收在一处（约 900 行）——四段共享同一批 ref，
+ * 拆开只会把 ref 传来传去；判断已全部在状态机与 room-model 里。下一次动到这里时，runJudgeTurn（~190 行）
+ * 适合先提成一个带 deps 的 JudgeTurnClient。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
@@ -35,12 +40,14 @@ import type { TranscriptSegment } from '@/types';
 import type { DashScopeASRClient } from '@/lib/services/dashscope-asr-service';
 import { buildAudioConstraints, computeRms } from '@/lib/services/asr/audio-constraints';
 import { floatToPcm16, frameDurationMs } from '@/lib/services/asr/pcm';
-import { judgeSpecOf, parseSseChunk } from '@/lib/ai-native/teach-back-panel';
-import { SentenceSplitter, TeachSpeechPlayer } from '@/components/teach/speech-pipeline';
+import { judgeSpecOf, parseSseChunk, type TeachBackPanelEvent } from '@/lib/ai-native/teach-back-panel';
+import { SentenceSplitter, TeachSpeechPlayer, unlockSpeechAudioContext, type PcmStreamSource } from '@/components/teach/speech-pipeline';
+import { TEACH_TTS_PCM_SAMPLE_RATE } from '@/lib/services/teach-tts-stream';
 import { useSessionStore } from '@/stores/session-store';
 import {
   createTurnMachine,
   pendingText,
+  prefetchCovers,
   reduceTurn,
   stageMoodOf,
   type StageMood,
@@ -50,6 +57,7 @@ import {
   type TurnPhase,
 } from './teach-back-turn-machine';
 import { HELD_REVEAL_INTERVAL_MS, nextHeldToReveal, type FeedbackEntry, type TranscriptTurn } from './teach-back-room-model';
+import { markTeachBackTiming } from './teach-back-timing';
 
 /** 出声 / 只看文字 的偏好 key（localStorage） */
 export const TEACH_BACK_VOICE_PREF_KEY = 'meetmind:teach-back:voice';
@@ -58,6 +66,12 @@ export const TEACH_BACK_LIVE_FEEDBACK_PREF_KEY = 'meetmind:teach-back:live-feedb
 
 /** 采集帧大小：@16k 128ms、@48k 43ms——VAD 分辨率与 WS 消息频率的折中 */
 const PROCESSOR_BUFFER = 2048;
+/**
+ * 讲给同桌听的 ASR 回合节奏（同一条 /api/asr-stream，按用途申明；课堂录音用默认 1000 / 800）：
+ * 上游句末静音 500ms —— 你停下后定稿约 0.85~1.0s 到（此前 1000ms 时是 1.3~1.5s），状态机走 0.5s 捷径先到先提交；
+ * interim 250ms 一发 —— 定稿迟到时带 interim 提交，尾巴最多差一两个字（800ms 一发时差一个词）。
+ */
+const ASR_TURN_TUNING = { vadSilenceMs: 500, draftFlushMs: 250 } as const;
 const TICK_MS = 250;
 /** 波形保留的最近帧数 */
 const LEVEL_HISTORY = 28;
@@ -120,6 +134,19 @@ export interface UseTeachBackPanelResult {
   speakAs: (judgeId: TeachBackJudgeId | null, text: string) => void;
 }
 
+/** 一次评委回合请求的把手：abort 用 controller；预热的请求提交时 release() 放行 */
+interface JudgeRequestHandle {
+  controller: AbortController;
+  release: () => void;
+}
+
+/** 预热中的评委请求（停下 650ms 发的，提交时对上文字就直接用） */
+interface JudgePrefetch {
+  turnIndex: number;
+  text: string;
+  handle: JudgeRequestHandle;
+}
+
 function readPref(key: string): boolean {
   if (typeof window === 'undefined') return true;
   try {
@@ -165,6 +192,8 @@ export function useTeachBackPanel({ targets, transcript, metadata, turnsRef }: U
   const liveRef = useRef(false);
   /** 实时反馈开着时在飞的那一个请求（新回合 / 插话会中止它） */
   const requestRef = useRef<AbortController | null>(null);
+  /** 预热中的评委请求（停下 650ms 发、提交时接上；接着讲就作废） */
+  const prefetchRef = useRef<JudgePrefetch | null>(null);
   /** 实时反馈关着时在飞的请求：互不中止，讲完了也让它们跑完（笔记要揭示） */
   const heldRequestsRef = useRef(new Set<AbortController>());
   /** turnIndex → turnsRef 里那条用户发言的位置（供迟到的定稿升级） */
@@ -211,19 +240,33 @@ export function useTeachBackPanel({ targets, transcript, metadata, turnsRef }: U
         const judge = voiceByTextRef.current.has(text) ? voiceByTextRef.current.get(text) ?? null : currentVoiceRef.current;
         voiceByTextRef.current.delete(text);
         const spec = judge ? judgeSpecOf(judge) : null;
+        markTeachBackTiming('tts-request', { chars: text.length });
         try {
+          // stream:true → 服务端边合成边发 PCM 分片（audio/pcm），首片 ~0.4s 就出声；上游流式不可用时服务端退回整块 wav
           const response = await fetch('/api/teach/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(spec ? { text, voice: spec.voice, instruct: spec.ttsInstruct } : { text }),
+            body: JSON.stringify({ ...(spec ? { text, voice: spec.voice, instruct: spec.ttsInstruct } : { text }), stream: true }),
           });
           if (!response.ok) return null;
-          return await response.blob();
+          if ((response.headers.get('content-type') || '').startsWith('audio/pcm') && response.body) {
+            return {
+              kind: 'pcm-stream',
+              sampleRate: Number(response.headers.get('x-teach-tts-sample-rate')) || TEACH_TTS_PCM_SAMPLE_RATE,
+              channels: Number(response.headers.get('x-teach-tts-channels')) || 1,
+              body: response.body,
+              onFirstChunk: () => markTeachBackTiming('tts-first-byte', { chars: text.length, stream: true }),
+            } satisfies PcmStreamSource;
+          }
+          const blob = await response.blob();
+          markTeachBackTiming('tts-first-byte', { chars: text.length, bytes: blob.size });
+          return blob;
         } catch {
           return null;
         }
       },
       onSentenceStart: (seq) => {
+        markTeachBackTiming('audio-start', { seq });
         setSpeakingJudge(seqJudgeRef.current.get(seq) ?? null);
         seqJudgeRef.current.delete(seq);
       },
@@ -279,6 +322,8 @@ export function useTeachBackPanel({ targets, transcript, metadata, turnsRef }: U
   closeJudgeRef.current = closeJudge;
 
   const interruptJudge = useCallback(() => {
+    markTeachBackTiming('interrupt');
+    prefetchRef.current = null;
     requestRef.current?.abort();
     requestRef.current = null;
     pendingCloseRef.current = false;
@@ -293,14 +338,18 @@ export function useTeachBackPanel({ targets, transcript, metadata, turnsRef }: U
     )));
   }, []);
 
-  const runJudgeTurn = useCallback(async (segment: string, mode: 'turn' | 'check-in', turnIndex: number | null, held: boolean) => {
+  /**
+   * 评委回合请求。`gated`（预热）：你刚停下 650ms、还没到"讲完了"的门槛就把请求发出去，模型先想着；
+   * 事件攒在手里不上屏、不占状态机，提交时 release() 按序回放（多半此时首字已经在路上）；你接着讲就 abort。
+   */
+  const runJudgeTurn = useCallback((segment: string, mode: 'turn' | 'check-in', turnIndex: number | null, held: boolean, gated = false): JudgeRequestHandle => {
     const controller = new AbortController();
     if (held) {
       heldRequestsRef.current.add(controller);
     } else {
       requestRef.current?.abort();
       requestRef.current = controller;
-      setRequestInFlight(true);
+      if (!gated) setRequestInFlight(true);
     }
 
     const history = turnsRef.current;
@@ -313,6 +362,9 @@ export function useTeachBackPanel({ targets, transcript, metadata, turnsRef }: U
     let entryId: string | null = null;
     let said = '';
     let settled = false;
+    let gateOpen = !gated;
+    const buffered: TeachBackPanelEvent[] = [];
+    let streamEnded = false;
     const settle = (close: boolean) => {
       if (settled) return;
       settled = true;
@@ -332,105 +384,161 @@ export function useTeachBackPanel({ targets, transcript, metadata, turnsRef }: U
       if (entryId) patchEntry(entryId, { state: 'interrupted' });
     };
 
-    try {
-      const response = await fetch('/api/apps/teach-back/turn', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          targets: targetsRef.current,
-          turns: history,
-          segment,
-          transcript: slimTranscript,
-          metadata: metadataRef.current,
-          mode,
-        }),
-        signal: controller.signal,
-      });
-      if (!response.ok || !response.body) {
-        settle(true);
-        return;
-      }
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let carry = '';
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (controller.signal.aborted) {
-          recordPartial();
-          return;
+    let firstDelta = false;
+    let firstSentence = false;
+    /** 处理一条 SSE 事件；返回 true = 这一回合到此结束 */
+    const handleEvent = (event: TeachBackPanelEvent): boolean => {
+      if (event.type === 'judge') {
+        judgeId = event.judgeId;
+        entrySeq += 1;
+        entryId = `fb-${entrySeq}`;
+        const entry: FeedbackEntry = {
+          id: entryId,
+          judgeId,
+          turnIndex,
+          at: elapsedNow(),
+          text: '',
+          state: 'streaming',
+          held,
+          revealed: false,
+        };
+        setFeedback((current) => [...current, entry]);
+        markTeachBackTiming('judge-open', { turnIndex, judgeId, held });
+        if (!held) {
+          currentVoiceRef.current = judgeId;
+          splitterRef.current = new SentenceSplitter();
+          setRequestInFlight(false);
+          setActiveJudge(judgeId);
+          dispatchRef.current({ type: 'judge-open', at: Date.now() });
         }
-        const chunk = decoder.decode(value ?? new Uint8Array(), { stream: !done });
-        const parsed = parseSseChunk(carry, done ? `${chunk}\n` : chunk);
-        carry = parsed.carry;
-        for (const event of parsed.events) {
-          if (event.type === 'judge') {
-            judgeId = event.judgeId;
-            entrySeq += 1;
-            entryId = `fb-${entrySeq}`;
-            const entry: FeedbackEntry = {
-              id: entryId,
-              judgeId,
-              turnIndex,
-              at: elapsedNow(),
-              text: '',
-              state: 'streaming',
-              held,
-              revealed: false,
-            };
-            setFeedback((current) => [...current, entry]);
-            if (!held) {
-              currentVoiceRef.current = judgeId;
-              splitterRef.current = new SentenceSplitter();
-              setRequestInFlight(false);
-              setActiveJudge(judgeId);
-              dispatchRef.current({ type: 'judge-open', at: Date.now() });
+        return false;
+      }
+      if (event.type === 'delta' && judgeId && entryId) {
+        said += event.text;
+        if (!firstDelta) {
+          firstDelta = true;
+          markTeachBackTiming('first-delta', { turnIndex, chars: event.text.length });
+        }
+        const id = entryId;
+        patchEntry(id, (entry) => ({ text: entry.text + event.text }));
+        if (!held && voiceEnabledRef.current) {
+          for (const sentence of splitterRef.current?.push(event.text) ?? []) {
+            if (!firstSentence) {
+              firstSentence = true;
+              markTeachBackTiming('first-sentence', { turnIndex, chars: sentence.length });
             }
-          } else if (event.type === 'delta' && judgeId && entryId) {
-            said += event.text;
-            const id = entryId;
-            patchEntry(id, (entry) => ({ text: entry.text + event.text }));
-            if (!held && voiceEnabledRef.current) {
-              for (const sentence of splitterRef.current?.push(event.text) ?? []) enqueueVoiced(judgeId, sentence);
-            }
-          } else if (event.type === 'done' && judgeId && entryId) {
-            const full = event.text || said;
-            turnsRef.current = [...turnsRef.current, { role: 'assistant', text: full, judgeId }];
-            patchEntry(entryId, { text: full, state: 'done' });
-            if (!held && voiceEnabledRef.current) {
-              const tail = splitterRef.current?.flush();
-              if (tail) enqueueVoiced(judgeId, tail);
-              const player = ensurePlayer();
-              if (player.isActive && speakingRef.current) {
-                pendingCloseRef.current = true; // 等声音说完再回到听讲
-                settle(false);
-                return;
-              }
-            }
-            settle(true);
-            return;
-          } else if (event.type === 'silent' || event.type === 'error') {
-            if (entryId) patchEntry(entryId, { state: 'done' });
-            settle(true);
-            return;
+            enqueueVoiced(judgeId, sentence);
           }
         }
-        if (done) break;
+        return false;
       }
-      // 流结束但没有 done：有开口就记下说过的话
+      if (event.type === 'done' && judgeId && entryId) {
+        const full = event.text || said;
+        markTeachBackTiming('done', { turnIndex, judgeId, text: full });
+        turnsRef.current = [...turnsRef.current, { role: 'assistant', text: full, judgeId }];
+        patchEntry(entryId, { text: full, state: 'done' });
+        if (!held && voiceEnabledRef.current) {
+          const tail = splitterRef.current?.flush();
+          if (tail) enqueueVoiced(judgeId, tail);
+          const player = ensurePlayer();
+          if (player.isActive && speakingRef.current) {
+            pendingCloseRef.current = true; // 等声音说完再回到听讲
+            settle(false);
+            return true;
+          }
+        }
+        settle(true);
+        return true;
+      }
+      if (event.type === 'silent' || event.type === 'error') {
+        markTeachBackTiming(event.type, { turnIndex });
+        if (entryId) patchEntry(entryId, { state: 'done' });
+        settle(true);
+        return true;
+      }
+      return false;
+    };
+    /** 流结束但没有 done：有开口就记下说过的话 */
+    const finishStream = () => {
       if (judgeId && entryId && said.trim()) {
         turnsRef.current = [...turnsRef.current, { role: 'assistant', text: said.trim(), judgeId }];
         patchEntry(entryId, { state: 'done' });
       }
       settle(true);
-    } catch {
-      if (controller.signal.aborted) {
-        // 被插话打断：状态机已经转到"你在讲"
-        recordPartial();
-        return;
+    };
+    /** 提交了：放行（回放攒下的事件） */
+    const release = () => {
+      if (gateOpen || controller.signal.aborted) return;
+      gateOpen = true;
+      if (!held) setRequestInFlight(true);
+      let finished = false;
+      for (const event of buffered.splice(0)) {
+        if (handleEvent(event)) {
+          finished = true;
+          break;
+        }
       }
-      if (entryId) patchEntry(entryId, { state: 'done' });
-      settle(true);
-    }
+      if (!finished && streamEnded) finishStream();
+    };
+
+    void (async () => {
+      try {
+        markTeachBackTiming('request-sent', { turnIndex, mode, held, prefetch: gated });
+        const response = await fetch('/api/apps/teach-back/turn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            targets: targetsRef.current,
+            turns: history,
+            segment,
+            transcript: slimTranscript,
+            metadata: metadataRef.current,
+            mode,
+          }),
+          signal: controller.signal,
+        });
+        markTeachBackTiming('response-headers', { turnIndex, status: response.status });
+        if (!response.ok || !response.body) {
+          if (gateOpen) settle(true);
+          else streamEnded = true;
+          return;
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let carry = '';
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (controller.signal.aborted) {
+            recordPartial();
+            return;
+          }
+          const chunk = decoder.decode(value ?? new Uint8Array(), { stream: !done });
+          const parsed = parseSseChunk(carry, done ? `${chunk}\n` : chunk);
+          carry = parsed.carry;
+          for (const event of parsed.events) {
+            if (!gateOpen) {
+              buffered.push(event);
+            } else if (handleEvent(event)) {
+              return;
+            }
+          }
+          if (done) break;
+        }
+        streamEnded = true;
+        if (gateOpen) finishStream();
+      } catch {
+        if (controller.signal.aborted) {
+          // 被插话打断：状态机已经转到"你在讲"
+          recordPartial();
+          return;
+        }
+        if (entryId) patchEntry(entryId, { state: 'done' });
+        if (gateOpen) settle(true);
+        else streamEnded = true;
+      }
+    })();
+
+    return { controller, release };
   }, [elapsedNow, enqueueVoiced, ensurePlayer, patchEntry, turnsRef]);
 
   /* ── effects 执行 ── */
@@ -445,20 +553,55 @@ export function useTeachBackPanel({ targets, transcript, metadata, turnsRef }: U
     nextTurnIndexRef.current = turnIndex + 1;
   }, [elapsedNow]);
 
+  const dropPrefetch = useCallback((reason: 'cancel' | 'discard' | null) => {
+    const prefetch = prefetchRef.current;
+    if (!prefetch) return;
+    prefetchRef.current = null;
+    prefetch.handle.controller.abort();
+    if (requestRef.current === prefetch.handle.controller) requestRef.current = null;
+    if (reason === 'discard') markTeachBackTiming('prefetch-discarded', { turnIndex: prefetch.turnIndex });
+  }, []);
+
   const applyEffects = useCallback((effects: TurnEffect[]) => {
     for (const effect of effects) {
       switch (effect.type) {
+        case 'turn-prefetch': {
+          // 实时反馈关着时评委只记不说，没有"开口要快"的问题，不预热
+          if (!liveFeedbackRef.current) break;
+          dropPrefetch(null);
+          const handle = runJudgeTurn(effect.text, 'turn', effect.turnIndex, false, true);
+          prefetchRef.current = { turnIndex: effect.turnIndex, text: effect.text, handle };
+          break;
+        }
+        case 'turn-prefetch-cancel':
+          dropPrefetch('cancel');
+          break;
         case 'turn-commit': {
+          markTeachBackTiming('turn-commit', {
+            turnIndex: effect.turnIndex,
+            lastVoiceAt: machineRef.current.lastVoiceAt,
+            text: effect.text,
+          });
           turnPositionsRef.current.set(effect.turnIndex, turnsRef.current.length);
           turnsRef.current = [...turnsRef.current, { role: 'user', text: effect.text }];
           pushTurn(effect.turnIndex, effect.text);
           const held = !liveFeedbackRef.current;
-          void runJudgeTurn(effect.text, 'turn', effect.turnIndex, held);
+          const prefetch = prefetchRef.current;
+          if (!held && prefetch && prefetch.turnIndex === effect.turnIndex && prefetchCovers(prefetch.text, effect.text)) {
+            // 预热的请求文字对得上：直接接上，模型已经想了几百毫秒
+            prefetchRef.current = null;
+            markTeachBackTiming('prefetch-adopted', { turnIndex: effect.turnIndex });
+            prefetch.handle.release();
+          } else {
+            if (prefetch) dropPrefetch('discard');
+            runJudgeTurn(effect.text, 'turn', effect.turnIndex, held);
+          }
           // 实时反馈关着：听众只记不说，状态机不用等谁开口——下一拍就回到听讲
           if (held) window.setTimeout(() => dispatchRef.current({ type: 'judge-close', at: Date.now() }), 0);
           break;
         }
         case 'turn-upgrade': {
+          markTeachBackTiming('turn-upgrade', { turnIndex: effect.turnIndex, text: effect.text });
           const position = turnPositionsRef.current.get(effect.turnIndex);
           if (position !== undefined && turnsRef.current[position]?.role === 'user') {
             const next = [...turnsRef.current];
@@ -473,7 +616,7 @@ export function useTeachBackPanel({ targets, transcript, metadata, turnsRef }: U
           break;
         case 'idle-nudge':
           if (liveFeedbackRef.current) {
-            void runJudgeTurn('', 'check-in', null, false);
+            runJudgeTurn('', 'check-in', null, false);
           } else {
             window.setTimeout(() => dispatchRef.current({ type: 'judge-close', at: Date.now() }), 0);
           }
@@ -488,7 +631,7 @@ export function useTeachBackPanel({ targets, transcript, metadata, turnsRef }: U
           break;
       }
     }
-  }, [interruptJudge, pushTurn, runJudgeTurn, turnsRef]);
+  }, [dropPrefetch, interruptJudge, pushTurn, runJudgeTurn, turnsRef]);
 
   const dispatch = useCallback((event: TurnEvent) => {
     const before = machineRef.current;
@@ -499,6 +642,9 @@ export function useTeachBackPanel({ targets, transcript, metadata, turnsRef }: U
       // 从听讲 / 听众发言进入"你在讲"= 新一段开口的时刻（pausing / settling 回到 speaking 还是同一段）
       if (step.state.phase === 'speaking' && before.phase !== 'pausing' && before.phase !== 'settling') {
         turnStartedAtRef.current = event.at;
+      } else if (step.state.phase === 'speaking' && before.lastVoiceAt !== null) {
+        // 停了一下又接着讲：这一段静音的长度就是"换气 / 想词"的实测分布（尺子用它定 endSilence）
+        markTeachBackTiming('pause-resume', { silenceMs: event.at - before.lastVoiceAt, tail: pendingText(before).slice(-12) });
       }
     } else if (event.type === 'asr-interim' || event.type === 'asr-final' || event.type === 'typed') {
       setLiveText(pendingText(step.state));
@@ -522,6 +668,7 @@ export function useTeachBackPanel({ targets, transcript, metadata, turnsRef }: U
       window.clearInterval(tickRef.current);
       tickRef.current = null;
     }
+    prefetchRef.current = null;
     requestRef.current?.abort();
     requestRef.current = null;
     if (abortHeld) {
@@ -569,6 +716,7 @@ export function useTeachBackPanel({ targets, transcript, metadata, turnsRef }: U
     setStatus('connecting');
     setFinished(false);
     ensurePlayer().unlock();
+    unlockSpeechAudioContext(); // 流式 PCM 播放的 AudioContext 要在这个手势里建好，评委才出得了声
     sessionStartRef.current ??= Date.now();
     // 重新开麦：新状态机，回合号接着上一段数
     machineRef.current = { ...createTurnMachine(), turnIndex: nextTurnIndexRef.current };
@@ -590,17 +738,20 @@ export function useTeachBackPanel({ targets, transcript, metadata, turnsRef }: U
     const asr = new DashScopeASRClient('', {
       onSentence: (sentence) => {
         if (asrRef.current !== asr || !sentence.isFinal || !sentence.text) return;
+        markTeachBackTiming('asr-final', { text: sentence.text });
         dispatchRef.current({ type: 'asr-final', text: sentence.text, at: Date.now() });
       },
       onInterim: (interim) => {
         if (asrRef.current !== asr) return;
-        dispatchRef.current({ type: 'asr-interim', text: (interim?.text || '').trim(), at: Date.now() });
+        const text = (interim?.text || '').trim();
+        markTeachBackTiming('asr-interim', { chars: text.length });
+        dispatchRef.current({ type: 'asr-interim', text, at: Date.now() });
       },
       onError: () => {
         if (asrRef.current !== asr) return;
         teardown('asr-down', false);
       },
-    });
+    }, { wsQuery: ASR_TURN_TUNING });
     asrRef.current = asr;
 
     let audioContext: AudioContext;

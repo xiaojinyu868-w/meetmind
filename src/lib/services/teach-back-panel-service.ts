@@ -5,6 +5,7 @@ import {
   JUDGE_SAY_MAX_CHARS,
   JudgeStreamParser,
   recentJudgeIds,
+  selectRelevantTranscript,
   trimPanelHistory,
   type TeachBackPanelEvent,
 } from '@/lib/ai-native/teach-back-panel';
@@ -18,9 +19,15 @@ import { createLogger } from '@/lib/logger';
 
 const log = createLogger('teach-back-panel');
 
-/** 课堂原文给评委看的预算：回合是实时的，首 token 延迟直接决定"像不像通话"，不给 48k */
-const TRANSCRIPT_BUDGET_CHARS = 9_000;
-const HISTORY_BUDGET_CHARS = 5_000;
+/**
+ * 课堂原文给评委看的预算（2026-09-11 从 9k 收到 5k）：评委回应的是刚讲的这段，给它的是与这段相关的原文窗口
+ * （selectRelevantTranscript：命中段 + 邻居 + 目标点证据段，整段原话不截半句），不是逐段压缩的整节课。
+ * 实测 qwen3.7-plus 首 token 对 8k / 5k / 2.5k 原文不敏感（1.09 / 1.12 / 0.96s，噪声内），收预算是为了原文完整可核对、成本减半。
+ */
+const TRANSCRIPT_BUDGET_CHARS = 5_000;
+/** 本场记录：最近两回合（他讲的两段 + 评委对它们的回应），字数封顶兜底 */
+const HISTORY_BUDGET_CHARS = 1_500;
+const HISTORY_MAX_USER_TURNS = 2;
 
 export interface TeachBackPanelInput {
   targets: TeachBackTarget[];
@@ -45,9 +52,12 @@ export function resolveTeachBackPanelModel(): string {
  */
 export async function* streamTeachBackPanel(input: TeachBackPanelInput): AsyncGenerator<TeachBackPanelEvent> {
   const targets = input.targets.slice(0, 8);
-  const history = trimPanelHistory(input.turns, HISTORY_BUDGET_CHARS);
+  const history = trimPanelHistory(input.turns, HISTORY_BUDGET_CHARS, HISTORY_MAX_USER_TURNS);
   const recentSpeakers = recentJudgeIds(input.turns);
-  const transcriptContext = buildPromptTranscriptContext(input.transcript, {
+  // check-in 没有"刚讲的这段"：用他最近讲的一段选窗口
+  const focus = input.segment || [...input.turns].reverse().find((turn) => turn.role === 'user')?.text || '';
+  const window = selectRelevantTranscript(input.transcript, focus, targets, { maxChars: TRANSCRIPT_BUDGET_CHARS });
+  const transcriptContext = buildPromptTranscriptContext(window.segments as TranscriptSegment[], {
     maxChars: TRANSCRIPT_BUDGET_CHARS,
     includeIndex: false,
     includeTimestamp: false,
@@ -72,6 +82,7 @@ export async function* streamTeachBackPanel(input: TeachBackPanelInput): AsyncGe
           role: 'user',
           content: buildTeachBackPanelUserPrompt({
             transcriptContext: transcriptContext.text || '（这节课的原文暂不可用，只凭他的讲述判断）',
+            transcriptWindowed: window.windowed,
             history,
             latestSegment: input.segment,
             mode: input.mode,

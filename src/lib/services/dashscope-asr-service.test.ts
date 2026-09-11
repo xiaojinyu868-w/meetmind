@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DashScopeASRClient,
+  appendWsQuery,
   isTerminalAsrError,
   resolveHandshakeTimeoutMs,
   resolveReadyTimeoutMs,
@@ -185,6 +186,13 @@ describe('connection policy helpers', () => {
     expect(resolveReadyTimeoutMs(0)).toBe(15_000);
     expect(resolveReadyTimeoutMs(2)).toBe(25_000);
     expect(resolveReadyTimeoutMs(9)).toBe(30_000);
+  });
+
+  it('回合节奏申明拼进 WS 地址：token 与 vadSilenceMs / draftFlushMs 同一串，空值不拼', () => {
+    expect(appendWsQuery('wss://a/api/asr-stream', {})).toBe('wss://a/api/asr-stream');
+    expect(appendWsQuery('wss://a/api/asr-stream', { token: 'j w t', vadSilenceMs: 500, draftFlushMs: 250 }))
+      .toBe('wss://a/api/asr-stream?token=j%20w%20t&vadSilenceMs=500&draftFlushMs=250');
+    expect(appendWsQuery('wss://a/api/asr-stream?x=1', { vadSilenceMs: 500, empty: '' })).toBe('wss://a/api/asr-stream?x=1&vadSilenceMs=500');
   });
 
   it('候选地址按轮数轮转，主地址一直挂起时下一轮先试备用端口', () => {

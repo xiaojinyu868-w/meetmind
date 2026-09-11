@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   createTurnMachine,
+  looksUnfinished,
   pendingText,
+  prefetchCovers,
   reduceTurn,
   stageMoodOf,
   voiceThreshold,
@@ -37,6 +39,11 @@ function frames(run: Run, n: number, rms: number): Run {
     current = feed(current, { type: 'frame', rms, at: current.at + FRAME_MS, durationMs: FRAME_MS });
   }
   return current;
+}
+
+/** 评委席看得见的 effects（预热 / 取消是幕后的） */
+function judgeEffects(run: Run): TurnEffect[] {
+  return run.effects.filter((effect) => effect.type !== 'turn-prefetch' && effect.type !== 'turn-prefetch-cancel');
 }
 
 function calibrated(params: Parameters<typeof createTurnMachine>[0] = {}): Run {
@@ -93,66 +100,85 @@ describe('听讲 → 你在讲 → 停顿 → 回合结束', () => {
     expect(run.state.level).toBeGreaterThan(0);
   });
 
-  it('有效语音 ≥1.5s、静音 ≥1.2s → 回合结束并提交（无 interim 直接提交）', () => {
+  it('有效语音 ≥1.5s、静音 ≥1.2s → 回合结束并提交（无 interim 直接提交）；停下 650ms 先预热评委', () => {
     let run = calibrated();
     run = frames(run, 20, VOICE); // 2s 语音
     run = feed(run, { type: 'asr-final', text: '三次握手是为了确认双向都能收发。', at: run.at });
     run = frames(run, 6, QUIET); // 0.6s 静音：还在 hangover 里，画面不抖
     expect(run.state.phase).toBe('speaking');
-    run = frames(run, 5, QUIET); // 累计 1.1s 静音
-    expect(run.state.phase).toBe('pausing');
     expect(run.effects).toHaveLength(0);
-    run = frames(run, 2, QUIET); // 跨过 1.2s
+    run = frames(run, 1, QUIET); // 0.7s：停下来了 → 预热
+    expect(run.state.phase).toBe('pausing');
+    expect(run.effects).toEqual([{ type: 'turn-prefetch', text: '三次握手是为了确认双向都能收发。', turnIndex: 0 }]);
+    run = frames(run, 4, QUIET); // 累计 1.1s
+    expect(run.state.phase).toBe('pausing');
+    expect(judgeEffects(run)).toHaveLength(0);
+    run = frames(run, 1, QUIET); // 1.2s 到
     expect(run.state.phase).toBe('judging');
-    expect(run.effects).toEqual([{ type: 'turn-commit', text: '三次握手是为了确认双向都能收发。', turnIndex: 0 }]);
+    expect(judgeEffects(run)).toEqual([{ type: 'turn-commit', text: '三次握手是为了确认双向都能收发。', turnIndex: 0 }]);
     expect(run.state.turnIndex).toBe(1);
+    expect(run.state.prefetching).toBe(false);
   });
 
-  it('语音太短（<1.5s）停下来不算回合，带着已说的继续听；接着讲会合并进同一回合', () => {
+  it('语音太短（<1.5s）停下来不算回合、也不预热，带着已说的继续听；接着讲会合并进同一回合', () => {
     let run = calibrated();
     run = frames(run, 8, VOICE); // 0.8s
     run = feed(run, { type: 'asr-final', text: '嗯，', at: run.at });
-    run = frames(run, 14, QUIET);
+    run = frames(run, 17, QUIET); // 「嗯，」像没说完 → 1.7s 门槛
     expect(run.state.phase).toBe('listening');
     expect(run.effects).toHaveLength(0);
     expect(run.state.finals).toEqual(['嗯，']);
     run = frames(run, 10, VOICE); // 再讲 1s，累计 1.8s
     run = feed(run, { type: 'asr-final', text: '然后握手要三次。', at: run.at });
-    run = frames(run, 13, QUIET);
-    expect(run.effects).toEqual([{ type: 'turn-commit', text: '嗯，然后握手要三次。', turnIndex: 0 }]);
+    run = frames(run, 12, QUIET);
+    expect(judgeEffects(run)).toEqual([{ type: 'turn-commit', text: '嗯，然后握手要三次。', turnIndex: 0 }]);
   });
 
-  it('停下时 ASR 还没定稿：先 settling，定稿一到立刻提交', () => {
-    let run = calibrated();
-    run = frames(run, 20, VOICE);
-    run = feed(run, { type: 'asr-interim', text: '三次握手是为了', at: run.at });
-    run = frames(run, 13, QUIET);
-    expect(run.state.phase).toBe('settling');
-    expect(run.effects).toHaveLength(0);
-    run = feed(run, { type: 'asr-final', text: '三次握手是为了确认双向。', at: run.at + 200 });
-    expect(run.state.phase).toBe('judging');
-    expect(run.effects).toEqual([{ type: 'turn-commit', text: '三次握手是为了确认双向。', turnIndex: 0 }]);
-  });
-
-  it('settling 超时（700ms）就拿 interim 提交，不无限等', () => {
+  it('停下 1.2s 时定稿还没到：拿手上的 interim 提交，不等定稿', () => {
     let run = calibrated();
     run = frames(run, 20, VOICE);
     run = feed(run, { type: 'asr-interim', text: '三次握手是为了确认', at: run.at });
-    run = frames(run, 13, QUIET);
-    expect(run.state.phase).toBe('settling');
-    run = frames(run, 5, QUIET); // settling 已 600ms
-    expect(run.state.phase).toBe('settling');
-    run = frames(run, 1, QUIET); // 700ms 到
+    run = frames(run, 11, QUIET);
+    expect(run.state.phase).toBe('pausing');
+    expect(judgeEffects(run)).toHaveLength(0);
+    run = frames(run, 1, QUIET); // 1.2s 到
     expect(run.state.phase).toBe('judging');
-    expect(run.effects).toEqual([{ type: 'turn-commit', text: '三次握手是为了确认', turnIndex: 0 }]);
+    expect(judgeEffects(run)).toEqual([{ type: 'turn-commit', text: '三次握手是为了确认', turnIndex: 0 }]);
+    expect(run.state.lastCommitted).toEqual({ text: '三次握手是为了确认', turnIndex: 0, finals: [], interim: '三次握手是为了确认' });
+  });
+
+  it('预热后接着讲：turn-prefetch-cancel，同一回合继续；再停下再预热', () => {
+    let run = calibrated();
+    run = frames(run, 20, VOICE);
+    run = feed(run, { type: 'asr-interim', text: '三次握手是为了确认', at: run.at });
+    run = frames(run, 8, QUIET);
+    expect(run.effects).toEqual([{ type: 'turn-prefetch', text: '三次握手是为了确认', turnIndex: 0 }]);
+    run = frames(run, 2, VOICE);
+    expect(run.state.phase).toBe('speaking');
+    expect(run.effects.at(-1)).toEqual({ type: 'turn-prefetch-cancel', turnIndex: 0 });
+    expect(run.state.prefetching).toBe(false);
+    run = feed(run, { type: 'asr-interim', text: '三次握手是为了确认双向都能收发', at: run.at });
+    run = frames(run, 7, QUIET);
+    expect(run.effects.at(-1)).toEqual({ type: 'turn-prefetch', text: '三次握手是为了确认双向都能收发', turnIndex: 0 });
+  });
+
+  it('ASR 一个字还没给就到点：不预热，settling 里它追上来一句定稿 → 立刻提交', () => {
+    let run = calibrated();
+    run = frames(run, 20, VOICE);
+    run = frames(run, 12, QUIET);
+    expect(run.state.phase).toBe('settling');
+    expect(run.effects).toHaveLength(0);
+    run = feed(run, { type: 'asr-final', text: '三次握手是为了确认双向。', at: run.at + 100 });
+    expect(run.state.phase).toBe('judging');
+    expect(run.effects).toEqual([{ type: 'turn-commit', text: '三次握手是为了确认双向。', turnIndex: 0 }]);
   });
 
   it('settling 期间又开口：取消提交，继续同一回合', () => {
     let run = calibrated();
     run = frames(run, 20, VOICE);
-    run = feed(run, { type: 'asr-interim', text: '三次握手', at: run.at });
-    run = frames(run, 13, QUIET);
+    run = frames(run, 12, QUIET);
     expect(run.state.phase).toBe('settling');
+    run = feed(run, { type: 'asr-interim', text: '三次握手', at: run.at });
     run = frames(run, 2, VOICE);
     expect(run.state.phase).toBe('speaking');
     expect(run.state.settleStartedAt).toBeNull();
@@ -170,13 +196,24 @@ describe('听讲 → 你在讲 → 停顿 → 回合结束', () => {
     expect(run.effects).toEqual([{ type: 'turn-commit', text: '这一段讲完了。', turnIndex: 0 }]);
   });
 
-  it('能量说你讲了但 ASR 一个字没认出来：不惊动评委，回到听讲', () => {
+  it('能量说你讲了但 ASR 一个字没认出来：等 settle 到点，不惊动评委，回到听讲', () => {
     let run = calibrated();
     run = frames(run, 20, VOICE);
-    run = frames(run, 13, QUIET);
+    run = frames(run, 12, QUIET);
+    expect(run.state.phase).toBe('settling'); // 也许 ASR 只是慢了
+    run = frames(run, 3, QUIET);
     expect(run.state.phase).toBe('listening');
     expect(run.effects).toHaveLength(0);
     expect(run.state.turnIndex).toBe(0);
+  });
+
+  it('空 interim（代理定稿前的清屏）不清掉手上的尾巴', () => {
+    let run = calibrated();
+    run = feed(run, { type: 'asr-interim', text: '三次握手是为了', at: run.at });
+    run = feed(run, { type: 'asr-interim', text: '', at: run.at });
+    expect(pendingText(run.state)).toBe('三次握手是为了');
+    run = feed(run, { type: 'asr-final', text: '三次握手是为了确认。', at: run.at });
+    expect(pendingText(run.state)).toBe('三次握手是为了确认。');
   });
 
   it('pendingText 拼接定稿与尾巴', () => {
@@ -184,6 +221,71 @@ describe('听讲 → 你在讲 → 停顿 → 回合结束', () => {
     run = feed(run, { type: 'asr-final', text: ' 第一句。 ', at: run.at });
     run = feed(run, { type: 'asr-interim', text: '第二句还没', at: run.at });
     expect(pendingText(run.state)).toBe('第一句。第二句还没');
+  });
+});
+
+describe('prefetchCovers', () => {
+  it('提交文字只比预热多句末标点 / 最后一个词 → 预热的请求可以直接用', () => {
+    expect(prefetchCovers('三次握手是为了确认双向', '三次握手是为了确认双向。')).toBe(true);
+    expect(prefetchCovers('三次握手是为了确认双向', '三次握手是为了确认双向都能收发。')).toBe(true);
+    expect(prefetchCovers('三次握手是为了确认双向。', '三次握手是为了确认双向。')).toBe(true);
+  });
+
+  it('停顿里 ASR 又补了一截、或文字对不上 → 重新请求', () => {
+    expect(prefetchCovers('三次握手', '三次握手是为了确认双向都能收发。')).toBe(false);
+    expect(prefetchCovers('三次握手是为了', '四次挥手是为了')).toBe(false);
+    expect(prefetchCovers('', '三次握手')).toBe(false);
+  });
+});
+
+describe('换气 ≠ 讲完：尾巴像没说完就多等', () => {
+  it('looksUnfinished：逗号 / 连词 / 语气词 / 介词收尾算没说完，句号 / 实词收尾不算', () => {
+    for (const text of ['定义域是原来的值域，', '要求 f 的值域落在 g 的定义域和', '所以定义域是', '然后', '嗯', '也就是说', '先做 f 再做 g，然后', '把 x 和']) {
+      expect(looksUnfinished(text), text).toBe(true);
+    }
+    // "的" 故意不收：句尾的"是这样的 / 对的"太常见，多等半秒不值
+    for (const text of ['两个刚好交换过来。', '它不是单射，因为 2 和 -2 都对应 4', '这样的逆映射不存在', '这一点很重要', 'f 的像叫做映像', '每个 y 都能得到', '这是对的', '', '   ']) {
+      expect(looksUnfinished(text), text).toBe(false);
+    }
+  });
+
+  it('interim 以连词收尾：1.2s 不算讲完，1.7s 才提交', () => {
+    let run = calibrated();
+    run = frames(run, 20, VOICE);
+    run = feed(run, { type: 'asr-interim', text: '所以定义域是 f 的定义域，然后', at: run.at });
+    run = frames(run, 16, QUIET); // 1.6s 静音
+    expect(run.state.phase).toBe('pausing');
+    expect(judgeEffects(run)).toHaveLength(0);
+    run = frames(run, 1, QUIET); // 1.7s
+    expect(run.state.phase).toBe('judging');
+    expect(judgeEffects(run)).toEqual([{ type: 'turn-commit', text: '所以定义域是 f 的定义域，然后', turnIndex: 0 }]);
+  });
+
+  it('接着讲：连词后面的话合进同一回合，没有假回合', () => {
+    let run = calibrated();
+    run = frames(run, 20, VOICE);
+    run = feed(run, { type: 'asr-interim', text: '所以定义域是 f 的定义域，然后', at: run.at });
+    run = frames(run, 15, QUIET); // 1.5s 的想词停顿（没有连词判断时这里早就提交了）
+    expect(run.state.phase).toBe('pausing');
+    run = frames(run, 15, VOICE);
+    expect(run.state.phase).toBe('speaking');
+    expect(judgeEffects(run)).toHaveLength(0);
+    run = feed(run, { type: 'asr-final', text: '所以定义域是 f 的定义域，然后值域要落在 g 的定义域里。', at: run.at });
+    run = frames(run, 12, QUIET);
+    expect(judgeEffects(run)).toEqual([{ type: 'turn-commit', text: '所以定义域是 f 的定义域，然后值域要落在 g 的定义域里。', turnIndex: 0 }]);
+  });
+
+  it('定稿以逗号收尾（ASR 在换气处断句）：不走 0.5s 捷径，留着等下一句', () => {
+    let run = calibrated();
+    run = frames(run, 20, VOICE);
+    run = frames(run, 7, QUIET);
+    expect(run.state.phase).toBe('pausing');
+    run = feed(run, { type: 'asr-final', text: '首先，单射的意思是，', at: run.at });
+    expect(run.state.phase).toBe('pausing');
+    expect(run.effects).toHaveLength(0);
+    expect(run.state.finals).toEqual(['首先，单射的意思是，']);
+    run = frames(run, 5, VOICE);
+    expect(run.state.phase).toBe('speaking');
   });
 });
 
@@ -246,13 +348,33 @@ describe('评委发言与插话', () => {
     let run = calibrated();
     run = frames(run, 20, VOICE);
     run = feed(run, { type: 'asr-interim', text: '三次握手是为了确认', at: run.at });
-    run = frames(run, 13 + 8, QUIET); // settling 超时提交 interim
+    run = frames(run, 9 + 3, QUIET); // settling 超时提交 interim
     expect(run.state.phase).toBe('judging');
     run = { ...run, effects: [] };
     run = feed(run, { type: 'asr-final', text: '三次握手是为了确认双向都能收发。', at: run.at });
     expect(run.effects).toEqual([
       { type: 'turn-upgrade', text: '三次握手是为了确认双向都能收发。', turnIndex: 0 },
     ]);
+    expect(run.state.lastCommitted?.text).toBe('三次握手是为了确认双向都能收发。');
+  });
+
+  it('多句回合带着尾巴提交：迟到的定稿只替换尾巴，前面已定稿的句子原样保留', () => {
+    let run = calibrated();
+    run = frames(run, 20, VOICE);
+    run = feed(run, { type: 'asr-final', text: '单射就是不同的 x 对应不同的 y。', at: run.at });
+    run = feed(run, { type: 'asr-interim', text: '只有单射才能有逆映', at: run.at });
+    run = frames(run, 12, QUIET);
+    expect(judgeEffects(run)).toEqual([{ type: 'turn-commit', text: '单射就是不同的 x 对应不同的 y。只有单射才能有逆映', turnIndex: 0 }]);
+    run = { ...run, effects: [] };
+    // 评委的回声 / 别的话：不理
+    run = feed(run, { type: 'asr-final', text: '你刚才说的定义不对。', at: run.at });
+    expect(run.effects).toHaveLength(0);
+    run = feed(run, { type: 'asr-final', text: '只有单射才能有逆映射。', at: run.at });
+    expect(run.effects).toEqual([{ type: 'turn-upgrade', text: '单射就是不同的 x 对应不同的 y。只有单射才能有逆映射。', turnIndex: 0 }]);
+    // 同一条定稿不会再升级第二次
+    run = { ...run, effects: [] };
+    run = feed(run, { type: 'asr-final', text: '只有单射才能有逆映射。', at: run.at });
+    expect(run.effects).toHaveLength(0);
   });
 
   it('讲完了：带上未提交的文字；评委在说则先打断', () => {

@@ -55,6 +55,33 @@ function isClientIdle(params) {
   return params.now - params.lastClientMessageAt > timeoutMs;
 }
 
+/** 句末静音（上游 VAD）与 interim 下发节流的允许区间：与 env 兜底同一把尺 */
+const TURN_SILENCE_RANGE = { min: 200, max: 3000 };
+const DRAFT_FLUSH_RANGE = { min: 200, max: 2500 };
+
+/**
+ * 一条连接的回合节奏：课堂录音要的是句子完整（静音 1s 断句、interim 800ms 一发就够），
+ * 「讲给同桌听」要的是"你停下评委就接"（2026-09-11：静音 500ms 断句、interim 250ms 一发）。
+ * 同一条 /api/asr-stream 通道，由客户端在 WS URL 查询串里按用途申明（`vadSilenceMs` / `draftFlushMs`），
+ * 缺省或非法值回落 env / 默认；越界钳到区间内（上游 max_sentence_silence 只接受 [200, 6000]）。
+ * @param {{query?: Record<string, unknown>, env?: Record<string, string|undefined>}} params
+ * @returns {{turnSilenceMs:number, draftFlushMs:number}}
+ */
+function resolveTurnTuning(params = {}) {
+  const query = params.query || {};
+  const env = params.env || {};
+  const pick = (queryValue, envValue, range, fallback) => {
+    const fromQuery = typeof queryValue === 'string' && queryValue.trim() ? Number(queryValue) : NaN;
+    const fromEnv = typeof envValue === 'string' && envValue.trim() ? Number(envValue) : NaN;
+    const value = Number.isFinite(fromQuery) ? fromQuery : Number.isFinite(fromEnv) ? fromEnv : fallback;
+    return Math.min(range.max, Math.max(range.min, Math.round(value)));
+  };
+  return {
+    turnSilenceMs: pick(query.vadSilenceMs, env.DASHSCOPE_ASR_WS_VAD_SILENCE_MS, TURN_SILENCE_RANGE, 1000),
+    draftFlushMs: pick(query.draftFlushMs, env.ASR_DRAFT_FLUSH_MS, DRAFT_FLUSH_RANGE, 800),
+  };
+}
+
 module.exports = {
   UPSTREAM_READY_TIMEOUT_MS,
   CLIENT_IDLE_TIMEOUT_MS,
@@ -62,4 +89,5 @@ module.exports = {
   parseTimelineOffsetMessage,
   shiftSpan,
   isClientIdle,
+  resolveTurnTuning,
 };
