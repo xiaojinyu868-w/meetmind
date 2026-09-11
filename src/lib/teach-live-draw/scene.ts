@@ -23,6 +23,8 @@ export const PALETTE: Record<string, string> = {
   paper: '#F6F8F6',
 };
 export const CURVE_COLORS = ['pine', 'amber', 'blue', 'rose', 'violet'];
+/** 向量默认轮换色（蓝优先：坐标基向量的惯例） */
+export const ARROW_COLORS = ['blue', 'rose', 'pine', 'amber', 'violet'];
 
 export interface Style {
   color?: string;
@@ -105,6 +107,8 @@ export class Scene {
   now = 0;
   /** axes({ equal: true })：带坐标系也保形 */
   equalAxes = false;
+  /** axes({ lock: true })：老师给的坐标范围就是画面，不自动贴内容收紧 */
+  viewLocked = false;
   private counters: Record<string, number> = {};
   private ids = new Set<string>();
 
@@ -142,45 +146,66 @@ export class Scene {
 }
 
 /** 把用户写的 label / opts 参数规范化 */
-function opts(x: string | Style | undefined): Style {
-  if (x === undefined || x === null) return {};
-  if (typeof x === 'string') return { label: x };
-  return { ...x };
+/** 老师写法五花八门：'label' / { color } / 'label', { color } 都认；后面的样式对象覆盖前面的 */
+function opts(...args: Array<string | Style | number | undefined | null>): Style {
+  const out: Style = {};
+  for (const x of args) {
+    if (x === undefined || x === null || typeof x === 'number') continue;
+    if (typeof x === 'string') out.label = x;
+    else Object.assign(out, x);
+  }
+  return out;
 }
 
+/** 点的宽容写法：{x, y} / [x, y] / 带 name 的点；都不是就返回 null */
+function toPt(v: unknown): Pt | null {
+  if (Array.isArray(v) && v.length >= 2 && Number.isFinite(Number(v[0])) && Number.isFinite(Number(v[1]))) return { x: Number(v[0]), y: Number(v[1]) };
+  if (v && typeof v === 'object' && Number.isFinite((v as Pt).x) && Number.isFinite((v as Pt).y)) return v as Pt;
+  return null;
+}
+
+const SUBSCRIPT_DIGITS: Record<string, string> = { '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4', '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9' };
+
+/** 标签 → 可当 id 的名字：e₁ → e1（老师说 point at="fig#e1" 时能对上） */
 function safeName(s: string | undefined): string | undefined {
   if (!s) return undefined;
-  const clean = s.replace(/[^\p{L}\p{N}_-]/gu, '');
+  const clean = s.replace(/[₀-₉]/g, (d) => SUBSCRIPT_DIGITS[d] ?? d).replace(/[^\p{L}\p{N}_-]/gu, '');
   return clean || undefined;
 }
 
 /** 参数不是点时给一句能修的错误，而不是让 NaN 流进 SVG（老师把 arrow(A, dx, dy) 写成 arrow(A, B) 之类） */
 function expectPt(p: unknown, fn: string, arg: string): Pt {
-  const ok = !!p && typeof p === 'object' && Number.isFinite((p as Pt).x) && Number.isFinite((p as Pt).y);
-  if (!ok) {
-    const got = p === undefined ? 'undefined' : p === null ? 'null' : typeof p === 'object' ? 'object' : typeof p;
-    throw new TypeError(`${fn}() 的 ${arg} 需要一个点（{x, y}），收到 ${got}`);
+  const pt = toPt(p);
+  if (!pt) {
+    const got = p === undefined ? 'undefined' : p === null ? 'null' : Array.isArray(p) ? `数组 ${JSON.stringify(p).slice(0, 40)}` : typeof p === 'object' ? 'object' : typeof p;
+    throw new TypeError(`${fn}() 的 ${arg} 需要一个点（{x, y} 或 [x, y]），收到 ${got}`);
   }
-  return p as Pt;
+  return pt;
 }
 
 /** 脚本的全局环境。返回 { name → value }，运行时用 new Function(...names) 注入。 */
 export function createApi(scene: Scene): Record<string, unknown> {
   let curveColorIdx = 0;
 
-  const named = (p: Pt, name?: string): NamedPt => Object.assign({ x: p.x, y: p.y }, name ? { name } : {});
+  const named = (p: Pt | number[], name?: string): NamedPt => {
+    const q = toPt(p) ?? { x: NaN, y: NaN };
+    return Object.assign({ x: q.x, y: q.y }, name ? { name } : {});
+  };
 
-  const point = (x: number | Pt, y?: number | string | Style, label?: string | Style, st?: Style): NamedPt => {
+  const point = (x: number | Pt | number[], y?: number | string | Style, label?: string | Style, st?: Style): NamedPt => {
     let p: Pt;
     let o: Style;
     if (typeof x === 'object') {
-      p = { x: x.x, y: x.y };
-      o = { ...opts(y as string | Style | undefined), ...opts(label) };
+      p = expectPt(x, 'point', '坐标');
+      o = opts(y as string | Style | undefined, label, st);
     } else {
+      if (!Number.isFinite(x) || !Number.isFinite(Number(y))) throw new TypeError(`point(x, y) 的坐标需要是数字，收到 (${String(x)}, ${String(y)})`);
       p = { x, y: Number(y) };
-      o = { ...opts(label), ...(st ?? {}) };
+      o = opts(label, st);
     }
     const name = safeName(o.label);
+    // { hidden: true }：只要这个点的坐标，不画
+    if (o.hidden) return named(p, name);
     const id = scene.nextId('P', o.id ?? name);
     scene.add({ kind: 'point', id, name, chunk: scene.chunk, style: o, label: o.label, p });
     const result = named(p, name);
@@ -198,24 +223,27 @@ export function createApi(scene: Scene): Record<string, unknown> {
     return result;
   };
 
-  const lineLike = (type: Ln['type']) => (a: NamedPt, b: NamedPt, o?: string | Style): Ln & { id: string } => {
-    const st = opts(o);
-    expectPt(a, type, 'A');
-    expectPt(b, type, 'B');
-    const l: Ln = { a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y }, type };
-    const autoName = a.name && b.name ? `${a.name}${b.name}` : undefined;
-    const id = scene.nextId(type === 'segment' ? 's' : type === 'ray' ? 'ray' : 'l', st.id ?? autoName);
+  const lineLike = (type: Ln['type']) => (a: NamedPt | number[], b: NamedPt | number[], o?: string | Style, o2?: Style): Ln & { id: string } => {
+    const st = opts(o, o2);
+    const pa = expectPt(a, type, 'A');
+    const pb = expectPt(b, type, 'B');
+    const l: Ln = { a: { x: pa.x, y: pa.y }, b: { x: pb.x, y: pb.y }, type };
+    const na = (a as NamedPt).name;
+    const nb = (b as NamedPt).name;
+    const autoName = na && nb ? `${na}${nb}` : undefined;
+    const id = scene.nextId(type === 'segment' ? 's' : type === 'ray' ? 'ray' : 'l', st.id ?? autoName ?? safeName(st.label));
     scene.add({ kind: 'line', id, name: autoName, chunk: scene.chunk, style: st, label: st.label, l });
     return Object.assign(l, { id });
   };
 
-  const circle = (o: NamedPt, rOrP: number | Pt, st?: string | Style): Circ & { id: string } => {
-    const s = opts(st);
-    expectPt(o, 'circle', '圆心');
-    const r = typeof rOrP === 'number' ? rOrP : G.dist(o, expectPt(rOrP, 'circle', '半径或圆上一点'));
+  const circle = (o: NamedPt | number[], rOrP: number | Pt | number[], st?: string | Style, st2?: Style): Circ & { id: string } => {
+    const s = opts(st, st2);
+    const center = expectPt(o, 'circle', '圆心');
+    const r = typeof rOrP === 'number' ? rOrP : G.dist(center, expectPt(rOrP, 'circle', '半径或圆上一点'));
     if (!Number.isFinite(r) || r <= 0) throw new TypeError(`circle() 的半径需要是正数，收到 ${String(rOrP)}`);
-    const c: Circ = { c: { x: o.x, y: o.y }, r };
-    const id = scene.nextId('c', s.id ?? (o.name ? `circle${o.name}` : undefined));
+    const c: Circ = { c: { x: center.x, y: center.y }, r };
+    const oname = (o as NamedPt).name;
+    const id = scene.nextId('c', s.id ?? safeName(s.label) ?? (oname ? `circle${oname}` : undefined));
     scene.add({ kind: 'circle', id, chunk: scene.chunk, style: s, label: s.label, c });
     return Object.assign(c, { id });
   };
@@ -228,31 +256,38 @@ export function createApi(scene: Scene): Record<string, unknown> {
   };
 
   const polygon = (...args: unknown[]) => {
-    let pts: NamedPt[];
-    let st: Style = {};
-    if (Array.isArray(args[0])) {
-      pts = args[0] as NamedPt[];
-      st = opts(args[1] as string | Style | undefined);
+    let rawPts: unknown[];
+    let styleArgs: unknown[];
+    if (Array.isArray(args[0]) && (args[0].length === 0 || typeof args[0][0] === 'object')) {
+      // polygon([A, B, C], 'label', { color })
+      rawPts = args[0] as unknown[];
+      styleArgs = args.slice(1);
     } else {
-      const last = args[args.length - 1];
-      const hasOpts = last !== null && (typeof last === 'string' || (typeof last === 'object' && !('x' in (last as object))));
-      pts = (hasOpts ? args.slice(0, -1) : args) as NamedPt[];
-      st = opts(hasOpts ? (last as string | Style) : undefined);
+      // polygon(A, B, C, 'label', { color })：点用完就是样式
+      const firstNonPt = args.findIndex((a) => !toPt(a));
+      rawPts = firstNonPt < 0 ? args : args.slice(0, firstNonPt);
+      styleArgs = firstNonPt < 0 ? [] : args.slice(firstNonPt);
     }
-    pts.forEach((p, i) => expectPt(p, 'polygon', `第 ${i + 1} 个点`));
-    const autoName = pts.every((p) => p.name) ? pts.map((p) => p.name).join('') : undefined;
-    const id = scene.nextId('poly', st.id ?? autoName);
+    const st = opts(...(styleArgs as Array<string | Style | undefined>));
+    const pts = rawPts.map((p, i) => expectPt(p, 'polygon', `第 ${i + 1} 个点`));
+    const names = rawPts.map((p) => (p as NamedPt).name);
+    const autoName = names.every(Boolean) && names.length ? names.join('') : undefined;
+    const id = scene.nextId('poly', st.id ?? autoName ?? safeName(st.label));
     scene.add({ kind: 'polygon', id, name: autoName, chunk: scene.chunk, style: st, label: st.label, pts: pts.map((p) => ({ x: p.x, y: p.y })) });
-    return { id, pts };
+    return { id, pts: pts.map((p, i) => named(p, names[i])) };
   };
 
-  const angle = (a: NamedPt, b: NamedPt, c: NamedPt, o?: string | Style) => {
-    const st = opts(o);
+  const angle = (a0: NamedPt | number[], b0: NamedPt | number[], c0: NamedPt | number[], o?: string | Style, o2?: Style) => {
+    const st = opts(o, o2);
+    const a = toPt(a0);
+    const b = toPt(b0);
+    const c = toPt(c0);
     // 退化（有两点重合 / 传错对象）就不画：画一个错的角标比不画更糟
     if (!a || !b || !c || G.dist(a, b) < G.EPS || G.dist(c, b) < G.EPS) return NaN;
     const deg = G.angleOf(a, b, c);
     const right = !st.arc && Math.abs(deg - 90) < 0.5;
-    const id = scene.nextId('angle', st.id ?? (b.name ? `angle${b.name}` : undefined));
+    const bname = (b0 as NamedPt).name;
+    const id = scene.nextId('angle', st.id ?? (bname ? `angle${bname}` : undefined));
     scene.add({ kind: 'angle', id, chunk: scene.chunk, style: st, label: st.label, a, b, c, right });
     return deg;
   };
@@ -287,27 +322,30 @@ export function createApi(scene: Scene): Record<string, unknown> {
     return id;
   };
 
-  /** arrow(A, B, opts) 或 arrow(A, dx, dy, opts)——老师两种都会写，都认 */
-  const arrow = (a: Pt, b: Pt | number, o?: string | Style | number, o2?: string | Style) => {
-    expectPt(a, 'arrow', '起点');
+  /** arrow(A, B, 'label', { color }) 或 arrow(A, dx, dy, 'label', { color })——老师两种都会写，都认；不给颜色就按色板轮换（几支向量不会撞色） */
+  let arrowColorIdx = 0;
+  const arrow = (a0: Pt | number[], b0: Pt | number[] | number, ...rest: Array<string | Style | number | undefined>) => {
+    const a = expectPt(a0, 'arrow', '起点');
     let to: Pt;
-    let st: Style;
-    if (typeof b === 'number') {
-      const dy = typeof o === 'number' ? o : NaN;
-      if (!Number.isFinite(b) || !Number.isFinite(dy)) throw new TypeError('arrow(A, dx, dy) 的 dx / dy 需要是数字');
-      to = { x: a.x + b, y: a.y + dy };
-      st = opts(o2);
+    let styleArgs: Array<string | Style | number | undefined>;
+    if (typeof b0 === 'number') {
+      const dy = rest[0];
+      if (!Number.isFinite(b0) || typeof dy !== 'number' || !Number.isFinite(dy)) throw new TypeError('arrow(A, dx, dy) 的 dx / dy 需要是数字');
+      to = { x: a.x + b0, y: a.y + dy };
+      styleArgs = rest.slice(1);
     } else {
-      expectPt(b, 'arrow', '终点');
+      const b = expectPt(b0, 'arrow', '终点');
       to = { x: b.x, y: b.y };
-      st = opts(typeof o === 'number' ? undefined : o);
+      styleArgs = rest;
     }
+    const st = opts(...styleArgs);
+    if (!st.color) st.color = ARROW_COLORS[arrowColorIdx++ % ARROW_COLORS.length];
     if (G.dist(a, to) < G.EPS) return scene.nextId('arrow', st.id); // 零长度箭头不画
-    const id = scene.nextId('arrow', st.id);
+    const id = scene.nextId('arrow', st.id ?? safeName(st.label));
     scene.add({ kind: 'arrow', id, chunk: scene.chunk, style: st, label: st.label, from: { x: a.x, y: a.y }, to });
     return id;
   };
-  const vector = (a: Pt, dx: number, dy: number, o?: string | Style) => arrow(a, dx, dy, o);
+  const vector = (a: Pt | number[], dx: number, dy: number, ...rest: Array<string | Style | undefined>) => arrow(a, dx, dy, ...rest);
 
   // ---------- 分析 ----------
 
@@ -337,8 +375,9 @@ export function createApi(scene: Scene): Record<string, unknown> {
   const polarCurve = (r: (deg: number) => number, range: [number, number] = [0, 360], o?: string | Style) =>
     curve(A.samplePolar(r, range[0], range[1]), o);
 
-  const axes = (o: { x?: [number, number]; y?: [number, number]; grid?: boolean; ticks?: boolean; xLabel?: string; yLabel?: string; equal?: boolean } = {}) => {
+  const axes = (o: { x?: [number, number]; y?: [number, number]; grid?: boolean; ticks?: boolean; xLabel?: string; yLabel?: string; equal?: boolean; lock?: boolean } = {}) => {
     if (o.equal) scene.equalAxes = true;
+    if (o.lock) scene.viewLocked = true;
     if (o.x || o.y) {
       const v = scene.view ?? { xmin: -5, xmax: 5, ymin: -5, ymax: 5 };
       scene.view = {
@@ -426,7 +465,8 @@ export function createApi(scene: Scene): Record<string, unknown> {
   /** 把任何几何对象画出来：点 / 线 / 圆 / 点数组（多边形） */
   const draw = (obj: unknown, o?: string | Style): unknown => {
     if (Array.isArray(obj)) {
-      if (obj.length && typeof obj[0] === 'object' && 'x' in (obj[0] as object)) return polygon(obj as NamedPt[], o);
+      if (obj.length && toPt(obj[0])) return polygon(obj as NamedPt[], o);
+      if (obj.length === 2 && typeof obj[0] === 'number') return point(obj as number[], o);
       return obj.map((item) => draw(item, o));
     }
     if (!obj || typeof obj !== 'object') return obj;
@@ -453,6 +493,57 @@ export function createApi(scene: Scene): Record<string, unknown> {
     return circle(named(c.c), c.r, st);
   };
 
+  // ---------- 三维（正交投影：先绕竖轴转 yaw，再抬 pitch；配合 time 就是会转的立体图） ----------
+
+  type P3 = [number, number, number] | { x: number; y: number; z: number };
+  const to3 = (p: P3): [number, number, number] => (Array.isArray(p) ? [Number(p[0]), Number(p[1]), Number(p[2])] : [p.x, p.y, p.z]);
+  const view3d = (o: { yaw?: number; pitch?: number; scale?: number } = {}) => {
+    const yaw = G.deg2rad(o.yaw ?? 35);
+    const pitch = G.deg2rad(o.pitch ?? 22);
+    const sc = o.scale ?? 1;
+    const proj = (p: P3, name?: string): NamedPt => {
+      const [x, y, z] = to3(p);
+      // 绕 y 轴（竖轴）转 yaw
+      const xr = x * Math.cos(yaw) + z * Math.sin(yaw);
+      const zr = -x * Math.sin(yaw) + z * Math.cos(yaw);
+      // 绕 x 轴抬 pitch：看见"上方"
+      const yr = y * Math.cos(pitch) - zr * Math.sin(pitch);
+      return named({ x: xr * sc, y: yr * sc }, safeName(name));
+    };
+    const AXIS_COLORS = ['blue', 'rose', 'pine'];
+    return {
+      proj,
+      point3: (p: P3, label?: string | Style, st?: Style) => point(proj(p), label, st),
+      segment3: (a: P3, b: P3, o2?: string | Style, o3?: Style) => lineLike('segment')(proj(a), proj(b), o2, o3),
+      arrow3: (a: P3, b: P3, ...rest: Array<string | Style | undefined>) => arrow(proj(a), proj(b), ...rest),
+      /** 三条坐标轴（x 蓝 y 玫红 z 松绿），长度 len */
+      axes3d: (len = 3, labels: [string, string, string] = ['x', 'y', 'z']) =>
+        ([[len, 0, 0], [0, len, 0], [0, 0, len]] as P3[]).map((tip, i) => arrow(proj([0, 0, 0]), proj(tip), labels[i], { color: AXIS_COLORS[i], width: 2.5 })),
+      /** 长方体（线框），角点在 o，边长 w h d */
+      box3: (o: P3, w: number, h: number, d: number, st?: string | Style) => {
+        const [x, y, z] = to3(o);
+        const c: [number, number, number][] = [
+          [x, y, z], [x + w, y, z], [x + w, y + h, z], [x, y + h, z],
+          [x, y, z + d], [x + w, y, z + d], [x + w, y + h, z + d], [x, y + h, z + d],
+        ];
+        const edges: [number, number][] = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]];
+        const style = { color: 'ink2', width: 2, ...opts(st) };
+        return edges.map(([i, j]) => lineLike('segment')(proj(c[i]), proj(c[j]), style));
+      },
+    };
+  };
+
+  /** 构造函数的参数里，[x, y] 与 [[x, y], …] 都当成点：老师用 JS 数组表达点是最自然的写法 */
+  const withPts = <F extends (...args: never[]) => unknown>(fn: F): F =>
+    ((...args: unknown[]) =>
+      (fn as unknown as (...a: unknown[]) => unknown)(
+        ...args.map((a) => {
+          if (Array.isArray(a) && a.length === 2 && typeof a[0] === 'number' && typeof a[1] === 'number') return toPt(a) ?? a;
+          if (Array.isArray(a) && a.length && Array.isArray(a[0]) && typeof a[0][0] === 'number') return a.map((p) => toPt(p) ?? p);
+          return a;
+        }),
+      )) as unknown as F;
+
   return {
     // 对象
     pt: (x: number, y: number, name?: string): NamedPt => named({ x, y }, safeName(name)),
@@ -471,6 +562,8 @@ export function createApi(scene: Scene): Record<string, unknown> {
     arrow,
     vector,
     pointsOf,
+    // 三维
+    view3d,
     // 时间（整张图随 t 变化；运行时采样编译成浏览器原生动画）
     time: (dur = 4, o: { loop?: boolean | 'pingpong' } = {}): number => {
       if (!scene.timeline) scene.timeline = { dur: Math.max(0.5, Math.min(30, Number(dur) || 4)), loop: o.loop ?? true };
@@ -482,10 +575,10 @@ export function createApi(scene: Scene): Record<string, unknown> {
       return x * x * (3 - 2 * x);
     },
     // 构造（返回数学对象，不自动画；要画就交给 segment/line/circle/point）
-    midpoint: (a: Pt, b: Pt) => named(G.midpoint(a, b)),
-    lerp: (a: Pt | number, b: Pt | number, t: number): NamedPt | number =>
-      typeof a === 'number' && typeof b === 'number' ? a + (b - a) * t : named(G.lerp(a as Pt, b as Pt, t)),
-    intersect: (u: Ln | Circ, v: Ln | Circ): NamedPt | NamedPt[] | null => {
+    midpoint: withPts((a: Pt, b: Pt) => named(G.midpoint(a, b))),
+    lerp: withPts((a: Pt | number, b: Pt | number, t: number): NamedPt | number =>
+      typeof a === 'number' && typeof b === 'number' ? a + (b - a) * t : named(G.lerp(a as Pt, b as Pt, t))),
+    intersect: withPts((u: Ln | Circ, v: Ln | Circ): NamedPt | NamedPt[] | null => {
       const isCirc = (o: Ln | Circ): o is Circ => 'r' in o;
       if (!isCirc(u) && !isCirc(v)) {
         const p = G.intersectLines(u, v);
@@ -495,30 +588,30 @@ export function createApi(scene: Scene): Record<string, unknown> {
       const l = (isCirc(u) ? v : u) as Ln;
       const c = (isCirc(u) ? u : v) as Circ;
       return G.intersectLineCircle(l, c).map((p) => named(p));
-    },
+    }),
     draw,
-    perpendicular: (l: Ln, p: Pt, o?: string | Style) => drawnLine(G.perpendicular(l, p), o),
-    parallel: (l: Ln, p: Pt, o?: string | Style) => drawnLine(G.parallel(l, p), o),
-    perpBisector: (a: Pt, b: Pt, o?: string | Style) => drawnLine(G.perpBisector(a, b), o),
-    foot: (p: Pt, l: Ln, name?: string) => named(G.foot(p, l), safeName(name)),
-    bisector: (a: Pt, b: Pt, c: Pt, o?: string | Style) => drawnLine(G.bisector(a, b, c), o),
-    tangentAt: (c: Circ, p: NamedPt, o?: string | Style) => drawnLine(G.tangentAt(c, p), { color: 'amber', ...opts(o) }, p.name ? `tangent${p.name}` : undefined),
-    tangentsFrom: (p: Pt, c: Circ) => G.tangentPoints(p, c).map((q) => named(q)),
-    onCircle: (c: Circ, deg: number, name?: string) => named(G.onCircle(c, deg), safeName(name)),
-    polar: (o: Pt, r: number, deg: number, name?: string) => named(G.polar(o, r, deg), safeName(name)),
-    rotate: (p: Pt, o: Pt, deg: number, name?: string) => named(G.rotate(p, o, deg), safeName(name)),
-    reflect: (p: Pt, l: Ln, name?: string) => named(G.reflect(p, l), safeName(name)),
-    translate: (p: Pt, dx: number, dy: number, name?: string) => named(G.translate(p, dx, dy), safeName(name)),
-    lineThrough: (p: Pt, deg: number, o?: string | Style) => drawnLine(G.lineThrough(p, deg), o),
-    circumcircle: (a: Pt, b: Pt, c: Pt, o?: string | Style) => drawnCircle(G.circumcircle(a, b, c), { dashed: true, ...opts(o) }),
-    incircle: (a: Pt, b: Pt, c: Pt, o?: string | Style) => drawnCircle(G.incircle(a, b, c), { dashed: true, ...opts(o) }),
-    centroid: (pts: Pt[]) => named(G.centroid(pts)),
-    squareOn: (a: Pt, b: Pt, awayFrom: Pt) => G.squareOn(a, b, awayFrom).map((p) => named(p)),
-    regularPolygon: (o: Pt, r: number, n: number, startDeg?: number) => G.regularPolygon(o, r, n, startDeg).map((p) => named(p)),
-    dist: G.dist,
-    angleOf: G.angleOf,
-    heading: G.heading,
-    polygonArea: (pts: Pt[]) => Math.abs(G.polygonArea(pts)),
+    perpendicular: withPts((l: Ln, p: Pt, o?: string | Style) => drawnLine(G.perpendicular(l, p), o)),
+    parallel: withPts((l: Ln, p: Pt, o?: string | Style) => drawnLine(G.parallel(l, p), o)),
+    perpBisector: withPts((a: Pt, b: Pt, o?: string | Style) => drawnLine(G.perpBisector(a, b), o)),
+    foot: withPts((p: Pt, l: Ln, name?: string) => named(G.foot(p, l), safeName(name))),
+    bisector: withPts((a: Pt, b: Pt, c: Pt, o?: string | Style) => drawnLine(G.bisector(a, b, c), o)),
+    tangentAt: withPts((c: Circ, p: NamedPt, o?: string | Style) => drawnLine(G.tangentAt(c, p), { color: 'amber', ...opts(o) }, p.name ? `tangent${p.name}` : undefined)),
+    tangentsFrom: withPts((p: Pt, c: Circ) => G.tangentPoints(p, c).map((q) => named(q))),
+    onCircle: withPts((c: Circ, deg: number, name?: string) => named(G.onCircle(c, deg), safeName(name))),
+    polar: withPts((o: Pt, r: number, deg: number, name?: string) => named(G.polar(o, r, deg), safeName(name))),
+    rotate: withPts((p: Pt, o: Pt, deg: number, name?: string) => named(G.rotate(p, o, deg), safeName(name))),
+    reflect: withPts((p: Pt, l: Ln, name?: string) => named(G.reflect(p, l), safeName(name))),
+    translate: withPts((p: Pt, dx: number, dy: number, name?: string) => named(G.translate(p, dx, dy), safeName(name))),
+    lineThrough: withPts((p: Pt, deg: number, o?: string | Style) => drawnLine(G.lineThrough(p, deg), o)),
+    circumcircle: withPts((a: Pt, b: Pt, c: Pt, o?: string | Style) => drawnCircle(G.circumcircle(a, b, c), { dashed: true, ...opts(o) })),
+    incircle: withPts((a: Pt, b: Pt, c: Pt, o?: string | Style) => drawnCircle(G.incircle(a, b, c), { dashed: true, ...opts(o) })),
+    centroid: withPts((pts: Pt[]) => named(G.centroid(pts))),
+    squareOn: withPts((a: Pt, b: Pt, awayFrom: Pt) => G.squareOn(a, b, awayFrom).map((p) => named(p))),
+    regularPolygon: withPts((o: Pt, r: number, n: number, startDeg?: number) => G.regularPolygon(o, r, n, startDeg).map((p) => named(p))),
+    dist: withPts(G.dist),
+    angleOf: withPts(G.angleOf),
+    heading: withPts(G.heading),
+    polygonArea: withPts((pts: Pt[]) => Math.abs(G.polygonArea(pts))),
     // 分析
     fn,
     curve,

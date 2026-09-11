@@ -206,3 +206,88 @@ describe('API 对误用给出能修的错误，而不是 NaN', () => {
     expect(r.drawables).toBe(1);
   });
 });
+
+describe('老师最自然的写法都认（线性代数那节课的原始脚本）', () => {
+  it('[x, y] arrays are points everywhere; label + style trailing args both apply', () => {
+    const r = runDraw([
+      "axes({ x: [-1, 6], y: [-1, 5] });\nconst h = 1.2;\nvector([0, 0], 1, 0, 'e₁', { color: 'blue' });\nvector([0, 0], 0, 1, 'e₂', { color: 'rose' });\nvector([0, 0], h, 1, 'M·e₁', { color: 'blue', width: 3 });\npolygon([[0, 0], [1, 0], [1 + h, 1], [h, 1]], { color: 'amber', label: '面积 = 1' });\nsegment([0,0], [2,2], 'd', { color: 'pine', dashed: true });\nconst M = midpoint([0, 0], [2, 2]);\npoint(M, 'M');",
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.error).toBeUndefined();
+    expect(r.markup).toContain('#C24B5A'); // rose vector
+    expect(r.markup).toContain('面积 = 1');
+    expect(r.markup).toMatch(/stroke="#2F6B55"[^>]*stroke-dasharray/); // segment label+style both applied
+    expect(r.markup).toContain('data-label="M"');
+  });
+
+  it('hidden points are not drawn but usable; arrows without color cycle through the palette', () => {
+    const r = runDraw([
+      "function P3(x, y, z) { return [x + z * 0.5, y - z * 0.35]; }\nconst A = point(P3(0,0,0), '', { hidden: true });\nconst B = point(P3(3,0,0), 'e₁');\narrow(A, B);\narrow(A, point(P3(0,3,0), 'e₂'));\narrow(A, point(P3(0,0,3), 'e₃'));",
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.error).toBeUndefined();
+    const colors = new Set((r.markup.match(/marker-end="url\(#[^"]*arrow-([0-9A-Fa-f]{6})\)"/g) ?? []).map((m) => m.slice(-8, -2)));
+    expect(colors.size).toBe(3);
+    expect(r.drawables).toBe(3 + 3); // 3 visible points + 3 arrows（hidden 的 A 不登记）
+  });
+
+  it('misuse still yields a repairable TypeError mentioning arrays are fine', () => {
+    const r = runDraw(["segment('A', 'B');"]);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/需要一个点（\{x, y\} 或 \[x, y\]）/);
+  });
+});
+
+describe('view3d（正交投影，配 time 会转）', () => {
+  it('projects 3d points consistently and axes3d draws three colored arrows', () => {
+    const r = runDraw(["const v = view3d({ yaw: 30, pitch: 20 });\nv.axes3d(3);\nv.box3([0,0,0], 2, 1, 1.5);\nconst P = v.point3([2,1,1.5], 'P');\nv.arrow3([0,0,0], [2,1,1.5], 'd', { color: 'amber' });"]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.error).toBeUndefined();
+    expect(r.drawables).toBe(3 + 12 + 1 + 1);
+    expect(new Set((r.markup.match(/arrow-([0-9A-Fa-f]{6})\)/g) ?? [])).size).toBe(4);
+    const spin = runDraw(["const t = time(6);\nconst v = view3d({ yaw: 60 * t });\nv.axes3d(3);"]);
+    expect(spin.ok && spin.timeline?.dur).toBe(6);
+    expect(spin.ok && spin.markup).toMatch(/attributeName="d"/);
+  });
+});
+
+describe('坐标范围自动贴内容', () => {
+  it('a unit square inside axes [-4,4]² gets a tight view (origin kept); lock keeps the teacher range', () => {
+    const script = "axes({ x: [-4, 4], y: [-4, 4] });\nvector([0,0], 1, 0, 'e₁');\nvector([0,0], 0, 1, 'e₂');\npolygon([[0,0],[1,0],[1,1],[0,1]], { color: 'amber' });";
+    const tight = runDraw([script]);
+    const locked = runDraw([script.replace('axes({ x: [-4, 4], y: [-4, 4] })', 'axes({ x: [-4, 4], y: [-4, 4], lock: true })')]);
+    expect(tight.ok && locked.ok).toBe(true);
+    if (!tight.ok || !locked.ok) return;
+    // 收紧后单位向量占的像素长度远大于锁定时
+    const len = (m: string) => { const a = /data-name="e1"[^>]*d="M([\d.]+) ([\d.]+) L([\d.]+) ([\d.]+)"/.exec(m); return a ? Math.abs(Number(a[3]) - Number(a[1])) : 0; };
+    expect(len(tight.markup)).toBeGreaterThan(len(locked.markup) * 2.5);
+    // 刻度不再画到 -4：范围里没有 -3 这个刻度了
+    expect(tight.markup).not.toMatch(/>-3</);
+    expect(locked.markup).toMatch(/>-3</);
+  });
+
+  it('content that already fills the range is left alone; axes-only figures keep their range', () => {
+    const r = runDraw(["axes({ x: [-3, 3], y: [-1, 9] });\nconst f = curve(x => x * x, [-3, 3]);"]);
+    expect(r.ok && r.markup).toMatch(/>-3</);
+    const empty = runDraw(["axes({ x: [-1, 6], y: [-1, 5] });"]);
+    expect(empty.ok && empty.markup).toMatch(/>6</);
+  });
+});
+
+describe('上板顺序', () => {
+  it('filled shapes are painted before vectors written earlier in the same chunk; chunks stay in order', () => {
+    const r = runDraw(["vector([0,0], 0, 1, 'e2', { color: 'rose' });\npolygon([[0,0],[1,0],[1,1],[0,1]], { color: 'pine' });", "vector([0,0], 2, 1, 'v', { color: 'amber' });"]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const poly = r.markup.indexOf('<path id="poly1"');
+    const e2 = r.markup.indexOf('data-name="e2"');
+    const v = r.markup.indexOf('data-name="v"');
+    expect(poly).toBeGreaterThan(-1);
+    expect(poly).toBeLessThan(e2);
+    expect(e2).toBeLessThan(v);
+  });
+});

@@ -14,7 +14,7 @@ Context v1 在 middleware 白名单中仅为委托认证：mmctx_ token 不符�
 
 | 文件 | 行数 | 职责 | 核心 export |
 |------|------|------|------------|
-| `math-text.ts` | ~330 | 夹着 TeX 的文本怎么切、怎么念（纯函数）：`splitMathText`（`$…$` `\(…\)` `$$…$$` + 裸 LaTeX 运行段；`looksLikeMath` 排除货币）给 MathText / teach-live 渲染；`latexToSpeech` / `speakableText` 把公式变成能念的中文（分之、的平方、点乘、纳布拉、求和 从…到…、绝对值……17 例单测）给 TTS | `splitMathText`, `looksLikeMath`, `latexToSpeech`, `speakableText` |
+| `math-text.ts` | ~380 | 夹着 TeX 的文本怎么切、怎么念（纯函数）：`splitMathText`（`$…$` `\(…\)` `$$…$$` + 裸 LaTeX 运行段；`looksLikeMath` 排除货币）给 MathText / teach-live 渲染；`expandColorMacros`（课堂色板宏 `\pine{}` `\amber{}` `\blue{}` `\rose{}` `\ink{}` `\faint{}` → `\textcolor`，文本层配平花括号展开——KaTeX macros 遇宏体里的 `#2F6B55` 会当参数）；`latexToSpeech` / `speakableText` 把公式变成能念的中文（分之、的平方、点乘、纳布拉、求和 从…到…、绝对值……17 例单测）给 TTS | `splitMathText`, `looksLikeMath`, `expandColorMacros`, `latexToSpeech`, `speakableText` |
 | `safe-math.ts` | ~240 | 无 eval 的算术 / 一元函数表达式求值（手写 shunting-yard：+ - * / ^、一元负号、sin cos tan exp ln log sqrt abs…、pi / e、隐式乘法 2x）；teach-live 三处共用：`<plot>` 函数图、`<draw>` 运行时字符串函数、口播 `{{ 24 / 2 }}` 内联计算 | `compileExpression`, `evaluateInlineMath` |
 | `json-utils.ts` | 459 | JSON 解析/修复（LLM 未转义引号修复、安全序列化） | `parseJsonResponse`, `safeStringify`, `deepClone`, `isValidJson` |
 | `page-utils.ts` | 10 | Barrel re-export — 实际实现在 `page/` 子目录 | 全部 54 个导出符号 |

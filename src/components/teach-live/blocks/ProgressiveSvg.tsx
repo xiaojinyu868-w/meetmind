@@ -91,7 +91,7 @@ export const ProgressiveSvg = React.memo(function ProgressiveSvg({ attrs, segmen
       mountedRef.current.set(segment.id, complete.length);
       if (mounted.length) {
         grew = true;
-        batch = batch.concat(mounted);
+        if (!segment.instant) batch = batch.concat(mounted);
       }
     }
     if (batch.length) {

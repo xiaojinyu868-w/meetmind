@@ -42,6 +42,19 @@ interface SegmentResult {
   transform: Transform;
   /** 部分渲染：脚本在这段中途报错，已画出报错前的对象 */
   partialError?: string;
+  /**
+   * 重排：这一段补的东西超出了当前画面（例如先画单位正方形、再补画剪切后的像），整张图按全部内容重新取景，
+   * 这一段的 markup 是从头到这段的完整图，之前的段都作废；后续追加段沿用它的布局
+   */
+  refit?: boolean;
+}
+
+/** viewBox 明显撑大（任一边 > 15%）就该重新取景 */
+function outgrows(next: string, base: string): boolean {
+  const a = next.split(/\s+/).map(Number);
+  const b = base.split(/\s+/).map(Number);
+  if (a.length !== 4 || b.length !== 4 || a.some(Number.isNaN) || b.some(Number.isNaN)) return false;
+  return a[2] > b[2] * 1.15 || a[3] > b[3] * 1.15;
 }
 
 type OkResult = Extract<RunResult, { ok: true }>;
@@ -82,17 +95,33 @@ export function DrawBlock({ block, animate, revealed, threadId, onGrow, onIssue 
         const key = prefixKey(i);
         if (results[key] || runningRef.current.has(key)) continue;
         // 前一段还没出结果就等下一轮 effect
-        const baseKey = prefixKey(0);
         const prevKey = i > 0 ? prefixKey(i - 1) : null;
         if (prevKey && !results[prevKey]) return;
-        const base = results[baseKey];
+        // 布局由首段决定；中途重排过就由最近一次重排决定
+        let base: SegmentResult | undefined = results[prefixKey(0)];
+        for (let j = i - 1; j > 0; j--) {
+          const rj = results[prefixKey(j)];
+          if (rj?.refit) {
+            base = rj;
+            break;
+          }
+        }
         runningRef.current.add(key);
         const options: RunOptions = {
           idPrefix,
           params: paramValues,
           ...(i > 0 && base ? { transform: base.transform, fromChunk: i } : {}),
         };
-        const r = await runDrawScript(texts.slice(0, i + 1), options);
+        let r = await runDrawScript(texts.slice(0, i + 1), options);
+        let refit = false;
+        if (i > 0 && base && r.ok && !r.error && outgrows(r.viewBox, base.viewBox)) {
+          // 补画的东西出了画面：整张图重新取景（老师讲到哪，镜头拉到哪）
+          const whole = await runDrawScript(texts.slice(0, i + 1), { idPrefix, params: paramValues });
+          if (whole.ok && !whole.error) {
+            r = whole;
+            refit = true;
+          }
+        }
         runningRef.current.delete(key);
         if (!mountedRef.current) return;
 
@@ -101,7 +130,7 @@ export function DrawBlock({ block, animate, revealed, threadId, onGrow, onIssue 
           // 自愈：让模型修这一段；修好了 fixes 变化 → signature 变化 → 本 effect 重跑
           fixTriedRef.current.add(seg.id);
           try {
-            const fixed = await liveFixDraw(threadId, texts.slice(0, i + 1), i, failure);
+            const fixed = await liveFixDraw(threadId, texts.slice(0, i + 1), i, failure, seg.id);
             if (!mountedRef.current) return;
             if (fixed.verified && fixed.script.trim()) {
               setFixes((prev) => ({ ...prev, [seg.id]: fixed.script }));
@@ -122,7 +151,7 @@ export function DrawBlock({ block, animate, revealed, threadId, onGrow, onIssue 
         if (i === 0) setParams(r.params);
         setResults((prev) => ({
           ...prev,
-          [key]: { markup: r.markup, viewBox: r.viewBox, transform: r.transform, ...(r.error ? { partialError: r.error } : {}) },
+          [key]: { markup: r.markup, viewBox: r.viewBox, transform: r.transform, ...(r.error ? { partialError: r.error } : {}), ...(refit ? { refit } : {}) },
         }));
         return; // 一次一个，state 落地后 effect 再跑下一段
       }
@@ -155,15 +184,20 @@ export function DrawBlock({ block, animate, revealed, threadId, onGrow, onIssue 
 
   if (!revealed) return null;
 
-  // 展示对象：已揭示且已算出结果的段
-  const shown: LiveSegment[] = [];
+  // 展示对象：已揭示且已算出结果的段；遇到重排段就从它重新开始（之前的段已包含在它的完整图里）
+  let shown: LiveSegment[] = [];
   let lastViewBox: string | undefined;
+  let refits = 0;
   for (let i = 0; i < complete.length; i++) {
     const seg = complete[i];
     if (!seg.revealed) break;
     const r = results[prefixKey(i)];
     if (!r) break;
-    shown.push({ id: seg.id, text: r.markup, complete: true, revealed: true });
+    if (r.refit) {
+      shown = [];
+      refits += 1;
+    }
+    shown.push({ id: seg.id, text: r.markup, complete: true, revealed: true, ...(r.refit ? { instant: true } : {}) });
     lastViewBox = r.viewBox;
   }
   const segments: LiveSegment[] = full ? [{ id: `${block.id}-full-${full.key}`, text: full.markup, complete: true, revealed: true }] : shown;
@@ -181,7 +215,7 @@ export function DrawBlock({ block, animate, revealed, threadId, onGrow, onIssue 
   return (
     <div className="live-draw">
       <ProgressiveSvg
-        key={full ? `full-${full.key}` : 'progressive'}
+        key={full ? `full-${full.key}` : `progressive-${refits}`}
         attrs={{ viewbox: viewBox ?? '0 0 800 450', title: block.attrs.title ?? '' }}
         segments={segments}
         animate={full ? false : animate}

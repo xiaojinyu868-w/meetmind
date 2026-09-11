@@ -147,6 +147,8 @@ export function runDraw(chunks: string[], options: RunOptions = {}): RunResult {
         const union = new Scene(params, 0);
         union.view = scene.view;
         union.size = scene.size;
+        union.equalAxes = scene.equalAxes;
+        union.viewLocked = scene.viewLocked;
         union.drawables = frames.flatMap((f) => f.drawables);
         const transform = options.transform ?? fitTransform(union);
         const rendered = frames.map((f) => render(f, { ...renderOpts, transform }));

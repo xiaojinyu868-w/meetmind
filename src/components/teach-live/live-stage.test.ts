@@ -209,3 +209,16 @@ describe('director helpers', () => {
     expect(slept).toContain(1700);
   });
 });
+
+describe('draw-fix 事件（自愈脚本落日志后回看替换原段）', () => {
+  it('replaces the broken segment text of a draw block; other kinds untouched', () => {
+    let state: LessonState = createLessonState({ threadId: 't', title: '', topic: '' });
+    for (const ev of eventsFromMarkup(`<draw id="fig">circle(O, 3);</draw><math id="eq">x</math>`)) state = lessonReducer(state, { type: 'server', event: ev, replay: true });
+    const fig = Object.values(state.blocks).find((b) => b.kind === 'draw')!;
+    const eq = Object.values(state.blocks).find((b) => b.kind === 'math')!;
+    state = lessonReducer(state, { type: 'server', event: { type: 'draw-fix', segmentId: fig.segments[0].id, script: 'const O = point(0, 0, "O");\ncircle(O, 3);', error: 'ReferenceError: O' }, replay: true });
+    expect(state.blocks[fig.id].segments[0].text).toContain('const O = point');
+    state = lessonReducer(state, { type: 'server', event: { type: 'draw-fix', segmentId: eq.segments[0].id, script: 'nope', error: 'x' }, replay: true });
+    expect(state.blocks[eq.id].segments[0].text).toBe('x');
+  });
+});

@@ -27,13 +27,34 @@ function locate(container: HTMLElement, target: PointerTarget): Rect | null {
   if (!block) return null;
   let el: Element = block;
   if (target.innerId) {
-    const inner = block.querySelector(`#${cssEscape(target.innerId)}`) ?? block.querySelector(`[id="${target.innerId}"]`);
+    const inner = findInner(block, target.innerId);
     if (inner) el = inner;
   }
   const r = el.getBoundingClientRect();
   const c = container.getBoundingClientRect();
   if (r.width === 0 && r.height === 0) return null;
   return { x: r.left - c.left, y: r.top - c.top, w: r.width, h: r.height };
+}
+
+const SUBSCRIPTS: Record<string, string> = { '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4', '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9' };
+
+/**
+ * 老师说 at="fig#v"：图里元素的真实 id 带块前缀（lb_3-v），所以先按 id，再按 data-name / data-label 找；
+ * e₁ 与 e1 视为同一个名字。
+ */
+function findInner(block: HTMLElement, rawId: string): Element | null {
+  const norm = rawId.replace(/[₀-₉]/g, (d) => SUBSCRIPTS[d] ?? d);
+  const candidates = norm === rawId ? [rawId] : [rawId, norm];
+  for (const id of candidates) {
+    const hit =
+      block.querySelector(`#${cssEscape(id)}`) ??
+      block.querySelector(`[id="${id}"]`) ??
+      block.querySelector(`[data-name="${id}"]`) ??
+      block.querySelector(`[data-label="${id}"]`) ??
+      block.querySelector(`[id$="-${id}"]`);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 function cssEscape(id: string): string {

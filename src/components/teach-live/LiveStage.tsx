@@ -73,7 +73,8 @@ export function LiveStage({ lesson, live, onLeave }: LiveStageProps) {
     if (!board) return;
     const id = requestAnimationFrame(() => {
       // 只在最新一块露不全时滚动（nearest），别把页首标题顶出去
-      const blocks = board.querySelectorAll<HTMLElement>('.live-block');
+      // 未揭示的 draw 块以 hidden 外框先挂着（在算图），滚动只看显示出来的
+      const blocks = board.querySelectorAll<HTMLElement>('.live-block:not([hidden])');
       const last = blocks[blocks.length - 1];
       if (last) last.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     });

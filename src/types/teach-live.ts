@@ -80,8 +80,13 @@ export type LiveBlockCloseEvent = {
   complete: boolean;
 };
 export type LiveCueEvent = { type: 'cue'; name: LiveCueName; args: LiveAttrs };
+/**
+ * <draw> 某一段脚本被自愈替换（服务端已复跑验证）。只落日志不走 SSE：
+ * 回看 / 恢复时按它替换该段正文，否则重放的是当年跑不通的原脚本。
+ */
+export type LiveDrawFixEvent = { type: 'draw-fix'; segmentId: string; script: string; error: string };
 
-export type LiveEvent = LiveBlockOpenEvent | LiveBlockDeltaEvent | LiveBlockCloseEvent | LiveCueEvent;
+export type LiveEvent = LiveBlockOpenEvent | LiveBlockDeltaEvent | LiveBlockCloseEvent | LiveCueEvent | LiveDrawFixEvent;
 
 export function isLiveBlockKind(name: string): name is LiveBlockKind {
   return (LIVE_BLOCK_KINDS as readonly string[]).includes(name);
