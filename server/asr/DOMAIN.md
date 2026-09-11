@@ -15,7 +15,7 @@
 | `qwen-session.test.js` | 旧族语种自动识别、上下文与 VAD 协议回归测试 |
 | `duplex-session.js` | 新族 Qwen-Audio-3.0-ASR / Fun-ASR 的 duplex 任务协议：模型族分派、上游 URL 解析、run-task / continue-task / finish-task 构造、result-generated 解析 |
 | `duplex-session.test.js` | 新族协议构造与解析、按族分派回归测试 |
-| `session-link.js` | 一条客户端连接的链路守护纯函数（2026-09-11）：`timeline-offset` 消息解析、上游 / 墙钟时间戳平移回课堂时间轴（`shiftSpan`）、上游就绪超时 20s 与客户端存活 60s 的阈值与判定 |
+| `session-link.js` | 一条客户端连接的链路守护纯函数（2026-09-11）：`timeline-offset` 消息解析、上游 / 墙钟时间戳平移回课堂时间轴（`shiftSpan`）、上游就绪超时 20s 与客户端存活 60s 的阈值与判定；`resolveTurnTuning`：按连接的 WS 查询串（`vadSilenceMs` / `draftFlushMs`）决定上游句末静音与 interim 下发节流，缺省走 env / 课堂默认 1000 / 800，越界钳进区间——「讲给同桌听」传 500 / 250（实测 qwen-audio-3.0 对 `max_sentence_silence` 不敏感，500 / 300 / 1000 定稿都在停下后 1.2~1.4s 到；interim 在停下那一刻已是整句，所以客户端拿 interim 提交，不等定稿） |
 | `session-link.test.js` | 偏移解析 / 平移 / 存活判定回归测试 |
 
 ## 协议分派（按模型族）

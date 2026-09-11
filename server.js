@@ -60,6 +60,7 @@ const {
   parseTimelineOffsetMessage,
   shiftSpan,
   isClientIdle,
+  resolveTurnTuning,
 } = require('./server/asr/session-link');
 // 新一代 Qwen-Audio-3.0-ASR / Fun-ASR 的 duplex 任务协议（与旧 Omni Realtime 协议按模型族分派）
 const {
@@ -450,23 +451,13 @@ app.prepare().then(() => {
     const duplexTaskId = useDuplexAsr ? generateDuplexTaskId() : null;
     const upstreamWsUrl = resolveAsrWsUrl(model, process.env.DASHSCOPE_ASR_WS_URL);
     const sampleRate = parseInt(process.env.DASHSCOPE_ASR_WS_SR || '16000', 10);
-    const turnSilenceMs = clampNumber(
-      parseInt(process.env.DASHSCOPE_ASR_WS_VAD_SILENCE_MS || '1000', 10),
-      200,
-      3000,
-      1000
-    );
+    // 回合节奏按用途申明（讲给同桌听在 WS URL 上带 vadSilenceMs / draftFlushMs），缺省走 env / 课堂默认
+    const { turnSilenceMs, draftFlushMs } = resolveTurnTuning({ query: asrConnectionQuery, env: process.env });
     const turnVadThreshold = clampNumber(
       parseFloat(process.env.DASHSCOPE_ASR_WS_VAD_THRESHOLD || '0.20'),
       0.05,
       0.95,
       0.20
-    );
-    const draftFlushMs = clampNumber(
-      parseInt(process.env.ASR_DRAFT_FLUSH_MS || '800', 10),
-      200,
-      2500,
-      800
     );
     const dedupSimilarity = clampNumber(
       parseFloat(process.env.ASR_DEDUP_SIMILARITY || '0.95'),
@@ -613,7 +604,7 @@ app.prepare().then(() => {
         dashscopeWs.send(JSON.stringify(runTask));
         initialSessionUpdateSent = true;
         if (extraLog) {
-          console.log(`[ASR-Proxy] run-task sent (${extraLog}), model=${model}, lang=${languageMode}, context length: ${corpusText.length}`);
+          console.log(`[ASR-Proxy] run-task sent (${extraLog}), model=${model}, lang=${languageMode}, silence=${turnSilenceMs}ms, draft=${draftFlushMs}ms, context length: ${corpusText.length}`);
         }
         return;
       }

@@ -84,6 +84,12 @@ export interface DashScopeASROptions {
   handshakeTimeoutMs?: number;
   /** 握手成功到收到 ready（代理连上上游）的超时基数，随失败轮数增长，默认 15000 → 上限 30000 */
   readyTimeoutMs?: number;
+  /**
+   * 附加到 WS URL 查询串的回合节奏申明（server.js `resolveTurnTuning` 消费）：
+   * `vadSilenceMs` 上游句末静音（课堂默认 1000）、`draftFlushMs` interim 下发节流（默认 800）。
+   * 讲给同桌听传 { vadSilenceMs: 500, draftFlushMs: 250 }——你停下评委就接；课堂录音不传。
+   */
+  wsQuery?: Record<string, string | number>;
 }
 
 type ConnectOutcome = 'ready' | 'failed' | 'terminal';
@@ -108,6 +114,14 @@ export function rotateCandidates<T>(candidates: T[], round: number): T[] {
 /** 这些错误重连没有意义：额度 / 密钥 / 服务未配置，立刻终止并把原因交给 UI */
 export function isTerminalAsrError(message: string): boolean {
   return /ASR_QUOTA_EXCEEDED|GUEST_DAILY_ASR_CAP|API Key 未配置|密钥失效/i.test(message);
+}
+
+/** 把查询参数拼到 WS 地址上（已有 ? 就用 &；空对象原样返回） */
+export function appendWsQuery(wsUrl: string, query: Record<string, string | number>): string {
+  const entries = Object.entries(query).filter(([, value]) => value !== '' && value !== undefined && value !== null);
+  if (entries.length === 0) return wsUrl;
+  const encoded = entries.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`).join('&');
+  return `${wsUrl}${wsUrl.includes('?') ? '&' : '?'}${encoded}`;
 }
 
 /** 存活判定：代理每 15s 回一次 pong，超过这个时长一条消息都没有就当作半开连接主动重连 */
@@ -341,9 +355,10 @@ export class DashScopeASRClient {
       const authToken = typeof window !== 'undefined'
         ? window.localStorage.getItem('meetmind_access_token') || window.localStorage.getItem('auth_token')
         : null;
-      const wsUrlWithAuth = authToken
-        ? `${wsUrl}${wsUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(authToken)}`
-        : wsUrl;
+      const wsUrlWithAuth = appendWsQuery(wsUrl, {
+        ...(authToken ? { token: authToken } : {}),
+        ...(this.options.wsQuery ?? {}),
+      });
 
       this.isReady = false;
       this.connectionGeneration += 1;
