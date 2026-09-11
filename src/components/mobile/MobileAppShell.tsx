@@ -39,6 +39,8 @@ import { MobileFirstLearningScreen } from './MobileFirstLearningScreen';
 import { selectDemoLiveSegments } from '@/components/classroom/DemoLessonLoader';
 import { GUEST_DEMO_LESSON_TITLE } from '@/components/classroom/guest-demo-entry';
 import { UnfinishedLessonBar } from '@/components/classroom/UnfinishedLessonBar';
+import { GuestSyncHint } from '@/components/classroom/GuestSyncHint';
+import { useGuestSyncHint } from '@/hooks/useGuestSyncHint';
 import type { UnfinishedLesson } from '@/hooks/useUnfinishedRecordings';
 import { useAdminLens } from '@/components/admin/AdminLensProvider';
 import {
@@ -176,6 +178,7 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
   const { push } = useMobileNav();
   const { enabled: adminLensEnabled } = useAdminLens();
   const learning = useLearningContext();
+  const showGuestSyncHint = useGuestSyncHint(p.isAuthenticated);
   const echo = p.workspaceEchoes[0];
   const [flashPhoto, setFlashPhoto] = useState<{ url: string; time: string } | null>(null);
   const [flash, setFlash] = useState(false);
@@ -277,6 +280,8 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
             }}
           />
         ) : null}
+        {/* 访客本机有录好的课：恢复条旁一句「登录后，这节课会跟着你到任何设备」，不弹窗 */}
+        {showGuestSyncHint ? <GuestSyncHint /> : null}
         <MobileLearningCommandCenter
           onStartRecording={() => {
             void p.onStartRecording().then((started) => {
