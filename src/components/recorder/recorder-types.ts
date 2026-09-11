@@ -34,6 +34,13 @@ export interface RecorderProps {
   onRecordingStop?: (audioBlob?: Blob, meta?: RecorderCallbackMeta) => void;
   /** 录音期间每片原声到达时回调（默认 1s 一片）；不回调 = 原声只在内存里，关页即丢 */
   onAudioChunk?: (chunk: Blob, meta: RecorderAudioChunkMeta) => void;
+  /**
+   * 录音中 Recorder 被卸载（切到没有挂载点的布局 / 客户端路由离开）时回调（2026-09-11）。
+   * 此时最后一片原声已经通过 onAudioChunk 交出、ASR 与采集已停；外层应把分片与字幕快照落盘、
+   * 让这节课留成「没结束」交给恢复条（继续录 / 就到这里），而不是像正常停录那样出理解、跳复习。
+   * 之前卸载只停 MediaRecorder 不回调任何东西，录到一半的内容在内存里被丢掉。
+   */
+  onRecordingInterrupted?: (meta: RecorderCallbackMeta) => void;
   onTranscriptionError?: (message: string, meta?: RecorderCallbackMeta) => void;
   onTranscriptUpdate?: (segments: TranscriptSegment[], meta?: RecorderCallbackMeta) => void;
   onTranscriptTextUpdate?: (segmentId: string, text: string) => void;

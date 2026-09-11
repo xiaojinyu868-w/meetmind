@@ -42,6 +42,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   onRecordingStart,
   onRecordingStop,
   onAudioChunk,
+  onRecordingInterrupted,
   onTranscriptionError,
   onTranscriptUpdate,
   onTranscriptTextUpdate,
@@ -59,6 +60,11 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   audioSource = 'mic',
 }: RecorderProps, ref) {
   const [status, setStatus] = useState<RecorderStatus>('idle');
+  // 卸载 cleanup 只能读到首次渲染的闭包：状态与中断回调都走 ref 镜像
+  const statusRef = useRef<RecorderStatus>('idle');
+  statusRef.current = status;
+  const onRecordingInterruptedRef = useRef(onRecordingInterrupted);
+  onRecordingInterruptedRef.current = onRecordingInterrupted;
   const [elapsedMs, setElapsedMs] = useState(0);
   const [level, setLevel] = useState(0);
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
@@ -1386,12 +1392,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       pcmCaptureRef.current?.stop();
       pcmCaptureRef.current = null;
       pcmResamplerRef.current = null;
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-      }
-      if (audioContextRef.current) audioContextRef.current.close().catch(() => {});
-      sourceNodeRef.current = null;
       if (asrClientRef.current) {
         asrClientRef.current.stop();
         asrClientRef.current = null;
@@ -1401,13 +1401,58 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         pendingAsrClientRef.current = null;
       }
       if (enhanceManagerRef.current) enhanceManagerRef.current.dispose();
-      // acquireAudioStream cleanup——卸载时兜底释放采集资源
-      if (audioCleanupRef.current) {
-        try { audioCleanupRef.current(); } catch { /* ignore */ }
-        audioCleanupRef.current = null;
+
+      const releaseAudioResources = () => {
+        if (audioContextRef.current) audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
+        sourceNodeRef.current = null;
+        // acquireAudioStream cleanup——卸载时兜底释放采集资源
+        if (audioCleanupRef.current) {
+          try { audioCleanupRef.current(); } catch { /* ignore */ }
+          audioCleanupRef.current = null;
+        }
+        releaseScreenTrack();
+      };
+
+      const recorder = mediaRecorderRef.current;
+      const wasRecording = statusRef.current === 'recording' || statusRef.current === 'paused';
+      if (!recorder || recorder.state === 'inactive' || !wasRecording) {
+        if (recorder && recorder.state !== 'inactive') {
+          recorder.stop();
+          recorder.stream.getTracks().forEach((track) => track.stop());
+        }
+        releaseAudioResources();
+        return;
       }
-      releaseScreenTrack();
+
+      // 录音中被卸载（切到没有挂载点的布局 / 客户端路由离开）：不能只 stop 了事。
+      // 走 stopMediaRecorderSafely 让最后一片原声先经 ondataavailable → onAudioChunk 交给外层，
+      // 再通知外层「录音被打断」——外层把分片与字幕快照落盘，这节课留成「没结束」交给恢复条。
+      const meta: RecorderCallbackMeta = {
+        recordingId: recordingIdRef.current,
+        sessionId: sessionIdRef.current,
+        durationMs: startTimeRef.current > 0 ? Math.max(0, Date.now() - startTimeRef.current) : 0,
+      };
+      console.warn('[Recorder] unmounted while recording — handing the lesson over as unfinished', {
+        sessionId: meta.sessionId,
+        durationMs: meta.durationMs,
+        chunks: audioChunksRef.current.length,
+      });
+      void stopMediaRecorderSafely()
+        .catch((error) => {
+          console.error('[Recorder] stopMediaRecorderSafely on unmount failed:', error);
+          return null;
+        })
+        .then(() => {
+          releaseAudioResources();
+          try {
+            onRecordingInterruptedRef.current?.(meta);
+          } catch (error) {
+            console.error('[Recorder] onRecordingInterrupted failed:', error);
+          }
+        });
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isRecording = status === 'recording';
