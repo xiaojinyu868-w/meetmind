@@ -80,7 +80,8 @@ export async function* streamTeachBackPanel(input: TeachBackPanelInput): AsyncGe
         },
       ],
       model,
-      { temperature: 0.7, maxTokens: 320, smooth: 'off', thinking: false },
+      // maxTokens 是上限不是目标：头行 + 一句话 + 一个问题 ≈ 40-60 token；留到 160 是给英文课 / 罕见长句的余量
+      { temperature: 0.7, maxTokens: 160, smooth: 'off', thinking: false },
     );
 
     for await (const chunk of stream) {
