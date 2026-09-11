@@ -57,8 +57,10 @@ useAppLearningActivity 的桌面/移动应用活动由登录用户提交 /api/me
 | `useTutorLauncher.ts` | ~340 | AI 家教启动逻辑（blobToDataUrl + buildTutorLaunchImages + buildTutorPrompt* + openTutor* + applyBatchAction），从 page.tsx 提取（Phase 4） |
 | `useTranscriptIngest.ts` | ~400 | 转录摄入与持久化；尊重调用方的 persistSourceKey/sourceType/role，并将来源 provenance 写入 WorkspaceCapture。音频拼接护栏：只有「当前会话本身就是上一次导入新建的」才把已有会话音频并入（模块级 lastIngestCreatedSessionId），防止资料 A 的音频拼进课程 B |
 | `useRecordingLifecycle.ts` | ~600 | 录音生命周期（persistCaptureToWorkspace + handleRecordingStart + handleRecordingStop）；写入 `transcriptionStatus` pending/completed/failed；2026-08 单遍化：realtime 结果停录即发布为课后证据并触发课后理解，不再自动跑课后 batch 定稿与说话人分离。**2026-09-10 录课不丢**：结束时转录用 `replaceSessionTranscripts` 整段覆盖（检查点已写过快照，追加会双份）、最终 blob 落库后删 `recordingChunks`、没 blob 时先试从分片拼回；服务端 capture 走 `buildLiveRecordingCaptureInput`（sourceKey `live:{uid}:{sid}`，与检查点 / 原声回写 / 恢复收尾同一把）；POST 前本地标 `syncState=pending`，成功 synced、失败 failed + 一句 toast（补传见 `retry-pending-recording-uploads`） |
-| `useRecordingCheckpoint.ts` | ~230 | **录课中持续落盘 + 服务端检查点**（2026-09-10）：Recorder 的每片原声（`onAudioChunk`）进内存缓冲，每 5s 批量追加 `recordingChunks`；每 5s 把已定稿实时字幕整段快照覆盖到 `transcripts`（不改 transcriptionStatus）并写 `checkpointAt / lastCheckpointDurationMs`；登录用户开始即打、开头几句 15s 一次、之后 60s 一次向 `POST /api/workspace/recording-checkpoint` 写「录制中」capture（另一台设备录课期间就能看到），页面隐藏 / pagehide 用 keepalive 发心跳；录音结束只丢掉迟到的分片缓冲，不再写任何东西（结束路径是权威）。访客只落本地 |
-| `useUnfinishedRecordings.ts` | ~190 | **「有一节课没结束」**（2026-09-10）：`status='recording'` 且不是当前 Recorder 在录、非远端录制中的会话（页面被关 / 崩溃 / 被系统回收留下的）；最后活动（checkpointAt）8s 宽限（Recorder 收尾窗口，3s 心跳重算）后进恢复条；`finish`（就到这里）→ `recording-recovery-service.finalizeUnfinishedRecording`，`resume`（继续录）= 先收好前半段再由调用方开新一段（两段各自成课，原声容器无法无缝接续）；>6h 没回来的与占位里什么都没有的（0 秒 / 无分片 / 无字幕，且创建 >30s）挂载时静默处理。桌面由 ClassroomView 挂，移动端由 page.tsx 挂并传给 MobileAppShell。`useLiveQuery` 不传 `[]` deps（StrictMode 双挂载下挂载前已存在的行只有一次 emission，会永远拿到空数组——实测复现） |
+| `useRecordingCheckpoint.ts` | ~230 | **录课中持续落盘 + 服务端检查点**（2026-09-10）：Recorder 的每片原声（`onAudioChunk`）进内存缓冲，每 5s 批量追加 `recordingChunks`；每 5s 把已定稿实时字幕整段快照覆盖到 `transcripts`（不改 transcriptionStatus）并写 `checkpointAt / lastCheckpointDurationMs`；登录用户开始即打、开头几句 15s 一次、之后 60s 一次向 `POST /api/workspace/recording-checkpoint` 写「录制中」capture（另一台设备录课期间就能看到），页面隐藏 / pagehide 用 keepalive 发心跳；录音结束只丢掉迟到的分片缓冲，不再写任何东西（结束路径是权威）。访客只落本地。**2026-09-11 `handleRecordingInterrupted`**：Recorder 随布局卸载被打断（桌面切 tab / 站内路由离开 / 视口跨断点）时，先 flush 分片 + 字幕快照 + 服务端最后一次检查点，再把 isRecording 置回 false，这节课留成「没结束」交给恢复条（顺序决定 pending 分片不被 effect 丢掉） |
+| `useUnfinishedRecordings.ts` | ~190 | **「有一节课没结束」**（2026-09-10）：`status='recording'` 且不是当前 Recorder 在录、非远端录制中的会话（页面被关 / 崩溃 / 被系统回收留下的）；最后活动（checkpointAt）8s 宽限（Recorder 收尾窗口，3s 心跳重算）后进恢复条；`finish`（就到这里）→ `recording-recovery-service.finalizeUnfinishedRecording`，`resume`（继续录）= 先收好前半段再由调用方开新一段（两段各自成课，原声容器无法无缝接续）；>6h 没回来的与占位里什么都没有的（0 秒 / 无分片 / 无字幕，且创建 >30s）挂载时静默处理。桌面由 ClassroomView 挂，移动端由 page.tsx 挂并传给 MobileAppShell。`useLiveQuery` 查询闭包不引用外部值，deps 省略（见下方「useLiveQuery deps 规则」） |
+| `useRecordingLeaveGuard.ts` | ~60 | 录课中点站内链接离开 /app 的一句确认（2026-09-11）：capture 阶段拦 `a[href]`，同源且 pathname 变化才 `window.confirm`；外链 / 新标签 / 下载 / 修饰键放过；不动 history.pushState。桌面切 tab 的确认在 page.tsx `handleViewModeChange` 里；关标签仍由 beforeunload 兜底 |
+| `useGuestSyncHint.ts` | ~20 | 访客本机有 completed 的课 → 课堂列表恢复条旁 / 移动端首页顶部一句「登录后，这节课会跟着你到任何设备 · 登录」（`GuestSyncHint`，2026-09-11）。不弹窗；登录后迁移照旧 |
 | `useTranscriptHandlers.ts` | ~440 | 转录处理器（handleTranscriptUpdate + handleRecordingTranscriptionError + handleTranscriptEnhanced + handleVideoAssistantMessage + handleTranscriptTextUpdate）；兜底批量转写落盘后推进 ready / review，失败时同步 audioSession 为 failed；不再自动触发 diarization；pending 路径写服务端 capture 也走 `buildLiveRecordingCaptureInput`（同一把 `live:{uid}:{sid}` sourceKey） |
 | `useAudioMessagePlayback.ts` | ~130 | 收集流音频播放（stopAudioMessagePlayback + toggleAudioMessagePlayback + cleanup effect），从 page.tsx 提取（Phase 4） |
 | `useCollectionListActions.ts` | ~268 | 收集列表操作适配层（ensureWorkspaceCaptureSourceItem + resolveCollectionListSourceItem + quote/review/toggle/archive/restore/delete/edit/askTutor），从 page.tsx 提取（Phase 5） |
@@ -102,6 +104,16 @@ useAppLearningActivity 的桌面/移动应用活动由登录用户提交 /api/me
 | `useTranscript.ts` | 121 | 转录数据请求（调用 API） |
 | `useTutor.ts` | 164 | AI 家教交互（调用 API） |
 | `useFeedStream.ts` | ~190 | 今日情报请求与缓存：按工作区上下文/目标签名缓存 6 小时，先恢复可用旧结果再后台刷新；收集或目标变化时自动失效，并过滤本机已标记不相关的卡片 |
+
+## useLiveQuery deps 规则（2026-09-11 全仓复查）
+
+`dexie-react-hooks` 的 `useLiveQuery(querier, deps)` 内部是 `deps || []`——**省略与传 `[]` 完全等价**；此前
+「传 `[]` 在 StrictMode 双挂载下永远拿到空数组」是误判（`liveQuery` 每次 subscribe 都重新执行 querier，
+第二次订阅有自己的 emission）。唯一的规则：**querier 闭包里用到的每个外部值（props / state / store 选出的值）
+都必须进 deps**，否则值变了查询不重跑、组件停在旧结果。全表查询（`useClassroomLessons` 的 4 个、
+`useUnfinishedRecordings`、`useAudioSessions` 的无参 hook、`useGuestSyncHint`）闭包无外部值，省略即可；
+带 `sessionId` / `course` 的（`useAudioSession` / `useAnchors` / `useTranscripts` / `useCourseContextPack`）
+已按值列 deps。新写查询时对照这一条，不要再复制"不传 deps 修 StrictMode"的说法。
 
 ## ⚠️ 超标文件
 
