@@ -5,6 +5,15 @@
 
 ---
 
+## 2026-09-11 — 生产改为专用检出目录运行：开发目录不再是运行目录
+
+- **为什么**：过去所有会话都在 `/mnt/meetmind-capture-v1-server-handoff` 一个目录里开发，而生产（PM2）也从它跑。9-10 一天撞出三类事故：`git add -A` 把别人已暂存的删除带进提交、`git stash` 撤走别人的工作文件、`make deploy` 把别人的半成品送上生产；服务端（`server.js`）的修复也只能通过改别人正在开发的工作树才能生效。
+- **改法**：新建 `release/prod` 分支 + `/mnt/meetmind-prod` worktree 作为唯一运行目录（PM2 cwd、`deploy.sh` 的 `PROJECT_DIR`）；数据仍在原目录、软链过去；`prisma.ts` 改为读 `DATABASE_URL`（此前只按 cwd 找库，换目录会静默新建空库）；每条开发线各自 worktree + 分支，上线 = 合进 `release/prod` 再 `make deploy`。流程写在 `docs/RELEASE_FLOW.md`，铁律进 `AGENTS.md`。
+- 本次随之上线：`feat/reliability`（实时字幕断连自愈、Recorder 卸载收尾、登录迁移只推变过的课、访客登录入口）与 teach-live 分支已提交的第二轮。
+- **待办**：维护窗口把 `prisma/meetmind.db` / `public/uploads` / `public/downloads` / `public/wechat-media` / `data/` 迁到 `/mnt/meetmind-data` 并双向软链，让数据也不住在任何开发目录里。
+
+---
+
 ## 2026-09-11 — 上课舞台第二轮：精确图形的通用解法（代码即意图）+ 课堂手势收口
 
 用户追问：切线 / 圆 / 函数图像这类严谨内容出错不可接受，应在代码层定义而不是用坐标画；几个原语堵不住所有情形，要通用；任何方案不能伤低延迟与音画同步。决策与推理见 `docs/TEACH_TUTOR_ENGINE.md` §12.4。回滚基线 tag `teach-live-v1`。

@@ -26,6 +26,7 @@
 - **日志用 `src/lib/logger.ts`（pino）**，不要 console.log
 - **vendor 树不改写**（`src/lib/services/teach-engine/vendor/`、`assets/fenshen/huashu-nuwa/`）：只随上游整体替换，必要修复标 `[FIX vs upstream]`
 - **git 边界**：默认在当前特性分支做原子提交并推送同名远端分支；推送或合并 `main`、force-push、改写已推送历史、删远端分支、开 PR 合并——这些要明确指令
+- **多人并行（2026-09-11 起）**：一个会话一个 worktree 一个分支，只 `git add <路径>` / `git commit -- <路径>`（禁 `git add -A` / `commit -a` / `stash`），不进别人的目录执行 git；生产只从 `/mnt/meetmind-prod`（`release/prod`）跑，上线 = 合进 `release/prod` 再 `make deploy` → `docs/RELEASE_FLOW.md`
 
 ### 默认做法（有理由可偏离）
 
