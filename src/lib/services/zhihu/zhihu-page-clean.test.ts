@@ -235,6 +235,65 @@ describe('cleanZhihuPage · 回答页', () => {
     expect(page.editedAt).toBeNull();
   });
 
+  it('作者卡带勋章图 + 签名（2026-09-12 实测「话题下的优秀答主」）：整张卡吃掉，正文从第一段开始；没评论时 commentCount 为 null', () => {
+    const page = [
+      LOGO,
+      '',
+      '# 能不能详细讲一下，如何通过正则化权重惩罚的方法，来降低模型的过拟合问题？',
+      '',
+      '关注者',
+      '',
+      '**1**',
+      '',
+      '[查看全部 1 个回答](https://www.zhihu.com/question/2073447066982937453)',
+      '',
+      '[![石溪](https://picx.zhimg.com/v2-3eda.jpg?source=2c26e567)](https://www.zhihu.com/people/zhang-san-5-26-12)',
+      '',
+      '[石溪](https://www.zhihu.com/people/zhang-san-5-26-12)',
+      `[${Z}![](https://pica.zhimg.com/v2-27bf.png?source=32738c0c)](https://www.zhihu.com/question/48509984) ${Z}![](https://pica.zhimg.com/v2-4812.jpg?source=88ceefae)`,
+      '',
+      '数学话题下的优秀答主',
+      '',
+      `${Z} 关注`,
+      '',
+      '**我是石溪，欢迎关注我的知乎账号。**',
+      '',
+      '## 模型训练目标',
+      '',
+      '模型训练涉及两个关键的步骤和目标，一个是优化，一个是泛化。',
+      '',
+      `阅读全文${Z}`,
+      '',
+      `${Z}赞同 1${Z}${Z}添加评论${Z}1 ${Z}喜欢`,
+    ].join('\n');
+    const result = cleanZhihuPage(page, { url: 'https://www.zhihu.com/question/2073447066982937453/answer/2073447709726467019' });
+    expect(result.confident).toBe(true);
+    expect(result.author).toBe('石溪');
+    expect(result.body.startsWith('**我是石溪')).toBe(true);
+    expect(result.body).not.toContain('优秀答主');
+    expect(result.body).not.toContain('pica.zhimg.com');
+    expect(result.body.endsWith('一个是泛化。')).toBe(true);
+    expect(result.voteUpCount).toBe(1);
+    expect(result.commentCount).toBeNull();
+  });
+
+  it('作者卡之后紧跟像正文的长句时不多吞（没有「关注」行的匿名 / 旧版式）', () => {
+    const page = [
+      '# 问题',
+      '',
+      '[查看全部 2 个回答](https://www.zhihu.com/question/1)',
+      '',
+      '[某人](https://www.zhihu.com/people/x)',
+      '',
+      '这是一段很长很长的正文开头，它明显不是签名，因为它带着完整的句子和句号，长度也超过了签名的样子。',
+      '',
+      '后面还有。',
+    ].join('\n');
+    const result = cleanZhihuPage(page, { url: 'https://www.zhihu.com/question/1/answer/2' });
+    expect(result.body.startsWith('这是一段很长很长的正文开头')).toBe(true);
+    expect(result.author).toBe('某人');
+  });
+
   it('找不到结构标记时走保守清洗：去 logo、标 confident=false、不吞正文', () => {
     const raw = [LOGO, '', '# 某个问题', '', '一段没有任何知乎页面骨架的文字。'].join('\n');
     const page = cleanZhihuPage(raw, { url: 'https://www.zhihu.com/answer/1' });

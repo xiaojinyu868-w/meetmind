@@ -98,6 +98,22 @@ function isBlank(line: string): boolean {
   return line.replace(new RegExp(ZWSP, 'g'), '').trim() === '';
 }
 
+/**
+ * 作者卡里的行：只有图片 / 链接，或 ≤40 字的短句（签名、勋章文案——签名可以带句号，「哥们，别搞，我也是水军。」就是真实签名）。
+ * 只在后面真的出现「关注」行时才会被当作卡片吃掉；没有「关注」行一个字都不吞，所以短正文误伤的风险只在极端情况下存在。
+ */
+function looksLikeAuthorCardLine(line: string): boolean {
+  const text = line.replace(new RegExp(ZWSP, 'g'), '').trim();
+  if (!text) return true;
+  const withoutMedia = text
+    .replace(/\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)/g, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[[^\]]*\]\([^)]*\)/g, '')
+    .trim();
+  if (!withoutMedia) return true;
+  return withoutMedia.length <= 40 && !/^#/.test(withoutMedia);
+}
+
 function parseFooter(lines: string[], from: number): Pick<CleanedZhihuPage, 'editedAt' | 'voteUpCount' | 'commentCount'> {
   let editedAt: string | null = null;
   let voteUpCount: number | null = null;
@@ -156,18 +172,22 @@ function cleanAnswer(lines: string[], title: string): CleanedZhihuPage {
       i++;
     }
   }
-  // 签名 + 关注按钮：只有在接下来两行内出现「关注」行时才把签名一起吃掉，否则正文从这里开始
+  // 作者卡余下部分：勋章图（`[​![](…)](topic) ​![](…)`，2026-09-12 实测「话题下的优秀答主」这类）、签名、`​关注` 按钮。
+  // 向后最多看 5 个非空行：只要它们长得像卡片（纯图片 / 链接行，或 ≤40 字且不带句末标点的短句）就继续，
+  // 碰到「关注」行把这一段全吃掉；先碰到像正文的行就从那行开始，不冒险多吞。
   {
     let probe = i;
     let seenNonBlank = 0;
     let followIdx = -1;
-    while (probe < lines.length && seenNonBlank < 2) {
-      if (!isBlank(lines[probe])) {
+    while (probe < lines.length && seenNonBlank < 5) {
+      const line = lines[probe];
+      if (!isBlank(line)) {
         seenNonBlank++;
-        if (FOLLOW_RE.test(lines[probe])) {
+        if (FOLLOW_RE.test(line)) {
           followIdx = probe;
           break;
         }
+        if (!looksLikeAuthorCardLine(line)) break;
       }
       probe++;
     }
