@@ -282,6 +282,65 @@ export async function importFavlist(
 }
 
 // ---------------------------------------------------------------------------
+// 最近收藏自动同步（零动作入口：在知乎点了收藏，回到 MeetMind 就已经在）
+// ---------------------------------------------------------------------------
+
+export interface SyncRecentResult {
+  mode: 'oauth' | 'self';
+  scanned: number;
+  added: number;
+  skipped: 'throttled' | null;
+  /** 给同一请求里的后续步骤（画像观察）复用，路由不要把它原样返回给客户端 */
+  identity: ZhihuIdentity;
+  items: ZhihuCollectionItem[];
+}
+
+/** 同一用户两次同步之间的最短间隔：知乎 /user/collections 额度有限，第一屏每次打开都会调 */
+export const SYNC_MIN_INTERVAL_MS = 15 * 60 * 1000;
+const lastSyncAt = new Map<string, number>();
+
+/** 测试 / 手动触发用 */
+export function resetSyncThrottle(userId?: string): void {
+  if (userId) lastSyncAt.delete(userId);
+  else lastSyncAt.clear();
+}
+
+/**
+ * 拉最近 50 条收藏（跨收藏夹），只新增本地没有的（已有的可能已物化全文，不覆盖）。
+ * 只写摘要级 capture，不抓全文——这是入口不是开课；开课时再按需物化。
+ */
+export async function syncRecentCollections(
+  userId: string,
+  opts: { limit?: number; force?: boolean; now?: () => number } = {},
+  deps: Partial<ZhihuImportDeps> = {},
+): Promise<SyncRecentResult> {
+  const d = mergeDeps(deps);
+  const now = opts.now ?? Date.now;
+  const resolved = await resolveZhihuIdentity(userId, d);
+  const last = lastSyncAt.get(userId) ?? 0;
+  if (!opts.force && now() - last < SYNC_MIN_INTERVAL_MS) return { mode: resolved.mode, scanned: 0, added: 0, skipped: 'throttled', identity: resolved.identity, items: [] };
+  lastSyncAt.set(userId, now());
+
+  const { items } = await d.client.recentCollections({ limit: Math.min(50, Math.max(1, opts.limit ?? 50)) }, resolved.identity);
+  const withUrl = items.filter((item) => item.url);
+  const keys = withUrl.map((item) => zhihuSourceKey(userId, canonicalizeSourceUrl(item.url) ?? item.url));
+  const existing = keys.length
+    ? await prisma.workspaceCapture.findMany({ where: { userId, sourceKey: { in: keys } }, select: { sourceKey: true } })
+    : [];
+  const known = new Set(existing.map((row) => row.sourceKey));
+
+  let added = 0;
+  for (let i = 0; i < withUrl.length; i += 1) {
+    if (known.has(keys[i])) continue;
+    const input = captureInputFromCollectionItem(userId, withUrl[i], null);
+    await d.upsertCapture(userId, input);
+    added += 1;
+  }
+  if (added > 0) log.info('zhihu-import: recent collections synced', { userId, scanned: withUrl.length, added, mode: resolved.mode });
+  return { mode: resolved.mode, scanned: withUrl.length, added, skipped: null, identity: resolved.identity, items: withUrl };
+}
+
+// ---------------------------------------------------------------------------
 // 读取与正文物化
 // ---------------------------------------------------------------------------
 

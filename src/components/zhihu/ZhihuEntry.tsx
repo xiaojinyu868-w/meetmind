@@ -25,6 +25,7 @@ import {
   fetchZhihuStatus,
   importFavlist,
   startZhihuOAuth,
+  syncRecentCollections,
   ZhihuClientError,
   type ZhihuCaptureDto,
   type ZhihuLessonSummaryDto,
@@ -137,6 +138,16 @@ export function ZhihuEntry() {
     setMode(list.mode);
     setCaptures(caps);
     setLessons(mine);
+    // 零动作入口：最近在知乎收的顺手收下（服务端节流；失败静默，不打扰）
+    try {
+      const synced = await syncRecentCollections(token);
+      if (synced.added > 0) {
+        setNotice({ tone: 'quiet', text: C.syncedRecent(synced.added) });
+        setCaptures(await fetchCaptures(token).catch(() => caps));
+      }
+    } catch {
+      /* 同步失败不影响第一屏 */
+    }
   }, []);
 
   // 已登录：看连接状态 → 已连接就拉收藏夹 + 已收下的 + 开过的课

@@ -61,6 +61,11 @@ export async function fetchFavlists(token: string): Promise<{ mode: 'oauth' | 's
   return readJson(await fetch('/api/zhihu/favlists', { headers: headers(token) }));
 }
 
+/** 最近收藏同步进收集流（服务端 15 分钟节流） */
+export async function syncRecentCollections(token: string): Promise<{ added: number; scanned: number; skipped: 'throttled' | null }> {
+  return readJson(await fetch('/api/zhihu/sync', { method: 'POST', headers: headers(token, true), body: '{}' }));
+}
+
 export async function importFavlist(token: string, favlistUrlToken: string): Promise<{ fetched: number; imported: number }> {
   return readJson(
     await fetch('/api/zhihu/import', { method: 'POST', headers: headers(token, true), body: JSON.stringify({ favlistUrlToken }) }),

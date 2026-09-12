@@ -272,3 +272,39 @@ describe('materializeCaptures', () => {
     await expect(materializeCaptures('u1', ['a', 'missing'], {}, deps)).rejects.toMatchObject({ code: 'capture_not_found' });
   });
 });
+
+describe('syncRecentCollections', () => {
+  it('只新增本地没有的、摘要级；15 分钟内第二次调用被节流；force 绕过', async () => {
+    const { syncRecentCollections, resetSyncThrottle } = await import('./zhihu-import-service');
+    resetSyncThrottle();
+    const items = [
+      { title: '已有的', url: 'https://www.zhihu.com/question/1/answer/11?utm_source=x', summary: '摘要', author: null, likeCount: 1, commentCount: 0, favoriteCount: 0, createdAt: 0, favTime: 0, favlists: [] },
+      { title: '新的', url: 'https://zhuanlan.zhihu.com/p/22', summary: '新摘要', author: { name: '乙', url: 'https://www.zhihu.com/people/yi' }, likeCount: 2, commentCount: 0, favoriteCount: 0, createdAt: 0, favTime: 0, favlists: [{ urlToken: '9', title: '收藏夹九' }] },
+      { title: '没链接', url: '', summary: '', author: null, likeCount: 0, commentCount: 0, favoriteCount: 0, createdAt: 0, favTime: 0, favlists: [] },
+    ];
+    const recentCollections = vi.fn(async () => ({ items }));
+    const deps = depsWith({ client: { recentCollections } as never });
+    prismaMock.workspaceCapture.findMany.mockResolvedValueOnce([{ sourceKey: zhihuSourceKey('u1', 'https://www.zhihu.com/question/1/answer/11') }]);
+
+    let clock = NOW;
+    const now = () => clock;
+    const first = await syncRecentCollections('u1', { now }, deps);
+    expect(first).toMatchObject({ mode: 'oauth', scanned: 2, added: 1, skipped: null });
+    expect(first.items).toHaveLength(2);
+    expect(deps.upserts).toHaveLength(1);
+    expect(deps.upserts[0].input.title).toBe('新的');
+    const meta = (deps.upserts[0].input.metadata as { zhihu: ZhihuCaptureMeta }).zhihu;
+    expect(meta.body).toBe('summary');
+    expect(meta.favlists).toEqual([{ urlToken: '9', title: '收藏夹九' }]);
+
+    clock += 5 * 60 * 1000;
+    const second = await syncRecentCollections('u1', { now }, deps);
+    expect(second.skipped).toBe('throttled');
+    expect(recentCollections).toHaveBeenCalledTimes(1);
+
+    prismaMock.workspaceCapture.findMany.mockResolvedValueOnce([]);
+    const forced = await syncRecentCollections('u1', { now, force: true }, deps);
+    expect(forced.skipped).toBeNull();
+    expect(recentCollections).toHaveBeenCalledTimes(2);
+  });
+});

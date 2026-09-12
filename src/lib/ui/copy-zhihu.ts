@@ -43,6 +43,7 @@ export const ZHIHU_COPY = {
   favlistsHint: '选一个，同学会把里面的回答和文章读一遍，再讲给你听。',
   favlistsEmpty: '这个知乎账号还没有公开的收藏夹。',
   favlistsLoading: '正在看你的收藏夹…',
+  syncedRecent: (count: number): string => `你最近在知乎收的 ${count} 条，同学顺手收下了——在收集流里能看到。`,
   favlistPrivate: '私密',
   favlistPublic: '公开',
   favlistImported: (count: number, full: number): string => (full > 0 ? `已收下 ${count} 条 · ${full} 条读了全文` : `已收下 ${count} 条`),
