@@ -92,7 +92,16 @@ export function ZhihuReview({ threadId }: { threadId: string }) {
                   </button>
                 </div>
               )}
-              {run.status === 'idle' && !lesson.pack && <p className="py-10 text-center text-[14px] text-ink-muted">{lesson.packError ?? C.loading}</p>}
+              {run.status === 'idle' && !lesson.pack && (
+                <div className="py-10 text-center">
+                  <p className={`text-[14px] ${lesson.packError ? 'text-cinnabar-deep' : 'text-ink-muted'}`}>{lesson.packError ?? C.loading}</p>
+                  {lesson.packError && (
+                    <button type="button" className="mt-4 rounded-full border border-divider px-4 py-1.5 text-[13px] hover:bg-paper-warm" onClick={lesson.retryPack}>
+                      {C.retry}
+                    </button>
+                  )}
+                </div>
+              )}
               {run.status === 'done' && run.result && lesson.materials && active === 'quiz' && (
                 <QuizWindow
                   result={run.result}

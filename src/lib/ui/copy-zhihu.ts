@@ -105,5 +105,6 @@ export const ZHIHU_COPY = {
   /** 通用 */
   loginFirst: '先登录，才能保存这节课。',
   retry: '再试一次',
+  packSlow: '这节课的材料半天没读回来——老师可能正忙着讲。再试一次就好。',
   loading: '稍等…',
 } as const;

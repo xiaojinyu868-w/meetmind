@@ -55,10 +55,10 @@ export function ZhihuLesson({ threadId }: { threadId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId]);
 
-  // 讲完一轮：generating 从 true 落到 false → 长出「考一考」小卡（每轮讲完再出现一次，除非学生已经去过课后页）
+  // 讲完一轮：busy（老师还在生成或还在演）从 true 落到 false → 长出「考一考」小卡。
+  // 用 busy 而不是 generating：首条「开始上课」由本页直接 POST，不走 hook 的 send，generating 不会置真；而演出结束才是学生眼里的"讲完"
   React.useEffect(() => {
-    const generating = Boolean(lesson.state.generating);
-    if (generating) {
+    if (lesson.busy) {
       setLive(true);
       wasGenerating.current = true;
       return;
@@ -68,7 +68,7 @@ export function ZhihuLesson({ threadId }: { threadId: string }) {
       rounds.current += 1;
       setNextStep((s) => (s === 'dismissed' && rounds.current < 3 ? s : 'shown'));
     }
-  }, [lesson.state.generating]);
+  }, [lesson.busy]);
 
   const leave = React.useCallback(() => {
     lesson.leaveLesson();

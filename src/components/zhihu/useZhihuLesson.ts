@@ -43,6 +43,8 @@ export interface ZhihuLessonController {
   continueBusy: boolean;
   /** 最近一次交卷 / 打分的时间戳，课后页据此把「继续看」推到前面 */
   assessedAt: number | null;
+  /** 材料包没读到（慢 / 断）时再试 */
+  retryPack: () => void;
 }
 
 export function useZhihuLesson(threadId: string): ZhihuLessonController {
@@ -58,9 +60,11 @@ export function useZhihuLesson(threadId: string): ZhihuLessonController {
   const runsRef = React.useRef(runs);
   runsRef.current = runs;
 
+  const [packAttempt, setPackAttempt] = React.useState(0);
   React.useEffect(() => {
     if (!accessToken) return;
     let cancelled = false;
+    setPackError(null);
     fetchLessonPack(accessToken, threadId)
       .then((data) => {
         if (cancelled) return;
@@ -68,12 +72,16 @@ export function useZhihuLesson(threadId: string): ZhihuLessonController {
         setThread(data.thread);
       })
       .catch((error: unknown) => {
-        if (!cancelled) setPackError(error instanceof ZhihuClientError ? error.message : C.errors.unknown);
+        if (cancelled) return;
+        if (error instanceof ZhihuClientError) setPackError(error.message);
+        else if ((error as Error)?.name === 'TimeoutError' || (error as Error)?.name === 'AbortError') setPackError(C.packSlow);
+        else setPackError(C.errors.unknown);
       });
     return () => {
       cancelled = true;
     };
-  }, [accessToken, threadId]);
+  }, [accessToken, threadId, packAttempt]);
+  const retryPack = React.useCallback(() => setPackAttempt((n) => n + 1), []);
 
   const materials = React.useMemo(() => (pack ? materialsToTranscript(pack) : null), [pack]);
 
@@ -152,5 +160,5 @@ export function useZhihuLesson(threadId: string): ZhihuLessonController {
     [accessToken, pack, threadId],
   );
 
-  return { threadId, pack, packError, thread, materials, runs, run, openSource, evidenceLabel, recordAssessment, weak, groups, continueBusy, assessedAt };
+  return { threadId, pack, packError, thread, materials, runs, run, openSource, evidenceLabel, recordAssessment, weak, groups, continueBusy, assessedAt, retryPack };
 }

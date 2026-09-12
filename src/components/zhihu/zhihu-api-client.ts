@@ -109,7 +109,8 @@ export async function fetchCaptures(token: string): Promise<ZhihuCaptureDto[]> {
 }
 
 export async function fetchLessonPack(token: string, threadId: string): Promise<{ thread: { id: string; title: string; topic: string }; pack: LiveMaterialPack }> {
-  return readJson(await fetch(`/api/zhihu/lesson/${encodeURIComponent(threadId)}`, { headers: headers(token) }));
+  // 老师正在讲时共享 SQLite 可能被事件写入占着，这一读偶发很慢：20 s 不回来就当失败，让页面给「再试一次」而不是一直「稍等」
+  return readJson(await fetch(`/api/zhihu/lesson/${encodeURIComponent(threadId)}`, { headers: headers(token), signal: AbortSignal.timeout(20_000) }));
 }
 
 export async function fetchContinueReading(token: string, input: { concepts: string[]; threadId: string }): Promise<ContinueReadingGroup[]> {
