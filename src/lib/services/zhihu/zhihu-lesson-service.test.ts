@@ -79,6 +79,32 @@ describe('挑材料与切节选', () => {
     expect(excerptOf(noBreak, 300).length).toBeLessThan(330);
   });
 
+  it('有小标题的长文按结构节选：开头 + 每个小标题及首段 + 结尾，中间略标出，预算内', () => {
+    const sections = ['模型训练目标', '权重惩罚是一种可行的办法', 'L2 正则化的几何意义', '在 PyTorch 里怎么写', '回顾训练过程中的数学表达式'];
+    const text = [
+      '我是石溪，这篇回答选自我的专栏。'.repeat(3),
+      ...sections.flatMap((h, i) => [`## ${h}`, `${h}的第一段讲的是要点${i}。`.repeat(6), `${h}的第二段是展开细节。`.repeat(8), `${h}的第三段是例子。`.repeat(8)]),
+      '这样就非常轻松地完成了权重惩罚的构造过程，这就是全文的结论。',
+    ].join('\n\n');
+    expect(text.length).toBeGreaterThan(2000);
+    const cut = excerptOf(text, 1800);
+    expect(cut.length).toBeLessThanOrEqual(1800 + 60);
+    for (const h of sections) expect(cut).toContain(`## ${h}`);
+    expect(cut).toContain('模型训练目标的第一段');
+    expect(cut).toContain('## 结尾');
+    expect(cut).toContain('全文的结论');
+    expect(cut).toContain('（本节其余略）'); // 三段的小节只带前两段
+    expect(cut).not.toContain('第三段是例子');
+    expect(cut.endsWith('……（按结构节选：开头、各小节首段与结尾；全文见原链接）')).toBe(true);
+  });
+
+  it('没有小标题或只有一个时退回从头切', () => {
+    const plain = `${'第一段讲定义。'.repeat(40)}\n\n${'第二段讲例子。'.repeat(40)}`;
+    expect(excerptOf(plain, 200).endsWith('……（节选，全文见原链接）')).toBe(true);
+    const oneHeading = `## 唯一的标题\n\n${'正文。'.repeat(200)}`;
+    expect(excerptOf(oneHeading, 200).endsWith('……（节选，全文见原链接）')).toBe(true);
+  });
+
   it('材料包：引用 id 顺序、正文状态决定预算、元信息一行、skipped 原样带出', () => {
     const chosen = [
       record('a', { body: 'full', voteUpCount: 300, text: '正'.repeat(2500) }),

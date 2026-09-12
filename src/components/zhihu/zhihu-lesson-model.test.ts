@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildExecutePayload, materialsToTranscript, sourceForTime, weakConceptsFromAssessment } from './zhihu-lesson-model';
+import { buildExecutePayload, materialsToTranscript, relabelTimeReferences, sourceForTime, weakConceptsFromAssessment } from './zhihu-lesson-model';
 import type { LiveMaterialPack } from '@/lib/services/teach-live/live-materials';
 
 const pack: LiveMaterialPack = {
@@ -91,3 +91,39 @@ describe('buildExecutePayload / weakConceptsFromAssessment', () => {
     expect(weakConceptsFromAssessment({ appKey: 'quiz', items: [{ concept: '全对', outcome: 'correct' }] })).toEqual([]);
   });
 });
+
+describe('relabelTimeReferences', () => {
+  it('解析里的假时间点换成「材料 N《标题》」，范围只取起点；citations / payload / snippet / url 不动；比例与时钟以外的数字不误伤', () => {
+    const { spans, transcript } = materialsToTranscript(pack);
+    const a2Start = spans[1].startMs;
+    const secs = Math.ceil(a2Start / 1000) + 1; // 取整到材料 2 时间段内的一秒
+    const mm = Math.floor(secs / 60);
+    const ss = String(secs % 60).padStart(2, '0');
+    const result = {
+      cards: [
+        {
+          id: 'quiz-card-1',
+          body: '0:07-0:21 明确指出过拟合的本质是把噪声当规律。',
+          meta: { stem: '比例是 1:1 的映射对吗？', explanation: `${mm}:${ss} 解释了 L1 的几何意义；0:07 说的是另一件事。`, options: ['16:9 屏幕'] },
+          citations: [{ startMs: 7660, snippet: '0:07 这里是原文片段' }],
+          actions: [{ kind: 'seek', payload: { timestamp: 7660 } }],
+          url: 'https://x/0:07',
+        },
+      ],
+      raw: { questions: [{ explanation: '0:21-0:34 说明判断过拟合看误差差距' }] },
+    };
+    const out = relabelTimeReferences(result, spans);
+    expect(out.cards[0].body).toBe('材料 1《过拟合到底是什么？》明确指出过拟合的本质是把噪声当规律。');
+    expect(out.cards[0].meta.explanation).toBe('材料 2《早停法》解释了 L1 的几何意义；材料 1《过拟合到底是什么？》说的是另一件事。');
+    expect(out.cards[0].meta.stem).toBe('比例是 1:1 的映射对吗？');
+    expect(out.cards[0].meta.options).toEqual(['16:9 屏幕']);
+    expect(out.cards[0].citations).toEqual(result.cards[0].citations);
+    expect(out.cards[0].actions).toEqual(result.cards[0].actions);
+    expect(out.cards[0].url).toBe('https://x/0:07');
+    expect(out.raw.questions[0].explanation).toBe('材料 1《过拟合到底是什么？》说明判断过拟合看误差差距');
+    // 超出材料时间轴的时间点原样保留
+    expect(relabelTimeReferences('99:00 之后', spans)).toBe('99:00 之后');
+    expect(transcript.length).toBeGreaterThan(0);
+  });
+});
+

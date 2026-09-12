@@ -104,6 +104,36 @@ export function buildExecutePayload(params: { appKey: ZhihuLessonAppKey; threadI
   };
 }
 
+/** m:ss 或 m:ss-m:ss；后面紧跟中文时把那个空格一起吃掉（「0:07 明确指出」→「材料 1《…》明确指出」） */
+const TIME_REF_RE = /(?<![\d:])(\d{1,2}):([0-5]\d)(?:\s*[-–~至到]\s*(\d{1,2}):([0-5]\d))?(?![\d:])(?: (?=[\u4e00-\u9fff（「]))?/g;
+
+/**
+ * 应用矩阵的 prompt 是课堂口吻（"引用原话写时间点"），喂伪转录后解析里会出现「0:07-0:21 明确指出…」这种假时间。
+ * 在渲染前把它换成真来源：「材料 1《过拟合到底是什么？》明确指出…」。只改字符串，不碰 citations / actions 里的数字
+ * （那些仍用于点开对应知乎原文）。这是对"来源没有时间轴"的渲染层修正；prompt 层的来源无关化留给 ai-native 主干。
+ */
+export function relabelTimeReferences<T>(value: T, spans: MaterialSourceSpan[]): T {
+  const label = (m: number, s: number): string | null => {
+    const span = sourceForTime(spans, (m * 60 + s) * 1000);
+    if (!span) return null;
+    const title = span.title.length > 18 ? `${span.title.slice(0, 17)}…` : span.title;
+    return `材料 ${span.ref.replace(/^A/, '')}《${title}》`;
+  };
+  const fix = (text: string): string =>
+    text.replace(TIME_REF_RE, (whole, m1: string, s1: string) => label(Number(m1), Number(s1)) ?? whole);
+  const walk = (node: unknown, key?: string): unknown => {
+    if (typeof node === 'string') return key === 'snippet' || key === 'id' || key === 'url' ? node : fix(node);
+    if (Array.isArray(node)) return node.map((item) => walk(item));
+    if (node && typeof node === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(node as Record<string, unknown>)) out[k] = k === 'payload' || k === 'citations' ? v : walk(v, k);
+      return out;
+    }
+    return node;
+  };
+  return walk(value) as T;
+}
+
 const WEAK_OUTCOMES = new Set(['wrong', 'missed', 'blind-spot', 'aware-gap', 'productive-struggle', 'uncovered']);
 
 /** 考后「哪没稳」：按结果挑概念，去重、保持首次出现顺序、最多 max 个 */

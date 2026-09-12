@@ -123,6 +123,8 @@ export interface ContinueReadingInput {
   /** 材料包里已有的链接，不重复推 */
   excludeUrls?: string[];
   perConcept?: number;
+  /** 每个概念先留多少条候选给后面的模型判断（默认 = perConcept，即不留余量） */
+  poolSize?: number;
 }
 
 export interface ContinueReadingGroup {
@@ -133,7 +135,7 @@ export interface ContinueReadingGroup {
 /** 考后补货：每个没稳的概念搜一次（≤3 次），各留 1–2 条最有根的；一条链接只出现一次 */
 export async function continueReading(input: ContinueReadingInput, opts: Pick<SearchZhihuCandidatesOptions, 'client' | 'config'> = {}): Promise<ContinueReadingGroup[]> {
   const concepts = [...new Set(input.concepts.map((c) => c.trim()).filter((c) => c.length >= 2))].slice(0, 3);
-  const perConcept = Math.max(1, Math.min(3, input.perConcept ?? 2));
+  const perConcept = Math.max(1, Math.min(6, input.poolSize ?? input.perConcept ?? 2));
   const topic = input.topic?.trim() ?? '';
   const taken = new Set<string>();
   const groups: ContinueReadingGroup[] = [];

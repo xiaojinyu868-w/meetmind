@@ -106,14 +106,86 @@ export function excerptBudget(index: number): number {
   return 700;
 }
 
-/** 在预算内尽量按段落切；切了就标「（节选）」 */
-export function excerptOf(text: string, budget: number): string {
+/** 从头切：在预算内尽量按句号 / 段落收尾；切了就标「（节选）」 */
+export function headExcerpt(text: string, budget: number): string {
   const clean = text.replace(/\r\n?/g, '\n').trim();
   if (clean.length <= budget) return clean;
   const window = clean.slice(0, budget);
   const lastBreak = Math.max(window.lastIndexOf('\n\n'), window.lastIndexOf('。\n'), window.lastIndexOf('。'));
   const cut = lastBreak > budget * 0.6 ? lastBreak + 1 : budget;
   return `${clean.slice(0, cut).trimEnd()}\n……（节选，全文见原链接）`;
+}
+
+function clipSentence(text: string, max: number): string {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  if (clean.length <= max) return clean;
+  const window = clean.slice(0, max);
+  const lastStop = Math.max(window.lastIndexOf('。'), window.lastIndexOf('！'), window.lastIndexOf('？'), window.lastIndexOf('；'));
+  return `${clean.slice(0, lastStop > max * 0.5 ? lastStop + 1 : max).trimEnd()}…`;
+}
+
+/**
+ * 按结构节选：长回答 / 专栏常有小标题，从头切 1800 字只能拿到开头 10%，结论段一定丢。
+ * 有标题时改为：开头一段 + 每个小标题及其第一段 + 结尾一段（结论），标出「（中间略）」；没有标题就退回从头切。
+ * 输出是给老师看的材料，不是给学生读的正文，所以宁可每节短一点也要把骨架和结论带上。
+ */
+export function excerptOf(text: string, budget: number): string {
+  const clean = text.replace(/\r\n?/g, '\n').trim();
+  if (clean.length <= budget) return clean;
+  const blocks = clean.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
+  const isHeading = (b: string) => /^#{1,6}\s+\S/.test(b) && b.length <= 80;
+  const headingCount = blocks.filter(isHeading).length;
+  if (headingCount < 2) return headExcerpt(clean, budget);
+
+  type Section = { heading: string | null; paragraphs: string[] };
+  const sections: Section[] = [{ heading: null, paragraphs: [] }];
+  for (const block of blocks) {
+    if (isHeading(block)) sections.push({ heading: block.replace(/^#{1,6}\s+/, '').trim(), paragraphs: [] });
+    else sections[sections.length - 1].paragraphs.push(block);
+  }
+  const [preamble, ...titled] = sections;
+  const lastParagraph = [...blocks].reverse().find((b) => !isHeading(b)) ?? '';
+
+  const out: string[] = [];
+  let used = 0;
+  const push = (line: string) => {
+    out.push(line);
+    used += line.length + 1;
+  };
+  const reserveTail = Math.min(300, Math.floor(budget * 0.18));
+  const bodyBudget = budget - reserveTail - 40;
+
+  if (preamble.paragraphs[0]) push(clipSentence(preamble.paragraphs[0], Math.min(400, Math.floor(bodyBudget * 0.25))));
+  const perSection = Math.max(90, Math.floor((bodyBudget - used) / Math.max(1, titled.length)));
+  for (const section of titled) {
+    if (used >= bodyBudget) {
+      push('（后面还有小节，中间略）');
+      break;
+    }
+    push(`## ${section.heading}`);
+    const first = section.paragraphs[0];
+    if (first) push(clipSentence(first, perSection - (section.heading?.length ?? 0) - 4));
+    if (section.paragraphs.length > 1) push('（本节其余略）');
+  }
+  if (lastParagraph && !out.some((line) => line.startsWith(lastParagraph.slice(0, 20)))) {
+    push('## 结尾');
+    push(clipSentence(lastParagraph, reserveTail));
+  }
+  // 第二遍：首段都很短、预算还剩得多时，把各小节的第二段也带上（替换掉「本节其余略」），让老师多一点可讲的肉
+  if (used < budget * 0.6) {
+    for (const section of titled) {
+      const second = section.paragraphs[1];
+      if (!second) continue;
+      const marker = out.indexOf('（本节其余略）', out.indexOf(`## ${section.heading}`));
+      if (marker < 0) continue;
+      const room = budget - used - 40;
+      if (room < 80) break;
+      const clipped = clipSentence(second, Math.min(room, Math.max(120, Math.floor(budget / Math.max(1, titled.length)))));
+      out.splice(marker, 1, clipped, section.paragraphs.length > 2 ? '（本节其余略）' : '');
+      used += clipped.length + 1;
+    }
+  }
+  return `${out.filter(Boolean).join('\n').trimEnd()}\n……（按结构节选：开头、各小节首段与结尾；全文见原链接）`;
 }
 
 function metaLine(record: ZhihuCaptureRecord): string {

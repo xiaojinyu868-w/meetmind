@@ -14,7 +14,7 @@ import type { LiveMaterialPack } from '@/lib/services/teach-live/live-materials'
 import type { ContinueReadingGroup } from '@/lib/services/zhihu/zhihu-discovery-service';
 import type { LearningAssessmentDraft, LearningEventInput } from '@/types/learning-event';
 import { executeApp, fetchContinueReading, fetchLessonPack, ZhihuClientError } from './zhihu-api-client';
-import { buildExecutePayload, materialsToTranscript, sourceForTime, weakConceptsFromAssessment, type MaterialsTranscript, type ZhihuLessonAppKey } from './zhihu-lesson-model';
+import { buildExecutePayload, materialsToTranscript, relabelTimeReferences, sourceForTime, weakConceptsFromAssessment, type MaterialsTranscript, type ZhihuLessonAppKey } from './zhihu-lesson-model';
 
 export interface AppRun {
   status: 'idle' | 'running' | 'done' | 'error';
@@ -109,7 +109,7 @@ export function useZhihuLesson(threadId: string): ZhihuLessonController {
       setRuns((r) => ({
         ...r,
         [appKey]: outcome.ok
-          ? { status: 'done', result: outcome.result, updatedAt: Date.now() }
+          ? { status: 'done', result: relabelTimeReferences(outcome.result, materials.spans), updatedAt: Date.now() }
           : { status: 'error', result: null, updatedAt: Date.now(), error: outcome.error === 'CONTENT_NOT_READY' ? C.notReady : C.quizFailed },
       }));
     },
