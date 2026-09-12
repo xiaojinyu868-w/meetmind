@@ -98,7 +98,7 @@ describe('searchZhihuCandidates', () => {
             Data: {
               HasMore: false,
               Items: [
-                { Title: '知乎上的正则化', ContentType: 'Answer', ContentId: '1', Summary: '<em>正则化</em>是……', Url: 'https://www.zhihu.com/question/1/answer/2', VoteUpCount: 88, CommentCount: 1, AuthorName: '甲', EditTime: 1, FeaturedComments: [] },
+                { Title: '知乎上的正则化 - 知乎', ContentType: 'Answer', ContentId: '1', Summary: '<em>正则化</em>是……', Url: 'https://www.zhihu.com/question/1/answer/2', VoteUpCount: 88, CommentCount: 1, AuthorName: '甲', EditTime: 1, FeaturedComments: [] },
                 { Title: '站外的正则化', ContentType: 'Article', ContentId: '2', Summary: '……', Url: 'https://example.com/reg', VoteUpCount: 9999, CommentCount: 0, AuthorName: '乙', EditTime: 1, FeaturedComments: [] },
               ],
             },

@@ -9,6 +9,7 @@
  */
 
 import { canonicalizeSourceUrl } from '@/lib/capture/source-provenance';
+import { stripZhihuTitleSuffix } from './zhihu-page-clean';
 import { getZhihuConfig, type ZhihuConfig } from '@/lib/config/zhihu.config';
 import { createLogger } from '@/lib/logger';
 import { getZhihuOpenClient, ZhihuApiError, type ZhihuOpenClient, type ZhihuSearchItem } from './zhihu-open-client';
@@ -113,7 +114,10 @@ export async function searchZhihuCandidates(query: string, opts: SearchZhihuCand
       if (kind !== 'rate_limit' && kind !== 'quota') throw error;
       log.warn('zhihu search rate limited, falling back to global search', { kind });
       const global = await client.searchGlobal(q, { count: Math.min(20, (opts.count ?? 8) * 2) });
-      result = { ...global, items: global.items.filter((item) => /(^|\.)zhihu\.com$/.test(hostOf(item.url))) };
+      result = {
+        ...global,
+        items: global.items.filter((item) => /(^|\.)zhihu\.com$/.test(hostOf(item.url))).map((item) => ({ ...item, title: stripZhihuTitleSuffix(item.title) })),
+      };
     }
     const seen = new Set<string>();
     return result.items
