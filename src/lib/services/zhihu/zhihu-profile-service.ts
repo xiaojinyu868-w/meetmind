@@ -87,13 +87,17 @@ export async function collectZhihuProfileFacts(client: ZhihuOpenClient, identity
       return empty;
     }
   };
-  const [favlists, recent, followees, answers, articles] = await Promise.all([
-    opts.favlists ? Promise.resolve(opts.favlists) : safe('favlists', async () => (await client.userFavlists({ limit: 20 }, identity)).items, []),
-    opts.recent ? Promise.resolve(opts.recent) : safe('recent', async () => (await client.recentCollections({ limit: 20 }, identity)).items, []),
-    safe('followees', async () => (await client.userFollowees({ limit: 20 }, identity)).items, []),
-    safe('answers', async () => (await client.userContents({ contentType: 'answer', sortField: 'like_count', sortOrder: 'desc', limit: 5 }, identity)).items, []),
-    safe('articles', async () => (await client.userContents({ contentType: 'article', sortField: 'like_count', sortOrder: 'desc', limit: 5 }, identity)).items, []),
-  ]);
+  // 串行而不是 Promise.all：知乎对同一账号的并发请求会报 30001（2026-09-12 实测，四个接口一起发时 followees / contents 被拒）
+  const gap = () => new Promise((resolve) => setTimeout(resolve, 250));
+  const favlists = opts.favlists ?? (await safe('favlists', async () => (await client.userFavlists({ limit: 20 }, identity)).items, []));
+  if (!opts.favlists) await gap();
+  const recent = opts.recent ?? (await safe('recent', async () => (await client.recentCollections({ limit: 20 }, identity)).items, []));
+  if (!opts.recent) await gap();
+  const followees = await safe('followees', async () => (await client.userFollowees({ limit: 20 }, identity)).items, []);
+  await gap();
+  const answers = await safe('answers', async () => (await client.userContents({ contentType: 'answer', sortField: 'like_count', sortOrder: 'desc', limit: 5 }, identity)).items, []);
+  await gap();
+  const articles = await safe('articles', async () => (await client.userContents({ contentType: 'article', sortField: 'like_count', sortOrder: 'desc', limit: 5 }, identity)).items, []);
   return { favlists, recent, followees, answers, articles };
 }
 

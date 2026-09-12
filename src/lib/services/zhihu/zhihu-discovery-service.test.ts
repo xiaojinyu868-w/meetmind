@@ -83,6 +83,37 @@ describe('searchZhihuCandidates', () => {
     const failing = createZhihuOpenClient({ config, fetchImpl: async () => new Response(JSON.stringify({ Code: 30002, Message: 'quota' }), { status: 200 }) });
     expect(await searchZhihuCandidates('过拟合 正则化', { client: failing, config })).toEqual([]);
   });
+
+  it('站内搜索被限流（30001）时退到全网搜索，只留知乎站内链接；全网也失败才返回空', async () => {
+    const endpoints: string[] = [];
+    const client = createZhihuOpenClient({
+      config,
+      fetchImpl: async (url) => {
+        const path = new URL(url).pathname;
+        endpoints.push(path);
+        if (path.endsWith('/zhihu_search')) return new Response(JSON.stringify({ Code: 30001, Message: 'rate limit exceeded' }), { status: 200 });
+        return new Response(
+          JSON.stringify({
+            Code: 0,
+            Data: {
+              HasMore: false,
+              Items: [
+                { Title: '知乎上的正则化', ContentType: 'Answer', ContentId: '1', Summary: '<em>正则化</em>是……', Url: 'https://www.zhihu.com/question/1/answer/2', VoteUpCount: 88, CommentCount: 1, AuthorName: '甲', EditTime: 1, FeaturedComments: [] },
+                { Title: '站外的正则化', ContentType: 'Article', ContentId: '2', Summary: '……', Url: 'https://example.com/reg', VoteUpCount: 9999, CommentCount: 0, AuthorName: '乙', EditTime: 1, FeaturedComments: [] },
+              ],
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      },
+    });
+    const candidates = await searchZhihuCandidates('正则化', { client, config });
+    expect(endpoints.map((e) => e.split('/').pop())).toEqual(['zhihu_search', 'global_search']);
+    expect(candidates.map((c) => c.title)).toEqual(['知乎上的正则化']);
+
+    const bothFail = createZhihuOpenClient({ config, fetchImpl: async () => new Response(JSON.stringify({ Code: 30001, Message: 'rate limit exceeded' }), { status: 200 }) });
+    expect(await searchZhihuCandidates('正则化', { client: bothFail, config })).toEqual([]);
+  });
 });
 
 describe('continueReading', () => {

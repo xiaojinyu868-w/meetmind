@@ -88,6 +88,14 @@ export interface SearchZhihuCandidatesOptions {
   config?: ZhihuConfig;
 }
 
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
 export async function searchZhihuCandidates(query: string, opts: SearchZhihuCandidatesOptions = {}): Promise<ZhihuDiscoveryCandidate[]> {
   const config = opts.config ?? getZhihuConfig();
   if (!isZhihuSearchEnabled(config)) return [];
@@ -96,7 +104,17 @@ export async function searchZhihuCandidates(query: string, opts: SearchZhihuCand
   if (q.length < 2) return [];
   const exclude = new Set((opts.excludeUrls ?? []).map((u) => canonicalizeSourceUrl(u) ?? u));
   try {
-    const result = await client.searchZhihu(q, { count: opts.count ?? 8 });
+    let result;
+    try {
+      result = await client.searchZhihu(q, { count: opts.count ?? 8 });
+    } catch (error) {
+      // 站内搜索的频率 / 额度是单独计的（2026-09-12 实测：站内 30001 时全网搜索仍正常）；退到全网搜索，只留知乎站内链接
+      const kind = (error as ZhihuApiError)?.kind;
+      if (kind !== 'rate_limit' && kind !== 'quota') throw error;
+      log.warn('zhihu search rate limited, falling back to global search', { kind });
+      const global = await client.searchGlobal(q, { count: Math.min(20, (opts.count ?? 8) * 2) });
+      result = { ...global, items: global.items.filter((item) => /(^|\.)zhihu\.com$/.test(hostOf(item.url))) };
+    }
     const seen = new Set<string>();
     return result.items
       .filter((item) => item.url && item.title)

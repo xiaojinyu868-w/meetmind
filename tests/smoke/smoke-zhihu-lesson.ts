@@ -242,6 +242,13 @@ async function main(): Promise<void> {
         await page.getByRole('button', { name: '材料 · 考一考', exact: true }).click();
         await page.waitForTimeout(800);
         await page.screenshot({ path: path.join(shotDir, 'zhihu-lesson-rail.png') });
+        await page.getByRole('button', { name: '收起', exact: true }).click();
+        // 老师讲完一轮 → 右下长出「考一考」小卡（不花模型钱时不会出现）
+        if (!skipLlm) {
+          await page.waitForFunction(() => document.body.innerText.includes('讲完这一段了'), null, { timeout: 120_000 }).catch(() => undefined);
+          await page.waitForTimeout(400);
+          await page.screenshot({ path: path.join(shotDir, 'zhihu-lesson-next.png') });
+        }
         // 课后页：进来自动出题，等题出来（或 90s 超时也截一张）
         await page.goto(`${base}/apps/zhihu/lesson/${threadId}/review`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         if (!skipLlm) {
@@ -258,7 +265,7 @@ async function main(): Promise<void> {
         await page.goto(`${base}/apps/zhihu/lesson/${threadId}/review`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.waitForTimeout(skipLlm ? 2500 : 8000);
         await page.screenshot({ path: path.join(shotDir, 'zhihu-review-mobile.png'), fullPage: true });
-        pass(`截图：${shotDir}/zhihu-entry.png · zhihu-lesson.png · zhihu-lesson-rail.png · zhihu-review.png · *-mobile.png`);
+        pass(`截图：${shotDir}/zhihu-entry.png · zhihu-lesson.png · zhihu-lesson-rail.png · zhihu-lesson-next.png · zhihu-review.png · *-mobile.png`);
       } finally {
         await browser.close();
       }
