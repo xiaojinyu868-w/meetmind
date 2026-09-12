@@ -142,6 +142,7 @@ describe('buildZhihuLesson', () => {
       writeMaterials: async (threadId, pack) => {
         calls.write.push({ threadId, items: pack.items.length });
       },
+      priorLessons: async (_userId, materialsTitle) => (materialsTitle === '机器学习入门' ? [{ threadId: 't0', title: '模型为什么会「背题」', topic: '机器学习入门', materialsTitle, itemCount: 2, createdAt: '2026-09-11T00:00:00.000Z', updatedAt: '2026-09-11T00:00:00.000Z' }] : []),
       providerModel: () => 'glm-test',
       now: () => NOW,
     };
@@ -161,6 +162,8 @@ describe('buildZhihuLesson', () => {
     expect(result.pack.items.map((i) => [i.ref, i.body])).toEqual([['A1', 'full'], ['A2', 'full']]);
     expect(result.pack.skipped).toEqual([{ sourceId: 'video', title: '回答 video', reason: '视频没有可讲的正文' }]);
     expect(result.materialized).toEqual([{ captureId: 'sum', status: 'full', bodyChars: 999 }]);
+    // 同一收藏夹之前上过的课写进材料包（老师据此不从头讲同一段）
+    expect(result.pack.priorLessons).toEqual([{ threadId: 't0', title: '模型为什么会「背题」', createdAt: '2026-09-11T00:00:00.000Z' }]);
   });
 
   it('显式课题优先；抽正文失败的仍以摘要进包；没有可讲内容报错', async () => {
@@ -169,6 +172,7 @@ describe('buildZhihuLesson', () => {
     const result = await buildZhihuLesson('u1', { captureIds: ['sum'], topic: '  过拟合专题  ', learner: { v: 1 } as never }, d);
     expect(calls.createThread[0]).toMatchObject({ topic: '过拟合专题', learner: { v: 1 } });
     expect(result.pack.items[0].body).toBe('summary');
+    expect(result.pack.priorLessons).toHaveLength(1); // 之前的课按材料组（收藏夹）匹配，不按这次的课题
 
     await expect(buildZhihuLesson('u1', {}, d)).rejects.toMatchObject({ code: 'favlist_not_found' });
     const { d: empty } = deps([]);

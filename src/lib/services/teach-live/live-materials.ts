@@ -40,6 +40,8 @@ export interface LiveMaterialPack {
   skipped?: Array<{ sourceId?: string; title: string; reason: string }>;
   /** 开课的 MeetMind 用户；TeachThread 没有归属列，材料包就是这节课属于谁的唯一记录 */
   ownerUserId?: string;
+  /** 同一组材料之前上过的课（标题 / 课题），给老师一句"别从头讲同一段"；由开课方（如 zhihu-lesson-service）填 */
+  priorLessons?: Array<{ threadId: string; title: string; createdAt: string }>;
   createdAt: string;
 }
 
@@ -97,6 +99,10 @@ export function formatLiveMaterialsBlock(pack: LiveMaterialPack | null): string 
   lines.push('- 口播里引用材料说「材料 1」这样能念的话；板书 / 要点里可以写 [A1]。');
   lines.push('- 标了「只有摘要」的材料只能当线索，不要替它编细节；材料没覆盖但学生需要的基础可以补，但要说一句「这段不在你收藏里」。');
   lines.push('- 课题标题（scene title）从材料的共同主题里起，不要照抄某一篇的标题。');
+  if (pack.priorLessons?.length) {
+    const recent = pack.priorLessons.slice(0, 5).map((lesson) => `《${lesson.title}》`).join('、');
+    lines.push(`- 这位学生用这组材料已经上过 ${pack.priorLessons.length} 节：${recent}。这次不要从头讲同一段——先问一句上次讲到哪、哪里没懂，或者换一篇材料 / 往深处走。`);
+  }
   lines.push('');
   for (const item of pack.items) {
     const author = item.author ? ` · ${item.author}` : '';

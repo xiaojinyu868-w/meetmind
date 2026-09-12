@@ -41,6 +41,8 @@ export interface ZhihuLessonDeps {
   materialize: typeof materializeCaptures;
   createThread: typeof createThread;
   writeMaterials: typeof writeLiveMaterials;
+  /** 这位学生用同一组材料之前上过的课（给老师一句"别从头讲同一段"）；默认查材料包目录 + TeachThread */
+  priorLessons: (userId: string, materialsTitle: string) => Promise<ZhihuLessonSummary[]>;
   providerModel: () => string;
   now: () => number;
 }
@@ -51,6 +53,7 @@ function defaultDeps(): ZhihuLessonDeps {
     materialize: materializeCaptures,
     createThread,
     writeMaterials: writeLiveMaterials,
+    priorLessons: async (userId, materialsTitle) => (await listLessonsForUser(userId, 50)).filter((l) => l.materialsTitle === materialsTitle),
     providerModel: () => resolveTeachLiveProvider().model,
     now: () => Date.now(),
   };
@@ -195,7 +198,7 @@ function metaLine(record: ZhihuCaptureRecord): string {
   return parts.join(' · ');
 }
 
-export function buildMaterialPack(params: { title: string; chosen: ZhihuCaptureRecord[]; skipped: LiveMaterialPack['skipped']; now: number; ownerUserId?: string }): LiveMaterialPack {
+export function buildMaterialPack(params: { title: string; chosen: ZhihuCaptureRecord[]; skipped: LiveMaterialPack['skipped']; now: number; ownerUserId?: string; priorLessons?: LiveMaterialPack['priorLessons'] }): LiveMaterialPack {
   const items: LiveMaterialItem[] = params.chosen.map((record, index) => {
     const full = record.zhihu.body === 'full' && (record.normalizedText ?? '').length > 0;
     const text = record.normalizedText ?? record.previewText ?? '';
@@ -217,6 +220,7 @@ export function buildMaterialPack(params: { title: string; chosen: ZhihuCaptureR
     items,
     skipped: params.skipped,
     ...(params.ownerUserId ? { ownerUserId: params.ownerUserId } : {}),
+    ...(params.priorLessons?.length ? { priorLessons: params.priorLessons } : {}),
     createdAt: new Date(params.now).toISOString(),
   };
 }
@@ -264,7 +268,16 @@ export async function buildZhihuLesson(userId: string, input: BuildZhihuLessonIn
 
   const title = inferTitle(records, input.favlistUrlToken);
   const topic = (input.topic?.trim() || title).slice(0, 100);
-  const pack = buildMaterialPack({ title, chosen: ordered, skipped, now: d.now(), ownerUserId: userId });
+  // 同一收藏夹之前开过的课：告诉老师别从头讲同一段（查失败不影响开课）
+  const prior = await d.priorLessons(userId, title).catch(() => [] as ZhihuLessonSummary[]);
+  const pack = buildMaterialPack({
+    title,
+    chosen: ordered,
+    skipped,
+    now: d.now(),
+    ownerUserId: userId,
+    priorLessons: prior.slice(0, 5).map((l) => ({ threadId: l.threadId, title: l.title || l.topic, createdAt: l.createdAt })),
+  });
 
   const thread = await d.createThread({ topic, model: d.providerModel(), engine: 'live', learner: input.learner ?? null });
   await d.writeMaterials(thread.id, pack);

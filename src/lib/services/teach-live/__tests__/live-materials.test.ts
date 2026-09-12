@@ -49,6 +49,10 @@ describe('live-materials', () => {
     expect(block).toContain('这段不在你收藏里');
     expect(block).toContain('不要照抄某一篇的标题');
     expect(block).not.toContain('一个视频'); // skipped 不进 prompt
+    expect(block).not.toContain('已经上过'); // 没有 priorLessons 就不提
+
+    const again = formatLiveMaterialsBlock({ ...pack, priorLessons: [{ threadId: 't0', title: '模型为什么会「背题」', createdAt: '2026-09-11T00:00:00.000Z' }] });
+    expect(again).toContain('这位学生用这组材料已经上过 1 节：《模型为什么会「背题」》。这次不要从头讲同一段');
   });
 
   it('损坏的文件当作没有材料', async () => {
