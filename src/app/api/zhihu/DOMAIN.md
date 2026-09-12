@@ -9,6 +9,7 @@
 | `/api/zhihu/status` | GET | `{ enabled, connected, mode: 'oauth'│'self'│null, expired, expiresAt }`——第一屏据此显示「连接知乎」还是「选一个收藏夹」；expired → 「重新连接知乎」 |
 | `/api/zhihu/favlists` | GET | 当前用户的收藏夹（≤50，知乎无分页）+ `mode` |
 | `/api/zhihu/import` | POST `{favlistUrlToken, limit?}` | 把一个收藏夹收进收集流：翻页拉全（≤100 条）→ 每条 `upsertCaptureForUser`（sourceType `zhihu-favorite`，sourceKey `zhihu:<uid>:<sha1(canonical)>`，摘要进正文位、provenance `partial`）；重复导入只更新。返回 `{ favlist, fetched, imported, captures[] }` |
+| `/api/zhihu/sync` | POST `{force?}` | 零动作入口：最近 50 条收藏（跨收藏夹）只新增本地没有的，摘要级；服务端 15 分钟节流 → `{ added, scanned, skipped:'throttled'│null }`。第一屏每次打开静默调，`added>0` 才说一句。没被节流的那次顺手把知乎画像写成一条学习观察（`zhihu-profile-service`，24 h 一次，fire-and-forget）；identity 不出服务端 |
 | `/api/zhihu/materialize` | POST `{captureIds[≤30], force?}` | 按需抽正文（Firecrawl ≈1 credit / 条，并发 3）→ 去杂质 → 重新 upsert 成 `complete`；每条 `status: full│already-full│unsupported│failed`，失败留摘要并把原因写进 `metadata.zhihu` |
 | `/api/zhihu/captures` | GET `?favlist=` | 已收进来的知乎收藏（含 `metadata.zhihu`：正文状态 / 作者 / 赞同 / 所在收藏夹 / 抽取失败原因） |
 
@@ -18,7 +19,7 @@
 | `/api/zhihu/lesson` | POST `{favlistUrlToken? │ captureIds?, topic?, maxItems?}` | 把一个收藏夹开成一节 live 课：挑材料（按赞同，≤8 篇有正文可讲的）→ 只给进材料包的几篇抽正文 → 建 `engine=live` 的 TeachThread + 材料包落盘（`teach-live/live-materials.ts`）；learner 读槽与 `/api/teach/threads` 同款。返回 `{ thread:{id,title,topic}, pack, materialized }`；前端拿 thread.id 去 `/apps/zhihu/lesson/<id>` 开讲（首条学生消息「开始上课」由课堂页发，与 /teach/live 一致）。teach-live 未配置 503 `teach_live_unavailable` |
 | `/api/zhihu/lesson/[threadId]` | GET | 这节课的材料包 + 线程元信息（课堂页右侧「这节课的材料」、课后出题 / 继续看用）；不是从收藏夹开的课 404 |
 
-| `/api/zhihu/continue` | POST `{concepts[≤5], threadId?, topic?, perConcept?}` | 考后补货：还没稳的概念 → 站内搜索（每概念 1 次，≤3 次）→ 按权威 / 赞同 / 有反方评论排序，排除材料包里已有链接 → `{ groups:[{concept, candidates[]}] }`；检索失败返回空组不报错 |
+| `/api/zhihu/continue` | POST `{concepts[≤5], threadId?, topic?, perConcept?}` | 考后补货：还没稳的概念 → 站内搜索（每概念 1 次，≤3 次）→ 按权威 / 赞同 / 有反方评论排序，排除材料包里已有链接，每组留 6 条候选池 → **快模型针对这个缺口挑 1–2 条并写一句只落在摘要里的理由**（`zhihu-continue-judge`；失败退回元数据理由）→ `{ groups:[{concept, candidates[]}] }`；检索失败返回空组不报错 |
 
 讲完就考没有新路由：课堂页把材料包变成伪转录直接调既有 `/api/apps/execute`（quiz / flashcards），assessment 走既有 `/api/memory/events`。
 

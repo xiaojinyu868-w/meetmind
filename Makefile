@@ -75,6 +75,10 @@ deploy-zhihu: ## 知乎线独立试用实例上线：在 /mnt/meetmind-zhihu 旁
 smoke-zhihu-lesson: ## 收藏夹开课闭环（不需知乎凭证）：合成账户 → 3 条正文完整的收藏 → /api/zhihu/lesson → 老师开讲命中材料概念 → 伪转录出题 → continue → 清理；SMOKE_BASE 指服务（默认 3106），SMOKE_BROWSER=chromium 截图，SMOKE_SKIP_LLM=1 不花模型钱
 	@SMOKE_BASE=$${SMOKE_BASE:-http://localhost:3106} npx tsx tests/smoke/smoke-zhihu-lesson.ts
 
+.PHONY: bench-zhihu-lesson
+bench-zhihu-lesson: ## 收藏夹开课质量门（花模型钱，不进 CI）：同一材料包开 N 节课只听第一轮，量「引材料次数 / 概念命中 / 分歧点名 / 首字延迟」；BENCH_N（默认 3）、BENCH_PACK 指一份真实材料包、BENCH_KEYWORDS 逗号分隔；产物到 BENCH_OUT（默认 /tmp/mm-zhihu-bench）
+	@SMOKE_BASE=$${SMOKE_BASE:-http://localhost:3106} npx tsx tests/eval/zhihu-lesson-bench.ts
+
 .PHONY: test-desktop
 test-desktop: ## 桌面壳纯逻辑单测（口袋：选区读取 / 来源解析 / 离线队列；不需要 Electron）
 	@node --test ./desktop/pocket/pocket.test.js

@@ -56,7 +56,22 @@
 | G5 开课 | 材料包 + teach-live 材料段 | teach-live 现有测试全绿 + 材料段单测；`smoke-zhihu-lesson` 老师口播命中材料 | 0adccfa 完成，实测通过 |
 | G6 考 + 补货 | 伪转录适配 + zhihu provider + 继续看 | 单测；`smoke-zhihu-lesson` quiz 7 题 | e00ee4d 完成 |
 | G7 第一屏 | `/apps/zhihu` + 课堂页 + 文案 + 失败态 | `smoke-zhihu-lesson` 浏览器截图三张 | ebf90dc 完成 |
-| 上线 | PM2 + nginx + 证书 + `make deploy-zhihu` | `/api/health` + 静态 chunk 抽样 + 子域名走通旅程 | 实例已在 3012 跑、nginx HTTP 块已就位、生产构建上 smoke 通过；**证书等 DNS A 记录**（`certbot --nginx -d zhihu.meetmind.online`） |
+| G7.1 打磨（09-12 晚） | 第一屏重做（桌宠 + 三步预期 + 收藏夹状态 + 你开过的课 + 只给能用的按钮 + 登录回跳）；讲完一轮长出「考一考」；课后三栏页；材料预览与正文状态说人话 | `smoke-zhihu-lesson` 六张截图（桌面 + 手机）过眼 | 0f8078a 完成，线上 |
+| G8 内容层 | 节选按结构取；题目解析假时间 → 真材料；「继续看」模型判断 + 有根理由；`make bench-zhihu-lesson` 质量门 | 10 例单测；真实 19K 字回答节选核过；bench 三轮数字见下 | 1db130d 完成，线上 |
+| G4 入口 + 画像（原计划"后置"） | `/api/zhihu/sync` 最近收藏自动进收集流；知乎画像一条观察进 Hindsight | 单测；线上实测：50 条 2.4 s 进库、第二次节流、activity 事件 + `zhihu.profile` ContextEvent（submitted） | 542cfd0 完成，线上 |
+| 上线 | PM2 + nginx + 证书 + `make deploy-zhihu` | `/api/health` + 静态 chunk 抽样 + 子域名走通旅程 | https://zhihu.meetmind.online 在跑（证书到 2026-12-11），每次提交后 `make deploy-zhihu` |
+
+## 质量门基线（`make bench-zhihu-lesson`，合成包 ×3，线上 3012，2026-09-12 21:20）
+
+| 指标 | 数字 | 读法 |
+|---|---|---|
+| 首字延迟 | ≈2.0–2.2 s | 材料块进 system prompt 后没有拖慢开口 |
+| 第一轮口播 | 229 / 401 / 438 字，3/3 讲完 | 一轮一个点，符合 live 的节奏 |
+| 「材料 N」点名 | 平均 5.3 次 / 轮 | 讲自材料，不是泛泛而谈 |
+| 概念命中 | 2/6 · 6/6 · 6/6 | 第一轮只讲过拟合时命中低是正常的 |
+| 分歧点名 | 1/3 | A2 与 A3 对「早停算不算正则化」看法相反；第一轮多半还没讲到早停，**后续轮次的分歧点名要单测另一条链**（待做） |
+
+数字波动 = `teach-live-prompt` / `live-materials` 格式 / `excerptOf` 改动的回归信号；改这三处后重跑对照。
 
 ## 风险与兜底
 
