@@ -15,7 +15,8 @@ export async function GET(request: NextRequest, { params }: { params: { threadId
     return NextResponse.json({ success: false, error: 'bad_request', message: '线程 id 不合法' }, { status: 400 });
   }
   const [thread, pack] = await Promise.all([getThread(threadId), readLiveMaterials(threadId)]);
-  if (!thread || !pack) {
+  // 材料包记了开课人就按人隔离；没记（更早的课）按旧行为放行
+  if (!thread || !pack || (pack.ownerUserId && pack.ownerUserId !== auth.userId)) {
     return NextResponse.json({ success: false, error: 'lesson_not_found', message: '这节课不存在，或不是从收藏夹开的' }, { status: 404 });
   }
   return NextResponse.json({ success: true, thread: { id: thread.id, title: thread.title, topic: thread.topic, engine: thread.engine }, pack });

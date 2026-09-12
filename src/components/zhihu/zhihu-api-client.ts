@@ -68,6 +68,36 @@ export async function createLesson(token: string, favlistUrlToken: string): Prom
   );
 }
 
+export interface ZhihuLessonSummaryDto {
+  threadId: string;
+  title: string;
+  topic: string;
+  materialsTitle: string;
+  itemCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function fetchLessons(token: string): Promise<ZhihuLessonSummaryDto[]> {
+  const data = await readJson<{ lessons: ZhihuLessonSummaryDto[] }>(await fetch('/api/zhihu/lessons', { headers: headers(token) }));
+  return data.lessons;
+}
+
+export interface ZhihuCaptureDto {
+  id: string;
+  title: string;
+  previewText: string | null;
+  sourceUrl: string | null;
+  occurredAt: string | null;
+  bodyChars: number;
+  zhihu: { kind: string; body: 'summary' | 'full'; favlists: Array<{ urlToken: string; title: string }>; voteUpCount: number; author: string | null };
+}
+
+export async function fetchCaptures(token: string): Promise<ZhihuCaptureDto[]> {
+  const data = await readJson<{ captures: ZhihuCaptureDto[] }>(await fetch('/api/zhihu/captures', { headers: headers(token) }));
+  return data.captures;
+}
+
 export async function fetchLessonPack(token: string, threadId: string): Promise<{ thread: { id: string; title: string; topic: string }; pack: LiveMaterialPack }> {
   return readJson(await fetch(`/api/zhihu/lesson/${encodeURIComponent(threadId)}`, { headers: headers(token) }));
 }

@@ -6,6 +6,7 @@
 export const ZHIHU_COPY = {
   title: '从一个收藏夹开始',
   subtitle: '你在知乎收藏过的，让同学讲给你听。讲完考一考，没稳的再去知乎上接着看。',
+  steps: ['连接知乎', '选一个收藏夹', '同学开讲，讲完考一考，没稳的回知乎继续看'] as const,
   back: '回到 MeetMind',
 
   /** 连接 */
@@ -36,15 +37,21 @@ export const ZHIHU_COPY = {
   } as Record<string, string>,
 
   /** 收藏夹 */
-  favlistsTitle: '选一个收藏夹',
-  favlistsHint: '同学会把里面的回答和文章读一遍，再讲给你听。',
+  favlistsTitle: '你的收藏夹',
+  favlistsHint: '选一个，同学会把里面的回答和文章读一遍，再讲给你听。',
   favlistsEmpty: '这个知乎账号还没有公开的收藏夹。',
   favlistsLoading: '正在看你的收藏夹…',
   favlistPrivate: '私密',
   favlistPublic: '公开',
+  favlistImported: (count: number, full: number): string => (full > 0 ? `已收下 ${count} 条 · ${full} 条读了全文` : `已收下 ${count} 条`),
+  favlistTaught: (times: number): string => (times === 1 ? '开过 1 节课' : `开过 ${times} 节课`),
   startLesson: '开课',
-  importing: '正在收下…',
+  startAgain: '再开一节',
+  progressImport: '收下这个收藏夹',
+  progressRead: '同学读最值得讲的几篇',
+  progressOpen: '开讲',
   imported: (count: number): string => `已收下 ${count} 条`,
+  importing: '正在收下…',
   reading: (count: number): string => `正在读 ${count} 篇…`,
   opening: '同学准备开讲',
   selfMode: '演示账号',
@@ -52,6 +59,11 @@ export const ZHIHU_COPY = {
   upstreamDown: '知乎暂时没有响应，稍后再试。',
   nothingToTeach: '这个收藏夹里没有可以讲的正文——都是视频或想法。',
   emptyFavlist: '这个收藏夹是空的。',
+
+  /** 开过的课 */
+  lessonsTitle: '你开过的课',
+  lessonFrom: (favlist: string, count: number): string => `来自「${favlist}」· ${count} 篇`,
+  lessonContinue: '回到这节课',
 
   /** 课堂页 */
   leave: '离开课堂',

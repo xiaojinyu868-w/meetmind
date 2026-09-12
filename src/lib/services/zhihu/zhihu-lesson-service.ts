@@ -10,7 +10,8 @@
 
 import { createThread } from '@/lib/services/teach-codex/thread-store';
 import { resolveTeachLiveProvider } from '@/lib/config/teach.config';
-import { writeLiveMaterials, type LiveMaterialItem, type LiveMaterialPack } from '@/lib/services/teach-live/live-materials';
+import { listLiveMaterials, writeLiveMaterials, type LiveMaterialItem, type LiveMaterialPack } from '@/lib/services/teach-live/live-materials';
+import prisma from '@/lib/prisma';
 import type { LearnerContext } from '@/types/learner-context';
 import { createLogger } from '@/lib/logger';
 import { listZhihuCaptures, materializeCaptures, ZhihuImportError, type MaterializeResult, type ZhihuCaptureRecord } from './zhihu-import-service';
@@ -122,7 +123,7 @@ function metaLine(record: ZhihuCaptureRecord): string {
   return parts.join(' · ');
 }
 
-export function buildMaterialPack(params: { title: string; chosen: ZhihuCaptureRecord[]; skipped: LiveMaterialPack['skipped']; now: number }): LiveMaterialPack {
+export function buildMaterialPack(params: { title: string; chosen: ZhihuCaptureRecord[]; skipped: LiveMaterialPack['skipped']; now: number; ownerUserId?: string }): LiveMaterialPack {
   const items: LiveMaterialItem[] = params.chosen.map((record, index) => {
     const full = record.zhihu.body === 'full' && (record.normalizedText ?? '').length > 0;
     const text = record.normalizedText ?? record.previewText ?? '';
@@ -137,7 +138,15 @@ export function buildMaterialPack(params: { title: string; chosen: ZhihuCaptureR
       sourceId: record.id,
     };
   });
-  return { v: 1, source: 'zhihu-favlist', title: params.title, items, skipped: params.skipped, createdAt: new Date(params.now).toISOString() };
+  return {
+    v: 1,
+    source: 'zhihu-favlist',
+    title: params.title,
+    items,
+    skipped: params.skipped,
+    ...(params.ownerUserId ? { ownerUserId: params.ownerUserId } : {}),
+    createdAt: new Date(params.now).toISOString(),
+  };
 }
 
 function inferTitle(records: ZhihuCaptureRecord[], favlistUrlToken?: string): string {
@@ -183,7 +192,7 @@ export async function buildZhihuLesson(userId: string, input: BuildZhihuLessonIn
 
   const title = inferTitle(records, input.favlistUrlToken);
   const topic = (input.topic?.trim() || title).slice(0, 100);
-  const pack = buildMaterialPack({ title, chosen: ordered, skipped, now: d.now() });
+  const pack = buildMaterialPack({ title, chosen: ordered, skipped, now: d.now(), ownerUserId: userId });
 
   const thread = await d.createThread({ topic, model: d.providerModel(), engine: 'live', learner: input.learner ?? null });
   await d.writeMaterials(thread.id, pack);
@@ -196,3 +205,47 @@ export async function buildZhihuLesson(userId: string, input: BuildZhihuLessonIn
   });
   return { thread: { id: thread.id, title: thread.title, topic: thread.topic }, pack, materialized };
 }
+
+// ---------------------------------------------------------------------------
+// 我开过的课
+// ---------------------------------------------------------------------------
+
+export interface ZhihuLessonSummary {
+  threadId: string;
+  /** 课名跟随老师的首个 scene title，没有就是课题 */
+  title: string;
+  topic: string;
+  /** 收藏夹名 */
+  materialsTitle: string;
+  itemCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 从材料包目录反查这个用户开过的课（TeachThread 没有归属列）；线程已删的不列 */
+export async function listLessonsForUser(userId: string, limit = 20): Promise<ZhihuLessonSummary[]> {
+  const packs = await listLiveMaterials((pack) => pack.ownerUserId === userId && pack.source === 'zhihu-favlist');
+  if (!packs.length) return [];
+  const rows = await prisma.teachThread.findMany({
+    where: { id: { in: packs.map((p) => p.threadId) }, status: 'active' },
+    select: { id: true, title: true, topic: true, createdAt: true, updatedAt: true },
+  });
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return packs
+    .flatMap(({ threadId, pack }) => {
+      const row = byId.get(threadId);
+      if (!row) return [];
+      return [{
+        threadId,
+        title: row.title,
+        topic: row.topic,
+        materialsTitle: pack.title,
+        itemCount: pack.items.length,
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+      }];
+    })
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, limit);
+}
+

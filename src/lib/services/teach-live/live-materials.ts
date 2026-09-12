@@ -38,7 +38,29 @@ export interface LiveMaterialPack {
   items: LiveMaterialItem[];
   /** 没进材料包的条目（视频 / 想法 / 抽不到正文），前端如实展示 */
   skipped?: Array<{ sourceId?: string; title: string; reason: string }>;
+  /** 开课的 MeetMind 用户；TeachThread 没有归属列，材料包就是这节课属于谁的唯一记录 */
+  ownerUserId?: string;
   createdAt: string;
+}
+
+/** 扫一遍材料包目录（小文件、小规模；上百节课以内够用，再大就该进表） */
+export async function listLiveMaterials(filter: (pack: LiveMaterialPack) => boolean): Promise<Array<{ threadId: string; pack: LiveMaterialPack }>> {
+  const dir = path.join(process.cwd(), TeachConfig.materialsDir);
+  let names: string[] = [];
+  try {
+    names = await fs.readdir(dir);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') log.warn('materials dir read failed', { message: (error as Error)?.message });
+    return [];
+  }
+  const out: Array<{ threadId: string; pack: LiveMaterialPack }> = [];
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue;
+    const threadId = name.slice(0, -'.json'.length);
+    const pack = await readLiveMaterials(threadId);
+    if (pack && filter(pack)) out.push({ threadId, pack });
+  }
+  return out;
 }
 
 function materialsPath(threadId: string): string {
