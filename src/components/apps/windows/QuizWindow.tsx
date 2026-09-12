@@ -60,6 +60,8 @@ interface QuizWindowProps {
   result: AppExecutionResult | null;
   transcript: TranscriptSegment[];
   onSeek?: (startMs: number) => void;
+  /** 证据按钮的文案（默认「回到课堂 mm:ss」）；材料不是课堂转录时由宿主给出人话，如「看这篇材料：A1《…》」 */
+  evidenceLabel?: (startMs: number) => string;
   onLearningActivity?: (line: string, observation?: LearningObservationContent) => void;
   /** 交卷时把每题的对错 + 证据交给记忆（结构化，见 assessment-events.ts） */
   onAssessment?: (draft: AssessmentDraft) => void;
@@ -80,7 +82,7 @@ const OPTION_ROW: Record<OptionState, string> = {
 
 const PRIMARY_BTN = 'mm-press mm-focus rounded-full bg-ink px-5 py-2 text-[13.5px] font-medium text-white hover:opacity-85 disabled:cursor-not-allowed disabled:bg-divider disabled:text-ink-muted';
 
-export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onAssessment, nextStep }: QuizWindowProps) {
+export function QuizWindow({ result, transcript, onSeek, evidenceLabel, onLearningActivity, onAssessment, nextStep }: QuizWindowProps) {
   const questions = useMemo(() => normalizeQuizQuestions(result), [result]);
   const [reviewQuestionIds, setReviewQuestionIds] = useState<string[] | null>(null);
   const activeQuestions = useMemo(
@@ -345,9 +347,11 @@ export function QuizWindow({ result, transcript, onSeek, onLearningActivity, onA
                 onClick={() => onSeek?.(current.evidence!.startMs)}
                 className="mm-focus mt-5 rounded text-[12px] text-ink-muted/80 transition hover:text-ink disabled:cursor-default"
               >
-                {onSeek
-                  ? APPS_COPY.quiz.returnToEvidenceAt(formatQuizEvidenceTime(current.evidence.startMs))
-                  : APPS_COPY.quiz.evidenceAt(formatQuizEvidenceTime(current.evidence.startMs))}
+                {evidenceLabel
+                  ? evidenceLabel(current.evidence.startMs)
+                  : onSeek
+                    ? APPS_COPY.quiz.returnToEvidenceAt(formatQuizEvidenceTime(current.evidence.startMs))
+                    : APPS_COPY.quiz.evidenceAt(formatQuizEvidenceTime(current.evidence.startMs))}
               </button>
             ) : null}
 

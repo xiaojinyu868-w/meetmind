@@ -105,11 +105,15 @@ async function main(): Promise<void> {
   const { materialsToTranscript, buildExecutePayload } = await import('@/components/zhihu/zhihu-lesson-model');
   const { TeachConfig } = await import('@/lib/config/teach.config');
 
-  const userId = `smoke-zhihu-${Date.now().toString(36)}`;
+  // SMOKE_ZHIHU_SELF=1：用固定 id（需在 .env 的 ZHIHU_SELF_MODE_USER_IDS 白名单里），截图里能看到真实收藏夹与「你开过的课」
+  const userId = process.env.SMOKE_ZHIHU_SELF === '1' ? 'smoke-zhihu-self' : `smoke-zhihu-${Date.now().toString(36)}`;
   let threadId: string | null = null;
   const pass = (line: string) => console.log(`✓ ${line}`);
 
   try {
+    await prisma.workspaceCapture.deleteMany({ where: { userId } }).catch(() => undefined);
+    await prisma.workspace.deleteMany({ where: { ownerId: userId } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: userId } }).catch(() => undefined);
     await prisma.user.create({ data: { id: userId, username: userId, nickname: '知乎线合成验收账户' } });
     const session = await authService.createSessionForUserId(userId);
     const token = session.accessToken;
@@ -176,8 +180,11 @@ async function main(): Promise<void> {
       assert(msgRes.ok, `messages ${msgRes.status} ${await msgRes.text()}`);
       const { speech, events, completed } = await speechPromise;
       assert(speech.length > 40, `老师几乎没开口（${speech.length} 字，${events} 个事件）`);
-      const hits = ['过拟合', '正则', '早停', 'L1', 'L2', '材料'].filter((k) => speech.includes(k));
-      assert(hits.length >= 2, `口播里没出现材料概念（命中：${hits.join(',') || '无'}）：${speech.slice(0, 200)}`);
+      // 老师开场可能先讲直觉不点术语；「材料 N」被点名引用，或至少两个材料概念出现，都算讲自材料
+      const hits = ['过拟合', '正则', '早停', 'L1', 'L2'].filter((k) => speech.includes(k));
+      const citesMaterials = /材料\s*[123１２３]/.test(speech);
+      assert(citesMaterials || hits.length >= 2, `口播里没有引用材料（命中概念：${hits.join(',') || '无'}）：${speech.slice(0, 200)}`);
+      if (citesMaterials) hits.unshift('材料 N 被点名');
       pass(`老师开讲 ${speech.length} 字 / ${events} 个事件 / ${completed ? '一轮讲完' : '截断于超时'}；命中材料概念：${hits.join('、')}`);
       console.log(`  口播开头：${speech.slice(0, 140).replace(/\s+/g, ' ')}…`);
     }
@@ -224,16 +231,34 @@ async function main(): Promise<void> {
         const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
         await page.goto(`${base}/apps/zhihu`);
         await page.evaluate((value) => localStorage.setItem('meetmind_access_token', value), token);
-        await page.goto(`${base}/apps/zhihu`);
-        await page.waitForTimeout(1500);
-        await page.screenshot({ path: path.join(shotDir, 'zhihu-entry.png') });
-        await page.goto(`${base}/apps/zhihu/lesson/${threadId}`);
+        await page.goto(`${base}/apps/zhihu`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        // 等状态卡出来（dev 首次编译 API 路由要几秒）
+        await page.waitForFunction(() => !document.body.innerText.includes('稍等…') && !document.body.innerText.includes('正在看你的收藏夹'), null, { timeout: 60_000 }).catch(() => undefined);
+        await page.waitForTimeout(800);
+        await page.screenshot({ path: path.join(shotDir, 'zhihu-entry.png'), fullPage: true });
+        await page.goto(`${base}/apps/zhihu/lesson/${threadId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 }); // dev 首次编译舞台页可能 >30s
         await page.waitForTimeout(6000);
         await page.screenshot({ path: path.join(shotDir, 'zhihu-lesson.png') });
         await page.getByRole('button', { name: '材料 · 考一考', exact: true }).click();
         await page.waitForTimeout(800);
         await page.screenshot({ path: path.join(shotDir, 'zhihu-lesson-rail.png') });
-        pass(`截图：${shotDir}/zhihu-entry.png · zhihu-lesson.png · zhihu-lesson-rail.png`);
+        // 课后页：进来自动出题，等题出来（或 90s 超时也截一张）
+        await page.goto(`${base}/apps/zhihu/lesson/${threadId}/review`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        if (!skipLlm) {
+          await page.waitForFunction(() => !document.body.innerText.includes('同学在出题'), null, { timeout: 90_000 }).catch(() => undefined);
+        } else {
+          await page.waitForTimeout(2500);
+        }
+        await page.screenshot({ path: path.join(shotDir, 'zhihu-review.png'), fullPage: true });
+        // 手机视口：第一屏与课后页
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto(`${base}/apps/zhihu`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.waitForTimeout(1500);
+        await page.screenshot({ path: path.join(shotDir, 'zhihu-entry-mobile.png'), fullPage: true });
+        await page.goto(`${base}/apps/zhihu/lesson/${threadId}/review`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.waitForTimeout(skipLlm ? 2500 : 8000);
+        await page.screenshot({ path: path.join(shotDir, 'zhihu-review-mobile.png'), fullPage: true });
+        pass(`截图：${shotDir}/zhihu-entry.png · zhihu-lesson.png · zhihu-lesson-rail.png · zhihu-review.png · *-mobile.png`);
       } finally {
         await browser.close();
       }

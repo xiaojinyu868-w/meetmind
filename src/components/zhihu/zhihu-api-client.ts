@@ -42,6 +42,11 @@ export interface ZhihuStatus {
   expiresAt: string | null;
 }
 
+/** 公开状态（不需登录）：这条线开了没、知乎登录能不能用 */
+export async function fetchZhihuPublicStatus(): Promise<{ enabled: boolean; oauthReady: boolean }> {
+  return readJson(await fetch('/api/auth/zhihu/status', { cache: 'no-store' }));
+}
+
 export async function fetchZhihuStatus(token: string): Promise<ZhihuStatus> {
   return readJson<ZhihuStatus>(await fetch('/api/zhihu/status', { headers: headers(token) }));
 }

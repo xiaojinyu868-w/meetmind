@@ -21,6 +21,8 @@ export const ZHIHU_COPY = {
   notConnected: '还没连接知乎。',
   disabled: '这条线还没开放。',
   connecting: '正在去知乎…',
+  oauthNotReady: '知乎登录还没开放。先用 MeetMind 账号登录，收藏夹这一步暂时用演示账号走。',
+  oauthNotReadyLoggedIn: '知乎登录还没开放，你的账号也不在演示名单里——开放后这里会出现「连接知乎」。',
 
   /** 授权失败（zhihu_error 机器码 → 人话） */
   errors: {
@@ -51,9 +53,6 @@ export const ZHIHU_COPY = {
   progressRead: '同学读最值得讲的几篇',
   progressOpen: '开讲',
   imported: (count: number): string => `已收下 ${count} 条`,
-  importing: '正在收下…',
-  reading: (count: number): string => `正在读 ${count} 篇…`,
-  opening: '同学准备开讲',
   selfMode: '演示账号',
   quotaExceeded: '知乎接口今天的额度用完了，明天再来。',
   upstreamDown: '知乎暂时没有响应，稍后再试。',
@@ -67,6 +66,12 @@ export const ZHIHU_COPY = {
 
   /** 课堂页 */
   leave: '离开课堂',
+  nextStepTitle: '讲完这一段了。',
+  nextStepBody: '用同学读过的这几篇考一考，看哪些真的会了；没稳的，知乎上还有讲得更清楚的。',
+  nextStepQuiz: '考一考',
+  nextStepListen: '继续听',
+  reviewTitle: '讲完了，考一考。',
+  reviewBack: '回到课堂',
   railToggle: '材料 · 考一考',
   railCollapse: '收起',
   tabMaterials: '材料',
@@ -75,6 +80,9 @@ export const ZHIHU_COPY = {
   materialsTitle: (count: number): string => `同学读了这 ${count} 篇`,
   materialsFull: '正文完整',
   materialsSummary: '只有摘要',
+  materialsFullNote: '同学读到了全文',
+  materialsSummaryNote: '只拿到了摘要，讲的时候只当线索，不替它编细节',
+  evidenceLabel: (ref: string, title: string): string => `看这篇材料：${ref}《${title.length > 18 ? `${title.slice(0, 17)}…` : title}》`,
   materialsSkipped: (count: number): string => `另有 ${count} 篇没进这节课`,
   openOriginal: '在知乎看原文',
   quizIntro: '讲完了？用这几篇材料考一考，看哪些真的会了。',

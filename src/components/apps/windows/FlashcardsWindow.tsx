@@ -51,6 +51,8 @@ interface FlashcardsWindowProps {
   /** 当前课堂（到期模型向服务端点名这叠卡的历史时带上；不传也能算，只用本机） */
   sessionId?: string;
   onSeek?: (startMs: number) => void;
+  /** 证据按钮的文案（默认「回到课堂 mm:ss」）；材料不是课堂转录时由宿主给出人话 */
+  evidenceLabel?: (startMs: number) => string;
   onLearningActivity?: (line: string) => void;
   /** 全部打完分时把每张卡的 got / missed + 证据交给记忆（结构化） */
   onAssessment?: (draft: AssessmentDraft) => void;
@@ -79,7 +81,7 @@ function ProgressRing({ got, missed, total }: { got: number; missed: number; tot
   );
 }
 
-export function FlashcardsWindow({ result, transcript, sessionId, onSeek, onLearningActivity, onAssessment, nextStep }: FlashcardsWindowProps) {
+export function FlashcardsWindow({ result, transcript, sessionId, onSeek, evidenceLabel, onLearningActivity, onAssessment, nextStep }: FlashcardsWindowProps) {
   const cards = useMemo(() => normalizeFlashcards(result), [result]);
   const fallbackMessage = useMemo(() => getFlashcardsFallbackMessage(result), [result]);
   const [reviewCardIds, setReviewCardIds] = useState<string[] | null>(null);
@@ -324,6 +326,7 @@ export function FlashcardsWindow({ result, transcript, sessionId, onSeek, onLear
           onFlip={handleFlip}
           onShowHint={() => setShowHint(true)}
           onSeek={onSeek}
+          evidenceLabel={evidenceLabel}
         />
       </div>
 

@@ -26,9 +26,9 @@
 
 | 路径 | 组件 | 说明 |
 |---|---|---|
-| `/apps/zhihu` | `ZhihuEntry` | 三种状态各一句人话：未登录（用知乎登录 / 用 MeetMind 账号登录）→ 已登录未连接 / 已过期 / 未开放 → 已连接（收藏夹列表，每个一颗「开课」= 导入 → 抽正文 → 跳课堂页，三行进度）。授权回来的 `?zhihu=` / `?zhihu_error=` 提示一次就从地址栏清掉 |
-| `/apps/zhihu/lesson/[threadId]` | `ZhihuLesson` | 舞台原样复用 teach-live 的 `LiveStage` + `useLiveLesson`；进来先 `openLesson`，事件日志为空就替学生发「开始上课」；右侧可收起的栏三页：材料（同学读了哪几篇 / 正文状态 / 原文）、考一考（测验 / 闪卡：`zhihu-lesson-model` 把材料包变伪转录喂既有 `/api/apps/execute`，`QuizWindow` / `FlashcardsWindow` 原样复用，「回到原话」= 打开知乎原文）、继续看（交卷后 assessment 进 `/api/memory/events`，没稳的概念 → `/api/zhihu/continue`）|
+| `/apps/zhihu` | `ZhihuEntry` | 桌宠 + 三步预期。未登录：知乎登录可用（`GET /api/auth/zhihu/status` 公开接口的 `oauthReady`）才给「用知乎登录」，否则只给「用 MeetMind 账号登录」（带 `?next=` 回跳）并说明原因——不给一颗点了会坏的按钮。已登录：连接 / 重新连接；已连接：收藏夹带状态（已收下几条 / 读了几篇全文 / 开过几节课 / 回到上次那节课）、「开课」三步进度真实可见（收下 → 同学读 → 开讲）；下面是「你开过的课」（`GET /api/zhihu/lessons`）。`isCheckingAuth` 期间不当未登录渲染，避免登录用户闪一下「去登录」 |
+| `/apps/zhihu/lesson/[threadId]` | `ZhihuLesson` | 舞台原样复用 teach-live 的 `LiveStage` + `useLiveLesson`；进来先 `openLesson`，事件日志为空就替学生发「开始上课」。右侧可收起的**材料栏**（同学读了哪几篇 / 正文状态说人话 / 原文；「考一考 →」去课后页）。**老师讲完一轮那一刻**（`generating` 由真落假）右下长出小卡「讲完这一段了。考一考？／继续听」——机器 act，不让学生去找按钮 |
+| `/apps/zhihu/lesson/[threadId]/review` | `ZhihuReview` | 课后三栏：左材料有根（每篇一段预览 + 原文）、中练习（`QuizWindow` / `FlashcardsWindow` 原组件，新增可选 `evidenceLabel` prop 把「回到课堂 mm:ss」换成「看这篇材料：A1《…》」，点开知乎原文）、右继续看（交卷 → assessment 进 `/api/memory/events` → 没稳的概念 → `/api/zhihu/continue`）。进来就自动出题（零提问）；手机按 练习 → 继续看 → 材料 竖排 |
 
-文案 `src/lib/ui/copy-zhihu.ts`；浏览器端 fetch 封装 `components/zhihu/zhihu-api-client.ts`（错误统一 `ZhihuClientError{code,message,status}`）。
-验证：`make smoke-zhihu-lesson`（不需知乎凭证：合成账户 → 3 条正文完整的收藏 → 开课 → 老师口播命中材料概念 → 伪转录出题 → continue → 清理；`SMOKE_BROWSER=chromium` 截三张图）。
-
+共享：`useZhihuLesson`（材料包 / 伪转录 / 出题 / 交卷 / 继续看的状态，课堂页与课后页共用）、`ZhihuLessonPanels`（材料清单 / 继续看）、`zhihu-lesson-model`（纯函数）、`zhihu-api-client`（fetch 封装，错误统一 `ZhihuClientError`）。
+文案 `src/lib/ui/copy-zhihu.ts`。验证：`make smoke-zhihu-lesson`（`SMOKE_BROWSER=chromium` 截第一屏 / 课堂 / 材料栏 / 课后 / 手机两张；`SMOKE_ZHIHU_SELF=1` 用白名单固定 id 让截图里出现真实收藏夹与「你开过的课」）。
