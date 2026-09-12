@@ -37,7 +37,12 @@ Access Secret 在 developer.zhihu.com/profile 自助申请，一个账号最多 
 | 收藏夹内容 | `/api/v1/user/favlist_contents` | `FavlistUrlToken` 必填；分页 | 创作字段 + `FavTime`（收藏时间）+ `Favlists[{UrlToken,Title,Url}]` + `Author?{Name,UrlToken,Url,Gender,Headline}`（下游没给就没有） |
 | 近期收藏 | `/api/v1/user/collections` | `Limit` ≤50；**无 Offset 无 Paging**，只是最近一批 | 同收藏夹内容 |
 
-### OAuth（`openapi.zhihu.com`；`app_id` / `app_key` 由黑客松平台建项目发放，或邮件 product-platform@zhihu.com 申请）
+### OAuth（`openapi.zhihu.com`；`app_id` / `app_key` 要申请，见下）
+
+官方定位（开放平台 OAuth 文档 2026-09 版）：**OAuth 只为"知乎作第三方登录 + 读授权用户的信息"**；只调通用接口、只看自己的数据，用 Access Secret 即可——这正是「本人模式」成立的官方依据。
+申请：邮件 **`openplatform@zhihu.com`**（zip 内旧文档写的 product-platform@ 已过时），主题固定「<公司/组织/产品名称>申请接入知乎 OAuth 服务」，
+必填：应用名称、应用简介、应用图标（≥256×256，附件）、授权回调地址 `redirect_uri`、申请人姓名、手机号、申请人知乎个人中心地址、
+申请获取的用户权限（多选：A 邮箱 / B 手机 / C 公开内容 = 创作 + 关注 + 公开收藏夹；**授权页会把所选权限展示给用户二次确认，本线只需 C**）。黑客松平台建项目时也可能直接发放。
 
 1. 授权页 `GET /authorize?redirect_uri=&app_id=&response_type=code[&state=]`
 2. 回调 `{redirect_uri}?authorization_code=…`（实测参数名是 `authorization_code`，兼容 `code`；**实测不回传 `state`**）
