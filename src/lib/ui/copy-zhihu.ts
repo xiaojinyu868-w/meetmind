@@ -56,6 +56,7 @@ export const ZHIHU_COPY = {
   /** 课堂页 */
   leave: '离开课堂',
   railToggle: '材料 · 考一考',
+  railCollapse: '收起',
   tabMaterials: '材料',
   tabQuiz: '考一考',
   tabContinue: '继续看',

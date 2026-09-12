@@ -184,18 +184,20 @@ export function ZhihuLesson({ threadId }: { threadId: string }) {
         <main className="fixed inset-0 grid place-items-center bg-paper text-[14px] text-ink-secondary">{packError ?? C.loading}</main>
       )}
 
-      {/* 右侧栏开关 */}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="fixed right-4 top-4 z-[70] rounded-full border border-divider bg-card/90 px-4 py-2 text-[13px] text-ink shadow-sm backdrop-blur hover:bg-paper-warm"
-      >
-        {open ? '收起' : C.railToggle}
-      </button>
+      {/* 右侧栏开关：放在舞台顶栏之下、板面右上的空白处，不压住舞台自己的手绘 / 语速 / 回看按钮 */}
+      {!open && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="fixed right-6 top-20 z-[70] rounded-full border border-divider bg-card/90 px-4 py-2 text-[13px] text-ink shadow-sm backdrop-blur hover:bg-paper-warm"
+        >
+          {C.railToggle}
+        </button>
+      )}
 
       {open && (
         <aside className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-[440px] flex-col border-l border-divider bg-paper text-ink shadow-xl">
-          <header className="flex items-center gap-2 border-b border-divider px-4 pt-14 pb-3">
+          <header className="flex items-center gap-2 border-b border-divider px-4 py-3">
             {(['materials', 'quiz', 'continue'] as Tab[]).map((key) => (
               <button
                 key={key}
@@ -206,6 +208,10 @@ export function ZhihuLesson({ threadId }: { threadId: string }) {
                 {key === 'materials' ? C.tabMaterials : key === 'quiz' ? C.tabQuiz : C.tabContinue}
               </button>
             ))}
+            <span className="flex-1" />
+            <button type="button" onClick={() => setOpen(false)} className="rounded-full px-3 py-1 text-[13px] text-ink-secondary hover:bg-paper-warm">
+              {C.railCollapse}
+            </button>
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
