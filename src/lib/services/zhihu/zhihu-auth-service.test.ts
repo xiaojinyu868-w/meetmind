@@ -160,14 +160,13 @@ describe('completeZhihuOAuth', () => {
     });
   });
 
-  it('state 必须回传且对得上（黑客松 OAuth 承诺透传）；缺 authorization_code 报 code_missing', async () => {
+  it('state 回传了就必须对得上，没回传靠 cookie 放行；缺 authorization_code 报 code_missing', async () => {
     const client = fakeClient(PROFILE);
     expect(
       await completeZhihuOAuth({ cookieValue: cookieFor({}), params: new URLSearchParams('authorization_code=abc&state=other') }, depsWith({ client })),
     ).toMatchObject({ kind: 'error', code: 'state_mismatch' });
-    expect(
-      await completeZhihuOAuth({ cookieValue: cookieFor({}), params: new URLSearchParams('authorization_code=abc') }, depsWith({ client })),
-    ).toMatchObject({ kind: 'error', code: 'state_not_returned' });
+    // 没回传 state：cookie 对账已过就放行（官方 Hello World 也是这么处理的），只记日志
+    expect((await completeZhihuOAuth({ cookieValue: cookieFor({}), params: new URLSearchParams('authorization_code=abc') }, depsWith({ client }))).kind).not.toBe('error');
     expect(await completeZhihuOAuth({ cookieValue: cookieFor({}), params: new URLSearchParams('state=nonce-1') }, depsWith({ client }))).toMatchObject({
       kind: 'error',
       code: 'code_missing',

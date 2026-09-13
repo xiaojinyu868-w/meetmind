@@ -250,10 +250,11 @@ export async function completeZhihuOAuth(
   }
   const state = verified.state;
 
-  // 黑客松 OAuth 服务承诺 state 原样透传（2026-09 资料）：没回传就当被篡改，不放行；对不上同样拒绝。cookie 对账仍在（双保险）
+  // state：0.7.2 参考文档说黑客松 OAuth 服务会原样透传，官方 Hello World 却仍按"可能不回传"处理。CSRF 绑定靠的是签过名、
+  // 绑定到这个浏览器的 cookie（上面已经校验），所以这里：回传了必须等于 cookie 里的 nonce；没回传只记日志不拦——第一次真实授权后看日志定稿
   const returnedState = input.params.get('state');
-  if (!returnedState) return { kind: 'error', code: 'state_not_returned', next };
-  if (returnedState !== state.n) return { kind: 'error', code: 'state_mismatch', next };
+  if (returnedState && returnedState !== state.n) return { kind: 'error', code: 'state_mismatch', next };
+  if (!returnedState) log.warn('zhihu-auth: callback without state (cookie binding only)');
 
   const code = d.client.extractAuthorizationCode(input.params);
   if (!code) return { kind: 'error', code: 'code_missing', next };

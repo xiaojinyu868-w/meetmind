@@ -436,6 +436,17 @@ describe('zhihu-open-client · OAuth', () => {
     const wrapped = setup(() => jsonResponse({ code: 20000, data: { fullname: '小红', url: 'https://www.zhihu.com/people/xh' } }));
     await expect(wrapped.client.fetchOAuthProfile('tok-1')).resolves.toMatchObject({ name: '小红', hashId: null, uid: null, url: 'https://www.zhihu.com/people/xh' });
 
+    // 文档形态拿不到身份 → 再按 Hello World 的双凭证形态补一次
+    let calls = 0;
+    const legacy = setup(() => {
+      calls += 1;
+      return calls === 1 ? jsonResponse({ code: 401, data: 'unauthorized' }) : jsonResponse({ code: 20000, data: { fullname: '老形态', hash_id: 'legacy-1' } });
+    });
+    await expect(legacy.client.fetchOAuthProfile('tok-1')).resolves.toMatchObject({ name: '老形态', hashId: 'legacy-1' });
+    const legacyHeaders = headersOf(legacy.calls[1].init);
+    expect(legacyHeaders.Authorization).toBe('Bearer secret-abc');
+    expect(legacyHeaders['X-OAuth-Token']).toBe('tok-1');
+
     const broken = setup(() => jsonResponse('<html/>', 500, 'text/html'));
     await expect(broken.client.fetchOAuthProfile('tok-1')).resolves.toBeNull();
 

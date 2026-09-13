@@ -666,18 +666,29 @@ export function createZhihuOpenClient(options: ZhihuOpenClientOptions = {}) {
   }
 
   /** /user 没有正式 schema：尽力取昵称头像，拿不到返回 null，不抛错也不伪造字段 */
+  /**
+   * 两份官方资料对 /user 的鉴权说法不一致：0.7.2 参考文档说只带 `Authorization: Bearer <OAuth token>`；
+   * 黑客松 Hello World 示例却带 `Bearer <Access Secret>` + `X-OAuth-Token`。先按文档形态，拿不到身份再按示例形态补一次。
+   */
   async function fetchOAuthProfile(oauthToken: string): Promise<ZhihuOAuthProfile | null> {
+    const documented = await fetchOAuthProfileWith(oauthToken, 'bearer-oauth');
+    if (documented) return documented;
+    if (!config.accessSecret) return null;
+    const legacy = await fetchOAuthProfileWith(oauthToken, 'secret-plus-oauth');
+    if (legacy) log.info('zhihu-open: /user answered only to legacy dual-credential form');
+    return legacy;
+  }
+
+  async function fetchOAuthProfileWith(oauthToken: string, mode: 'bearer-oauth' | 'secret-plus-oauth'): Promise<ZhihuOAuthProfile | null> {
     const endpoint = '/user';
     try {
-      // 只带 OAuth access_token；不带 Access Secret、X-OAuth-Token、时间戳（官方 2026-09 资料）
-      const response = await doFetch(
-        new URL(endpoint, config.oauthBaseUrl).toString(),
-        { method: 'GET', headers: { Authorization: `Bearer ${oauthToken}`, Accept: 'application/json' } },
-        endpoint,
-        config.timeoutMs,
-      );
+      const headers: Record<string, string> =
+        mode === 'bearer-oauth'
+          ? { Authorization: `Bearer ${oauthToken}`, Accept: 'application/json' }
+          : { Authorization: `Bearer ${config.accessSecret}`, 'X-OAuth-Token': oauthToken, 'X-Request-Timestamp': String(Math.floor(now() / 1000)), Accept: 'application/json' };
+      const response = await doFetch(new URL(endpoint, config.oauthBaseUrl).toString(), { method: 'GET', headers }, endpoint, config.timeoutMs);
       if (!response.ok) {
-        log.warn('zhihu-open: profile fetch http error', { endpoint, status: response.status });
+        log.warn('zhihu-open: profile fetch http error', { endpoint, mode, status: response.status });
         return null;
       }
       const text = await response.text();
@@ -702,12 +713,12 @@ export function createZhihuOpenClient(options: ZhihuOpenClientOptions = {}) {
         url: str(source.url ?? source.Url) || null,
       };
       if (!profile.hashId && !profile.uid && !profile.url) {
-        log.warn('zhihu-open: profile without identity', { endpoint, code: payload.code ?? payload.Code });
+        log.warn('zhihu-open: profile without identity', { endpoint, mode, code: payload.code ?? payload.Code });
         return null;
       }
       return profile;
     } catch (error) {
-      log.warn('zhihu-open: profile fetch failed', { endpoint, kind: (error as ZhihuApiError)?.kind });
+      log.warn('zhihu-open: profile fetch failed', { endpoint, mode, kind: (error as ZhihuApiError)?.kind });
       return null;
     }
   }
