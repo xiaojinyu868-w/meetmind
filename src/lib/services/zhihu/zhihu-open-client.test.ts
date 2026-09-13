@@ -413,19 +413,46 @@ describe('zhihu-open-client · OAuth', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it('/user 资料尽力而为：带双凭证请求；失败返回 null 不抛', async () => {
-    const ok = setup(() => jsonResponse({ code: 20000, data: { name: '小明', avatar_url: 'https://a/b.jpg', headline: '学生', url: 'https://www.zhihu.com/people/xm' } }));
+  it('/user（黑客松正式形状）：只带 OAuth token；uid 超过安全整数也无损；失败 / 用户不存在返回 null 不抛', async () => {
+    const raw = '{"uid":969570047710216201,"hash_id":"0e4f7a","fullname":"小明","gender":"male","headline":"学生","description":"介绍","avatar_path":"https://a/b.jpg","url":"https://openapi.zhihu.com/users/969570047710216201","email":"","phone_no":"","phone":""}';
+    const ok = setup(() => new Response(raw, { status: 200, headers: { 'content-type': 'application/json' } }));
     const profile = await ok.client.fetchOAuthProfile('tok-1');
     const headers = headersOf(ok.calls[0].init);
     expect(ok.calls[0].url.toString()).toBe('https://openapi.zhihu.com/user');
-    expect(headers.Authorization).toBe('Bearer secret-abc');
-    expect(headers['X-OAuth-Token']).toBe('tok-1');
-    expect(profile).toEqual({ name: '小明', avatarUrl: 'https://a/b.jpg', headline: '学生', url: 'https://www.zhihu.com/people/xm' });
+    expect(headers.Authorization).toBe('Bearer tok-1'); // 不是 Access Secret
+    expect(headers['X-OAuth-Token']).toBeUndefined();
+    expect(headers['X-Request-Timestamp']).toBeUndefined();
+    expect(profile).toEqual({
+      hashId: '0e4f7a',
+      uid: '969570047710216201', // Number 会把它变成 ...200
+      name: '小明',
+      avatarUrl: 'https://a/b.jpg',
+      headline: '学生',
+      description: '介绍',
+      url: 'https://openapi.zhihu.com/users/969570047710216201',
+    });
+
+    // 历史包裹形态也认
+    const wrapped = setup(() => jsonResponse({ code: 20000, data: { fullname: '小红', url: 'https://www.zhihu.com/people/xh' } }));
+    await expect(wrapped.client.fetchOAuthProfile('tok-1')).resolves.toMatchObject({ name: '小红', hashId: null, uid: null, url: 'https://www.zhihu.com/people/xh' });
 
     const broken = setup(() => jsonResponse('<html/>', 500, 'text/html'));
     await expect(broken.client.fetchOAuthProfile('tok-1')).resolves.toBeNull();
 
+    const missing = setup(() => jsonResponse({ code: 404, data: "User don't exist" }));
+    await expect(missing.client.fetchOAuthProfile('tok-1')).resolves.toBeNull();
+
     const empty = setup(() => jsonResponse({ code: 20000, data: {} }));
     await expect(empty.client.fetchOAuthProfile('tok-1')).resolves.toBeNull();
+  });
+
+  it('quota：一次查多个能力组，字段归一；不耗业务额度', async () => {
+    const q = setup(() => jsonResponse({ Code: 0, Message: 'success', Data: [{ APIID: 'zhihu_search', TotalQuota: 10, TotalUsed: 3, RemainingQuota: 7 }, { APIID: 'hot_list', TotalQuota: 2, TotalUsed: 2, RemainingQuota: 0 }] }));
+    const rows = await q.client.quota(['zhihu_search', 'hot_list']);
+    expect(q.calls[0].url.searchParams.get('APIIDs')).toBe('zhihu_search,hot_list');
+    expect(rows).toEqual([
+      { apiId: 'zhihu_search', total: 10, used: 3, remaining: 7 },
+      { apiId: 'hot_list', total: 2, used: 2, remaining: 0 },
+    ]);
   });
 });

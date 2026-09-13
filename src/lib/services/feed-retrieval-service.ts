@@ -141,7 +141,8 @@ export async function retrieveExternalCandidates(
 
   // 知乎站内搜索作为并列 provider（2026-09-12）：有作者、有权威分级、有赞同、有精选评论的中文一手经验，
   // 补"不同视角 / 亲历者"那一格；两种策略下都追加，未配置 ZHIHU_ACCESS_SECRET 时为空数组零开销。
-  const zhihuGroups = isZhihuSearchEnabled()
+  // 知乎搜索额度极小（低额度账号 10 次 / 天）：情报补货默认不占，ZHIHU_FEED_SEARCH=1 才开，把额度留给课后「继续看」
+  const zhihuGroups = isZhihuSearchEnabled() && process.env.ZHIHU_FEED_SEARCH === '1'
     ? await Promise.all(activeDiscoveries.map((discovery) => searchZhihu(discovery)))
     : [];
 

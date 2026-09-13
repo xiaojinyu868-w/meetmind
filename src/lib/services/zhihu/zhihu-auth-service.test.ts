@@ -107,10 +107,14 @@ describe('纯函数', () => {
     expect(() => signOAuthState({ v: 1, n: 'x', r: '/', e: 1 }, '')).toThrow();
   });
 
-  it('稳定身份 = 主页链接的 url_token；用户名只留安全字符', () => {
-    expect(deriveZhihuProviderId({ name: '小明', avatarUrl: null, headline: null, url: 'https://www.zhihu.com/people/xiao-ming-42' })).toBe('xiao-ming-42');
-    expect(deriveZhihuProviderId({ name: '小明', avatarUrl: null, headline: null, url: 'https://zhihu.com/people/a%20b?x' })).toBe('a b');
-    expect(deriveZhihuProviderId({ name: '小明', avatarUrl: null, headline: null, url: null })).toBeNull();
+  it('稳定身份 = hash_id → uid → 主页链接（users/<uid> 或 people/<token>）；用户名只留安全字符', () => {
+    const base = { name: '小明', avatarUrl: null, headline: null, description: null, hashId: null, uid: null, url: null };
+    expect(deriveZhihuProviderId({ ...base, hashId: '0e4f7a', uid: '969570047710216200', url: 'https://openapi.zhihu.com/users/969570047710216200' })).toBe('0e4f7a');
+    expect(deriveZhihuProviderId({ ...base, uid: '969570047710216200', url: 'https://openapi.zhihu.com/users/969570047710216200' })).toBe('uid:969570047710216200');
+    expect(deriveZhihuProviderId({ ...base, url: 'https://openapi.zhihu.com/users/969570047710216200' })).toBe('uid:969570047710216200');
+    expect(deriveZhihuProviderId({ ...base, url: 'https://www.zhihu.com/people/xiao-ming-42' })).toBe('xiao-ming-42');
+    expect(deriveZhihuProviderId({ ...base, url: 'https://zhihu.com/people/a%20b?x' })).toBe('a b');
+    expect(deriveZhihuProviderId(base)).toBeNull();
     expect(deriveZhihuProviderId(null)).toBeNull();
     expect(usernameForZhihu('xiao-ming_42')).toBe('zhihu_xiao-ming_42');
     expect(usernameForZhihu('a b/c')).toBe('zhihu_abc');
@@ -142,11 +146,11 @@ describe('beginZhihuOAuth', () => {
 });
 
 describe('completeZhihuOAuth', () => {
-  const PROFILE = { name: '小明', avatar_url: 'https://a/b.jpg', headline: '学生', url: 'https://www.zhihu.com/people/xiao-ming-42' };
+  const PROFILE = { uid: 969570047710216200, hash_id: 'xiao-ming-42', fullname: '小明', gender: 'male', headline: '学生', description: '', avatar_path: 'https://a/b.jpg', url: 'https://openapi.zhihu.com/users/969570047710216200', email: '', phone_no: '', phone: '' };
 
   it('cookie 缺失 / 过期 / 未开启 → 对应错误码，且不出网', async () => {
     const client = fakeClient(PROFILE);
-    const params = new URLSearchParams('authorization_code=abc');
+    const params = new URLSearchParams('authorization_code=abc&state=nonce-1');
     expect(await completeZhihuOAuth({ cookieValue: null, params }, depsWith({ client }))).toMatchObject({ kind: 'error', code: 'state_missing' });
     expect(await completeZhihuOAuth({ cookieValue: cookieFor({ e: NOW - 1 }), params }, depsWith({ client }))).toMatchObject({ kind: 'error', code: 'state_expired' });
     expect(await completeZhihuOAuth({ cookieValue: 'bad', params }, depsWith({ client }))).toMatchObject({ kind: 'error', code: 'state_invalid' });
@@ -156,11 +160,14 @@ describe('completeZhihuOAuth', () => {
     });
   });
 
-  it('知乎回传了 state 就必须对得上；缺 authorization_code 报 code_missing', async () => {
+  it('state 必须回传且对得上（黑客松 OAuth 承诺透传）；缺 authorization_code 报 code_missing', async () => {
     const client = fakeClient(PROFILE);
     expect(
       await completeZhihuOAuth({ cookieValue: cookieFor({}), params: new URLSearchParams('authorization_code=abc&state=other') }, depsWith({ client })),
     ).toMatchObject({ kind: 'error', code: 'state_mismatch' });
+    expect(
+      await completeZhihuOAuth({ cookieValue: cookieFor({}), params: new URLSearchParams('authorization_code=abc') }, depsWith({ client })),
+    ).toMatchObject({ kind: 'error', code: 'state_not_returned' });
     expect(await completeZhihuOAuth({ cookieValue: cookieFor({}), params: new URLSearchParams('state=nonce-1') }, depsWith({ client }))).toMatchObject({
       kind: 'error',
       code: 'code_missing',
@@ -169,14 +176,14 @@ describe('completeZhihuOAuth', () => {
 
   it('换 token 失败 → exchange_failed，带回跳路径', async () => {
     const client = fakeClient(PROFILE, { exchangeFails: true });
-    const outcome = await completeZhihuOAuth({ cookieValue: cookieFor({ r: '/apps/zhihu?from=x' }), params: new URLSearchParams('authorization_code=abc') }, depsWith({ client }));
+    const outcome = await completeZhihuOAuth({ cookieValue: cookieFor({ r: '/apps/zhihu?from=x' }), params: new URLSearchParams('authorization_code=abc&state=nonce-1') }, depsWith({ client }));
     expect(outcome).toEqual({ kind: 'error', code: 'exchange_failed', next: '/apps/zhihu?from=x' });
   });
 
   it('绑定：已登录用户挂上知乎身份，token 与过期时间进 AuthProvider', async () => {
     const client = fakeClient(PROFILE);
     const deps = depsWith({ client });
-    const outcome = await completeZhihuOAuth({ cookieValue: cookieFor({ u: 'user-1' }), params: new URLSearchParams('authorization_code=abc') }, deps);
+    const outcome = await completeZhihuOAuth({ cookieValue: cookieFor({ u: 'user-1' }), params: new URLSearchParams('authorization_code=abc&state=nonce-1') }, deps);
     expect(outcome).toMatchObject({ kind: 'bound', userId: 'user-1', next: '/apps/zhihu' });
     expect(deps.calls.link).toEqual([{ userId: 'user-1', providerId: 'xiao-ming-42', token: 'oauth-tok', expiresAt: NOW + 3600 * 1000 }]);
     expect(deps.calls.session).toEqual([]);
@@ -185,7 +192,7 @@ describe('completeZhihuOAuth', () => {
   it('绑定时知乎没给稳定身份 → 用 bind:<userId> 占位，不阻断', async () => {
     const client = fakeClient(null);
     const deps = depsWith({ client });
-    const outcome = await completeZhihuOAuth({ cookieValue: cookieFor({ u: 'user-1' }), params: new URLSearchParams('code=abc') }, deps);
+    const outcome = await completeZhihuOAuth({ cookieValue: cookieFor({ u: 'user-1' }), params: new URLSearchParams('code=abc&state=nonce-1') }, deps);
     expect(outcome.kind).toBe('bound');
     expect(deps.calls.link[0]).toMatchObject({ providerId: 'bind:user-1' });
   });
@@ -193,7 +200,7 @@ describe('completeZhihuOAuth', () => {
   it('绑定到被禁用的用户 → user_unavailable', async () => {
     const client = fakeClient(PROFILE);
     const outcome = await completeZhihuOAuth(
-      { cookieValue: cookieFor({ u: 'user-x' }), params: new URLSearchParams('authorization_code=abc') },
+      { cookieValue: cookieFor({ u: 'user-x' }), params: new URLSearchParams('authorization_code=abc&state=nonce-1') },
       depsWith({ client, userIsActive: async () => false }),
     );
     expect(outcome).toMatchObject({ kind: 'error', code: 'user_unavailable' });
@@ -202,13 +209,13 @@ describe('completeZhihuOAuth', () => {
   it('登录：首次授权新建用户并发会话；再次授权找到已绑定用户，不再新建', async () => {
     const client = fakeClient(PROFILE);
     const first = depsWith({ client });
-    const outcome1 = await completeZhihuOAuth({ cookieValue: cookieFor({}), params: new URLSearchParams('authorization_code=abc') }, first);
+    const outcome1 = await completeZhihuOAuth({ cookieValue: cookieFor({}), params: new URLSearchParams('authorization_code=abc&state=nonce-1') }, first);
     expect(outcome1).toMatchObject({ kind: 'logged_in', created: true, next: '/apps/zhihu', session: { accessToken: 'jwt-user-new', refreshToken: 'rt-user-new', nickname: '小明' } });
     expect(first.calls.create).toEqual([{ name: '小明', providerId: 'xiao-ming-42' }]);
     expect(first.calls.link[0]).toMatchObject({ userId: 'user-new', providerId: 'xiao-ming-42' });
 
     const second = depsWith({ client, findUserByProvider: async () => ({ id: 'user-old', status: 'active' }) });
-    const outcome2 = await completeZhihuOAuth({ cookieValue: cookieFor({}), params: new URLSearchParams('authorization_code=abc') }, second);
+    const outcome2 = await completeZhihuOAuth({ cookieValue: cookieFor({}), params: new URLSearchParams('authorization_code=abc&state=nonce-1') }, second);
     expect(outcome2).toMatchObject({ kind: 'logged_in', created: false, session: { accessToken: 'jwt-user-old' } });
     expect(second.calls.create).toEqual([]);
     expect(second.calls.link[0]).toMatchObject({ userId: 'user-old' });
@@ -217,7 +224,7 @@ describe('completeZhihuOAuth', () => {
   it('登录时拿不到稳定身份 → identity_unavailable，不新建用户', async () => {
     const client = fakeClient({ name: '无主页' });
     const deps = depsWith({ client });
-    const outcome = await completeZhihuOAuth({ cookieValue: cookieFor({}), params: new URLSearchParams('authorization_code=abc') }, deps);
+    const outcome = await completeZhihuOAuth({ cookieValue: cookieFor({}), params: new URLSearchParams('authorization_code=abc&state=nonce-1') }, deps);
     expect(outcome).toMatchObject({ kind: 'error', code: 'identity_unavailable' });
     expect(deps.calls.create).toEqual([]);
     expect(deps.calls.link).toEqual([]);
@@ -226,7 +233,7 @@ describe('completeZhihuOAuth', () => {
   it('会话签发失败 → user_unavailable', async () => {
     const client = fakeClient(PROFILE);
     const outcome = await completeZhihuOAuth(
-      { cookieValue: cookieFor({}), params: new URLSearchParams('authorization_code=abc') },
+      { cookieValue: cookieFor({}), params: new URLSearchParams('authorization_code=abc&state=nonce-1') },
       depsWith({ client, createSession: async () => ({ success: false, error: '禁用' }) }),
     );
     expect(outcome).toMatchObject({ kind: 'error', code: 'user_unavailable' });

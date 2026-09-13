@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { continueReading, reasonFor, scoreZhihuItem, searchZhihuCandidates, stripEm } from './zhihu-discovery-service';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { continueReading, reasonFor, resetDiscoveryCaches, scoreZhihuItem, searchBudget, searchZhihuCandidates, stripEm } from './zhihu-discovery-service';
 import { createZhihuOpenClient } from './zhihu-open-client';
 import type { ZhihuConfig } from '@/lib/config/zhihu.config';
 
@@ -34,18 +34,31 @@ function item(over: Record<string, unknown>) {
   };
 }
 
-function clientWith(responder: (query: string) => Record<string, unknown>[]) {
+function clientWith(responder: (query: string) => Record<string, unknown>[], quota: { zhihu: number; global: number } | 'fail' = { zhihu: 10, global: 10 }) {
   const queries: string[] = [];
+  const paths: string[] = [];
   const client = createZhihuOpenClient({
     config,
     fetchImpl: async (url) => {
-      const q = new URL(url).searchParams.get('Query') ?? '';
+      const u = new URL(url);
+      paths.push(u.pathname.split('/').pop() ?? '');
+      if (u.pathname.endsWith('/quota')) {
+        if (quota === 'fail') return new Response('oops', { status: 500 });
+        const Data = [
+          { APIID: 'zhihu_search', TotalQuota: 10, TotalUsed: 10 - quota.zhihu, RemainingQuota: quota.zhihu },
+          { APIID: 'global_search', TotalQuota: 10, TotalUsed: 10 - quota.global, RemainingQuota: quota.global },
+        ];
+        return new Response(JSON.stringify({ Code: 0, Data }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      const q = u.searchParams.get('Query') ?? '';
       queries.push(q);
       return new Response(JSON.stringify({ Code: 0, Data: { HasMore: false, Items: responder(q) } }), { status: 200, headers: { 'content-type': 'application/json' } });
     },
   });
-  return { client, queries };
+  return { client, queries, paths };
 }
+
+beforeEach(() => resetDiscoveryCaches());
 
 describe('评分与理由', () => {
   it('权威与赞同决定分数，上限 12；理由是人话', () => {
@@ -90,6 +103,9 @@ describe('searchZhihuCandidates', () => {
       config,
       fetchImpl: async (url) => {
         const path = new URL(url).pathname;
+        if (path.endsWith('/quota')) {
+          return new Response(JSON.stringify({ Code: 0, Data: [{ APIID: 'zhihu_search', TotalQuota: 10, TotalUsed: 0, RemainingQuota: 10 }, { APIID: 'global_search', TotalQuota: 10, TotalUsed: 0, RemainingQuota: 10 }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+        }
         endpoints.push(path);
         if (path.endsWith('/zhihu_search')) return new Response(JSON.stringify({ Code: 30001, Message: 'rate limit exceeded' }), { status: 200 });
         return new Response(
@@ -111,6 +127,7 @@ describe('searchZhihuCandidates', () => {
     expect(endpoints.map((e) => e.split('/').pop())).toEqual(['zhihu_search', 'global_search']);
     expect(candidates.map((c) => c.title)).toEqual(['知乎上的正则化']);
 
+    resetDiscoveryCaches();
     const bothFail = createZhihuOpenClient({ config, fetchImpl: async () => new Response(JSON.stringify({ Code: 30001, Message: 'rate limit exceeded' }), { status: 200 }) });
     expect(await searchZhihuCandidates('正则化', { client: bothFail, config })).toEqual([]);
   });
@@ -135,3 +152,43 @@ describe('continueReading', () => {
     expect(groups[1].candidates).toHaveLength(2);
   });
 });
+
+describe('额度门与缓存', () => {
+  it('同一 query 六小时内只出网一次；额度快照 60 s 复用', async () => {
+    const { client, queries, paths } = clientWith(() => [{ Title: 'x', Url: 'https://www.zhihu.com/question/1/answer/1', Summary: 's', ContentType: 'Answer', VoteUpCount: 1 }]);
+    await searchZhihuCandidates('过拟合', { client, config });
+    await searchZhihuCandidates('过拟合', { client, config });
+    await searchZhihuCandidates('过拟合', { client, config, excludeUrls: ['https://www.zhihu.com/question/1/answer/1'] });
+    expect(queries).toEqual(['过拟合']); // 后两次走缓存（排除仍生效）
+    expect(paths.filter((p) => p === 'quota')).toHaveLength(1);
+    expect(await searchBudget(client)).toEqual({ zhihu: 10, global: 10 });
+  });
+
+  it('站内额度为 0 直接走全网（只留知乎链接）；两边都为 0 不出网返回空；额度查询失败按不限处理', async () => {
+    const only = clientWith(() => [
+      { Title: '知乎 - 知乎', Url: 'https://www.zhihu.com/question/2/answer/2', Summary: 's', ContentType: 'Answer', VoteUpCount: 1 },
+      { Title: '站外', Url: 'https://example.com/x', Summary: 's', ContentType: 'Article', VoteUpCount: 9 },
+    ], { zhihu: 0, global: 5 });
+    const out = await searchZhihuCandidates('正则化', { client: only.client, config });
+    expect(out.map((c) => c.title)).toEqual(['知乎']);
+    expect(only.paths).toEqual(['quota', 'global_search']);
+
+    resetDiscoveryCaches();
+    const none = clientWith(() => [], { zhihu: 0, global: 0 });
+    expect(await searchZhihuCandidates('正则化', { client: none.client, config })).toEqual([]);
+    expect(none.paths).toEqual(['quota']);
+
+    resetDiscoveryCaches();
+    const failing = clientWith(() => [{ Title: 'a', Url: 'https://www.zhihu.com/question/3/answer/3', Summary: 's', ContentType: 'Answer', VoteUpCount: 1 }], 'fail');
+    expect((await searchZhihuCandidates('正则化', { client: failing.client, config })).length).toBe(1);
+    expect(failing.paths).toEqual(['quota', 'zhihu_search']);
+  });
+
+  it('continueReading 今天只剩 1 次就只搜 1 个概念', async () => {
+    const { client, queries } = clientWith((q) => [{ Title: q, Url: `https://www.zhihu.com/question/${q.length}/answer/1`, Summary: 's', ContentType: 'Answer', VoteUpCount: 1 }], { zhihu: 1, global: 0 });
+    const groups = await continueReading({ concepts: ['正则化', '早停', '交叉验证'] }, { client, config });
+    expect(groups.map((g) => g.concept)).toEqual(['正则化']);
+    expect(queries).toEqual(['正则化']);
+  });
+});
+

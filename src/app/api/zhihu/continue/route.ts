@@ -6,7 +6,8 @@
  * 带 threadId 时从材料包取课题、已有链接与已读标题。检索失败宁可少推：返回空组不报错（产品论点 §5）。
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { continueReading } from '@/lib/services/zhihu/zhihu-discovery-service';
+import { continueReading, searchBudget } from '@/lib/services/zhihu/zhihu-discovery-service';
+import { getZhihuOpenClient } from '@/lib/services/zhihu/zhihu-open-client';
 import { judgeContinueReading } from '@/lib/services/zhihu/zhihu-continue-judge';
 import { readLiveMaterials } from '@/lib/services/teach-live/live-materials';
 import { readJsonBody, requireUser, zhihuErrorResponse } from '../zhihu-route-utils';
@@ -35,7 +36,13 @@ export async function POST(request: NextRequest) {
   try {
     const pool = await continueReading({ concepts, topic: topic || undefined, excludeUrls, poolSize: 6 });
     const groups = await judgeContinueReading(pool, { topic: topic || undefined, materialTitles }, { perConcept });
-    return NextResponse.json({ success: true, groups });
+    // 空结果要说清是"没搜到"还是"今天额度用完了"（额度查询免费、60 s 缓存）
+    let exhausted = false;
+    if (groups.length === 0) {
+      const budget = await searchBudget(getZhihuOpenClient()).catch(() => null);
+      exhausted = Boolean(budget && budget.zhihu <= 0 && budget.global <= 0);
+    }
+    return NextResponse.json({ success: true, groups, exhausted });
   } catch (error) {
     return zhihuErrorResponse(error);
   }

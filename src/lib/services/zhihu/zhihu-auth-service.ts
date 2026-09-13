@@ -43,6 +43,7 @@ export type ZhihuOAuthErrorCode =
   | 'state_invalid'
   | 'state_expired'
   | 'state_mismatch'
+  | 'state_not_returned'
   | 'code_missing'
   | 'exchange_failed'
   | 'identity_unavailable'
@@ -106,13 +107,20 @@ export function verifyOAuthState(value: string | null | undefined, secret: strin
 }
 
 /** 稳定身份 = 主页链接里的 url_token（https://www.zhihu.com/people/<token>）；拿不到就 null */
+/**
+ * 稳定身份：hash_id（字符串标识）→ uid（int64 无损字符串，前缀 uid:）→ 主页链接里的 url_token / users/<id>。
+ * 黑客松版 /user 正式给了 hash_id 与 uid（2026-09 资料），主页 url 形如 openapi.zhihu.com/users/<uid>，不再是 zhihu.com/people/<token>。
+ */
 export function deriveZhihuProviderId(profile: ZhihuOAuthProfile | null): string | null {
-  const url = profile?.url;
+  if (!profile) return null;
+  if (profile.hashId) return profile.hashId;
+  if (profile.uid) return `uid:${profile.uid}`;
+  const url = profile.url;
   if (!url) return null;
-  const match = /zhihu\.com\/people\/([^/?#]+)/i.exec(url);
+  const match = /zhihu\.com\/(?:people|users)\/([^/?#]+)/i.exec(url);
   if (!match) return null;
   const token = decodeURIComponent(match[1]).trim();
-  return token ? token : null;
+  return token ? (/^\d+$/.test(token) ? `uid:${token}` : token) : null;
 }
 
 /** 用户名只允许 [a-zA-Z0-9_-]，≤32；知乎 url_token 本身就是这个字符集 */
@@ -242,9 +250,10 @@ export async function completeZhihuOAuth(
   }
   const state = verified.state;
 
-  // 知乎回传了 state 就必须对得上；没回传（实测常态）靠 cookie 本身
+  // 黑客松 OAuth 服务承诺 state 原样透传（2026-09 资料）：没回传就当被篡改，不放行；对不上同样拒绝。cookie 对账仍在（双保险）
   const returnedState = input.params.get('state');
-  if (returnedState && returnedState !== state.n) return { kind: 'error', code: 'state_mismatch', next };
+  if (!returnedState) return { kind: 'error', code: 'state_not_returned', next };
+  if (returnedState !== state.n) return { kind: 'error', code: 'state_mismatch', next };
 
   const code = d.client.extractAuthorizationCode(input.params);
   if (!code) return { kind: 'error', code: 'code_missing', next };

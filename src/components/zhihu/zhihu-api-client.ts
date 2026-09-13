@@ -113,11 +113,11 @@ export async function fetchLessonPack(token: string, threadId: string): Promise<
   return readJson(await fetch(`/api/zhihu/lesson/${encodeURIComponent(threadId)}`, { headers: headers(token), signal: AbortSignal.timeout(20_000) }));
 }
 
-export async function fetchContinueReading(token: string, input: { concepts: string[]; threadId: string }): Promise<ContinueReadingGroup[]> {
-  const data = await readJson<{ groups: ContinueReadingGroup[] }>(
+export async function fetchContinueReading(token: string, input: { concepts: string[]; threadId: string }): Promise<{ groups: ContinueReadingGroup[]; exhausted: boolean }> {
+  const data = await readJson<{ groups: ContinueReadingGroup[]; exhausted?: boolean }>(
     await fetch('/api/zhihu/continue', { method: 'POST', headers: headers(token, true), body: JSON.stringify(input) }),
   );
-  return data.groups;
+  return { groups: data.groups, exhausted: data.exhausted === true };
 }
 
 /** 既有应用矩阵执行入口；材料不足是 200 + ok:false（CONTENT_NOT_READY），不是协议错误 */

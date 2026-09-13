@@ -54,10 +54,12 @@ export function ContinueReadingPanel({
   weak,
   groups,
   busy,
+  exhausted = false,
 }: {
   weak: string[] | null;
   groups: ContinueReadingGroup[] | null;
   busy: boolean;
+  exhausted?: boolean;
 }) {
   return (
     <section className="space-y-4">
@@ -65,7 +67,9 @@ export function ContinueReadingPanel({
       {weak && weak.length === 0 && <p className="text-[13px] leading-6 text-pine-deep">{C.continueAllGood}</p>}
       {weak && weak.length > 0 && <p className="text-[13px] leading-6 text-ink">{C.continueWeak(weak)}</p>}
       {busy && <p className="text-[13px] text-ink-muted">{C.continueLoading}</p>}
-      {!busy && weak && weak.length > 0 && groups && groups.length === 0 && <p className="text-[13px] text-ink-muted">{C.continueEmpty}</p>}
+      {!busy && weak && weak.length > 0 && groups && groups.length === 0 && (
+        <p className="text-[13px] text-ink-muted">{exhausted ? C.continueQuotaOut : C.continueEmpty}</p>
+      )}
       {groups?.map((group) => (
         <div key={group.concept}>
           <h3 className="text-[13px] font-medium text-ink-secondary">{group.concept}</h3>

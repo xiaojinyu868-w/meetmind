@@ -89,6 +89,59 @@ export interface SearchZhihuCandidatesOptions {
   config?: ZhihuConfig;
 }
 
+/** 搜索结果缓存：同一 query 六小时内不再出网（额度极小：低额度账号站内 / 全网各 10 次 / 天） */
+const SEARCH_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const SEARCH_CACHE_MAX = 200;
+const searchCache = new Map<string, { at: number; items: ZhihuSearchItem[] }>();
+
+/** 额度快照 60 s 内复用；查询本身不耗额度 */
+const BUDGET_TTL_MS = 60 * 1000;
+let budgetSnapshot: { at: number; zhihu: number; global: number } | null = null;
+
+export interface SearchBudget {
+  zhihu: number;
+  global: number;
+}
+
+/** 今天还能搜几次（站内 / 全网）；查不到返回 null（按不限处理，让真正的调用自己碰壁） */
+export async function searchBudget(client: ZhihuOpenClient, now: () => number = Date.now): Promise<SearchBudget | null> {
+  if (budgetSnapshot && now() - budgetSnapshot.at < BUDGET_TTL_MS) return { zhihu: budgetSnapshot.zhihu, global: budgetSnapshot.global };
+  try {
+    const rows = await client.quota(['zhihu_search', 'global_search']);
+    const zhihu = rows.find((r) => r.apiId === 'zhihu_search')?.remaining ?? 0;
+    const global = rows.find((r) => r.apiId === 'global_search')?.remaining ?? 0;
+    budgetSnapshot = { at: now(), zhihu, global };
+    return { zhihu, global };
+  } catch (error) {
+    log.warn('zhihu quota lookup failed', { kind: (error as ZhihuApiError)?.kind });
+    return null;
+  }
+}
+
+/** 测试 / 手动用：清缓存与额度快照 */
+export function resetDiscoveryCaches(): void {
+  searchCache.clear();
+  budgetSnapshot = null;
+}
+
+function cacheGet(key: string, now: number): ZhihuSearchItem[] | null {
+  const hit = searchCache.get(key);
+  if (!hit) return null;
+  if (now - hit.at > SEARCH_CACHE_TTL_MS) {
+    searchCache.delete(key);
+    return null;
+  }
+  return hit.items;
+}
+
+function cacheSet(key: string, items: ZhihuSearchItem[], now: number): void {
+  if (searchCache.size >= SEARCH_CACHE_MAX) {
+    const oldest = searchCache.keys().next().value;
+    if (oldest !== undefined) searchCache.delete(oldest);
+  }
+  searchCache.set(key, { at: now, items });
+}
+
 function hostOf(url: string): string {
   try {
     return new URL(url).hostname.toLowerCase();
@@ -105,22 +158,39 @@ export async function searchZhihuCandidates(query: string, opts: SearchZhihuCand
   if (q.length < 2) return [];
   const exclude = new Set((opts.excludeUrls ?? []).map((u) => canonicalizeSourceUrl(u) ?? u));
   try {
-    let result;
-    try {
-      result = await client.searchZhihu(q, { count: opts.count ?? 8 });
-    } catch (error) {
-      // 站内搜索的频率 / 额度是单独计的（2026-09-12 实测：站内 30001 时全网搜索仍正常）；退到全网搜索，只留知乎站内链接
-      const kind = (error as ZhihuApiError)?.kind;
-      if (kind !== 'rate_limit' && kind !== 'quota') throw error;
-      log.warn('zhihu search rate limited, falling back to global search', { kind });
-      const global = await client.searchGlobal(q, { count: Math.min(20, (opts.count ?? 8) * 2) });
-      result = {
-        ...global,
-        items: global.items.filter((item) => /(^|\.)zhihu\.com$/.test(hostOf(item.url))).map((item) => ({ ...item, title: stripZhihuTitleSuffix(item.title) })),
+    const count = opts.count ?? 8;
+    const nowMs = Date.now();
+    const cacheKey = `${q}|${count}`;
+    let items = cacheGet(cacheKey, nowMs);
+    if (!items) {
+      const viaGlobal = async () => {
+        const global = await client.searchGlobal(q, { count: Math.min(20, count * 2) });
+        return global.items.filter((item) => /(^|\.)zhihu\.com$/.test(hostOf(item.url))).map((item) => ({ ...item, title: stripZhihuTitleSuffix(item.title) }));
       };
+      // 先看今天还剩几次：站内用完直接走全网，两边都用完不出网（额度查询本身免费）
+      const budget = await searchBudget(client);
+      if (budget && budget.zhihu <= 0 && budget.global <= 0) {
+        log.warn('zhihu search quota exhausted for today', budget);
+        return [];
+      }
+      if (budget && budget.zhihu <= 0) {
+        items = await viaGlobal();
+      } else {
+        try {
+          items = (await client.searchZhihu(q, { count })).items;
+        } catch (error) {
+          // 站内搜索的频率 / 额度是单独计的（2026-09-12 实测：站内 30001 时全网搜索仍正常）；退到全网搜索，只留知乎站内链接
+          const kind = (error as ZhihuApiError)?.kind;
+          if (kind !== 'rate_limit' && kind !== 'quota') throw error;
+          log.warn('zhihu search rate limited, falling back to global search', { kind });
+          items = await viaGlobal();
+        }
+      }
+      if (budgetSnapshot) budgetSnapshot = null; // 刚花了一次，下次重新问
+      cacheSet(cacheKey, items, nowMs);
     }
     const seen = new Set<string>();
-    return result.items
+    return items
       .filter((item) => item.url && item.title)
       .filter((item) => {
         const canonical = canonicalizeSourceUrl(item.url) ?? item.url;
@@ -156,14 +226,20 @@ export interface ContinueReadingGroup {
 
 /** 考后补货：每个没稳的概念搜一次（≤3 次），各留 1–2 条最有根的；一条链接只出现一次 */
 export async function continueReading(input: ContinueReadingInput, opts: Pick<SearchZhihuCandidatesOptions, 'client' | 'config'> = {}): Promise<ContinueReadingGroup[]> {
-  const concepts = [...new Set(input.concepts.map((c) => c.trim()).filter((c) => c.length >= 2))].slice(0, 3);
+  const config = opts.config ?? getZhihuConfig();
+  if (!isZhihuSearchEnabled(config)) return [];
+  const client = opts.client ?? getZhihuOpenClient();
+  // 额度极小（低额度账号一天 10 + 10 次）：今天剩几次就最多搜几个概念，缓存命中的不算
+  const budget = await searchBudget(client);
+  const allowance = budget ? Math.min(3, Math.max(1, budget.zhihu + budget.global)) : 3; // 至少留 1 个：缓存命中不花额度
+  const concepts = [...new Set(input.concepts.map((c) => c.trim()).filter((c) => c.length >= 2))].slice(0, allowance);
   const perConcept = Math.max(1, Math.min(6, input.poolSize ?? input.perConcept ?? 2));
   const topic = input.topic?.trim() ?? '';
   const taken = new Set<string>();
   const groups: ContinueReadingGroup[] = [];
   for (const concept of concepts) {
     const query = topic && !concept.includes(topic) ? `${concept} ${topic}` : concept;
-    const candidates = await searchZhihuCandidates(query, { ...opts, count: 8, excludeUrls: input.excludeUrls });
+    const candidates = await searchZhihuCandidates(query, { ...opts, client, config, count: 8, excludeUrls: input.excludeUrls });
     const picked: ZhihuDiscoveryCandidate[] = [];
     for (const candidate of candidates) {
       const key = canonicalizeSourceUrl(candidate.url) ?? candidate.url;

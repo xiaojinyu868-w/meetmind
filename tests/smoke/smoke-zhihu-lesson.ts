@@ -216,11 +216,15 @@ async function main(): Promise<void> {
       pass(`伪转录（${transcript.length} 段 / ${Math.round(durationMs / 1000)}s）→ /api/apps/execute quiz → ${questionCount} 题`);
     }
 
-    // 5) 继续看（无知乎凭证时返回空组，不报错）
-    const contRes = await fetch(`${base}/api/zhihu/continue`, { method: 'POST', headers, body: JSON.stringify({ concepts: ['正则化', '早停'], threadId }) });
-    const cont = (await contRes.json()) as { success?: boolean; groups?: Array<{ concept: string; candidates: unknown[] }> };
-    assert(contRes.ok && cont.success && Array.isArray(cont.groups), `continue 失败 ${contRes.status} ${JSON.stringify(cont)}`);
-    pass(`POST /api/zhihu/continue → ${cont.groups.length} 组（${process.env.ZHIHU_ACCESS_SECRET ? '有凭证' : '无凭证，空组符合预期'}）`);
+    // 5) 继续看：知乎搜索额度极小（低额度账号站内 / 全网各 10 次 / 天），默认只在无凭证时跑（空组不报错）；有凭证要跑请 SMOKE_WITH_SEARCH=1
+    if (!process.env.ZHIHU_ACCESS_SECRET || process.env.SMOKE_WITH_SEARCH === '1') {
+      const contRes = await fetch(`${base}/api/zhihu/continue`, { method: 'POST', headers, body: JSON.stringify({ concepts: ['正则化', '早停'], threadId }) });
+      const cont = (await contRes.json()) as { success?: boolean; groups?: Array<{ concept: string; candidates: unknown[] }>; exhausted?: boolean };
+      assert(contRes.ok && cont.success && Array.isArray(cont.groups), `continue 失败 ${contRes.status} ${JSON.stringify(cont)}`);
+      pass(`POST /api/zhihu/continue → ${cont.groups.length} 组（${process.env.ZHIHU_ACCESS_SECRET ? (cont.exhausted ? '有凭证，今日搜索额度已用完' : '有凭证') : '无凭证，空组符合预期'}）`);
+    } else {
+      pass('POST /api/zhihu/continue 跳过（省搜索额度；SMOKE_WITH_SEARCH=1 才跑）');
+    }
 
     // 6) 浏览器截图
     if (process.env.SMOKE_BROWSER === 'chromium') {

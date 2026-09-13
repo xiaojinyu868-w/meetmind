@@ -40,6 +40,8 @@ export interface ZhihuLessonController {
   recordAssessment: (appKey: ZhihuLessonAppKey, draft: LearningAssessmentDraft) => void;
   weak: string[] | null;
   groups: ContinueReadingGroup[] | null;
+  /** 今天从知乎搜东西的额度用完了（空结果时要说清原因） */
+  continueExhausted: boolean;
   continueBusy: boolean;
   /** 最近一次交卷 / 打分的时间戳，课后页据此把「继续看」推到前面 */
   assessedAt: number | null;
@@ -56,6 +58,7 @@ export function useZhihuLesson(threadId: string): ZhihuLessonController {
   const [weak, setWeak] = React.useState<string[] | null>(null);
   const [groups, setGroups] = React.useState<ContinueReadingGroup[] | null>(null);
   const [continueBusy, setContinueBusy] = React.useState(false);
+  const [continueExhausted, setContinueExhausted] = React.useState(false);
   const [assessedAt, setAssessedAt] = React.useState<number | null>(null);
   const runsRef = React.useRef(runs);
   runsRef.current = runs;
@@ -152,13 +155,17 @@ export function useZhihuLesson(threadId: string): ZhihuLessonController {
         return;
       }
       setContinueBusy(true);
+      setContinueExhausted(false);
       fetchContinueReading(accessToken, { concepts, threadId })
-        .then(setGroups)
+        .then((data) => {
+          setGroups(data.groups);
+          setContinueExhausted(data.exhausted);
+        })
         .catch(() => setGroups([]))
         .finally(() => setContinueBusy(false));
     },
     [accessToken, pack, threadId],
   );
 
-  return { threadId, pack, packError, thread, materials, runs, run, openSource, evidenceLabel, recordAssessment, weak, groups, continueBusy, assessedAt, retryPack };
+  return { threadId, pack, packError, thread, materials, runs, run, openSource, evidenceLabel, recordAssessment, weak, groups, continueExhausted, continueBusy, assessedAt, retryPack };
 }

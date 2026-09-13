@@ -88,7 +88,8 @@
 ## 待产品负责人（2026-09-12 凌晨交付时）
 
 1. DNS：`zhihu.meetmind.online A 47.112.160.134`；到位后在服务器上 `certbot --nginx -d zhihu.meetmind.online`（nginx HTTP 块已在 `/etc/nginx/conf.d/`）。
-2. 凭证：`ZHIHU_ACCESS_SECRET / ZHIHU_OAUTH_APP_ID / ZHIHU_OAUTH_APP_KEY` 写进 `/mnt/meetmind-zhihu/.env`（模板已留好），然后 `pm2 restart meetmind-zhihu`；开放平台登记回调 `https://zhihu.meetmind.online/api/auth/zhihu/callback`。
-   想不走 OAuth 先用自己的知乎账号演示：把自己的 MeetMind userId 填进 `ZHIHU_SELF_MODE_USER_IDS`。
+2. 凭证（09-13 更正：**不走邮件申请**）：作品提交入口 9-13 10:00 开放后，队长在活动页「我的项目 → 队伍详情 → 创建项目」，回调地址填 `https://zhihu.meetmind.online/api/auth/zhihu/callback`，赛事页面直接分配 App ID / App Key → 写进 `/mnt/meetmind-zhihu/.env` 的 `ZHIHU_OAUTH_APP_ID / ZHIHU_OAUTH_APP_KEY`，`pm2 restart meetmind-zhihu`，然后本人真实授权一次（代码已按黑客松版协议对齐：state 必回传、/user 只带 OAuth token、uid 无损、hash_id 作稳定身份）。
+   演示账号仍可走 `ZHIHU_SELF_MODE_USER_IDS`。
+2b. **额度**：这把 Access Secret 是低额度档（站内 / 全网搜索各 10 次 / 天、热榜 2、直答 2）——去 developer.zhihu.com 看实名 / 提额入口，或问官方群；代码侧已做缓存 + 预算门 + 情报补货默认关，但评委多点几次「继续看」就会见到「今天额度用完了」的诚实提示。
 3. 建议维护窗口把共享 SQLite 切到 WAL（`PRAGMA journal_mode=WAL`，一次性、可回退）：现在 delete 模式下生产 + worker + 试用实例三个进程并发，偶发写锁超时。
 

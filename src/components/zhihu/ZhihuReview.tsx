@@ -128,7 +128,7 @@ export function ZhihuReview({ threadId }: { threadId: string }) {
           <aside className="order-2 lg:order-3 lg:sticky lg:top-6 lg:self-start">
             <h2 className="text-[15px] font-medium">{C.tabContinue}</h2>
             <div className="mt-3">
-              <ContinueReadingPanel weak={lesson.weak} groups={lesson.groups} busy={lesson.continueBusy} />
+              <ContinueReadingPanel weak={lesson.weak} groups={lesson.groups} busy={lesson.continueBusy} exhausted={lesson.continueExhausted} />
             </div>
           </aside>
         </div>

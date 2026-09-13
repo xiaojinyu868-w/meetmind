@@ -12,7 +12,10 @@
 `Authorization: Bearer <Access Secret>` + `X-Request-Timestamp: <秒级 Unix 时间戳>`（+ GET 也带 `Content-Type: application/json`）。
 Access Secret 在 developer.zhihu.com/profile 自助申请，一个账号最多 20 个、共享同一额度池、拥有完整权限、删除不可恢复。
 业务错误经常包在 **HTTP 200** 里：外层 `{Code, Message, Data}`，`Code≠0` 即失败——`0` 成功 / `10001` 参数 / `20001` 鉴权 /
-`30001` 频率（停止重试；**按接口分别计**——2026-09-12 实测站内搜索 30001 时全网搜索 / 热榜 / 用户接口都正常；同一账号并发发 4 个用户接口也会触发，所以画像事实串行拉）/ `30002` 当日配额耗尽（该能力全账号不可用）/ `90001` 内部错误。
+`30001` 频率 / 并发 / **当日额度耗尽**（官方 2026-09 资料三者都报它；停止重试，去免费的额度查询看剩多少）/ `30002` 当日配额耗尽（该能力全账号不可用）/ `90001` 内部错误。
+
+**额度查询** `GET /api/v1/quota?APIIDs=zhihu_search,global_search,…`（不耗额度）。**我们这把 Secret 是低额度档（未实名 / 未提额）**，2026-09-13 实测每天：站内搜索 10 · 全网搜索 10 · 热榜 2 · 问题回答摘要 10 · 用户数据 1000 · 创作 10 · 直答 2 · 知识库 500 · 小工具 2。
+所以：搜索结果进程内缓存 6 h、出网前先看预算（`zhihu-discovery-service` 的 `searchBudget`）、情报补货默认不占搜索额度（`ZHIHU_FEED_SEARCH=1` 才开）、smoke 默认不跑 continue（`SMOKE_WITH_SEARCH=1`）。提额要去 developer.zhihu.com 做实名 / 申请，代码里不能解决。
 
 ### 内容接口（额度 = 邀测免费额度 / 天）
 
@@ -37,18 +40,18 @@ Access Secret 在 developer.zhihu.com/profile 自助申请，一个账号最多 
 | 收藏夹内容 | `/api/v1/user/favlist_contents` | `FavlistUrlToken` 必填；分页 | 创作字段 + `FavTime`（收藏时间）+ `Favlists[{UrlToken,Title,Url}]` + `Author?{Name,UrlToken,Url,Gender,Headline}`（下游没给就没有） |
 | 近期收藏 | `/api/v1/user/collections` | `Limit` ≤50；**无 Offset 无 Paging**，只是最近一批 | 同收藏夹内容 |
 
-### OAuth（`openapi.zhihu.com`；`app_id` / `app_key` 要申请，见下）
+### OAuth（`openapi.zhihu.com`；黑客松版 2026-09-13 定稿）
 
-官方定位（开放平台 OAuth 文档 2026-09 版）：**OAuth 只为"知乎作第三方登录 + 读授权用户的信息"**；只调通用接口、只看自己的数据，用 Access Secret 即可——这正是「本人模式」成立的官方依据。
-申请：邮件 **`openplatform@zhihu.com`**（zip 内旧文档写的 product-platform@ 已过时），主题固定「<公司/组织/产品名称>申请接入知乎 OAuth 服务」，
-必填：应用名称、应用简介、应用图标（≥256×256，附件）、授权回调地址 `redirect_uri`、申请人姓名、手机号、申请人知乎个人中心地址、
-申请获取的用户权限（多选：A 邮箱 / B 手机 / C 公开内容 = 创作 + 关注 + 公开收藏夹；**授权页会把所选权限展示给用户二次确认，本线只需 C**）。黑客松平台建项目时也可能直接发放。
+官方定位：**OAuth 只为"知乎作第三方登录 + 读授权用户的信息"**；只调通用接口、只看自己的数据，用 Access Secret 即可——这正是「本人模式」成立的官方依据。
 
-1. 授权页 `GET /authorize?redirect_uri=&app_id=&response_type=code[&state=]`
-2. 回调 `{redirect_uri}?authorization_code=…`（实测参数名是 `authorization_code`，兼容 `code`；**实测不回传 `state`**）
-3. 换 token `POST /access_token`，表单 `app_id` / `app_key` / `grant_type=authorization_code`（固定枚举值）/ `redirect_uri` / `code`（承载回调里的 authorization_code）→ `{access_token, token_type, expires_in: 3600}`，可能包在 `data` / `Data` 里，业务码 `20000` = 成功
-4. `GET /user`（双凭证：Bearer Access Secret + X-OAuth-Token）取昵称头像——**没有正式 schema**，字段名不可依赖
-5. 缺：refresh token、scope、PKCE、撤销 / 解绑、拒绝授权回调、过期错误协议
+**凭证从哪来（黑客松）**：活动页 <https://www.zhihu.com/hackathon?activity_code=zhihu_hackathon_2026_p2> → 我的项目 → 队伍详情 → **创建项目**（作品提交入口 9-13 10:00 开放后可建），填项目名 / 赛道 / 介绍 / Demo 地址 / 产品说明 / icon / 封面 /（选）仓库 / 视频 / **知乎登录回调地址** → 赛事页面分配 **App ID + App Key**，**不走通用邮件申请**。回调地址填 `https://zhihu.meetmind.online/api/auth/zhihu/callback`，协议 / 域名 / 路径 / 尾斜杠要与代码里的 `ZHIHU_OAUTH_REDIRECT_URI` 逐字一致。App Key 只在服务端 `.env`。
+
+1. 授权页 `GET /authorize?redirect_uri=&app_id=&response_type=code&state=`
+2. 回调 `{redirect_uri}?authorization_code=…&state=…`（参数名是 `authorization_code`，兼容 `code`；**黑客松 OAuth 服务承诺 `state` 原样透传**——我们据此**没回传 state 就拒绝**（`state_not_returned`），回传了必须等于 cookie 里签过的 nonce；通用文档里"实测不回传 state"是老记录，不适用）
+3. 换 token `POST /access_token`，表单 `app_id` / `app_key` / `grant_type=authorization_code` / `redirect_uri` / `code`（承载回调里的 authorization_code）→ `{access_token, token_type, expires_in: 3600}`，可能包在 `data` / `Data` 里，业务码 `20000` = 成功；无 refresh
+4. `GET /user`，**只带 `Authorization: Bearer <OAuth access_token>`**（不带 Access Secret / X-OAuth-Token / 时间戳）→ `{uid(int64), hash_id, fullname, gender, headline, description, avatar_path, url: openapi.zhihu.com/users/<uid>, email, phone_no, phone}`；`uid` 可能超过 JS 安全整数，客户端读原文先把它加引号再 `JSON.parse`（`quoteBigIntFields`）。稳定身份 = `hash_id` → `uid:<uid>` → 主页链接。用户不存在的历史形态：HTTP 200 `{"code":404,"data":"User don't exist"}`
+5. 授权用户的创作 / 关注 / 收藏仍走 developer.zhihu.com 用户数据接口（Bearer Access Secret + `X-OAuth-Token` + 时间戳）；本人全文 / 评论 / 统计只支持 Secret 本人，不能用 X-OAuth-Token 切身份
+6. 缺：scope、PKCE、撤销 / 解绑、拒绝授权回调、过期错误协议
 
 ### 明确没有的（所有方案都得绕着走）
 
@@ -89,5 +92,5 @@ Access Secret 在 developer.zhihu.com/profile 自助申请，一个账号最多 
 - 安静：同步 / 导入不弹通知，不催；同学读完以回声形式出现。
 - 有根 + 诚实：每条材料带来源（平台 / 作者 / 发布时间 / 收藏时间 / 赞同 / 权威等级）；正文状态三档（只有摘要 / 正文完整 / 正文可能含杂质）如实标注；只有摘要时 AI 不猜原文。
 - 成本：Firecrawl ≈1 credit / 页，一个用户几百条收藏，所以正文**按需**抽（开课 / 情报真用到才抽），不整夹全抽。
-- 直答不进主循环（100 次/天、不可控）；热榜结果缓存 ≥10 分钟。
+- 直答不进主循环（低额度档一天 2 次）；热榜一天 2 次，结果必须缓存；搜索一天 10 + 10 次——所有搜索走缓存 + 预算门，情报补货默认不占。
 - OAuth token 1 小时且无 refresh：所有需要用户身份的同步都在用户在场时触发；过期如实提示「重新连接知乎」，不静默切到本人模式。

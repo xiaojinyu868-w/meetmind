@@ -25,7 +25,7 @@ const log = createLogger('zhihu-open');
 export type ZhihuErrorKind =
   | 'param' // 10001 / HTTP 400
   | 'auth' // 20001 / HTTP 401 403
-  | 'rate_limit' // 30001 / HTTP 429：停止重试
+  | 'rate_limit' // 30001 / HTTP 429：频率、并发或当日额度耗尽都可能报它（官方 2026-09 资料）；停止重试，去 quota 看剩多少
   | 'quota' // 30002：当日额度耗尽，该能力全账号不可用
   | 'server' // 90001 / HTTP 5xx
   | 'network'
@@ -187,11 +187,39 @@ export interface ZhihuOAuthToken {
   expiresAt: number;
 }
 
+/**
+ * `GET https://openapi.zhihu.com/user`（黑客松资料 2026-09 定稿）：uid int64（可能超过 JS 安全整数，读原文无损转字符串）、
+ * hash_id、fullname、gender、headline、description、avatar_path、url（`https://openapi.zhihu.com/users/<uid>`）；email / phone_no 无权限为空串。
+ */
 export interface ZhihuOAuthProfile {
+  /** 稳定身份首选：字符串标识 */
+  hashId: string | null;
+  /** 数字 ID 的十进制字符串（无损） */
+  uid: string | null;
   name: string | null;
   avatarUrl: string | null;
   headline: string | null;
+  description: string | null;
   url: string | null;
+}
+
+/** 额度查询（免费，不耗业务额度）：一个能力组一行 */
+export interface ZhihuQuotaItem {
+  apiId: string;
+  total: number;
+  used: number;
+  remaining: number;
+}
+
+export type ZhihuQuotaApiId = 'global_search' | 'zhihu_search' | 'hot_list' | 'question_answers' | 'user_data' | 'creator' | 'zhida_openai' | 'knowledge' | 'tools';
+
+/** 把 JSON 文本里的大整数字段（uid）先加引号再解析，避免 Number 精度丢失 */
+export function quoteBigIntFields(text: string, fields: string[] = ['uid']): string {
+  let out = text;
+  for (const field of fields) {
+    out = out.replace(new RegExp(`("${field}"\\s*:\\s*)(-?\\d{16,})`, 'g'), '$1"$2"');
+  }
+  return out;
 }
 
 /** 用户数据接口的身份：不传 oauthToken = Access Secret 所属账号本人 */
@@ -641,27 +669,63 @@ export function createZhihuOpenClient(options: ZhihuOpenClientOptions = {}) {
   async function fetchOAuthProfile(oauthToken: string): Promise<ZhihuOAuthProfile | null> {
     const endpoint = '/user';
     try {
+      // 只带 OAuth access_token；不带 Access Secret、X-OAuth-Token、时间戳（官方 2026-09 资料）
       const response = await doFetch(
         new URL(endpoint, config.oauthBaseUrl).toString(),
-        { method: 'GET', headers: baseHeaders(endpoint, { oauthToken }) },
+        { method: 'GET', headers: { Authorization: `Bearer ${oauthToken}`, Accept: 'application/json' } },
         endpoint,
         config.timeoutMs,
       );
-      if (!response.ok) return null;
-      const payload = await readJson<Record<string, unknown>>(response, endpoint);
-      const source = (payload.data ?? payload.Data ?? payload.user ?? payload) as Record<string, unknown>;
+      if (!response.ok) {
+        log.warn('zhihu-open: profile fetch http error', { endpoint, status: response.status });
+        return null;
+      }
+      const text = await response.text();
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(quoteBigIntFields(text)) as Record<string, unknown>;
+      } catch {
+        throw new ZhihuApiError('protocol', endpoint, '响应不是 JSON', { status: response.status });
+      }
+      // 历史实测：用户不存在 → HTTP 200 {"code":404,"data":"User don't exist"}；code 20000 也表示成功——只认有没有用户对象
+      const source = (payload.data && typeof payload.data === 'object' ? payload.data : payload.Data && typeof payload.Data === 'object' ? payload.Data : payload.user && typeof payload.user === 'object' ? payload.user : payload) as Record<string, unknown>;
       if (!source || typeof source !== 'object') return null;
+      const uidRaw = source.uid ?? source.Uid ?? source.id;
+      const uid = typeof uidRaw === 'string' || typeof uidRaw === 'number' ? String(uidRaw).trim() : '';
       const profile: ZhihuOAuthProfile = {
-        name: str(source.name ?? source.Fullname ?? source.fullname) || null,
-        avatarUrl: str(source.avatar_url ?? source.AvatarUrl) || null,
+        hashId: str(source.hash_id ?? source.HashId) || null,
+        uid: /^\d+$/.test(uid) ? uid : null,
+        name: str(source.fullname ?? source.Fullname ?? source.name) || null,
+        avatarUrl: str(source.avatar_path ?? source.avatar_url ?? source.AvatarUrl) || null,
         headline: str(source.headline ?? source.Headline) || null,
+        description: str(source.description ?? source.Description) || null,
         url: str(source.url ?? source.Url) || null,
       };
-      return profile.name || profile.url ? profile : null;
+      if (!profile.hashId && !profile.uid && !profile.url) {
+        log.warn('zhihu-open: profile without identity', { endpoint, code: payload.code ?? payload.Code });
+        return null;
+      }
+      return profile;
     } catch (error) {
       log.warn('zhihu-open: profile fetch failed', { endpoint, kind: (error as ZhihuApiError)?.kind });
       return null;
     }
+  }
+
+  /** 额度查询：不耗额度；30001 既可能是频率也可能是当日额度耗尽（官方 2026-09 资料），遇到就该来这里看剩多少 */
+  async function quota(apiIds: ZhihuQuotaApiId[]): Promise<ZhihuQuotaItem[]> {
+    const endpoint = '/api/v1/quota';
+    const data = await api<{ Data?: unknown } | unknown[]>(endpoint, { APIIDs: apiIds.join(',') });
+    const rows = Array.isArray(data) ? data : Array.isArray((data as { Data?: unknown })?.Data) ? ((data as { Data: unknown[] }).Data) : [];
+    return rows
+      .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object')
+      .map((row) => ({
+        apiId: str(row.APIID ?? row.ApiId ?? row.apiId),
+        total: num(row.TotalQuota),
+        used: num(row.TotalUsed),
+        remaining: num(row.RemainingQuota),
+      }))
+      .filter((row) => row.apiId);
   }
 
   return {
@@ -675,6 +739,7 @@ export function createZhihuOpenClient(options: ZhihuOpenClientOptions = {}) {
     userFavlists,
     favlistContents,
     recentCollections,
+    quota,
     buildAuthorizeUrl,
     extractAuthorizationCode,
     exchangeAuthorizationCode,
