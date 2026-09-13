@@ -15,7 +15,8 @@ function plainSummary(text: string | null | undefined, max = 160): string {
   const plain = (text ?? '')
     .replace(/!\[[^\]]*]\([^)]*\)/g, ' ')
     .replace(/\[([^\]]*)]\([^)]*\)/g, '$1')
-    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/#{1,6}\s*/g, ' ') // 摘要早被压成一行，标题号可能在行中
+    .replace(/\\([、，。：；！？（）])/g, '$1') // Markdown 转义的中文标点
     .replace(/[*_`>~]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
