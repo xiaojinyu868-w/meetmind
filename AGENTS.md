@@ -169,6 +169,7 @@ make smoke-context-live # 真 Hindsight + Tutor + 浏览器全链路验收（SMO
 - `docs/ASR_PIPELINE.md` — ASR 飞书妙记级工艺总图
 - `docs/TUTOR_AGENT.md` — Tutor agent loop（AI SDK v6）
 - `docs/TEACH_TUTOR_ENGINE.md` — AI 家教课堂引擎设计（pi harness + vendor OpenMAIC 28 动作引擎 + skill 体系；选型实测见 `out/teach-harness-ab/REPORT.md`）
+- `docs/TEACH_VISUALS_FRONTIER_2026-09.md` — 教学画面前沿调研：代码 / 图像 / 视频驱动的系统、模型价格与延时、学习科学证据、映射到 teach-live 的路线（动画面模态选型前先读）
 - `docs/OBSERVABILITY.md` — pino + Sentry + track 埋点
 - `docs/MODEL_REGISTRY_REFACTOR.md` — 模型注册表
 - `项目开发文档/提示词设计哲学.md` — Less Structure, More Intelligence

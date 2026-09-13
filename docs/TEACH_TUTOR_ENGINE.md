@@ -245,6 +245,10 @@ vendor 全量 22 类，v1 启用：
 
 线性代数那节真课的四个症状（图画不出来 / 四支向量同色 / 单位正方形缩在大画框一角 / 自愈 5 次败 4 次）逐条追到 draw 运行时：模型用 `[x, y]` 写点、用 `'label', { color }` 写样式——都是 JS 里最自然的写法，我们却只认 `{x, y}` 和三参数，于是整图 TypeError；修复模型也这么写，所以修不好。教训写进 `lib/teach-live-draw/DOMAIN.md`「模型笔误怎么吸收」第 5 条：**先宽容再自愈**——自愈日志的 `reported` 字段就是发现下一类窄口的探针。同轮补的能力：`view3d`（正交投影 + 时间 = 会转的立体图）、`tightenView` 自动取景、`orderForPaint` 上板顺序、`into` 越界 refit、`draw-fix` 事件落日志供回看。模型侧唯一的真问题是内容笔误（矩阵列向量写反），系统不替它判。
 
+### 12.8 前沿调研（2026-09-13）：画面要不要上图像 / 视频
+
+独立成文 `docs/TEACH_VISUALS_FRONTIER_2026-09.md`：学界（TheoremExplainAgent / Code2Video / ManimTrainer / Paper2Video / Generative UI）、业界（豆包老师·豆包课堂 / 千问智学 / VideoTutor / Khanmigo 交互图 / NotebookLM Cinematic / Learn Your Way）、模型（图像 / 视频 / 手写 / SVG / 数字人的价格与延时）、学习科学证据（手与渐进画出有效、露脸与 3D 数字人证据弱）。结论：实时主画面业界一致是"代码 / DSL 板书 + 语音"，差距在表达层；图像上三源 + 缓存 + 图上作画；像素视频只做离线库（Gemini Omni 是会写板书的候选）；实时数字人不做。
+
 ### 12.5 已知缺口（下一步）
 
 1. 自由 `<svg>` 示意图的重叠仍靠模型；若观察到高频，再试「事后修」的视觉自检（不进关键路径）。`<draw>` 的 critic 只解文字-文字重叠，文字压线（「原」压在对角线上）待做。
