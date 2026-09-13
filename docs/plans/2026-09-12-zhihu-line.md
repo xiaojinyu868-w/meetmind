@@ -62,6 +62,7 @@
 | G9 课的物化 [core] | live 课 → LessonRecord → IndexedDB 一节课 → `/app?session=teach:<id>` 直达复习页；讲完小卡「去复习」 | lesson-record 单测；dev 端到端：讲完 → 复习页时间轴 / 接下来怎么学 / 同桌可用 | 0653f6e 完成 |
 | G10 复习附件层 [core] | 材料卡 + 复习同桌 supportMaterials 附件层 + 知乎「继续看」从交卷记录推概念 | dev 端到端：材料卡 + 「先做一套题」提示 | 1e4fd87 完成 |
 | G11 抽能力层 | `services/material-lessons/`（候选 / 课的单位与预算 / 分线 / 接下来看哪篇），知乎只剩适配器；迷你课后页退役 | 103 例测试全绿，行为等价 | 5c39323 + 本次 |
+| G12 前端 / 交互线 | 独立 worktree 打磨第一屏 / 收藏夹 / 课堂壳 / 复习材料 UI；后端契约不动 | 改 `.ts/.tsx` 跑 `make check`；旅程跑 `make smoke-zhihu-lesson` | 进行中：`/mnt/meetmind-zhihu-ui` · `feat/zhihu-ui` · [交接](2026-09-13-zhihu-ui-handoff.md) |
 | 契约文档 | `docs/plans/2026-09-13-material-lessons.md`：三层 / 五接口 / 物化 / 边界表 / 治理 | — | 完成 |
 | 上线 | PM2 + nginx + 证书 + `make deploy-zhihu` | `/api/health` + 静态 chunk 抽样 + 子域名走通旅程 | https://zhihu.meetmind.online 在跑（证书到 2026-12-11），每次提交后 `make deploy-zhihu` |
 

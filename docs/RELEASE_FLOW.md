@@ -12,6 +12,7 @@
 | `/mnt/meetmind-product-polish` | `feat/product-polish` | 产品打磨 / 内容层 |
 | `/mnt/meetmind-reliability` | `feat/reliability` | 课堂线可靠性 |
 | `/mnt/meetmind-zhihu` | `feat/zhihu-hackathon` | 知乎线（收藏夹开课）。**同时是一个独立试用实例的运行目录**：PM2 `meetmind-zhihu` @ 3012，nginx `zhihu.meetmind.online`，`make deploy-zhihu` 在这里旁路构建；与生产同库同数据目录，零 schema 改动。是否合进 `release/prod` 由产品负责人试用后决定（`docs/plans/2026-09-12-zhihu-line.md`） |
+| `/mnt/meetmind-zhihu-ui` | `feat/zhihu-ui` | 知乎线**前端 / 交互**打磨。从 `feat/zhihu-hackathon` 开出（知乎代码尚未合进 `release/prod`）。开发 `PORT=3013 NEXT_DEV_DIST_DIR=.next-dev-zhihu-ui make dev`；**不是**第二个 PM2 实例，禁止在本目录 `make deploy-zhihu`。交付：推送本分支 → 主线在 `/mnt/meetmind-zhihu` 合进 `feat/zhihu-hackathon` → `make deploy-zhihu`。交接 `docs/plans/2026-09-13-zhihu-ui-handoff.md` |
 
 数据不在版本库里，目前仍放在 `/mnt/meetmind-capture-v1-server-handoff/`（`prisma/meetmind.db`、`public/uploads`、`public/downloads`、`public/wechat-media`、`data/`），生产目录用软链指过去；`.env` 里 `DATABASE_URL` 用**绝对路径**，`src/lib/prisma.ts` 读它（此前只按 cwd 找库，换目录会静默新建空库）。**下一步维护窗口把这些数据迁到 `/mnt/meetmind-data` 并双向软链**，让数据也不住在任何人的开发目录里。
 
