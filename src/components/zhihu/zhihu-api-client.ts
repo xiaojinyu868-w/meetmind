@@ -66,15 +66,70 @@ export async function syncRecentCollections(token: string): Promise<{ added: num
   return readJson(await fetch('/api/zhihu/sync', { method: 'POST', headers: headers(token, true), body: '{}' }));
 }
 
+export interface ZhihuFavlistItemDto {
+  id: string;
+  title: string;
+  summary: string;
+  url: string;
+  kind: string;
+  author: string | null;
+  voteUpCount: number;
+  commentCount: number;
+  favTime: number;
+  body: 'summary' | 'full';
+  bodyChars: number;
+  lessons: Array<{ threadId: string; title: string; mode: string; updatedAt: string }>;
+}
+
+export interface ZhihuFavlistDetailDto {
+  mode: 'oauth' | 'self';
+  favlist: ZhihuFavlist;
+  imported: number;
+  items: ZhihuFavlistItemDto[];
+}
+
+export interface ZhihuFavlistThemesDto {
+  themes: Array<{ id: string; title: string; why: string; itemIds: string[] }>;
+  misc: string[];
+  start: { itemId: string; why: string } | null;
+  source: 'model' | 'fallback' | 'trivial';
+}
+
+/** 收藏夹页：条目（第一次打开会先收进来） */
+export async function fetchFavlistDetail(token: string, urlToken: string, opts: { refresh?: boolean } = {}): Promise<ZhihuFavlistDetailDto> {
+  return readJson(await fetch(`/api/zhihu/favlists/${encodeURIComponent(urlToken)}${opts.refresh ? '?refresh=1' : ''}`, { headers: headers(token), signal: AbortSignal.timeout(60_000) }));
+}
+
+/** 收藏夹页：同学读出来的几条线（慢，一次模型调用，服务端缓存） */
+export async function fetchFavlistThemes(token: string, urlToken: string): Promise<ZhihuFavlistThemesDto> {
+  return readJson(await fetch(`/api/zhihu/favlists/${encodeURIComponent(urlToken)}/themes`, { headers: headers(token), signal: AbortSignal.timeout(90_000) }));
+}
+
 export async function importFavlist(token: string, favlistUrlToken: string): Promise<{ fetched: number; imported: number }> {
   return readJson(
     await fetch('/api/zhihu/import', { method: 'POST', headers: headers(token, true), body: JSON.stringify({ favlistUrlToken }) }),
   );
 }
 
-export async function createLesson(token: string, favlistUrlToken: string): Promise<{ thread: { id: string; title: string; topic: string }; pack: LiveMaterialPack }> {
+export type CreateLessonInput =
+  | { kind: 'single'; captureId: string; favlistUrlToken?: string }
+  | { kind: 'theme'; captureIds: string[]; topic: string; favlistUrlToken?: string }
+  | { kind: 'auto'; favlistUrlToken: string }
+  | { kind: 'favlist'; favlistUrlToken: string };
+
+/** 开课：一篇 / 一条线 / 随手（同学挑）/ 整个收藏夹（旧） */
+export async function createLesson(token: string, input: CreateLessonInput | string): Promise<{ thread: { id: string; title: string; topic: string }; pack: LiveMaterialPack }> {
+  const req = typeof input === 'string' ? { kind: 'favlist' as const, favlistUrlToken: input } : input;
+  const body =
+    req.kind === 'single'
+      ? { captureIds: [req.captureId], favlistUrlToken: req.favlistUrlToken, mode: 'single' }
+      : req.kind === 'theme'
+        ? { captureIds: req.captureIds, topic: req.topic, favlistUrlToken: req.favlistUrlToken, mode: 'theme' }
+        : req.kind === 'auto'
+          ? { favlistUrlToken: req.favlistUrlToken, auto: true }
+          : { favlistUrlToken: req.favlistUrlToken };
   return readJson(
-    await fetch('/api/zhihu/lesson', { method: 'POST', headers: headers(token, true), body: JSON.stringify({ favlistUrlToken }) }),
+    await fetch('/api/zhihu/lesson', { method: 'POST', headers: headers(token, true), body: JSON.stringify(body), signal: AbortSignal.timeout(180_000) }),
   );
 }
 

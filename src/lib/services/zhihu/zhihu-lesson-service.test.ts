@@ -181,3 +181,65 @@ describe('buildZhihuLesson', () => {
     await expect(buildZhihuLesson('u1', { favlistUrlToken: '1' }, onlyVideo)).rejects.toMatchObject({ message: expect.stringContaining('视频或想法') });
   });
 });
+
+describe('课的单位：single / theme', () => {
+  it('excerptFor：single ≤12000 字给全文；超长按结构取到 8000 并附目录；theme 每篇 4000；只有摘要 400', async () => {
+    const { excerptFor, outlineOf } = await import('./zhihu-lesson-service');
+    const short = '正文。'.repeat(1000); // 3000 字
+    expect(excerptFor(short, 'single', 0, true)).toBe(short);
+    const long = ['开头。'.repeat(200), ...Array.from({ length: 6 }, (_, i) => `## 第${i + 1}节\n\n${'内容。'.repeat(900)}`), '结论。'.repeat(100)].join('\n\n');
+    expect(long.length).toBeGreaterThan(12_000);
+    const cut = excerptFor(long, 'single', 0, true);
+    expect(cut.startsWith(`（全文 ${long.replace(/\r\n?/g, '\n').trim().length} 字、6 节，下面是开头、各节首段与结尾；目录：第1节 / 第2节`)).toBe(true);
+    expect(cut.length).toBeLessThan(9_000);
+    expect(outlineOf(long)).toEqual(['第1节', '第2节', '第3节', '第4节', '第5节', '第6节']);
+    expect(excerptFor(short, 'theme', 0, true).length).toBeLessThanOrEqual(3000);
+    expect(excerptFor('长'.repeat(6000), 'theme', 0, true).length).toBeLessThanOrEqual(4000 + 40);
+    expect(excerptFor('摘'.repeat(1000), 'theme', 0, false).length).toBeLessThanOrEqual(400 + 40);
+  });
+
+  it('selectNamedMaterials 保持点名顺序、剔掉没法讲的、超上限进 skipped', async () => {
+    const { selectNamedMaterials } = await import('./zhihu-lesson-service');
+    const records = [record('a', { voteUpCount: 1 }), record('b', { voteUpCount: 999 }), record('v', { kind: 'zvideo' }), record('c'), record('d'), record('e')];
+    const { chosen, skipped } = selectNamedMaterials(records, ['b', 'v', 'a', 'c', 'd', 'e'], 4);
+    expect(chosen.map((r) => r.id)).toEqual(['b', 'a', 'c', 'd']); // 不按赞同重排
+    expect(skipped.map((s) => [s.sourceId, s.reason])).toEqual([
+      ['v', '视频没有可讲的正文'],
+      ['e', '一条线一节课最多讲 4 篇'],
+    ]);
+  });
+
+  it('buildZhihuLesson：一条 captureId → single（课题 = 文章标题、材料包 mode/pickReason、按篇找之前的课）；多条 → theme', async () => {
+    const { buildZhihuLesson } = await import('./zhihu-lesson-service');
+    const records = [record('full', { body: 'full', voteUpCount: 500, text: '全文'.repeat(300) }), record('sum', { voteUpCount: 200 }), record('third', { body: 'full', text: '第三篇'.repeat(200) })];
+    const priorCalls: unknown[] = [];
+    const created: Array<Record<string, unknown>> = [];
+    const d: Partial<ZhihuLessonDeps> = {
+      listCaptures: async (_userId, opts) => (opts?.ids ? records.filter((r) => opts.ids!.includes(r.id)) : records),
+      materialize: async (_userId, ids) => ids.map((id) => ({ captureId: id, status: 'failed' as const, error: 'test' })),
+      createThread: (async (params: Record<string, unknown>) => {
+        created.push(params);
+        return { id: `thread-${created.length}`, title: String(params.topic).slice(0, 30), topic: String(params.topic), engine: 'live', model: 'm', codexThreadId: null, learnerJson: null, status: 'active', createdAt: new Date(), updatedAt: new Date() };
+      }) as never,
+      writeMaterials: async () => undefined,
+      priorLessons: async (_u: string, title: string, sourceIds: string[]) => {
+        priorCalls.push([title, sourceIds]);
+        return [];
+      },
+      providerModel: () => 'glm-test',
+      now: () => NOW,
+    };
+    const single = await buildZhihuLesson('u1', { captureIds: ['full'], pickReason: '最基础的一篇' }, d);
+    expect(created[0]).toMatchObject({ topic: '回答 full' });
+    expect(single.pack.mode).toBe('single');
+    expect(single.pack.pickReason).toBe('最基础的一篇');
+    expect(single.pack.items).toHaveLength(1);
+    expect(single.pack.items[0].excerpt).toBe('全文'.repeat(300)); // 全文，不节选
+    expect(priorCalls[0]).toEqual(['机器学习入门', ['full']]);
+
+    const theme = await buildZhihuLesson('u1', { captureIds: ['third', 'full', 'sum'], topic: '一条线' }, d);
+    expect(theme.pack.mode).toBe('theme');
+    expect(theme.pack.items.map((i) => i.sourceId)).toEqual(['third', 'full', 'sum']); // 点名顺序
+    expect(priorCalls[1]).toEqual(['机器学习入门', []]);
+  });
+});

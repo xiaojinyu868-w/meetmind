@@ -42,6 +42,10 @@ export interface LiveMaterialPack {
   ownerUserId?: string;
   /** 同一组材料之前上过的课（标题 / 课题），给老师一句"别从头讲同一段"；由开课方（如 zhihu-lesson-service）填 */
   priorLessons?: Array<{ threadId: string; title: string; createdAt: string }>;
+  /** 课的单位：single 一篇讲透 / theme 一条线几篇连起来 / favlist 整个收藏夹（旧）；决定材料块的措辞 */
+  mode?: 'single' | 'theme' | 'favlist';
+  /** 「随手开一节」时同学替学生挑这篇的理由 */
+  pickReason?: string;
   createdAt: string;
 }
 
@@ -93,20 +97,38 @@ export async function readLiveMaterials(threadId: string): Promise<LiveMaterialP
 export function formatLiveMaterialsBlock(pack: LiveMaterialPack | null): string {
   if (!pack || pack.items.length === 0) return '';
   const lines: string[] = [];
-  lines.push(`# 这节课的材料（学生自己收藏的 ${pack.items.length} 篇，来自「${pack.title}」，按参考价值排序）`);
-  lines.push('学生收藏它们是因为想学会它们讲的东西，所以这节课从这些材料出发讲，不另讲一套。');
-  lines.push('- 材料之间观点不一致的地方要点名对比：「材料 1 说……，材料 3 却认为……」，说清分歧在哪、你怎么判断（赞同数和作者身份是线索，不是定论）。');
-  lines.push('- 口播里引用材料说「材料 1」这样能念的话；板书 / 要点里可以写 [A1]。');
-  lines.push('- 标了「只有摘要」的材料只能当线索，不要替它编细节；材料没覆盖但学生需要的基础可以补，但要说一句「这段不在你收藏里」。');
-  lines.push('- 课题标题（scene title）从材料的共同主题里起，不要照抄某一篇的标题。');
+  const mode = pack.mode ?? 'favlist';
+  if (mode === 'single') {
+    const only = pack.items[0];
+    lines.push(`# 这节课讲学生收藏的这一篇：《${only.title}》（来自收藏夹「${pack.title}」，${only.body === 'full' ? '下面是全文或带目录的骨架' : '只有摘要'}）`);
+    lines.push('学生收藏它是因为想学会它讲的东西。这节课就把这一篇讲透：按它自己的脉络走，一轮讲一个点，讲到哪说到哪（"这篇后面还有 X 节，下次接着讲"），不要把它压成一段概述。');
+    if (pack.pickReason) lines.push(`- 这篇是你替学生从收藏夹里挑的，开口先用一句话说为什么先讲它：${pack.pickReason}`);
+    lines.push('- 口播里引用材料说「材料 1」或「这篇文章」；板书 / 要点里可以写 [A1]。作者的判断和例子要点名是作者说的。');
+    lines.push('- 标了「只有摘要」就只能当线索，不要替它编细节；文章没覆盖但学生需要的基础可以补，但要说一句「这段不在你收藏里」。');
+    lines.push('- 课题标题（scene title）从这篇讲的东西里起，不要照抄它的标题。');
+  } else if (mode === 'theme') {
+    lines.push(`# 这节课讲学生收藏里的一条线（${pack.items.length} 篇，来自收藏夹「${pack.title}」）`);
+    lines.push('这几篇是学生收藏里放在一起才讲得通的一条线。这节课的任务是把它们连起来：先说清这条线在讲什么、几篇各站在哪一段，再顺着讲；不要一篇一篇各讲一遍。');
+    lines.push('- 材料之间观点不一致的地方要点名对比：「材料 1 说……，材料 3 却认为……」，说清分歧在哪、你怎么判断（赞同数和作者身份是线索，不是定论）。');
+    lines.push('- 口播里引用材料说「材料 1」这样能念的话；板书 / 要点里可以写 [A1]。');
+    lines.push('- 标了「只有摘要」的材料只能当线索，不要替它编细节；材料没覆盖但学生需要的基础可以补，但要说一句「这段不在你收藏里」。');
+    lines.push('- 课题标题（scene title）从这条线的共同主题里起，不要照抄某一篇的标题。');
+  } else {
+    lines.push(`# 这节课的材料（学生自己收藏的 ${pack.items.length} 篇，来自「${pack.title}」，按参考价值排序）`);
+    lines.push('学生收藏它们是因为想学会它们讲的东西，所以这节课从这些材料出发讲，不另讲一套。');
+    lines.push('- 材料之间观点不一致的地方要点名对比：「材料 1 说……，材料 3 却认为……」，说清分歧在哪、你怎么判断（赞同数和作者身份是线索，不是定论）。');
+    lines.push('- 口播里引用材料说「材料 1」这样能念的话；板书 / 要点里可以写 [A1]。');
+    lines.push('- 标了「只有摘要」的材料只能当线索，不要替它编细节；材料没覆盖但学生需要的基础可以补，但要说一句「这段不在你收藏里」。');
+    lines.push('- 课题标题（scene title）从材料的共同主题里起，不要照抄某一篇的标题。');
+  }
   if (pack.priorLessons?.length) {
     const recent = pack.priorLessons.slice(0, 5).map((lesson) => `《${lesson.title}》`).join('、');
-    lines.push(`- 这位学生用这组材料已经上过 ${pack.priorLessons.length} 节：${recent}。这次不要从头讲同一段——先问一句上次讲到哪、哪里没懂，或者换一篇材料 / 往深处走。`);
+    lines.push(`- 这位学生${mode === 'single' ? '这一篇' : '用这组材料'}已经上过 ${pack.priorLessons.length} 节：${recent}。这次不要从头讲同一段——先问一句上次讲到哪、哪里没懂，接着往深处走。`);
   }
   lines.push('');
   for (const item of pack.items) {
     const author = item.author ? ` · ${item.author}` : '';
-    const state = item.body === 'full' ? '正文节选' : '只有摘要';
+    const state = item.body === 'full' ? (mode === 'single' && !/^（全文 \d+ 字/.test(item.excerpt) ? '全文' : '正文节选') : '只有摘要';
     lines.push(`[${item.ref}] 《${item.title}》${author} · ${item.meta} · ${state}`);
     lines.push(item.excerpt.trim());
     lines.push('');

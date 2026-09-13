@@ -8,6 +8,8 @@
 |---|---|---|
 | `/api/zhihu/status` | GET | `{ enabled, connected, mode: 'oauth'│'self'│null, expired, expiresAt }`——第一屏据此显示「连接知乎」还是「选一个收藏夹」；expired → 「重新连接知乎」 |
 | `/api/zhihu/favlists` | GET | 当前用户的收藏夹（≤50，知乎无分页）+ `mode` |
+| `/api/zhihu/favlists/[urlToken]` | GET `?refresh=1` | **收藏夹页**的条目：每条标题 / 作者 / 类型 / 赞同 / 收藏时间 / 一行摘要（去 Markdown 杂质）/ 正文状态 / 开过的课；本地一条都没有或 `refresh=1` 时先 `importFavlist` 收进来 |
+| `/api/zhihu/favlists/[urlToken]/themes` | GET `?force=1` | **同学读这个收藏夹**：按"放在一节课里讲得通"分成几条线（title / why / itemIds）+ 零散的 misc + 最值得先讲的 `start{itemId, why}`；一次 tutorQuick 调用，按条目集合 hash 缓存在 `data/zhihu-themes/<uid>/<token>.json`（`ZHIHU_THEMES_DIR`）；坏 JSON 退回一条线；≤1 篇可讲不叫模型 |
 | `/api/zhihu/import` | POST `{favlistUrlToken, limit?}` | 把一个收藏夹收进收集流：翻页拉全（≤100 条）→ 每条 `upsertCaptureForUser`（sourceType `zhihu-favorite`，sourceKey `zhihu:<uid>:<sha1(canonical)>`，摘要进正文位、provenance `partial`）；重复导入只更新。返回 `{ favlist, fetched, imported, captures[] }` |
 | `/api/zhihu/sync` | POST `{force?}` | 零动作入口：最近 50 条收藏（跨收藏夹）只新增本地没有的，摘要级；服务端 15 分钟节流 → `{ added, scanned, skipped:'throttled'│null }`。第一屏每次打开静默调，`added>0` 才说一句。没被节流的那次顺手把知乎画像写成一条学习观察（`zhihu-profile-service`，24 h 一次，fire-and-forget）；identity 不出服务端 |
 | `/api/zhihu/materialize` | POST `{captureIds[≤30], force?}` | 按需抽正文（Firecrawl ≈1 credit / 条，并发 3）→ 去杂质 → 重新 upsert 成 `complete`；每条 `status: full│already-full│unsupported│failed`，失败留摘要并把原因写进 `metadata.zhihu` |
@@ -16,7 +18,7 @@
 身份解析（`resolveZhihuIdentity`）：该用户绑定的 OAuth token 未过期 → 带 `X-OAuth-Token`；过期 → `zhihu_reconnect`（知乎无 refresh，只能重新授权）；
 未绑定但在 `ZHIHU_SELF_MODE_USER_IDS` 白名单 → 「本人模式」读 Access Secret 所属账号（演示 / smoke 兜底）；其他 → `zhihu_not_connected`。
 
-| `/api/zhihu/lesson` | POST `{favlistUrlToken? │ captureIds?, topic?, maxItems?}` | 把一个收藏夹开成一节 live 课：挑材料（按赞同，≤8 篇有正文可讲的）→ 只给进材料包的几篇抽正文 → 建 `engine=live` 的 TeachThread + 材料包落盘（`teach-live/live-materials.ts`）；learner 读槽与 `/api/teach/threads` 同款。返回 `{ thread:{id,title,topic}, pack, materialized }`；前端拿 thread.id 去 `/apps/zhihu/lesson/<id>` 开讲（首条学生消息「开始上课」由课堂页发，与 /teach/live 一致）。teach-live 未配置 503 `teach_live_unavailable` |
+| `/api/zhihu/lesson` | POST | **课的单位（09-13 起）**：`{captureIds:[一条]}` 或 `mode:'single'` → 讲这一篇（全文 ≤12000 字直接给；再长按结构取到 8000 字并附小节目录）；`{captureIds:[2–4 条], topic, mode:'theme'}` → 一条线连着讲（每篇 ≤4000）；`{favlistUrlToken, auto:true}` → 随手开一节：用分线结果的 `start` 挑一篇，`pickReason` 进材料包与课堂页；`{favlistUrlToken}`（旧 favlist 模式，按赞同 ≤8 篇 1800/1200/700 节选）只作兜底 / smoke。都只给进材料包的几篇抽正文 → 建 `engine=live` 的 TeachThread + 材料包落盘（`pack.mode` / `pack.pickReason` / `pack.priorLessons`）；learner 读槽与 `/api/teach/threads` 同款。返回 `{ thread:{id,title,topic}, pack, materialized }`。teach-live 未配置 503 `teach_live_unavailable` |
 | `/api/zhihu/lesson/[threadId]` | GET | 这节课的材料包 + 线程元信息（课堂页右侧「这节课的材料」、课后出题 / 继续看用）；不是从收藏夹开的课 404 |
 
 | `/api/zhihu/continue` | POST `{concepts[≤5], threadId?, topic?, perConcept?}` | 考后补货：还没稳的概念 → 站内搜索（每概念 1 次，≤3 次）→ 按权威 / 赞同 / 有反方评论排序，排除材料包里已有链接，每组留 6 条候选池 → **快模型针对这个缺口挑 1–2 条并写一句只落在摘要里的理由**（`zhihu-continue-judge`；失败退回元数据理由）→ `{ groups:[{concept, candidates[]}] }`；检索失败返回空组不报错 |
@@ -27,7 +29,8 @@
 
 | 路径 | 组件 | 说明 |
 |---|---|---|
-| `/apps/zhihu` | `ZhihuEntry` | 桌宠 + 三步预期。未登录：知乎登录可用（`GET /api/auth/zhihu/status` 公开接口的 `oauthReady`）才给「用知乎登录」，否则只给「用 MeetMind 账号登录」（带 `?next=` 回跳）并说明原因——不给一颗点了会坏的按钮。已登录：连接 / 重新连接；已连接：收藏夹带状态（已收下几条 / 读了几篇全文 / 开过几节课 / 回到上次那节课）、「开课」三步进度真实可见（收下 → 同学读 → 开讲）；下面是「你开过的课」（`GET /api/zhihu/lessons`）。`isCheckingAuth` 期间不当未登录渲染，避免登录用户闪一下「去登录」 |
+| `/apps/zhihu` | `ZhihuEntry` | 桌宠 + 三步预期。未登录：知乎登录可用（`GET /api/auth/zhihu/status` 公开接口的 `oauthReady`）才给「用知乎登录」，否则只给「用 MeetMind 账号登录」（带 `?next=` 回跳）并说明原因——不给一颗点了会坏的按钮。已登录：连接 / 重新连接；已连接：收藏夹带状态（已收下几条 / 读了几篇全文 / 开过几节课），每行是**入口**（→ 收藏夹页；整夹一键开课已撤——一次讲 4 篇或 98 篇不成立）；下面是「你开过的课」（`GET /api/zhihu/lessons`）。`isCheckingAuth` 期间不当未登录渲染，避免登录用户闪一下「去登录」 |
+| `/apps/zhihu/favlist/[urlToken]` | `ZhihuFavlist` | **收藏夹页**：先出条目（第一次打开顺手收进来），再出同学读出来的几条线（每条一句为什么 + 「按这条线开一节」），每篇一个「讲这篇 / 再讲一次」（正文状态、讲过几次、回到那节课），视频 / 想法归「零散的」并写明讲不了；顶部「随手开一节」= 同学挑最值得先讲的一篇并说为什么。分线没回来 / 失败时按收藏时间平铺，页面照样能用 |
 | `/apps/zhihu/lesson/[threadId]` | `ZhihuLesson` | 舞台原样复用 teach-live 的 `LiveStage` + `useLiveLesson`；进来先 `openLesson`，事件日志为空就替学生发「开始上课」。右侧可收起的**材料栏**（同学读了哪几篇 / 正文状态说人话 / 原文；「考一考 →」去课后页）。**老师讲完一轮那一刻**（`generating` 由真落假）右下长出小卡「讲完这一段了。考一考？／继续听」——机器 act，不让学生去找按钮 |
 | `/apps/zhihu/lesson/[threadId]/review` | `ZhihuReview` | 课后三栏：左材料有根（每篇一段预览 + 原文）、中练习（`QuizWindow` / `FlashcardsWindow` 原组件，新增可选 `evidenceLabel` prop 把「回到课堂 mm:ss」换成「看这篇材料：A1《…》」，点开知乎原文）、右继续看（交卷 → assessment 进 `/api/memory/events` → 没稳的概念 → `/api/zhihu/continue`）。进来就自动出题（零提问）；手机按 练习 → 继续看 → 材料 竖排 |
 

@@ -21,7 +21,10 @@ function previewOf(excerpt: string, max = 120): string {
 export function MaterialsList({ pack, compact = false }: { pack: LiveMaterialPack; compact?: boolean }) {
   return (
     <div>
-      <h2 className={`${compact ? 'text-[14px]' : 'text-[15px]'} font-medium`}>{C.materialsTitle(pack.items.length)}</h2>
+      <h2 className={`${compact ? 'text-[14px]' : 'text-[15px]'} font-medium`}>
+        {pack.mode === 'single' ? C.materialsTitleSingle : pack.mode === 'theme' ? C.materialsTitleTheme(pack.items.length) : C.materialsTitle(pack.items.length)}
+      </h2>
+      {pack.pickReason && <p className="mt-1 text-[12.5px] leading-6 text-pine-deep">{C.startWhy(pack.pickReason)}</p>}
       <ol className="mt-3 space-y-3">
         {pack.items.map((item) => (
           <li key={item.ref} className="rounded-xl border border-divider bg-card px-4 py-3">
@@ -33,7 +36,7 @@ export function MaterialsList({ pack, compact = false }: { pack: LiveMaterialPac
             {item.author && <p className="text-[12px] text-ink-secondary">{item.author}</p>}
             {!compact && <p className="mt-2 line-clamp-3 text-[13px] leading-6 text-ink-secondary">{previewOf(item.excerpt)}</p>}
             <p className={`mt-2 text-[12px] ${item.body === 'full' ? 'text-ink-muted' : 'text-cinnabar-deep'}`}>
-              {item.body === 'full' ? C.materialsFullNote : C.materialsSummaryNote}
+              {item.body === 'full' ? (pack.mode === 'single' && !/^（全文 \d+ 字/.test(item.excerpt) ? C.materialsFullTextNote : C.materialsFullNote) : C.materialsSummaryNote}
             </p>
             <a className="mt-1 inline-block text-[12px] text-pine underline-offset-4 hover:underline" href={item.url} target="_blank" rel="noopener noreferrer">
               {C.openOriginal}

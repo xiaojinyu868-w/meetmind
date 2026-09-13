@@ -108,6 +108,7 @@ async function main(): Promise<void> {
   // SMOKE_ZHIHU_SELF=1：用固定 id（需在 .env 的 ZHIHU_SELF_MODE_USER_IDS 白名单里），截图里能看到真实收藏夹与「你开过的课」
   const userId = process.env.SMOKE_ZHIHU_SELF === '1' ? 'smoke-zhihu-self' : `smoke-zhihu-${Date.now().toString(36)}`;
   let threadId: string | null = null;
+  let singleThreadId: string | null = null;
   const pass = (line: string) => console.log(`✓ ${line}`);
 
   try {
@@ -170,6 +171,17 @@ async function main(): Promise<void> {
     pass('GET /api/zhihu/lesson/<id> → engine=live，材料包 3 篇');
     const materialsFile = path.join(process.cwd(), TeachConfig.materialsDir, `${threadId}.json`);
     assert(fs.existsSync(materialsFile), `材料包文件不存在：${materialsFile}`);
+
+    // 2b) 课的单位 = 一篇：single 模式给老师全文、课题 = 文章标题、材料包记 mode
+    const singleRes = await fetch(`${base}/api/zhihu/lesson`, { method: 'POST', headers, body: JSON.stringify({ captureIds: [captureIds[1]], mode: 'single' }) });
+    const single = (await singleRes.json()) as { success?: boolean; thread?: { id: string; topic: string }; pack?: { mode?: string; items: Array<{ body: string; excerpt: string; title: string }> } };
+    assert(singleRes.ok && single.success && single.thread && single.pack, `single lesson 失败 ${singleRes.status} ${JSON.stringify(single)}`);
+    singleThreadId = single.thread.id;
+    assert.equal(single.pack.mode, 'single');
+    assert.equal(single.pack.items.length, 1);
+    assert.equal(single.thread.topic, MATERIALS[1].title, '单篇课的课题是文章标题');
+    assert.equal(single.pack.items[0].excerpt, MATERIALS[1].body.replace(/\r\n?/g, '\n').trim(), '单篇课给老师的是全文');
+    pass(`POST /api/zhihu/lesson mode=single → 线程 ${singleThreadId}，课题「${single.thread.topic}」，老师拿到全文 ${single.pack.items[0].excerpt.length} 字`);
     pass(`材料包已落盘 ${path.relative(process.cwd(), materialsFile)}`);
 
     // 3) 老师开讲：材料里的概念必须出现在口播里
@@ -280,11 +292,12 @@ async function main(): Promise<void> {
     // 清理：capture / workspace / 线程（表 + 事件日志 + 材料包）/ 用户
     await prisma.workspaceCapture.deleteMany({ where: { userId } }).catch(() => undefined);
     await prisma.workspace.deleteMany({ where: { ownerId: userId } }).catch(() => undefined);
-    if (threadId) {
-      await prisma.teachThread.delete({ where: { id: threadId } }).catch(() => undefined);
+    for (const id of [threadId, singleThreadId]) {
+      if (!id) continue;
+      await prisma.teachThread.delete({ where: { id } }).catch(() => undefined);
       for (const file of [
-        path.join(process.cwd(), TeachConfig.eventLogDir, `${threadId}.jsonl`),
-        path.join(process.cwd(), TeachConfig.materialsDir, `${threadId}.json`),
+        path.join(process.cwd(), TeachConfig.eventLogDir, `${id}.jsonl`),
+        path.join(process.cwd(), TeachConfig.materialsDir, `${id}.json`),
       ]) {
         fs.rmSync(file, { force: true });
       }

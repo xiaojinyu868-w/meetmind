@@ -6,24 +6,22 @@
  * 三种状态各一句人话，不摆功能：
  * - 未登录：知乎登录可用时给「用知乎登录」，不可用时只给「用 MeetMind 账号登录」并说明原因——不给一颗点了会坏的按钮
  * - 已登录未连接 / 已过期：连接 / 重新连接
- * - 已连接：收藏夹带状态（已收下几条 / 读了几篇全文 / 开过几节课），每个一颗「开课」；下面是「你开过的课」
- * 「开课」= 收下这个收藏夹 → 同学读最值得讲的几篇 → 开讲，三步进度真实可见。授权回来的提示只出现一次。
+ * - 已连接：收藏夹带状态（已收下几条 / 读了几篇全文 / 开过几节课），每个是一个入口——点进去是收藏夹页，
+ *   同学把里面的收藏分成几条线，课的单位是一篇或一条线（2026-09-13 起；整夹开课已退成兜底）；下面是「你开过的课」
+ * 授权回来的提示只出现一次。
  */
 
 import * as React from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { ZHIHU_COPY as C } from '@/lib/ui/copy-zhihu';
 import type { ZhihuFavlist } from '@/lib/services/zhihu/zhihu-open-client';
 import {
-  createLesson,
   fetchCaptures,
   fetchFavlists,
   fetchLessons,
   fetchZhihuPublicStatus,
   fetchZhihuStatus,
-  importFavlist,
   startZhihuOAuth,
   syncRecentCollections,
   ZhihuClientError,
@@ -33,11 +31,9 @@ import {
 } from './zhihu-api-client';
 
 type Notice = { tone: 'quiet' | 'warn'; text: string } | null;
-type StepState = 'todo' | 'doing' | 'done';
 
 const LOGIN_NEXT = '/login?next=%2Fapps%2Fzhihu';
 const primary = 'inline-flex items-center rounded-full bg-pine px-5 py-2.5 text-[14px] font-medium text-white transition hover:bg-pine-deep disabled:cursor-not-allowed disabled:opacity-50';
-const secondary = 'inline-flex items-center rounded-full border border-divider bg-card px-5 py-2.5 text-[14px] text-ink transition hover:bg-paper-warm disabled:cursor-not-allowed disabled:opacity-50';
 const ghost = 'text-[13px] text-ink-secondary underline-offset-4 hover:text-pine hover:underline';
 
 function messageFor(error: unknown): string {
@@ -85,19 +81,8 @@ function favlistStates(captures: ZhihuCaptureDto[], lessons: ZhihuLessonSummaryD
   return map;
 }
 
-function StepDot({ state }: { state: StepState }) {
-  if (state === 'done') {
-    return (
-      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden className="shrink-0 text-pine">
-        <path d="M3 7.2l2.6 2.6L11 4.6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    );
-  }
-  return <span aria-hidden className={`inline-block h-[7px] w-[7px] shrink-0 rounded-full ${state === 'doing' ? 'animate-pulse bg-pine' : 'bg-divider'}`} />;
-}
 
 export function ZhihuEntry() {
-  const router = useRouter();
   const { isAuthenticated, accessToken, isLoading, isCheckingAuth } = useAuth();
   // 本机有 token 但还在向服务端核对时不能当「未登录」渲染，否则登录用户会先闪一下「去登录」
   const authPending = isLoading || isCheckingAuth;
@@ -109,7 +94,6 @@ export function ZhihuEntry() {
   const [mode, setMode] = React.useState<'oauth' | 'self' | null>(null);
   const [notice, setNotice] = React.useState<Notice>(null);
   const [busy, setBusy] = React.useState<'connect' | string | null>(null);
-  const [steps, setSteps] = React.useState<[StepState, StepState, StepState]>(['todo', 'todo', 'todo']);
 
   // 授权回来的提示：读一次，清掉地址栏
   React.useEffect(() => {
@@ -178,31 +162,6 @@ export function ZhihuEntry() {
       setBusy(null);
     }
   }, [accessToken, isAuthenticated]);
-
-  const open = React.useCallback(
-    async (favlist: ZhihuFavlist) => {
-      if (!accessToken) return;
-      setBusy(favlist.urlToken);
-      setNotice(null);
-      setSteps(['doing', 'todo', 'todo']);
-      try {
-        const imported = await importFavlist(accessToken, favlist.urlToken);
-        if (imported.imported === 0) {
-          setNotice({ tone: 'warn', text: C.emptyFavlist });
-          return;
-        }
-        setSteps(['done', 'doing', 'todo']);
-        const lesson = await createLesson(accessToken, favlist.urlToken);
-        setSteps(['done', 'done', 'doing']);
-        router.push(`/apps/zhihu/lesson/${encodeURIComponent(lesson.thread.id)}`);
-      } catch (error) {
-        setNotice({ tone: 'warn', text: messageFor(error) });
-        setBusy(null);
-        setSteps(['todo', 'todo', 'todo']);
-      }
-    },
-    [accessToken, router],
-  );
 
   const states = React.useMemo(() => favlistStates(captures, lessons, favlists ?? []), [captures, lessons, favlists]);
   const connected = Boolean(isAuthenticated && status?.enabled && status.connected);
@@ -299,50 +258,28 @@ export function ZhihuEntry() {
             {favlists && favlists.length > 0 && (
               <ul className="mt-4 divide-y divide-divider-light rounded-2xl border border-divider bg-card">
                 {favlists.map((favlist) => {
-                  const active = busy === favlist.urlToken;
                   const state = states.get(favlist.urlToken);
                   const taught = state?.lessons.length ?? 0;
-                  const latest = state?.lessons[0];
                   return (
-                    <li key={favlist.urlToken} className="px-5 py-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-baseline gap-x-2">
+                    <li key={favlist.urlToken}>
+                      <Link
+                        href={`/apps/zhihu/favlist/${encodeURIComponent(favlist.urlToken)}`}
+                        className="flex items-center justify-between gap-4 px-5 py-4 transition hover:bg-paper-warm"
+                      >
+                        <span className="min-w-0">
+                          <span className="flex flex-wrap items-baseline gap-x-2">
                             <span className="text-[15px] font-medium">{favlist.title}</span>
                             <span className="text-[11px] text-ink-muted">{favlist.isPublic ? C.favlistPublic : C.favlistPrivate}</span>
-                          </div>
-                          {favlist.description && <p className="mt-1 line-clamp-2 text-[13px] leading-6 text-ink-secondary">{favlist.description}</p>}
-                          {state && (state.imported > 0 || taught > 0) && (
-                            <p className="mt-1 text-[12px] text-ink-muted">
-                              {[state.imported > 0 ? C.favlistImported(state.imported, state.full) : null, taught > 0 ? C.favlistTaught(taught) : null].filter(Boolean).join(' · ')}
-                              {latest && (
-                                <>
-                                  {' · '}
-                                  <Link className="text-pine underline-offset-4 hover:underline" href={`/apps/zhihu/lesson/${encodeURIComponent(latest.threadId)}`}>
-                                    {C.lessonContinue}
-                                  </Link>
-                                </>
-                              )}
-                            </p>
-                          )}
-                        </div>
-                        <button type="button" className={`${taught > 0 ? secondary : primary} shrink-0`} onClick={() => open(favlist)} disabled={busy !== null}>
-                          {active ? C.loading : taught > 0 ? C.startAgain : C.startLesson}
-                        </button>
-                      </div>
-                      {active && (
-                        <ol className="mt-3 space-y-1.5 text-[12.5px]">
-                          {[C.progressImport, C.progressRead, C.progressOpen].map((label, index) => {
-                            const s = steps[index];
-                            return (
-                              <li key={label} className={`flex items-center gap-2 ${s === 'todo' ? 'text-ink-muted' : 'text-ink'}`}>
-                                <StepDot state={s} />
-                                <span>{label}</span>
-                              </li>
-                            );
-                          })}
-                        </ol>
-                      )}
+                          </span>
+                          {favlist.description && <span className="mt-1 line-clamp-1 block text-[13px] leading-6 text-ink-secondary">{favlist.description}</span>}
+                          <span className="mt-1 block text-[12px] text-ink-muted">
+                            {state && (state.imported > 0 || taught > 0)
+                              ? [state.imported > 0 ? C.favlistImported(state.imported, state.full) : null, taught > 0 ? C.favlistTaught(taught) : null].filter(Boolean).join(' · ')
+                              : C.favlistUntouched}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-[13px] text-pine">{C.favlistOpen} →</span>
+                      </Link>
                     </li>
                   );
                 })}
