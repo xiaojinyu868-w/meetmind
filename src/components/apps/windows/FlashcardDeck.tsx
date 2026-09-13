@@ -43,14 +43,12 @@ interface FlashcardDeckProps {
   onFlip: () => void;
   onShowHint: () => void;
   onSeek?: (startMs: number) => void;
-  /** 证据按钮的文案（默认「回到课堂 mm:ss」） */
-  evidenceLabel?: (startMs: number) => string;
 }
 
 const PAPER = 'rounded-[18px] border border-divider bg-white shadow-[0_1px_2px_rgba(32,49,42,0.05),0_18px_40px_-18px_rgba(32,49,42,0.28)]';
 const FLIP_MS = 520;
 
-export function FlashcardDeck({ card, index, total, flipped, showHint, remaining, dragX = 0, dragging = false, leaving = null, onFlip, onShowHint, onSeek, evidenceLabel }: FlashcardDeckProps) {
+export function FlashcardDeck({ card, index, total, flipped, showHint, remaining, dragX = 0, dragging = false, leaving = null, onFlip, onShowHint, onSeek }: FlashcardDeckProps) {
   const faceStyle: CSSProperties = { backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', gridArea: '1 / 1' };
   const counter = `${String(index + 1).padStart(2, '0')} / ${String(total).padStart(2, '0')}`;
   const liftRef = useRef<HTMLDivElement | null>(null);
@@ -168,11 +166,9 @@ export function FlashcardDeck({ card, index, total, flipped, showHint, remaining
                     className="mm-focus ml-3 shrink-0 rounded text-ink-muted/70 transition hover:text-ink disabled:cursor-default"
                     onClick={(event) => { event.stopPropagation(); onSeek?.(card.evidence!.startMs); }}
                   >
-                    {evidenceLabel
-                      ? evidenceLabel(card.evidence.startMs)
-                      : onSeek
-                        ? APPS_COPY.flashcards.returnToEvidenceAt(formatFlashcardEvidenceTime(card.evidence.startMs))
-                        : APPS_COPY.flashcards.evidenceAt(formatFlashcardEvidenceTime(card.evidence.startMs))}
+                    {onSeek
+                      ? APPS_COPY.flashcards.returnToEvidenceAt(formatFlashcardEvidenceTime(card.evidence.startMs))
+                      : APPS_COPY.flashcards.evidenceAt(formatFlashcardEvidenceTime(card.evidence.startMs))}
                   </button>
                 ) : null}
               </div>

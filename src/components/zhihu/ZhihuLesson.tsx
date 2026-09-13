@@ -19,7 +19,7 @@ import { ZHIHU_COPY as C } from '@/lib/ui/copy-zhihu';
 import { LiveStage } from '@/components/teach-live/LiveStage';
 import { useLiveLesson } from '@/components/teach-live/useLiveLesson';
 import { liveFetchEvents, livePostMessage } from '@/components/teach-live/live-client';
-import { useZhihuLesson } from './useZhihuLesson';
+import { useLessonPack } from './useLessonPack';
 import { useLessonRecordSync } from '@/hooks/useLessonRecordSync';
 import { MaterialsList } from './ZhihuLessonPanels';
 
@@ -29,7 +29,7 @@ export function ZhihuLesson({ threadId }: { threadId: string }) {
   const router = useRouter();
   const { isAuthenticated, isLoading, isCheckingAuth } = useAuth();
   const lesson = useLiveLesson();
-  const zhihu = useZhihuLesson(threadId);
+  const zhihu = useLessonPack(threadId);
   const [live, setLive] = React.useState(true);
   const [bootError, setBootError] = React.useState<string | null>(null);
   const [railOpen, setRailOpen] = React.useState(false);

@@ -3,7 +3,7 @@
  *
  * 合成账户 → 直接写 3 条 zhihu-favorite capture（正文完整，跳过 Firecrawl）→ POST /api/zhihu/lesson（挑材料、建 live 线程、材料包落盘）
  * → GET /api/zhihu/lesson/<id> → 「开始上课」并听 SSE：老师开口的内容里必须出现材料里的概念（材料段真的进了 prompt）
- * → 材料包变伪转录喂 /api/apps/execute（quiz）→ POST /api/zhihu/continue（无凭证时返回空组不报错）→ 清理。
+ * → GET /api/teach/threads/<id>/record（课的物化）→ POST /api/zhihu/continue（无凭证时返回空组不报错）→ 清理。
  *
  * SMOKE_BASE 指向要验的服务（默认 http://localhost:3106）。SMOKE_BROWSER=chromium 时用 Playwright 带 token 打开
  * /apps/zhihu 与课堂页各截一张图到 SMOKE_SHOT_DIR。SMOKE_SKIP_LLM=1 跳过老师开讲与出题（不花模型钱）。
@@ -102,7 +102,6 @@ async function main(): Promise<void> {
   const { authService } = await import('@/lib/services/auth-service');
   const { workspaceContextService } = await import('@/lib/services/workspace-context-service');
   const { captureInputFromCollectionItem, ZHIHU_CAPTURE_SOURCE_TYPE } = await import('@/lib/services/zhihu/zhihu-import-service');
-  const { materialsToTranscript, buildExecutePayload } = await import('@/components/zhihu/zhihu-lesson-model');
   const { TeachConfig } = await import('@/lib/config/teach.config');
 
   // SMOKE_ZHIHU_SELF=1：用固定 id（需在 .env 的 ZHIHU_SELF_MODE_USER_IDS 白名单里），截图里能看到真实收藏夹与「你开过的课」
@@ -201,31 +200,22 @@ async function main(): Promise<void> {
       console.log(`  口播开头：${speech.slice(0, 140).replace(/\s+/g, ' ')}…`);
     }
 
-    // 4) 讲完就考：伪转录喂既有 execute
-    if (!skipLlm) {
-      const pack = lesson.pack as unknown as Parameters<typeof materialsToTranscript>[0];
-      const { transcript, durationMs } = materialsToTranscript(pack);
-      assert(durationMs >= 60_000, `伪转录时长 ${durationMs}ms 不够过 readiness 门`);
-      const payload = buildExecutePayload({ appKey: 'quiz', threadId, pack, transcript });
-      let execRes: Response | null = null;
-      let exec: { ok?: boolean; error?: string; result?: { cards?: unknown[]; raw?: Record<string, unknown> } } = {};
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        execRes = await fetch(`${base}/api/apps/execute`, { method: 'POST', headers, body: JSON.stringify(payload) });
-        exec = (await execRes.json().catch(() => ({}))) as typeof exec;
-        // 共享库锁等待超时（多进程 + delete 日志模式）是环境问题不是链路问题，退避重试两次
-        if (execRes.status === 500 && /timed out/i.test(exec.error ?? '')) {
-          console.log(`  · execute 遇到库锁超时，${attempt < 3 ? '重试' : '放弃'}（第 ${attempt} 次）`);
-          await new Promise((r) => setTimeout(r, 1500 * attempt));
-          continue;
-        }
-        break;
+    // 4) 课的物化：讲完的课能拿到 LessonRecord（复习页据此存成"我的一节课"）
+    {
+      const recRes = await fetch(`${base}/api/teach/threads/${threadId}/record`, { headers });
+      const rec = (await recRes.json()) as { success?: boolean; record?: { segments: Array<{ speaker: string; sourceRef?: string }>; materials?: { mode: string; items: Array<{ ref: string; coverage: string; excerpt: string }> } | null; rounds: number; settled: boolean; digest: { pagesTaught: string[] }; stageHref: string } };
+      assert(recRes.ok && rec.success && rec.record, `record 失败 ${recRes.status} ${JSON.stringify(rec).slice(0, 200)}`);
+      const record = rec.record;
+      assert.equal(record.materials?.items.length, 3, 'record 里的材料应是这节课的 3 篇');
+      assert(record.materials!.items.every((i) => i.coverage === 'full-text' && i.excerpt.length > 0), '材料应带全文节选');
+      assert.equal(record.stageHref, `/apps/zhihu/lesson/${threadId}`);
+      if (!skipLlm) {
+        assert(record.segments.length > 0 && record.settled && record.rounds >= 1, `讲完的课应有转录段并已结束：段 ${record.segments.length} settled=${record.settled}`);
+        assert(record.segments.every((seg) => seg.speaker === 'teacher'), '只有「开始上课」时不该出现学生段');
+        pass(`GET /api/teach/threads/<id>/record → ${record.segments.length} 段老师转录 / ${record.rounds} 轮 / 讲了 ${record.digest.pagesTaught.length} 页 / 材料 ${record.materials!.items.map((i) => i.ref).join(' ')} 带节选`);
+      } else {
+        pass(`GET /api/teach/threads/<id>/record → 材料 ${record.materials!.items.map((i) => i.ref).join(' ')} 带节选（未开讲，无转录段）`);
       }
-      assert(execRes && exec.ok && exec.result, `execute 失败 ${execRes?.status} ${JSON.stringify(exec).slice(0, 300)}`);
-      const questionCount = Array.isArray((exec.result.raw as { questions?: unknown[] } | undefined)?.questions)
-        ? ((exec.result.raw as { questions: unknown[] }).questions.length)
-        : exec.result.cards?.length ?? 0;
-      assert(questionCount > 0, '测验没有题');
-      pass(`伪转录（${transcript.length} 段 / ${Math.round(durationMs / 1000)}s）→ /api/apps/execute quiz → ${questionCount} 题`);
     }
 
     // 5) 继续看：知乎搜索额度极小（低额度账号站内 / 全网各 10 次 / 天），默认只在无凭证时跑（空组不报错）；有凭证要跑请 SMOKE_WITH_SEARCH=1
@@ -265,23 +255,20 @@ async function main(): Promise<void> {
           await page.waitForTimeout(400);
           await page.screenshot({ path: path.join(shotDir, 'zhihu-lesson-next.png') });
         }
-        // 课后页：进来自动出题，等题出来（或 90s 超时也截一张）
-        await page.goto(`${base}/apps/zhihu/lesson/${threadId}/review`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        if (!skipLlm) {
-          await page.waitForFunction(() => !document.body.innerText.includes('同学在出题'), null, { timeout: 90_000 }).catch(() => undefined);
-        } else {
-          await page.waitForTimeout(2500);
-        }
-        await page.screenshot({ path: path.join(shotDir, 'zhihu-review.png'), fullPage: true });
+        // 复习页：同学讲的课直达 /app?session=teach:<id>（讲过才有转录；没讲过恢复不了，截一张首页也行）
+        await page.goto(`${base}/app?session=${encodeURIComponent(`teach:${threadId}`)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.waitForFunction(() => document.body.innerText.includes('同学讲的课') || document.body.innerText.includes('课堂'), null, { timeout: 90_000 }).catch(() => undefined);
+        await page.waitForTimeout(2500);
+        await page.screenshot({ path: path.join(shotDir, 'zhihu-review.png'), fullPage: false });
         // 手机视口：第一屏与课后页
         await page.setViewportSize({ width: 390, height: 844 });
         await page.goto(`${base}/apps/zhihu`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.waitForTimeout(1500);
         await page.screenshot({ path: path.join(shotDir, 'zhihu-entry-mobile.png'), fullPage: true });
-        await page.goto(`${base}/apps/zhihu/lesson/${threadId}/review`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await page.waitForTimeout(skipLlm ? 2500 : 8000);
-        await page.screenshot({ path: path.join(shotDir, 'zhihu-review-mobile.png'), fullPage: true });
-        pass(`截图：${shotDir}/zhihu-entry.png · zhihu-lesson.png · zhihu-lesson-rail.png · zhihu-lesson-next.png · zhihu-review.png · *-mobile.png`);
+        await page.goto(`${base}/apps/zhihu/lesson/${threadId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.waitForTimeout(4000);
+        await page.screenshot({ path: path.join(shotDir, 'zhihu-lesson-mobile.png'), fullPage: false });
+        pass(`截图：${shotDir}/zhihu-entry.png · zhihu-lesson.png · zhihu-lesson-rail.png · zhihu-lesson-next.png · zhihu-review.png · zhihu-entry-mobile.png · zhihu-lesson-mobile.png`);
       } finally {
         await browser.close();
       }
