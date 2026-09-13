@@ -31,8 +31,8 @@
 |---|---|---|
 | `/apps/zhihu` | `ZhihuEntry` | 桌宠 + 三步预期。未登录：知乎登录可用（`GET /api/auth/zhihu/status` 公开接口的 `oauthReady`）才给「用知乎登录」，否则只给「用 MeetMind 账号登录」（带 `?next=` 回跳）并说明原因——不给一颗点了会坏的按钮。已登录：连接 / 重新连接；已连接：收藏夹带状态（已收下几条 / 读了几篇全文 / 开过几节课），每行是**入口**（→ 收藏夹页；整夹一键开课已撤——一次讲 4 篇或 98 篇不成立）；下面是「你开过的课」（`GET /api/zhihu/lessons`）。`isCheckingAuth` 期间不当未登录渲染，避免登录用户闪一下「去登录」 |
 | `/apps/zhihu/favlist/[urlToken]` | `ZhihuFavlist` | **收藏夹页**：先出条目（第一次打开顺手收进来），再出同学读出来的几条线（每条一句为什么 + 「按这条线开一节」），每篇一个「讲这篇 / 再讲一次」（正文状态、讲过几次、回到那节课），视频 / 想法归「零散的」并写明讲不了；顶部「随手开一节」= 同学挑最值得先讲的一篇并说为什么。分线没回来 / 失败时按收藏时间平铺，页面照样能用 |
-| `/apps/zhihu/lesson/[threadId]` | `ZhihuLesson` | 舞台原样复用 teach-live 的 `LiveStage` + `useLiveLesson`；进来先 `openLesson`，事件日志为空就替学生发「开始上课」。右侧可收起的**材料栏**（同学读了哪几篇 / 正文状态说人话 / 原文；「考一考 →」去课后页）。**老师讲完一轮那一刻**（`generating` 由真落假）右下长出小卡「讲完这一段了。考一考？／继续听」——机器 act，不让学生去找按钮 |
-| `/apps/zhihu/lesson/[threadId]/review` | `ZhihuReview` | 课后三栏：左材料有根（每篇一段预览 + 原文）、中练习（`QuizWindow` / `FlashcardsWindow` 原组件，新增可选 `evidenceLabel` prop 把「回到课堂 mm:ss」换成「看这篇材料：A1《…》」，点开知乎原文）、右继续看（交卷 → assessment 进 `/api/memory/events` → 没稳的概念 → `/api/zhihu/continue`）。进来就自动出题（零提问）；手机按 练习 → 继续看 → 材料 竖排 |
+| `/apps/zhihu/lesson/[threadId]` | `ZhihuLesson` | 舞台原样复用 teach-live 的 `LiveStage` + `useLiveLesson`；进来先 `openLesson`，事件日志为空就走 hook 的 `send('开始上课')`（generating 才真实）。右侧可收起的**材料栏**（同学读了哪几篇 / 正文状态说人话 / 原文）。**服务端讲完一轮**（generating 真→假）就把这节课存成「我的一节课」（`useLessonRecordSync` → IndexedDB）；**演完一轮**右下长出小卡「讲完这一段了。去复习 / 继续听」（演出卡住 90s 兜底出卡）；「去复习」= `/app?session=teach:<id>`，进 MeetMind 原来的复习页 |
+| ~~`/apps/zhihu/lesson/[threadId]/review`~~ | — | **已退役（09-13）**：课后全部在复习页（材料卡 `components/review/LessonMaterialsCard` + 复习同桌附件层 + 知乎「继续看」`ZhihuContinueReading` 作插槽）。伪转录 / 假时间重标注一并删除 |
 
-共享：`useZhihuLesson`（材料包 / 伪转录 / 出题 / 交卷 / 继续看的状态，课堂页与课后页共用）、`ZhihuLessonPanels`（材料清单 / 继续看）、`zhihu-lesson-model`（纯函数）、`zhihu-api-client`（fetch 封装，错误统一 `ZhihuClientError`）。
-文案 `src/lib/ui/copy-zhihu.ts`。验证：`make smoke-zhihu-lesson`（`SMOKE_BROWSER=chromium` 截第一屏 / 课堂 / 材料栏 / 课后 / 手机两张；`SMOKE_ZHIHU_SELF=1` 用白名单固定 id 让截图里出现真实收藏夹与「你开过的课」）。
+共享：`useLessonPack`（课堂页材料栏的材料包）、`ZhihuLessonPanels`（材料清单）、`ZhihuContinueReading`（复习页里的「继续看」：不传概念时服务端从这节课复习的交卷记录推）、`zhihu-api-client`（fetch 封装，错误统一 `ZhihuClientError`）。
+文案 `src/lib/ui/copy-zhihu.ts`。验证：`make smoke-zhihu-lesson`（`SMOKE_BROWSER=chromium` 截第一屏 / 课堂 / 材料栏 / 讲完小卡 / 复习页 / 手机两张；`SMOKE_ZHIHU_SELF=1` 用白名单固定 id 让截图里出现真实收藏夹与「你开过的课」）。

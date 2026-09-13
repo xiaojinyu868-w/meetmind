@@ -22,6 +22,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 ### 知乎接入
 
 `zhihu/DOMAIN.md`：知乎开放平台只读接口（搜索 / 热榜 / 直答 / 本人或 OAuth 用户的创作·关注·收藏）的类型化客户端 + 抓回页面的去杂质；知乎登录、收藏夹进收集流、收藏夹开课（teach-live）、知乎搜索补货都从这里出发。独立子域名部署，`ZHIHU_ENABLED` 灰度；北极星 `docs/plans/2026-09-12-zhihu-line.md`。
+| `material-lessons/` | 「从材料开一节课」能力层（与来源无关，2026-09-13）：候选材料形状、课的单位与预算、同学分线、接下来看哪篇的判断 → `material-lessons/DOMAIN.md`；契约 `docs/plans/2026-09-13-material-lessons.md` |
 
 `learning-observation-service.ts`：服务端生产者（课后理解、/api/memory/events）的统一落点，**双写**（2026-09-09）：`LearningEvent` 表始终写（掌握轨迹 / P0 画像的原料），`CONTEXT_ENABLED` 时同一份观察再经 education-adapter 进 `ContextEvent` 由 worker 投给 Hindsight；只等待落库，Context 侧失败不回滚事实表。课后标题/摘要/精选仍先完成。
 

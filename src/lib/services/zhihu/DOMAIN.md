@@ -68,6 +68,8 @@ Access Secret 在 developer.zhihu.com/profile 自助申请，一个账号最多 
 
 ## 二、本目录
 
+**2026-09-13 起本目录是适配器**：课的单位 / 预算 / 分线 / 「接下来看哪篇」的判断都在与来源无关的能力层 `services/material-lessons/`（契约 `docs/plans/2026-09-13-material-lessons.md`），这里只做 capture → `MaterialCandidate` 的映射（`zhihu-material-candidate.ts`）与函数名转发；课的物化在 `teach-live/lesson-record.ts`；复习页附件层在 `lib/review/`。
+
 | 文件 | 职责 | 不变量 |
 |---|---|---|
 | `zhihu-open-client.ts` | 上表全部端点 + OAuth 三步的类型化客户端；字段归一 camelCase、字符串数字转数字；`fetch` / 时间源可注入 | 直连 HTTP 不依赖 CLI；`Code≠0` 一律抛 `ZhihuApiError`（kind：param / auth / rate_limit / quota / server / network / timeout / protocol / oauth，`retryable` 只对 network / timeout / server 为 true）；日志只记 endpoint 与错误码，**不记 query、凭证、响应正文**；缺 Access Secret 不出网 |

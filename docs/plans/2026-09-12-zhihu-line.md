@@ -59,6 +59,10 @@
 | G7.1 打磨（09-12 晚） | 第一屏重做（桌宠 + 三步预期 + 收藏夹状态 + 你开过的课 + 只给能用的按钮 + 登录回跳）；讲完一轮长出「考一考」；课后三栏页；材料预览与正文状态说人话 | `smoke-zhihu-lesson` 六张截图（桌面 + 手机）过眼 | 0f8078a 完成，线上 |
 | G8 内容层 | 节选按结构取；题目解析假时间 → 真材料；「继续看」模型判断 + 有根理由；`make bench-zhihu-lesson` 质量门 | 10 例单测；真实 19K 字回答节选核过；bench 三轮数字见下 | 1db130d 完成，线上 |
 | G4 入口 + 画像（原计划"后置"） | `/api/zhihu/sync` 最近收藏自动进收集流；知乎画像一条观察进 Hindsight | 单测；线上实测：50 条 2.4 s 进库、第二次节流、activity 事件 + `zhihu.profile` ContextEvent（submitted） | 542cfd0 完成，线上 |
+| G9 课的物化 [core] | live 课 → LessonRecord → IndexedDB 一节课 → `/app?session=teach:<id>` 直达复习页；讲完小卡「去复习」 | lesson-record 单测；dev 端到端：讲完 → 复习页时间轴 / 接下来怎么学 / 同桌可用 | 0653f6e 完成 |
+| G10 复习附件层 [core] | 材料卡 + 复习同桌 supportMaterials 附件层 + 知乎「继续看」从交卷记录推概念 | dev 端到端：材料卡 + 「先做一套题」提示 | 1e4fd87 完成 |
+| G11 抽能力层 | `services/material-lessons/`（候选 / 课的单位与预算 / 分线 / 接下来看哪篇），知乎只剩适配器；迷你课后页退役 | 103 例测试全绿，行为等价 | 5c39323 + 本次 |
+| 契约文档 | `docs/plans/2026-09-13-material-lessons.md`：三层 / 五接口 / 物化 / 边界表 / 治理 | — | 完成 |
 | 上线 | PM2 + nginx + 证书 + `make deploy-zhihu` | `/api/health` + 静态 chunk 抽样 + 子域名走通旅程 | https://zhihu.meetmind.online 在跑（证书到 2026-12-11），每次提交后 `make deploy-zhihu` |
 
 ## 质量门基线（`make bench-zhihu-lesson`，合成包 ×3，线上 3012，2026-09-12 21:20）

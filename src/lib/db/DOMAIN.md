@@ -39,12 +39,18 @@ hooks/services → lib/db → types
 `remoteRecordingState / remoteCheckpointAt`（另一台设备正在录这节课，服务端 `metadata.recordingState` 回填；列表显示「录制中 · 已 N 分钟」）。
 `status='recording'` 的行不再在挂载时被强制改成 completed：它们是「没结束的课」，由 `useUnfinishedRecordings` 承接。
 
+### 同学讲的课（2026-09-13，非索引字段，不升版本）
+
+`audioSessions.sourceType` 多一个值 `'teach-live'`（无音频 / 视频，只有转录），`sourceRef` = TeachThread id；`transcripts.speakerId` 用具名 `teacher` / `student`（说话人标签「老师」/「我」），`sourceItemId` = 这段话讲的是哪篇材料（材料包 ref，如 A1）。
+`lesson-records.ts`：`saveLessonRecordAsSession(record, userId)` 幂等（sessionId = `teach:<threadId>`，整段替换转录）；`teachSessionId / threadIdFromTeachSession`。复习页恢复（`useReviewSession.restoreReviewSession`）会把 speakerId / sourceItemId 带上。
+
 ## 文件索引
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `schema.ts` | ~430 | Dexie DB 定义 + 表类型 + 版本迁移（v10：recordingChunks） |
-| `sessions.ts` | ~480 | 会话 CRUD；`markSessionCheckpoint`（录课检查点心跳）、`listUnfinishedRecordings`、`setSessionSyncState`；deleteSession 级联 recordingChunks |
+| `lesson-records.ts` | ~50 | 同学讲的 live 课 → 一节课（audioSessions `teach-live` 行 + transcripts 两个说话人），幂等整段替换 |
+| `sessions.ts` | ~480 | 会话 CRUD（`saveAudioSession` 多 `sourceRef` 选项）；`markSessionCheckpoint`（录课检查点心跳）、`listUnfinishedRecordings`、`setSessionSyncState`；deleteSession 级联 recordingChunks |
 | `conversations.ts` | 240 | 对话历史 CRUD + `reassignConversationOwner`（anonymous → 登录用户的归属迁移） |
 | `lexicon.ts` | 209 | 转录词库管理（种子/CRUD/编辑差分→自动晋升） |
 | `notes.ts` | 87 | 笔记 CRUD |
