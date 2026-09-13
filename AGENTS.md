@@ -161,6 +161,7 @@ make smoke-context-live # 真 Hindsight + Tutor + 浏览器全链路验收（SMO
 - `docs/PRODUCT_TASTE.md` — Taste 宪法：安静/有根/第一印象、行为原则、仪式时刻白名单、文案规则
 - `docs/ECHO_PRODUCT_DEFINITION.md` / `docs/APPLICATION_MATRIX_PRD.md` / `docs/PRODUCT_THESIS_2026.md` — 单品定义
 - `docs/AI_LESSON_DEFINITION.md` — 一堂 AI 讲的好课：自己的定义（AI 长短板对照 → 八条判断 → 形态推论 → 主讲 + 备课 / 画师 / 审核 / 观察 / 记忆的编排原则 → 评分卡）；改上课线的方向前先读
+- `docs/TEACH_LIVE_WOW.md` — 上课舞台的"惊艳"要素：五种来源、前 3 分钟时间线（现状 → 目标）、逐项设计（开场 / 图 / 检验 / 打断 / 懂我 / 声音 / 课后 / 用心）、生产级门禁、实施顺序；做上课线任何体验改动前对照
 
 **设计**
 - `docs/DESIGN_SYSTEM.md` — 设计系统 v7 文字真相源（双签名色 / token / 组件 / 暗色）
