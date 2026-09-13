@@ -361,6 +361,35 @@ function items<T>(data: unknown, mapper: (raw: Record<string, unknown>) => T): T
 // 客户端
 // ---------------------------------------------------------------------------
 
+const API_MIN_GAP_MS = 120;
+let apiQueue: Promise<unknown> = Promise.resolve();
+let lastApiAt = 0;
+/** 30001 后重试前等多久；测试里可调小 */
+let retryDelayMs = 1500;
+
+export function setZhihuRetryDelayForTests(ms: number): void {
+  retryDelayMs = ms;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 进程内串行：同一时刻只有一个 developer.zhihu.com 请求在飞，相邻至少隔 API_MIN_GAP_MS（跨 client 实例共享——同一进程通常同一账号） */
+function serialized<T>(run: () => Promise<T>): Promise<T> {
+  const next = apiQueue.then(async () => {
+    const wait = lastApiAt + API_MIN_GAP_MS - Date.now();
+    if (wait > 0) await sleep(wait);
+    try {
+      return await run();
+    } finally {
+      lastApiAt = Date.now();
+    }
+  });
+  apiQueue = next.catch(() => undefined);
+  return next;
+}
+
 export function createZhihuOpenClient(options: ZhihuOpenClientOptions = {}) {
   const config = options.config ?? getZhihuConfig();
   const fetchImpl: FetchLike = options.fetchImpl ?? ((input, init) => fetch(input, init));
@@ -406,6 +435,10 @@ export function createZhihuOpenClient(options: ZhihuOpenClientOptions = {}) {
   }
 
   /** developer.zhihu.com 的 {Code, Message, Data} 信封；Code≠0 即失败（哪怕 HTTP 200） */
+  /**
+   * developer.zhihu.com 对同一账号的并发请求直接报 30001（2026-09-13 实测：两个 /user/favlists 同一秒到就被拒一个）。
+   * 进程内把这些调用串成一条队列、相邻间隔 ≥120ms；用户数据 / 额度接口撞到 30001 再等 1.5s 重试一次（幂等 GET）。搜索类不重试——那多半是日额度。
+   */
   async function api<T>(
     path: string,
     query: Record<string, string | number | undefined>,
@@ -416,23 +449,37 @@ export function createZhihuOpenClient(options: ZhihuOpenClientOptions = {}) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined && value !== '') url.searchParams.set(key, String(value));
     }
-    const response = await doFetch(url.toString(), { method: 'GET', headers: baseHeaders(endpoint, identity) }, endpoint, config.timeoutMs);
-    if (!response.ok) {
-      const kind = kindFromStatus(response.status);
-      log.warn('zhihu-open: http error', { endpoint, status: response.status, kind });
-      throw new ZhihuApiError(kind, endpoint, `HTTP ${response.status}`, { status: response.status });
-    }
-    const payload = await readJson<Envelope<T>>(response, endpoint);
-    const code = num(payload.Code, NaN);
-    if (!Number.isFinite(code)) {
-      throw new ZhihuApiError('protocol', endpoint, '响应缺少 Code 字段', { status: response.status });
-    }
-    if (code !== 0) {
-      const kind = kindFromCode(code);
-      log.warn('zhihu-open: api error', { endpoint, code, kind });
-      throw new ZhihuApiError(kind, endpoint, payload.Message || `知乎开放平台错误 ${code}`, { code, status: response.status });
-    }
-    return (payload.Data ?? {}) as T;
+    const retryable = endpoint.includes('/api/v1/user/') || endpoint.endsWith('/quota');
+    const attempt = async (): Promise<T> => {
+      const response = await doFetch(url.toString(), { method: 'GET', headers: baseHeaders(endpoint, identity) }, endpoint, config.timeoutMs);
+      if (!response.ok) {
+        const kind = kindFromStatus(response.status);
+        log.warn('zhihu-open: http error', { endpoint, status: response.status, kind });
+        throw new ZhihuApiError(kind, endpoint, `HTTP ${response.status}`, { status: response.status });
+      }
+      const payload = await readJson<Envelope<T>>(response, endpoint);
+      const code = num(payload.Code, NaN);
+      if (!Number.isFinite(code)) {
+        throw new ZhihuApiError('protocol', endpoint, '响应缺少 Code 字段', { status: response.status });
+      }
+      if (code !== 0) {
+        const kind = kindFromCode(code);
+        log.warn('zhihu-open: api error', { endpoint, code, kind });
+        throw new ZhihuApiError(kind, endpoint, payload.Message || `知乎开放平台错误 ${code}`, { code, status: response.status });
+      }
+      return (payload.Data ?? {}) as T;
+    };
+    return serialized(async () => {
+      try {
+        return await attempt();
+      } catch (error) {
+        if (retryable && (error as ZhihuApiError)?.kind === 'rate_limit') {
+          await sleep(retryDelayMs);
+          return attempt();
+        }
+        throw error;
+      }
+    });
   }
 
   // ----- 内容 -----

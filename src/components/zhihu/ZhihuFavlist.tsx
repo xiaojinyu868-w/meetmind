@@ -33,7 +33,8 @@ const secondary = 'inline-flex items-center rounded-full border border-divider b
 
 function messageFor(error: unknown): string {
   if (error instanceof ZhihuClientError) {
-    if (error.code === 'zhihu_rate_limit' || error.code === 'zhihu_quota') return C.quotaExceeded;
+    if (error.code === 'zhihu_rate_limit') return C.zhihuBusy;
+    if (error.code === 'zhihu_quota') return C.quotaExceeded;
     if (error.code === 'zhihu_reconnect') return C.expired;
     if (error.code === 'zhihu_not_connected') return C.notConnected;
     if (error.code === 'zhihu_disabled') return C.disabled;

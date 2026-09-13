@@ -71,6 +71,7 @@ export const ZHIHU_COPY = {
   /** 收藏夹页 */
   backToFavlists: '回到收藏夹',
   favlistReading: '同学在翻这个收藏夹…',
+  zhihuBusy: '知乎那边刚才有点忙，没接上。等几秒再试一次。',
   favlistSlow: '这个收藏夹收得有点慢——知乎那边回得慢，或者条目太多。刷新再试一次。',
   favlistCount: (total: number, teachable: number): string => (total === teachable ? `${total} 条` : `${total} 条，其中 ${teachable} 篇能讲`),
   favlistEmptyItems: '这个收藏夹里还没有内容。',

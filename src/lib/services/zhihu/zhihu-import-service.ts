@@ -220,11 +220,25 @@ export async function getZhihuConnection(userId: string, deps: Partial<ZhihuImpo
 // 收藏夹
 // ---------------------------------------------------------------------------
 
-export async function listFavlistsForUser(userId: string, deps: Partial<ZhihuImportDeps> = {}): Promise<{ mode: ZhihuIdentityMode; favlists: ZhihuFavlist[] }> {
+/** 收藏夹清单几分钟内不会变，而第一屏 / 收藏夹页 / 分线 / 开课每条路都要它：进程内按用户缓存 5 分钟（注入了测试 client 时不缓存） */
+const FAVLISTS_TTL_MS = 5 * 60 * 1000;
+const favlistsCache = new Map<string, { at: number; value: { mode: ZhihuIdentityMode; favlists: ZhihuFavlist[] } }>();
+
+export function resetFavlistsCache(userId?: string): void {
+  if (userId) favlistsCache.delete(userId);
+  else favlistsCache.clear();
+}
+
+export async function listFavlistsForUser(userId: string, deps: Partial<ZhihuImportDeps> = {}, opts: { fresh?: boolean } = {}): Promise<{ mode: ZhihuIdentityMode; favlists: ZhihuFavlist[] }> {
   const d = mergeDeps(deps);
+  const cacheable = !deps.client;
+  const hit = favlistsCache.get(userId);
+  if (cacheable && !opts.fresh && hit && d.now() - hit.at < FAVLISTS_TTL_MS) return hit.value;
   const resolved = await resolveZhihuIdentity(userId, d);
   const { items } = await d.client.userFavlists({ limit: 50 }, resolved.identity);
-  return { mode: resolved.mode, favlists: items };
+  const value = { mode: resolved.mode, favlists: items };
+  if (cacheable) favlistsCache.set(userId, { at: d.now(), value });
+  return value;
 }
 
 export interface ImportFavlistResult {
