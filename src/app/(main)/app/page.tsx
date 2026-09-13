@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'rea
 import { useRouter, useSearchParams } from 'next/navigation';
 import { saveLessonRecordAsSession, threadIdFromTeachSession } from '@/lib/db/lesson-records';
 import { fetchLessonRecord } from '@/hooks/useLessonRecordSync';
+import { useLessonRecord } from '@/hooks/useLessonRecord';
+import { LessonMaterialsCard } from '@/components/review/LessonMaterialsCard';
+import { ZhihuContinueReading } from '@/components/zhihu/ZhihuContinueReading';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
@@ -1517,12 +1520,26 @@ function StudentAppContent({
   // 不再把 workspaceEchoes + supportReferences 默认塞进去——那会让 AI 在复习
   // 单节课时，引用到其它课/其它笔记的内容（"杂糅"），违反"有根、不串味"的边界。
   // 场景上下文（当前这节课）由 segments 承载，支持上下文只认用户的主动选择。
+  // 同学讲的课（sourceType='teach-live'）：复习页多一层"这节课的材料"——材料卡 + 复习同桌的附件层。不是同学讲的课时为空，零开销
+  const lessonRecordState = useLessonRecord(viewMode === 'review' && sessionId ? sessionId : null);
+  const lessonMaterialsSlot = useMemo(() => {
+    const record = lessonRecordState.record;
+    if (!record?.materials?.items.length) return null;
+    return (
+      <LessonMaterialsCard
+        record={record}
+        extra={record.materials.source === 'zhihu-favlist' ? <ZhihuContinueReading threadId={record.threadId} /> : undefined}
+      />
+    );
+  }, [lessonRecordState.record]);
+
   const tutorSupportContextText = useMemo(() => {
     const activeSelectedContext = mobileAIPreferSelectedContext
       ? (mobileAILaunchSupportContextText || selectedCollectionContextText)
       : selectedCollectionContextText;
-    return compactMultilineText(activeSelectedContext || '', 8500);
-  }, [mobileAILaunchSupportContextText, mobileAIPreferSelectedContext, selectedCollectionContextText]);
+    // 学生自己选中的内容优先；没选时，同学讲的课把这节课点名的几篇材料当附件层给复习同桌（只这几篇，不是整个收藏夹）
+    return compactMultilineText(activeSelectedContext || lessonRecordState.tutorContextText || '', 9000);
+  }, [lessonRecordState.tutorContextText, mobileAILaunchSupportContextText, mobileAIPreferSelectedContext, selectedCollectionContextText]);
 
   const currentLivePreview = useMemo(
     () =>
@@ -2704,6 +2721,7 @@ function StudentAppContent({
               totalDuration={totalDuration}
               studentId={studentId}
               tutorSupportContextText={tutorSupportContextText}
+              reviewHeaderSlot={lessonMaterialsSlot}
               selectedBreakpoint={selectedBreakpoint}
               timelineForView={timelineForView}
               waveformRef={waveformRef}

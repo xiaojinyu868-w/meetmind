@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildLessonRecord, lessonRecordDigestLine, materialRefsInText, LESSON_MS_PER_CHAR } from '../lesson-record';
+import { buildLessonRecord, capExcerpt, lessonRecordDigestLine, materialRefsInText, LESSON_MS_PER_CHAR } from '../lesson-record';
 import type { TeachLogEvent } from '@/lib/services/teach-codex/event-bus';
 import type { LiveMaterialPack } from '../live-materials';
 
@@ -72,6 +72,9 @@ describe('buildLessonRecord', () => {
       ['A1', 'full-text', true],
       ['A2', 'outline', true],
     ]);
+    expect(record.materials?.items[0].excerpt).toBe('正文。'.repeat(50));
+    expect(capExcerpt('一句。'.repeat(2000), 3500).endsWith('字，全文见原链接）')).toBe(true);
+    expect(capExcerpt('一句。'.repeat(2000), 3500).length).toBeLessThanOrEqual(3500 + 40);
     expect(record.materials?.pickReason).toBe('最基础的一篇');
     expect(record.materials?.skipped).toEqual([{ title: '一个视频', reason: '视频没有可讲的正文' }]);
     expect(record.priorLessons).toHaveLength(1);

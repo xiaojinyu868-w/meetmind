@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState, type RefObject } from 'react';
+import { useCallback, useMemo, useState, type ReactNode, type RefObject } from 'react';
 import { describeMoment } from '@/lib/learning/moment-title';
 import { COPY } from '@/lib/ui/copy';
 import dynamic from 'next/dynamic';
@@ -117,6 +117,8 @@ export interface DesktopVideoReviewLayoutProps {
   sourceFullText?: string;
   /** 非音视频类型的正文图片 URL 列表 */
   sourceImageUrls?: string[];
+  /** 时间轴 tab 顶部的一块（同学讲的课 → 这节课的材料卡），透传给 ReviewWorkspacePanel */
+  reviewHeaderSlot?: ReactNode;
 }
 
 // ── Component ──────────────────────────────────────────────────
@@ -577,6 +579,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                 sourceFullText={sourceFullText}
                 sourceImageUrls={sourceImageUrls}
                 keyframes={keyframeStrips}
+                headerSlot={props.reviewHeaderSlot}
               />
               </section>
             )}

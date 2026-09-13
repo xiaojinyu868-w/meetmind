@@ -38,6 +38,8 @@ interface ReviewWorkspacePanelProps {
   sourceImageUrls?: string[];
   /** 课中「截取这一页」关键帧（按时间轴插入转录流） */
   keyframes?: Array<{ timestampMs: number; src: string }>;
+  /** 时间轴 tab 顶部的一块（2026-09-13：同学讲的课 → 这节课的材料卡）；没有就不占位 */
+  headerSlot?: ReactNode;
 }
 
 export function ReviewWorkspacePanel({
@@ -63,6 +65,7 @@ export function ReviewWorkspacePanel({
   sourceFullText,
   sourceImageUrls,
   keyframes,
+  headerSlot,
 }: ReviewWorkspacePanelProps) {
   // v7 Octo IP：复习态空态。ctx='review-empty'（默认 idle，凌晨切 sleeping）
   const { mood: octoMoodEmpty } = useOctoMood({ ctx: 'review-empty' });
@@ -99,6 +102,7 @@ export function ReviewWorkspacePanel({
       </>
       )}
 
+      {reviewTab === 'timeline' && headerSlot ? <div className="shrink-0">{headerSlot}</div> : null}
       <div className="flex-1 min-h-0 overflow-hidden">
         {reviewTab === 'timeline' && timelineForView && (
           <TimelineView

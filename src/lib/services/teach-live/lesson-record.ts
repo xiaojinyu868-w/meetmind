@@ -56,7 +56,12 @@ export interface LessonRecordMaterialItem {
   coverage: 'full-text' | 'outline' | 'summary';
   /** 老师口播里点到过它 */
   mentioned: boolean;
+  /** 给复习同桌看的节选（附件层预算：每篇 ≤ MATERIAL_EXCERPT_CAP 字）；空串 = 只有摘要且摘要也空 */
+  excerpt: string;
 }
+
+/** 复习页附件层：每篇给同桌的节选上限（几篇合计约 6K token） */
+export const MATERIAL_EXCERPT_CAP = 3500;
 
 export interface LessonRecordMaterials {
   source: string;
@@ -102,6 +107,16 @@ export function materialRefsInText(text: string): string[] {
     if (n && n >= 1 && n <= 9) refs.add(`A${n}`);
   }
   return [...refs];
+}
+
+/** 附件层自己截自己：按段落收尾，标出略去了多少 */
+export function capExcerpt(text: string, cap: number): string {
+  const clean = text.replace(/\r\n?/g, '\n').trim();
+  if (clean.length <= cap) return clean;
+  const window = clean.slice(0, cap);
+  const cut = Math.max(window.lastIndexOf('\n\n'), window.lastIndexOf('。'));
+  const head = clean.slice(0, cut > cap * 0.5 ? cut + 1 : cap).trimEnd();
+  return `${head}\n……（此处略去约 ${clean.length - head.length} 字，全文见原链接）`;
 }
 
 function cleanSpeech(text: string): string {
@@ -237,6 +252,7 @@ export function buildLessonRecord(thread: Pick<TeachThreadRow, 'id' | 'title' | 
           body: item.body,
           coverage: item.body !== 'full' ? 'summary' : /^（全文 \d+ 字/.test(item.excerpt) || /节选/.test(item.excerpt.slice(-40)) ? 'outline' : 'full-text',
           mentioned: mentioned.has(item.ref) || (pack.mode === 'single' && item.ref === singleRef),
+          excerpt: capExcerpt(item.excerpt, MATERIAL_EXCERPT_CAP),
         })),
         skipped: (pack.skipped ?? []).map((s) => ({ title: s.title, reason: s.reason })),
       }
