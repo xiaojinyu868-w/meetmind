@@ -240,8 +240,15 @@ export function mergeSpeakerIds(
  * 返回匿名“发言者 A / B”，不假设谁是老师，也不自动猜真实姓名——
  * 声纹聚类编号的顺序不保证 0 是主讲人。
  */
+/** 同学讲的课（teach-live 物化）里两个具名说话人：老师 / 我（2026-09-13） */
+const NAMED_SPEAKERS: Record<string, { label: string; color: string }> = {
+  teacher: { label: '老师', color: 'text-pine' },
+  student: { label: '我', color: 'text-vermilion' },
+};
+
 export function getSpeakerLabel(speakerId: string | undefined): string {
   if (!speakerId) return '';
+  if (NAMED_SPEAKERS[speakerId]) return NAMED_SPEAKERS[speakerId].label;
   if (!/^\d+$/.test(speakerId)) return '';
   const id = Number(speakerId);
   if (!Number.isInteger(id) || id < 0 || id > 25) return '';
@@ -257,6 +264,7 @@ export function getSpeakerLabel(speakerId: string | undefined): string {
  */
 export function getSpeakerColorClass(speakerId: string | undefined): string {
   if (!speakerId) return '';
+  if (NAMED_SPEAKERS[speakerId]) return NAMED_SPEAKERS[speakerId].color;
   if (!/^\d+$/.test(speakerId)) return '';
   const id = Number(speakerId);
   if (!Number.isInteger(id) || id < 0) return '';

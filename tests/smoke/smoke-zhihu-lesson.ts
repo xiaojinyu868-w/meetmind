@@ -255,7 +255,7 @@ async function main(): Promise<void> {
         await page.goto(`${base}/apps/zhihu/lesson/${threadId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 }); // dev 首次编译舞台页可能 >30s
         await page.waitForTimeout(6000);
         await page.screenshot({ path: path.join(shotDir, 'zhihu-lesson.png') });
-        await page.getByRole('button', { name: '材料 · 考一考', exact: true }).click();
+        await page.getByRole('button', { name: '材料 · 去复习', exact: true }).click();
         await page.waitForTimeout(800);
         await page.screenshot({ path: path.join(shotDir, 'zhihu-lesson-rail.png') });
         await page.getByRole('button', { name: '收起', exact: true }).click();

@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { saveLessonRecordAsSession, threadIdFromTeachSession } from '@/lib/db/lesson-records';
+import { fetchLessonRecord } from '@/hooks/useLessonRecordSync';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
@@ -188,6 +190,7 @@ function StudentAppContent({
   isGuestFastEntry,
   forcedWorkspaceTab,
   initialClaimedCaptureId = null,
+  initialReviewSessionId = null,
   forceMobilePreview = false,
   wechatCaptureToken = null,
   initialMobileSubPage = null,
@@ -199,6 +202,8 @@ function StudentAppContent({
   isGuestFastEntry: boolean;
   forcedWorkspaceTab: SharedWorkspaceTab | null;
   initialClaimedCaptureId?: string | null;
+  /** `/app?session=<sessionId>`：直达某节课的复习态（2026-09-13，同学讲的课「去复习」用；teach:<threadId> 本机没有时按 record 现存再进） */
+  initialReviewSessionId?: string | null;
   forceMobilePreview?: boolean;
   wechatCaptureToken?: string | null;
   initialMobileSubPage?: MobileSubPage;
@@ -1416,6 +1421,40 @@ function StudentAppContent({
     url.searchParams.delete('claimedCapture');
     window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
   }, [collectionFeedItems, initialClaimedCaptureId]);
+
+  // `/app?session=<id>` 直达复习态。本机 IndexedDB 有这节课就直接恢复；teach-live 的课在别的设备上没有本地数据时，
+  // 按 record 现存一份再恢复（跨设备）。延迟一拍让开机恢复（useAppStateRestore）先落，避免被它盖回去。
+  const reviewSessionHandledRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialReviewSessionId || !mounted) return;
+    if (reviewSessionHandledRef.current === initialReviewSessionId) return;
+    if (!isAuthenticated || !accessToken || !user?.id) return;
+    reviewSessionHandledRef.current = initialReviewSessionId;
+    const targetSessionId = initialReviewSessionId;
+    const timer = window.setTimeout(async () => {
+      try {
+        let restored = await restoreReviewSession(targetSessionId, { reviewTab: 'timeline', currentTime: 0, showTranscriptBar: false });
+        if (!restored) {
+          const threadId = threadIdFromTeachSession(targetSessionId);
+          if (threadId) {
+            const record = await fetchLessonRecord(accessToken, threadId);
+            if (record.segments.length) {
+              await saveLessonRecordAsSession(record, user.id);
+              restored = await restoreReviewSession(targetSessionId, { reviewTab: 'timeline', currentTime: 0, showTranscriptBar: false });
+            }
+          }
+        }
+        if (!restored) console.warn('[app?session] 没能恢复这节课的复习态', targetSessionId);
+      } catch (error) {
+        console.error('[app?session] 恢复失败', error);
+      } finally {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('session');
+        window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+      }
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [initialReviewSessionId, mounted, isAuthenticated, accessToken, user?.id, restoreReviewSession]);
 
   const allCollectionItems = useMemo<WorkspaceCaptureListItem[]>(() => {
     const workspaceSourceKeys = new Set(
@@ -3190,6 +3229,7 @@ function SearchParamsReader() {
   const initialGlobalAskView = searchParams.get('workspace') === 'context' ? 'memory' : undefined;
   const initialMemoryFocus = searchParams.get('intent') === 'cheatsheet' ? 'cheatsheet' : undefined;
   const initialClaimedCaptureId = searchParams.get('claimedCapture');
+  const initialReviewSessionId = searchParams.get('session');
   const forceMobilePreview = searchParams.get('mobile') === '1';
   const wechatCaptureToken = searchParams.get('wechat_capture');
   const entryParam = searchParams.get('entry');
@@ -3215,6 +3255,7 @@ function SearchParamsReader() {
                 isGuestFastEntry={isGuestFastEntry}
                 forcedWorkspaceTab={forcedWorkspaceTab}
                 initialClaimedCaptureId={initialClaimedCaptureId}
+                initialReviewSessionId={initialReviewSessionId}
                 forceMobilePreview
                 wechatCaptureToken={wechatCaptureToken}
                 initialMobileSubPage={initialMobileSubPage}
@@ -3236,6 +3277,7 @@ function SearchParamsReader() {
         isGuestFastEntry={isGuestFastEntry}
         forcedWorkspaceTab={forcedWorkspaceTab}
         initialClaimedCaptureId={initialClaimedCaptureId}
+                initialReviewSessionId={initialReviewSessionId}
         wechatCaptureToken={wechatCaptureToken}
         initialMobileSubPage={initialMobileSubPage}
         autoLoadDemo={guestDemoEntry.autoLoadDemo}

@@ -53,6 +53,7 @@ export async function saveAudioSession(
     topic?: string;
     duration?: number;
     sourceType?: AudioSession['sourceType'];
+    sourceRef?: string;
     mediaUrl?: string;
     videoUrl?: string;
     videoEmbedUrl?: string;
@@ -126,6 +127,7 @@ export async function saveAudioSession(
       }
     }
     if (options.sourceType) patch.sourceType = options.sourceType;
+    if (options.sourceRef !== undefined) patch.sourceRef = options.sourceRef;
     if (options.mediaUrl !== undefined) patch.mediaUrl = options.mediaUrl;
     if (options.videoUrl !== undefined) patch.videoUrl = options.videoUrl;
     if (options.videoEmbedUrl !== undefined) patch.videoEmbedUrl = options.videoEmbedUrl;
@@ -166,6 +168,7 @@ export async function saveAudioSession(
     subject: options.subject,
     topic: options.topic,
     sourceType: options.sourceType || 'recording',
+    sourceRef: options.sourceRef,
     mediaUrl: options.mediaUrl,
     videoUrl: options.videoUrl,
     videoEmbedUrl: options.videoEmbedUrl,

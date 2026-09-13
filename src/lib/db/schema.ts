@@ -11,7 +11,13 @@ export interface AudioSession {
   topic?: string;
   /** 用户手动改过标题后为 true：自动标题系统（lesson-title）永远不再覆盖 */
   topicLocked?: boolean;
-  sourceType?: 'recording' | 'upload' | 'video-link' | 'video-file';
+  /**
+   * 来源。teach-live（2026-09-13）= 同学讲的一节 live 课物化而来：没有音频 / 视频，只有转录（老师 / 学生两个说话人）；
+   * `sourceRef` 记 TeachThread id，复习页据此拉这节课的材料与"接着讲"的舞台地址。
+   */
+  sourceType?: 'recording' | 'upload' | 'video-link' | 'video-file' | 'teach-live';
+  /** 来源方的引用（teach-live = threadId）；非索引字段，不升 schema 版本 */
+  sourceRef?: string;
   mediaUrl?: string;
   videoUrl?: string;
   videoEmbedUrl?: string;
@@ -118,6 +124,8 @@ export interface TranscriptSegment {
   speakerId?: string;
   confidence: number;
   isFinal: boolean;
+  /** 这段话讲的是哪份材料（teach-live 课：材料包 ref，如 A1）；非索引字段 */
+  sourceItemId?: string;
 }
 
 export interface TranscriptLexiconEntry {

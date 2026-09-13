@@ -148,6 +148,9 @@ export function useReviewSession(
       endMs: item.endMs,
       confidence: item.confidence,
       isFinal: item.isFinal,
+      // 说话人（分离过的录音 = 数字 id；同学讲的课 = teacher / student）——不带上复习页就分不出谁说的
+      ...(item.speakerId ? { speakerId: item.speakerId } : {}),
+      ...(item.sourceItemId ? { sourceItemId: item.sourceItemId } : {}),
     }));
 
     const loadedAnchors = await db.anchors
